@@ -38,6 +38,7 @@
 - If `type="name_change"` then `new_symbol` must be present.
 - `action_id` is unique (idempotent upsert).
 - `action_id` is treated as the stable identity key; updates are allowed only as new revisions in audit logs (append-only history), never silent overwrite without trace.
+- For split actions, cumulative adjustment factors derived from CorporateAction events must produce a continuous adjusted price series (no artificial price discontinuity at the effective boundary).
 
 ## Validation Rules (Planning-Level)
 - Check: unknown action `type` => quarantine event + alert (do not apply).
