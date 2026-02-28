@@ -44,3 +44,17 @@ Added:
 Notes:
 This release freezes the canonical contract layer before implementation begins.
 All execution and ledger behavior must conform to these contracts.
+
+## v0.3.0 — Phase 2 System-of-Record + Versioning Locked
+
+Added:
+- Storage layer index (Phase 2)
+- Postgres system-of-record planning spec (tables + invariants)
+- Parquet dataset conventions (raw/adjusted, partitions, version folders)
+- Dataset versioning + lineage rules (checksums, schema version, coverage windows)
+- Universe versioning rules (membership hashing, selection criteria, snapshot semantics)
+- Minimal immutable audit log requirements (run/step, order lifecycle, reconciliation)
+
+Notes:
+This release locks storage and lineage semantics required for reproducible replays and auditability.
+All future implementation must reference RunManifest → DatasetVersion/UniverseVersion → immutable storage artifacts.
