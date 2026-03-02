@@ -127,3 +127,51 @@ Live trading now requires:
 - Idempotency validation
 
 No single bug can route paper orders to live.
+
+## v0.6.0 — Phase 5 Scheduler Semantics + Runtime State Machines Locked
+
+Added:
+- Deterministic 5-minute scheduler model:
+  - Canonical bar-close semantics (UTC)
+  - Ingestion SLA deadlines
+  - Evaluation start guarantees
+  - Explicit skip / degrade / halt decision tree
+- Formal runtime cycle event sequence:
+  - BAR_CLOSED
+  - INGESTION_SLA_PASSED / MISSED
+  - RECONCILIATION_STARTED / PASSED / FAILED
+  - EVALUATION_STARTED / COMPLETED
+  - EXECUTION_WINDOW_STARTED / COMPLETED
+  - CYCLE_COMPLETED
+- Order state machine (execution-layer FSM):
+  - Explicit transition graph
+  - Terminal-state immutability
+  - Forbidden transitions defined
+  - Retry policy (network-only)
+  - Trigger → recorded event mapping
+- Strategy lifecycle state machine:
+  - IDLE → SIGNALLED → PENDING → IN_POSITION → EXIT_PENDING → COOLDOWN
+  - Position ownership invariants
+  - Explicit forbidden transitions
+  - Trigger → recorded event mapping
+- Reconciliation schedule formalized:
+  - Runs every evaluation cycle
+  - Mandatory end-of-day reconciliation
+  - Restart reconciliation requirement
+- Mismatch enforcement policy:
+  - Immediate freeze
+  - Order cancellation
+  - CRITICAL alert emission
+  - Human acknowledgment required before resume
+- Global event-recording contract:
+  - Every transition must emit immutable event
+  - No ambiguous “maybe filled” state allowed
+  - No implicit transitions permitted
+
+Notes:
+This release freezes runtime lifecycle semantics prior to execution implementation.
+
+All future engine behavior must conform to the defined scheduler model,
+state machines, reconciliation enforcement, and event-recording guarantees.
+
+
