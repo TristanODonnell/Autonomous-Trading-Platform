@@ -11,6 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare env for CI
+        run: |
+          cp infra/.env.example infra/.env
+
       - name: Start Postgres
         run: docker compose -f docker-compose.yml up -d
 
