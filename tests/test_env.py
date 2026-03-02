@@ -12,7 +12,7 @@ def test_environment_loads_required_variables(monkeypatch):
     settings = Settings()
 
     assert settings.app_env == "local"
-    assert "postgresql://" in settings.database_url
+    assert settings.database_url.startswith("postgresql+psycopg://")
 
 
 def test_missing_required_env_var_raises(monkeypatch):
