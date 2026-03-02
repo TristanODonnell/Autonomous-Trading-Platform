@@ -114,4 +114,3 @@ Every transition must emit exactly one ORDER_STATE_CHANGED event.
 | Submitted | Canceled | broker_cancel_confirmed | ORDER_STATE_CHANGED |
 | Partial | Canceled | broker_cancel_confirmed | ORDER_STATE_CHANGED |
 | Submitted | Rejected | broker_rejection | ORDER_STATE_CHANGED |
-

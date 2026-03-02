@@ -54,7 +54,7 @@
 - `capital_bucket > 0`.
 - If `run_type="backtest"`, `random_seed` must be defined.
 - If `run_type="backtest"`, `cost_model` and `fill_model` must be defined and version-pinned.
-- 
+-
 
 
 ## Validation Rules (Planning-Level)

@@ -51,7 +51,7 @@ No shorting in v1.
 
 Per position:
 
-min( 
+min(
     capital_bucket × 0.05,
     per_symbol_cap
 )

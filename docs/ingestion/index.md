@@ -1,5 +1,13 @@
 # Ingestion Pipeline (v1) — Index
 
+## Pages
+
+- [Sources](sources.md)
+- [SLAs and Fallbacks](slas-and-fallbacks.md)
+- [Outliers and Missing Data](outliers-and-missing-data.md)
+- [Corporate Actions Continuity](corporate-actions-continuity.md)
+- [Incident Recording](incident-recording.md)
+
 ## Purpose
 
 This folder locks the v1 ingestion pipeline behavior for:

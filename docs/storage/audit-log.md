@@ -193,7 +193,7 @@ Minimum payload:
 
 ## Retention (v1)
 - Retain audit log indefinitely for v1 development.
-- Before any live trading, define a retention policy suitable for compliance use-cases (multi-year). The planning doc explicitly calls for long retention. 
+- Before any live trading, define a retention policy suitable for compliance use-cases (multi-year). The planning doc explicitly calls for long retention.
 
 ## Acceptance Criteria
 ### The audit log must support:
@@ -209,4 +209,3 @@ Minimum payload:
 
 4. Reproducibility linkage:
 - link audit events to RunManifest, DatasetVersion, and UniverseVersion so the run can be replayed exactly.
-

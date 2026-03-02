@@ -1,4 +1,4 @@
-# Experiment Tracking 
+# Experiment Tracking
 
 ## Required Output Artifacts
 

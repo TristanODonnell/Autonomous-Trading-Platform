@@ -15,9 +15,9 @@ This universe is immutable for v1.
 
 ## Universe Name
 
-**Universe ID:** v1_iex_top500_liquid  
-**Data Source:** Alpaca (IEX feed)  
-**Asset Class:** U.S. Equities  
+**Universe ID:** v1_iex_top500_liquid
+**Data Source:** Alpaca (IEX feed)
+**Asset Class:** U.S. Equities
 **Exchanges:** NYSE, NASDAQ (IEX-covered)
 
 ---
