@@ -77,10 +77,17 @@ ignore = ["E501"]  # let formatter handle line length
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+pythonpath = ["."]
+markers = [
+  "integration: tests that require external services like Postgres"
+]
 
 # --- mypy ---
 [tool.mypy]
 python_version = "3.11"
+mypy_path = ["src"]
+explicity_package_bases = true
+namespace_packages = false
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
