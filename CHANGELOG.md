@@ -302,3 +302,13 @@ v1 is considered complete when a risk reviewer can sign off:
 Notes:
 This release locks operational validation requirements prior to
 declaring v1 complete. Implementation must satisfy these gates before promotion.
+
+## 0.1.0 — Phase 0 Baseline
+
+- Added src project layout
+- Added environment configuration loader
+- Added Postgres Docker container
+- Added pytest + coverage
+- Added initial env + DB connectivity tests
+- Added pre-commit quality gates
+- Added MkDocs documentation scaffold

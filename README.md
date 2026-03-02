@@ -255,4 +255,30 @@ The following paper-trading validation gates are now locked and versioned:
 
 The system now has defined criteria for calling v1 complete.
 
-Next: phase 101 Development Environment & Baseline Setup
+# v1 Project Implementation
+
+## Phase 0 — Development Baseline
+
+Phase 0 establishes a reproducible development environment and project scaffolding.
+
+### Introduced
+
+- `src/` project layout
+- Environment configuration loader (`config.py`)
+- Database engine factory (`db.py`)
+- Local Postgres container via Docker Compose
+- Pytest test framework with coverage reporting
+- Initial tests:
+  - Environment loading validation
+  - Database connectivity validation
+- Pre-commit hooks (ruff, mypy, formatting)
+- MkDocs documentation portal
+
+### Result
+
+The repository can now:
+
+- Run linting and type checking locally
+- Run tests with coverage
+- Connect to a local Postgres system-of-record
+- Serve documentation locally via MkDocs
