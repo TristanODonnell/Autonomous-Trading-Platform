@@ -219,3 +219,36 @@ For any given bar timestamp T, the system can deterministically state:
 Notes:
 This release freezes ingestion behavior prior to execution implementation.
 All future runtime logic must rely on these ingestion guarantees.
+
+## v0.8.0 — Phase 7 Research Engine (Backtest + Experiment Tracking) Locked
+
+Added:
+- Research engine specification sharing live contracts:
+  - Signal → OrderIntent → BrokerOrder/Fills (simulated) → Positions → Reports
+  - No research-only schemas permitted
+- Backtest semantics (v1):
+  - Bar-based simulation with event-like order transitions
+  - Fill timing rule locked (orders generated at bar close T, eligible to fill at T+1)
+  - Deterministic partial-fill behavior and cancellation rules
+- Fill + cost model contracts (v1):
+  - Linear cost model (commission/spread/slippage parameters)
+  - VolumeShare-like slippage model (parameterized, capped)
+  - Deterministic fill rules for market + limit orders
+- Experiment tracking outputs (required artifacts):
+  - run_manifest.json (reproducibility root)
+  - metrics_summary.json
+  - trades_journal (CSV/Parquet)
+  - debug_report.json (incidents + stress injections)
+- Stress test specification (required cases):
+  - gap shocks / volatility spikes
+  - data outages / delayed bars
+  - extreme slippage
+  - partial fill scenarios
+
+Acceptance:
+The backtest engine produces the same output “shape” as paper trading:
+Signal → OrderIntent → BrokerOrder/Fills (simulated) → Positions → Reports
+
+Notes:
+This release freezes the research engine semantics so the execution engine
+(paper/live) can reuse identical contracts and reporting surfaces.
