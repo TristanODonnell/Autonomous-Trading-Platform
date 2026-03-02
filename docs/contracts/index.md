@@ -1,5 +1,19 @@
 # Data Contracts Index (v1)
 
+## Pages
+
+- [MarketBar](marketbar.md)
+- [Signal](signal.md)
+- [OrderIntent](order-intent.md)
+- [BrokerOrder](broker-order.md)
+- [Fill](fill.md)
+- [PositionSnapshot](position-snapshot.md)
+- [CashSnapshot](cash-snapshot.md)
+- [RiskSnapshot](risk-snapshot.md)
+- [CorporateAction](corporate-action.md)
+- [UniverseSnapshot](universe-snapshot.md)
+- [RunManifest](run-manifest.md)
+
 ## Purpose
 This index defines the canonical data objects used across ingestion, execution, and simulation.
 All pipelines must share these contracts to preserve reproducibility and alignment between backtest and paper execution.
