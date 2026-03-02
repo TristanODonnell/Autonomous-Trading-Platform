@@ -16,8 +16,9 @@
 - docs/storage/audit-log.md
 
 ## Status
-- Current Phase: Phase 8 — v1 Vertical Slice Strategy Spec (Single Strategy + Constraints)- Mode: Design / Architecture Only (No Implementation)
-- Baseline: 5-minute bars - Alpaca - single strategy - single universe - single capital bucket
+- Current Phase: Phase 9 — Paper Trading Readiness Gates (Pre-v1 Acceptance)
+- Mode: Design / Architecture Only (No Implementation)
+- - Baseline: 5-minute bars - Alpaca - single strategy - single universe - single capital bucket
 - Default: NO_LIVE_TRADING (paper/shadow only)
 
 ### Phase 1 Complete
@@ -165,4 +166,27 @@ The v1 vertical slice strategy specification is now locked and versioned:
 
 The v1 vertical slice is now fully specified at the design layer.
 
-Next: Phase 9 — Paper Trading Readiness Gates (Pre-v1 Acceptance)
+### Phase 9 Complete
+The following paper-trading validation gates are now locked and versioned:
+
+- Minimum validation window defined (10 consecutive market days)
+- Required validation outcomes:
+  - Zero safety gate violations
+  - Zero reconciliation mismatches
+  - Idempotency proven under restarts
+  - Complete audit trail for every lifecycle event
+- Operational playbook defined:
+  - Incident response protocol
+  - Kill switch test cadence
+  - Manual intervention policy
+  - Broker connectivity monitoring rules
+- Promotion standard locked:
+  - End-to-end correctness requirement
+  - Reproducibility guarantee
+  - Audit trace reconstructability
+  - Safety controls verified
+
+The system now has defined criteria for calling v1 complete.
+
+Next:
+
