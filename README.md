@@ -16,7 +16,7 @@
 - docs/storage/audit-log.md
 
 ## Status
-- Current Phase: Phase 2 — System-of-Record Design (Postgres + Parquet) + Versioning
+- Current Phase: Phase 3 — Universe Governance + Survivorship Controls
 - Mode: Design / Architecture Only (No Implementation)
 - Baseline: 5-minute bars - Alpaca - single strategy - single universe - single capital bucket
 - Default: NO_LIVE_TRADING (paper/shadow only)
@@ -39,4 +39,17 @@ The following are now locked and versioned:
 - UniverseVersion rules (snapshot semantics, membership hash, selection criteria)
 - Minimal immutable audit log requirements (run/step lifecycle, order transitions, reconciliation outcomes)
 
-Next: Phase 3 — Execution/Orchestration Vertical Slice Design (bar loop + state machines + broker adapter boundaries)
+### Phase 3 Complete
+The following are now locked and versioned:
+
+- v1 Universe specification (eligibility filters, exclusions, cadence)
+- Deterministic UniverseSnapshot semantics
+- Monthly rebalance governance
+- Symbol lifecycle mapping (delisting, merger, rename handling)
+- Survivorship bias elimination rules
+- Eligibility reconstruction guarantee:
+  “Was this symbol tradable on this date?”
+
+Universe membership is now time-aware, versioned, and reproducible.
+
+Next: Phase 4 - Safety Architecture (Live-Proofing) + Execution Gates

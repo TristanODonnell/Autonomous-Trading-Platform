@@ -58,3 +58,32 @@ Added:
 Notes:
 This release locks storage and lineage semantics required for reproducible replays and auditability.
 All future implementation must reference RunManifest → DatasetVersion/UniverseVersion → immutable storage artifacts.
+
+## v0.4.0 — Phase 3 Universe Governance + Survivorship Controls Locked
+
+Added:
+- v1 Universe specification:
+  - Universe ID and data source (Alpaca IEX)
+  - Eligibility filters (price floor, liquidity threshold)
+  - Explicit asset exclusions (ETFs, ADRs, OTC, SPACs)
+  - Locked rebalance cadence (monthly)
+- Formal Universe lifecycle handling:
+  - Delisting behavior
+  - Merger and cash-out semantics
+  - Symbol change mapping rules
+  - Non-retroactive membership guarantees
+- Survivorship bias controls:
+  - Time-aware UniverseSnapshot enforcement
+  - Historical membership reconstruction rules
+  - Deterministic eligibility resolution:
+    “Was symbol X eligible on date Y?”
+- Universe invariants:
+  - Immutable snapshot storage
+  - Membership hashing
+  - UniverseVersion reproducibility guarantees
+
+Notes:
+This release freezes universe selection semantics and survivorship controls.
+All historical runs must reference a versioned UniverseSnapshot.
+No dynamic or future-aware membership is permitted.
+
