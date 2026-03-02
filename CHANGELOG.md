@@ -128,48 +128,50 @@ Live trading now requires:
 
 No single bug can route paper orders to live.
 
-## v0.7.0 — Phase 6 Ingestion Pipeline Semantics Locked
+## v0.6.0 — Phase 5 Scheduler Semantics + Runtime State Machines Locked
 
 Added:
-- Formal v1 ingestion source specification:
-  - Alpaca free feeds (IEX + delayed SIP where available)
-  - 5-minute bar ingestion model
-  - Corporate action ingestion requirements
-- Raw vs adjusted storage policy:
-  - Raw provider-native bars stored
-  - Adjusted bars derived via split adjustment_factor
-  - Dividend handling recorded as events (no dividend-adjusted series in v1)
-- Per-cycle Data SLAs defined:
-  - Freshness target (bar_close + 30s)
-  - Absolute lateness tolerance (bar_close + 90s hard deadline)
-- Deterministic breach decision tree:
-  - SKIP (symbol-level)
-  - DEGRADE (safe mode, no new entries)
-  - HALT (cycle-level)
-- Outlier detection thresholds:
-  - Extreme price deviation guardrails
-  - Range sanity checks
-  - Stale/zero-volume detection
-- Missing data policy locked:
-  - Forward-fill limited to indicator continuity only
-  - No new entries on forward-filled data
-  - Escalation thresholds for multi-bar absence
-- Corporate action continuity checks:
-  - Split-adjusted price continuity tolerance
-  - Adjustment-factor validation rules
-- Ingestion incident event contract:
+- Deterministic 5-minute scheduler model:
+  - Canonical bar-close semantics (UTC)
+  - Ingestion SLA deadlines
+  - Evaluation start guarantees
+  - Explicit skip / degrade / halt decision tree
+- Formal runtime cycle event sequence:
+  - BAR_CLOSED
   - INGESTION_SLA_PASSED / MISSED
-  - MARKETBAR_MISSING / OUTLIER / INVALID
-  - CORPORATE_ACTION_CONTINUITY_BREACH
-  - Explicit action_taken field (SKIP / DEGRADE / HALT)
-
-Acceptance:
-For any given bar timestamp T, the system can deterministically state:
-- When it must be available
-- What action is taken if it is not
-- What immutable event is recorded
+  - RECONCILIATION_STARTED / PASSED / FAILED
+  - EVALUATION_STARTED / COMPLETED
+  - EXECUTION_WINDOW_STARTED / COMPLETED
+  - CYCLE_COMPLETED
+- Order state machine (execution-layer FSM):
+  - Explicit transition graph
+  - Terminal-state immutability
+  - Forbidden transitions defined
+  - Retry policy (network-only)
+  - Trigger → recorded event mapping
+- Strategy lifecycle state machine:
+  - IDLE → SIGNALLED → PENDING → IN_POSITION → EXIT_PENDING → COOLDOWN
+  - Position ownership invariants
+  - Explicit forbidden transitions
+  - Trigger → recorded event mapping
+- Reconciliation schedule formalized:
+  - Runs every evaluation cycle
+  - Mandatory end-of-day reconciliation
+  - Restart reconciliation requirement
+- Mismatch enforcement policy:
+  - Immediate freeze
+  - Order cancellation
+  - CRITICAL alert emission
+  - Human acknowledgment required before resume
+- Global event-recording contract:
+  - Every transition must emit immutable event
+  - No ambiguous “maybe filled” state allowed
+  - No implicit transitions permitted
 
 Notes:
-This release freezes ingestion behavior prior to execution implementation.
-All future runtime logic must rely on these ingestion guarantees.
+This release freezes runtime lifecycle semantics prior to execution implementation.
+
+All future engine behavior must conform to the defined scheduler model,
+state machines, reconciliation enforcement, and event-recording guarantees.
+
 
