@@ -16,7 +16,7 @@
 - docs/storage/audit-log.md
 
 ## Status
-- Current Phase: - Current Phase: Phase 6 — Ingestion Pipeline Semantics
+- Current Phase:  Current Phase: Phase 7 — Research Engine Semantics (Backtest + Tracking + Stress)
 - Mode: Design / Architecture Only (No Implementation)
 - Baseline: 5-minute bars - Alpaca - single strategy - single universe - single capital bucket
 - Default: NO_LIVE_TRADING (paper/shadow only)
@@ -71,8 +71,6 @@ Capital-protection architecture is now formally defined.
 
 The system is provably live-proofed at the design layer.
 
-Next: Phase 5 - Scheduler Semantics + State Machines
-
 ### Phase 5 Complete
 The following are now locked and versioned:
 
@@ -122,3 +120,28 @@ The following ingestion semantics are now locked and versioned:
 - Ingestion incident event schema
 
 Ingestion behavior is now fully deterministic at the design layer.
+
+
+### Phase 7 Complete
+The following research engine semantics are now locked and versioned:
+
+- Backtest engine shares canonical contracts with paper/live:
+  Signal → OrderIntent → BrokerOrder/Fills (simulated) → Positions → Reports
+- Bar-based simulation model with event-like order transitions (v1)
+- Deterministic fill timing rule (T close → fill eligibility at T+1)
+- Fill + cost model contracts:
+  - v1 linear cost model
+  - v1 VolumeShare-like slippage model (parameterized + capped)
+- Experiment tracking artifacts:
+  - run_manifest.json
+  - metrics_summary
+  - trades journal
+  - debug report
+- Stress test specification:
+  - gaps, volatility spikes
+  - data outages / delayed bars
+  - extreme slippage
+  - partial fills
+
+The research engine is now contract-compatible with live execution and produces
+reproducible, audit-friendly outputs.
