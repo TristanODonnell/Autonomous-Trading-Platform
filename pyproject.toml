@@ -7,7 +7,7 @@ name = "retail-autonomous-trading-platform"
 version = "0.1.0"
 description = "U.S. equities retail algorithmic trading platform (planning-driven v1)."
 readme = "README.md"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.11,<3.13"
 license = { file = "LICENSE" }
 authors = [{ name = "Tristan ODonnell", email = "tristanodonnell100@gmail.com" }]
 keywords = ["trading", "backtesting", "alpaca", "data-engineering"]
