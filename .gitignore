@@ -138,8 +138,11 @@ celerybeat.pid
 .env*
 !.env.example
 
+.venv-*/
+orchestration/logs/
+
 .envrc
-.venv
+.venv/
 env/
 venv/
 ENV/

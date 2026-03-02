@@ -1,0 +1,114 @@
+services:
+  # ----------------------------
+  # platform Postgres
+  # ----------------------------
+  postgres:
+    image: postgres:16
+    container_name: ratp_postgres
+    restart: unless-stopped
+    env_file:
+      - infra/.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - ratp_pgdata:/var/lib/postgresql/data
+      - ./sql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ratp -d ratp"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # ----------------------------
+  # Airflow metadata Postgres (separate DB)
+  # ----------------------------
+  airflow_postgres:
+    image: postgres:16
+    container_name: airflow_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - "5433:5432"  # host 5433 -> container 5432 (avoids clashing with ratp_postgres)
+    volumes:
+      - airflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ----------------------------
+  # Airflow init (one-time)
+  # ----------------------------
+  airflow-init:
+    image: apache/airflow:2.9.3-python3.11
+    container_name: airflow_init
+    depends_on:
+      airflow_postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: admin
+      _AIRFLOW_WWW_USER_FIRSTNAME: Tristan
+      _AIRFLOW_WWW_USER_LASTNAME: ODonnell
+      _AIRFLOW_WWW_USER_ROLE: Admin
+      _AIRFLOW_WWW_USER_EMAIL: admin@example.com
+    volumes:
+      - ./orchestration/dags:/opt/airflow/dags
+      - ./orchestration/logs:/opt/airflow/logs
+      - ./orchestration/plugins:/opt/airflow/plugins
+    entrypoint: /bin/bash
+    command: -c "airflow db migrate && airflow users create --username $$(_AIRFLOW_WWW_USER_USERNAME) --password $$(_AIRFLOW_WWW_USER_PASSWORD) --firstname $$(_AIRFLOW_WWW_USER_FIRSTNAME) --lastname $$(_AIRFLOW_WWW_USER_LASTNAME) --role $$(_AIRFLOW_WWW_USER_ROLE) --email $$(_AIRFLOW_WWW_USER_EMAIL) || true"
+
+  # ----------------------------
+  # Airflow webserver
+  # ----------------------------
+  airflow-webserver:
+    image: apache/airflow:2.9.3-python3.11
+    container_name: airflow_webserver
+    restart: unless-stopped
+    depends_on:
+      airflow_postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./orchestration/dags:/opt/airflow/dags
+      - ./orchestration/logs:/opt/airflow/logs
+      - ./orchestration/plugins:/opt/airflow/plugins
+    command: webserver
+
+  # ----------------------------
+  # Airflow scheduler
+  # ----------------------------
+  airflow-scheduler:
+    image: apache/airflow:2.9.3-python3.11
+    container_name: airflow_scheduler
+    restart: unless-stopped
+    depends_on:
+      airflow_postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    volumes:
+      - ./orchestration/dags:/opt/airflow/dags
+      - ./orchestration/logs:/opt/airflow/logs
+      - ./orchestration/plugins:/opt/airflow/plugins
+    command: scheduler
+
+volumes:
+  ratp_pgdata:
+  airflow_pgdata:
