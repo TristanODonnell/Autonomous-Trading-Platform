@@ -87,3 +87,43 @@ This release freezes universe selection semantics and survivorship controls.
 All historical runs must reference a versioned UniverseSnapshot.
 No dynamic or future-aware membership is permitted.
 
+## v0.5.0 — Phase 4 Safety Architecture (Live-Proofing) Locked
+
+Added:
+- Formal environment isolation model:
+  - Strict separation of paper vs live namespaces
+  - Environment-scoped credentials and account bindings
+  - Paper-only build path (live code excluded by default)
+- Layered enablement gates (multi-layer live protection):
+  - Build-time gate
+  - Configuration gate (NO_LIVE_TRADING default)
+  - Runtime human-confirmed live activation token
+  - External out-of-band kill switch (outside DB + main service)
+- Hard caps & throttles:
+  - Gross exposure limits
+  - Per-symbol exposure limits
+  - Daily notional limits
+  - Order rate limits (per bar / per hour)
+- Shadow mode specification:
+  - Full decision-layer execution
+  - Zero broker initialization
+  - No network calls permitted
+- Broker account allowlist enforcement:
+  - Environment-scoped account_id allowlists
+  - Pre-execution validation
+  - Allowlist defined outside primary database
+- Deterministic idempotency key strategy and duplicate prevention policy
+
+Notes:
+This release locks capital-protection architecture before execution implementation begins.
+
+Live trading now requires:
+- Explicit build enablement
+- Explicit config override
+- Runtime activation token
+- External kill-switch inactive
+- Account allowlist validation
+- Cap validation
+- Idempotency validation
+
+No single bug can route paper orders to live.

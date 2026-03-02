@@ -16,7 +16,7 @@
 - docs/storage/audit-log.md
 
 ## Status
-- Current Phase: Phase 3 — Universe Governance + Survivorship Controls
+- Current Phase: Phase 4 — Safety Architecture (Live-Proofing)
 - Mode: Design / Architecture Only (No Implementation)
 - Baseline: 5-minute bars - Alpaca - single strategy - single universe - single capital bucket
 - Default: NO_LIVE_TRADING (paper/shadow only)
@@ -52,4 +52,24 @@ The following are now locked and versioned:
 
 Universe membership is now time-aware, versioned, and reproducible.
 
-Next: Phase 4 - Safety Architecture (Live-Proofing) + Execution Gates
+### Phase 4 Complete
+The following are now locked and versioned:
+
+- Environment isolation model (paper vs live separation)
+- Paper-only build path for v1
+- Multi-layer live enablement gates:
+  - Build-time gate
+  - Config gate
+  - Runtime human-confirmed activation token
+  - External kill-switch outside DB + service process
+- Hard caps and throttles (exposure, notional, rate limits)
+- Shadow mode (logic runs, broker disabled)
+- Broker account allowlist enforcement
+- Deterministic idempotency + duplicate prevention policy
+
+Capital-protection architecture is now formally defined.
+
+The system is provably live-proofed at the design layer.
+
+Next: Phase 5 - Scheduler Semantics + State Machines
+
