@@ -16,7 +16,7 @@
 - docs/storage/audit-log.md
 
 ## Status
-- Current Phase: Phase 4 — Safety Architecture (Live-Proofing)
+- Current Phase: - Current Phase: Phase 5 — Scheduler Semantics + State Machines
 - Mode: Design / Architecture Only (No Implementation)
 - Baseline: 5-minute bars - Alpaca - single strategy - single universe - single capital bucket
 - Default: NO_LIVE_TRADING (paper/shadow only)
@@ -73,3 +73,29 @@ The system is provably live-proofed at the design layer.
 
 Next: Phase 5 - Scheduler Semantics + State Machines
 
+### Phase 5 Complete
+The following are now locked and versioned:
+
+- Deterministic 5-minute scheduler model (bar close → ingestion SLA → evaluation start)
+- Explicit skip / degrade / halt decision tree for SLA misses
+- Runtime cycle event sequence (BAR_CLOSED → CYCLE_COMPLETED)
+- Order execution state machine:
+  - Defined transition graph
+  - Terminal-state immutability
+  - Forbidden transitions
+  - Retry policy (network-only)
+  - Trigger → event mapping
+- Strategy lifecycle state machine:
+  - IDLE → SIGNALLED → PENDING → IN_POSITION → EXIT_PENDING → COOLDOWN
+  - Position ownership invariants
+  - Forbidden transitions
+  - Trigger → event mapping
+- Reconciliation model:
+  - Runs every evaluation cycle + end-of-day
+  - Mismatch → freeze + alert + human acknowledgment required
+- Global runtime event contract:
+  - Every state transition must emit immutable event
+  - No ambiguous execution states permitted
+
+Runtime behavior is now fully deterministic at the design layer.
+Execution implementation must conform to the locked scheduler and FSM semantics.
