@@ -16,8 +16,7 @@
 - docs/storage/audit-log.md
 
 ## Status
-- Current Phase:  Current Phase: Phase 7 — Research Engine Semantics (Backtest + Tracking + Stress)
-- Mode: Design / Architecture Only (No Implementation)
+- Current Phase: Phase 8 — v1 Vertical Slice Strategy Spec (Single Strategy + Constraints)- Mode: Design / Architecture Only (No Implementation)
 - Baseline: 5-minute bars - Alpaca - single strategy - single universe - single capital bucket
 - Default: NO_LIVE_TRADING (paper/shadow only)
 
@@ -145,3 +144,25 @@ The following research engine semantics are now locked and versioned:
 
 The research engine is now contract-compatible with live execution and produces
 reproducible, audit-friendly outputs.
+
+### Phase 8 Complete
+The v1 vertical slice strategy specification is now locked and versioned:
+
+- Single strategy spec (bar-based):
+  - Entry/exit logic
+  - Holding assumptions
+  - Risk constraints (position sizing, max concurrent positions, exposure caps)
+- Failure semantics defined:
+  - Signal rejected by risk gate → signal recorded, no OrderIntent generated
+  - Repeated flip / churn → cooldown + suppression rules
+- Execution constraints locked:
+  - Order types: market + limit only
+  - Extended-hours behavior explicitly defined (default OFF)
+  - Stop-loss policy explicitly defined (v1 disabled; replacement controls documented)
+- Acceptance criteria:
+  - Strategy can be run through the paper pipeline and OrderIntent patterns predicted
+  - Strategy behavior under missing/late data is fully defined
+
+The v1 vertical slice is now fully specified at the design layer.
+
+Next: Phase 9 — Paper Trading Readiness Gates (Pre-v1 Acceptance)

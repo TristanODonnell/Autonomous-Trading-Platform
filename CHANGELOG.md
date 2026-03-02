@@ -252,3 +252,26 @@ Signal → OrderIntent → BrokerOrder/Fills (simulated) → Positions → Repor
 Notes:
 This release freezes the research engine semantics so the execution engine
 (paper/live) can reuse identical contracts and reporting surfaces.
+
+## v0.9.0 — Phase 8 v1 Vertical Slice Strategy Spec Locked
+
+Added:
+- Single-strategy vertical slice specification (spec-only; no implementation):
+  - Bar-based entry/exit logic
+  - Holding period assumptions and churn controls
+  - Risk constraints (position sizing, max concurrent positions, exposure caps)
+- Explicit failure-case semantics:
+  - Signal conflicts with risk gates (record signal; suppress OrderIntent)
+  - Repeated signal flips / churn behavior (cooldown and suppression rules)
+- Execution constraints locked for v1 strategy:
+  - Supported order types: market + limit only
+  - Extended-hours behavior explicitly defined (default OFF)
+  - Stop-loss policy explicitly defined (v1 disabled; replacement controls documented)
+- Vertical slice acceptance criteria:
+  - Predictable OrderIntent patterns under known bar sequences
+  - Strategy behavior defined under missing data / late data (no ambiguous outcomes)
+
+Acceptance:
+The v1 strategy spec can be run mentally through the full paper pipeline and the
+expected OrderIntent patterns are predictable. Missing/late data behavior is defined.
+
