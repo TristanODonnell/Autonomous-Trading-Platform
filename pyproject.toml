@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "retail-autonomous-trading-platform"
+version = "0.1.0"
+description = "U.S. equities retail algorithmic trading platform (planning-driven v1)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Tristan ODonnell", email = "tristanodonnell100@gmail.com" }]
+keywords = ["trading", "backtesting", "alpaca", "data-engineering"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+dependencies = [
+  # Core utility
+  "pydantic>=2.6",
+  "python-dotenv>=1.0",
+  "pyyaml>=6.0",
+  "tenacity>=8.2",
+  "packaging>=24.0",
+
+  # Data + storage
+  "pandas>=2.2",
+  "pyarrow>=15.0",
+
+  # DB (choose ONE of psycopg3 or sqlalchemy; keeping both is fine early)
+  "psycopg[binary]>=3.1",
+  "sqlalchemy>=2.0",
+
+  # HTTP + time
+  "requests>=2.31",
+  "python-dateutil>=2.9",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.6",
+  "mypy>=1.10",
+  "pytest>=8.2",
+  "pytest-cov>=5.0",
+  "types-requests",
+  "types-PyYAML",
+]
+cli = [
+  "typer>=0.12",
+  "rich>=13.7",
+]
+
+[project.urls]
+Homepage = "https://github.com/TristanODonnell/Autonomous-Trading-Platform"
+
+# --- setuptools src-layout ---
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["tests*", "docs*"]
+
+# --- ruff ---
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]  # let formatter handle line length
+
+# --- pytest ---
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+# --- mypy ---
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+no_implicit_optional = true
+strict_equality = true
