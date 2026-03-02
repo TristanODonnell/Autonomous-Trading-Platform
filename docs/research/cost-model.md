@@ -1,4 +1,4 @@
-# Cost Model 
+# Cost Model
 
 ## v1 Linear Cost Model
 

@@ -1,4 +1,4 @@
-# Backtest Semantics 
+# Backtest Semantics
 
 ## Simulation Model (v1)
 

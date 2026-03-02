@@ -2,7 +2,7 @@
 
 ## Purpose
 - Snapshots capture the system state at evaluation time.
-- **PositionSnapshot:** lists current holdings 
+- **PositionSnapshot:** lists current holdings
 - (`symbol`, `quantity`, `average_cost`, `market_value`).
 
 ## Producer / Consumer

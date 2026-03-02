@@ -1,4 +1,4 @@
-# Stress Test Specification 
+# Stress Test Specification
 
 ## Required Stress Scenarios (v1)
 

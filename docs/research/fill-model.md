@@ -1,4 +1,4 @@
-# Fill Model 
+# Fill Model
 
 ## Assumptions (v1)
 
