@@ -275,3 +275,30 @@ Acceptance:
 The v1 strategy spec can be run mentally through the full paper pipeline and the
 expected OrderIntent patterns are predictable. Missing/late data behavior is defined.
 
+## v1.0.0 — Phase 9 Paper Trading Readiness Gates Locked
+
+Added:
+- Formal paper trading acceptance criteria:
+  - Minimum 10 consecutive market-day validation window
+  - Zero safety gate violations required
+  - Zero reconciliation mismatches required
+  - Idempotency proven under restart conditions
+  - Complete logging + RunManifest enforcement
+- Operational playbook for paper mode:
+  - Incident response procedure (halt → snapshot → review → manual restart)
+  - Kill switch test cadence and required confirmation checks
+  - Broker connectivity monitoring and pause/resume policy
+  - Manual intervention logging requirements
+- Promotion standard definition:
+  - End-to-end correctness proven (Bar → Report)
+  - Reproducibility proven across runs
+  - Audit trace reconstructability guaranteed
+  - Safety controls validated (kill switch, reconciliation, idempotency)
+
+Acceptance:
+v1 is considered complete when a risk reviewer can sign off:
+“This system is safe to run continuously in paper trading mode.”
+
+Notes:
+This release locks operational validation requirements prior to
+declaring v1 complete. Implementation must satisfy these gates before promotion.
