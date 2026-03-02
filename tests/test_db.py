@@ -10,8 +10,10 @@ from src.db import get_engine
 def test_database_connectivity(monkeypatch):
     # match infra/.env values
     monkeypatch.setenv("APP_ENV", "local")
-    monkeypatch.setenv("DATABASE_URL", "postgresql://ratp:ratp_password@localhost:5432/ratp")
-
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://ratp:ratp_password@localhost:5432/ratp",
+    )
     engine = get_engine()
 
     with engine.connect() as conn:

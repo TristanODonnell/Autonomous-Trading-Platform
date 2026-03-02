@@ -5,8 +5,10 @@ from src.config import Settings
 
 def test_environment_loads_required_variables(monkeypatch):
     monkeypatch.setenv("APP_ENV", "local")
-    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/testdb")
-
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://ratp:ratp_password@localhost:5432/ratp",
+    )
     settings = Settings()
 
     assert settings.app_env == "local"
