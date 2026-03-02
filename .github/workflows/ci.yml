@@ -31,7 +31,7 @@ jobs:
           pip install pytest
 
       - name: Run tests
-        run: pytest
+        run: python -m pytest
 
       - name: Tear down
         if: always()
