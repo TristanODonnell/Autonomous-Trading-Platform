@@ -16,7 +16,7 @@
 - docs/storage/audit-log.md
 
 ## Status
-- Current Phase: - Current Phase: Phase 5 — Scheduler Semantics + State Machines
+- Current Phase: - Current Phase: Phase 6 — Ingestion Pipeline Semantics
 - Mode: Design / Architecture Only (No Implementation)
 - Baseline: 5-minute bars - Alpaca - single strategy - single universe - single capital bucket
 - Default: NO_LIVE_TRADING (paper/shadow only)
@@ -99,3 +99,26 @@ The following are now locked and versioned:
 
 Runtime behavior is now fully deterministic at the design layer.
 Execution implementation must conform to the locked scheduler and FSM semantics.
+
+
+### Phase 6 Complete
+The following ingestion semantics are now locked and versioned:
+
+- v1 ingestion sources (Alpaca free feeds, 5-minute bars)
+- Raw vs adjusted storage policy (split-adjusted series + dividend events)
+- Deterministic 5-minute data SLA model:
+  - Freshness window (bar_close + 30s)
+  - Hard deadline (bar_close + 90s)
+- Explicit breach actions:
+  - SKIP (symbol-level)
+  - DEGRADE (safe mode)
+  - HALT (cycle-level)
+- Outlier detection thresholds and rejection rules
+- Missing bar behavior:
+  - Controlled forward-fill
+  - Escalation thresholds
+  - No new entries on synthetic data
+- Corporate action continuity validation
+- Ingestion incident event schema
+
+Ingestion behavior is now fully deterministic at the design layer.
