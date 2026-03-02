@@ -1,5 +1,72 @@
 # Autonomous-Trading-Platform
 
+## Development Environment Setup
+
+### Python Version
+This project requires Python 3.11.x.
+
+Verify: python --version
+
+### Recommended IDE
+
+PyCharm Professional or Community Edition is recommended.
+Ensure the interpreter is set to the project's `.venv`.
+
+---
+
+### 1. Clone Repository
+- git clone https://github.com/TristanODonnell/Autonomous-Trading-Platform.git
+- cd Autonomous-Trading-Platform
+
+---
+
+### 2. Create Virtual Environment
+Windows:
+- py -m venv .venv
+- .\.venv\Scripts\activate
+
+macOS / Linux:
+- python3 -m venv .venv
+- source .venv/bin/activate
+
+---
+
+### 3. Install Dependencies
+Upgrade pip:
+- python -m pip install --upgrade pip
+
+Install pinned runtime dependencies:
+- python -m pip install -r requirements.txt
+
+Install the project(src layout, editable mode):
+- python -m pip install -e .
+
+---
+
+### 4. Install Dev Tooling
+Install development dependencies:
+- python -m pip install -r requirements-dev.txt
+
+Install pre-commit hooks:
+- pre-commit install
+
+---
+
+### 5. Run Tests
+- python -m pytest
+
+---
+
+### 6. Environment Configuration
+Copy example config:
+Windows:
+- copy .env.example .env.dev
+
+MacOS / Linux:
+- cp .env.example .env.dev
+
+Populate required variables before running the app.
+
 ## Canonical Docs
 - docs/v1-boundaries.md
 - docs/safety-doctrine.md
@@ -189,6 +256,3 @@ The following paper-trading validation gates are now locked and versioned:
 The system now has defined criteria for calling v1 complete.
 
 Next: phase 101 Development Environment & Baseline Setup
-
-
-
