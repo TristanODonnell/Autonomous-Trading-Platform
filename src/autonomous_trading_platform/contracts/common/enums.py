@@ -43,3 +43,8 @@ class CorporateActionType(enum.StrEnum):
     MERGER_CASH = "merger_cash"
     MERGER_STOCK = "merger_stock"
     NAME_CHANGE = "name_change"
+
+
+class LiquiditySide(enum.StrEnum):
+    MAKER = "maker"
+    TAKER = "taker"
