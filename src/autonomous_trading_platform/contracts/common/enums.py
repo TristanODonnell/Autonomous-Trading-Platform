@@ -68,3 +68,9 @@ class RunType(enum.StrEnum):
     PAPER = "paper"
     LIVE = "live"
     SHADOW = "shadow"
+
+
+class SignalDirection(enum.StrEnum):
+    BUY = "buy"
+    SELL = "sell"
+    FLAT = "flat"
