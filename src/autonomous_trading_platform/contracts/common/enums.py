@@ -48,3 +48,16 @@ class CorporateActionType(enum.StrEnum):
 class LiquiditySide(enum.StrEnum):
     MAKER = "maker"
     TAKER = "taker"
+
+
+class BarInterval(enum.StrEnum):
+    ONE_MIN = "1m"
+    FIVE_MIN = "5m"
+    FIFTEEN_MIN = "15m"
+    ONE_HOUR = "1h"
+    ONE_DAY = "1d"
+
+
+class PriceBasis(enum.StrEnum):
+    RAW = "raw"
+    ADJUSTED = "adjusted"
