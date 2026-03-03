@@ -32,3 +32,14 @@ class OrderStatus(enum.StrEnum):
     FILLED = "filled"
     CANCELED = "canceled"
     REJECTED = "rejected"
+
+
+class CorporateActionType(enum.StrEnum):
+    CASH_DIVIDEND = "cash_dividend"
+    STOCK_DIVIDEND = "stock_dividend"
+    SPLIT_FORWARD = "split_forward"
+    SPLIT_REVERSE = "split_reverse"
+    SPINOFF = "spinoff"
+    MERGER_CASH = "merger_cash"
+    MERGER_STOCK = "merger_stock"
+    NAME_CHANGE = "name_change"
