@@ -1,5 +1,6 @@
 # autonomous_trading_platform/contracts/market/market_bar.py
-from datetime import datetime
+
+from __future__ import annotations
 
 from pydantic import BaseModel
 
@@ -7,23 +8,24 @@ from autonomous_trading_platform.contracts.common.enums import (
     BarInterval,
     PriceBasis,
 )
+from autonomous_trading_platform.contracts.common.types import Money, UTCDateTime
 
 
 class MarketBar(BaseModel):
     bar_id: str
-    timestamp: datetime
-    end_timestamp: datetime
+    timestamp: UTCDateTime
+    end_timestamp: UTCDateTime
     interval: BarInterval
     symbol: str
-    open: float
-    high: float
-    low: float
-    close: float
+    open: Money
+    high: Money
+    low: Money
+    close: Money
     volume: int
-    vwap: float | None = None
+    vwap: Money | None = None
     trade_count: int | None = None
     price_basis: PriceBasis
     adjustment_factor: float
     source: str
-    ingested_at: datetime
+    ingested_at: UTCDateTime
     quality_flags: list[str] | None = None
