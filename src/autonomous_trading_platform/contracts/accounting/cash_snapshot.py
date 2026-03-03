@@ -1,21 +1,23 @@
 # autonomous_trading_platform/contracts/accounting/cash_snapshot.py
 
-from datetime import datetime
+from __future__ import annotations
+
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from autonomous_trading_platform.contracts.common.enums import OrderSource
+from autonomous_trading_platform.contracts.common.types import Money, UTCDateTime
 
 
 class CashSnapshot(BaseModel):
     snapshot_id: UUID
     run_id: UUID
-    timestamp: datetime
+    timestamp: UTCDateTime
     currency: str
-    cash: float
-    buying_power: float
-    reserved_cash: float
-    equity: float | None = None
+    cash: Money
+    buying_power: Money
+    reserved_cash: Money
+    equity: Money | None = None
     source: OrderSource
-    capital_bucket: float | None = None
+    capital_bucket: Money | None = None
