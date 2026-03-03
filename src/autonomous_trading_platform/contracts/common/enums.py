@@ -20,6 +20,11 @@ class TimeInForce(enum.StrEnum):
     FOK = "fok"
 
 
+class OrderSource(enum.StrEnum):
+    LEDGER = "ledger"
+    BROKER_RECONCILED = "broker_reconciled"
+
+
 class OrderStatus(enum.StrEnum):
     NEW = "new"
     SUBMITTED = "submitted"
