@@ -61,3 +61,10 @@ class BarInterval(enum.StrEnum):
 class PriceBasis(enum.StrEnum):
     RAW = "raw"
     ADJUSTED = "adjusted"
+
+
+class RunType(enum.StrEnum):
+    BACKTEST = "backtest"
+    PAPER = "paper"
+    LIVE = "live"
+    SHADOW = "shadow"
