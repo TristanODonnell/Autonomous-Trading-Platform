@@ -1,5 +1,8 @@
 # contracts/trading/broker_order.py
-from datetime import datetime
+
+from __future__ import annotations
+
+from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
@@ -11,6 +14,7 @@ from autonomous_trading_platform.contracts.common.enums import (
     Side,
     TimeInForce,
 )
+from autonomous_trading_platform.contracts.common.types import Money, Quantity, UTCDateTime
 
 
 class BrokerOrder(BaseModel):
@@ -25,15 +29,15 @@ class BrokerOrder(BaseModel):
     order_type: OrderType
     time_in_force: TimeInForce
     extended_hours: bool
-    qty: float | None = None
-    notional: float | None = None
-    limit_price: float | None = None
-    stop_price: float | None = None
+    qty: Quantity | None = None
+    notional: Money | None = None
+    limit_price: Money | None = None
+    stop_price: Money | None = None
     status: OrderStatus
-    submitted_at: datetime | None = None
-    updated_at: datetime
-    filled_qty: float = 0.0
-    avg_fill_price: float | None = None
+    submitted_at: UTCDateTime | None = None
+    updated_at: UTCDateTime
+    filled_qty: Quantity = Decimal("0")
+    avg_fill_price: Money | None = None
     last_error: str | None = None
     raw_broker_payload: dict[str, Any] | None = None
-    requested_qty: float | None = None
+    requested_qty: Quantity | None = None

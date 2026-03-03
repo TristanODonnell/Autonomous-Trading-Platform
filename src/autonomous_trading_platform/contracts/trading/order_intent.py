@@ -1,5 +1,6 @@
 # autonomous_trading_platform/contracts/trading/order_intent.py
-from datetime import datetime
+from __future__ import annotations
+
 from typing import Any
 from uuid import UUID
 
@@ -10,6 +11,7 @@ from autonomous_trading_platform.contracts.common.enums import (
     Side,
     TimeInForce,
 )
+from autonomous_trading_platform.contracts.common.types import Money, Quantity, UTCDateTime
 
 
 class OrderIntent(BaseModel):
@@ -17,15 +19,15 @@ class OrderIntent(BaseModel):
     idempotency_key: str
     run_id: UUID
     strategy_id: str
-    timestamp: datetime
-    bar_timestamp: datetime
+    timestamp: UTCDateTime
+    bar_timestamp: UTCDateTime
     symbol: str
     side: Side
-    qty: float | None = None
-    notional: float | None = None
+    qty: Quantity | None = None
+    notional: Money | None = None
     order_type: OrderType
-    limit_price: float | None = None
-    stop_price: float | None = None
+    limit_price: Money | None = None
+    stop_price: Money | None = None
     time_in_force: TimeInForce
     extended_hours: bool
     client_order_id: str
