@@ -210,3 +210,20 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Alembic
+infra/db/alembic/__pycache__/
+infra/db/alembic/versions/__pycache__/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# SQL dumps
+*.sql
+*.dump
+
+# Python
+**/__pycache__/
+*.pyc

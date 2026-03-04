@@ -44,7 +44,7 @@ class OrderIntents(Base):
     )
     extended_hours: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     client_order_id: Mapped[str] = mapped_column(String, nullable=False)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    meta: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB, nullable=True)
 
     __table_args__ = (
         UniqueConstraint(

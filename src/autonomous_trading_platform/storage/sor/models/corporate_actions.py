@@ -42,8 +42,7 @@ class CorporateAction(Base):
     source: Mapped[str] = mapped_column(String(64), nullable=False)
 
     ingested_at: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-
+    meta: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB, nullable=True)
     __table_args__ = (
         UniqueConstraint(
             "symbol",

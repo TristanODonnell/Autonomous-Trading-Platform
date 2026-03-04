@@ -35,4 +35,4 @@ class Fill(Base):
         SAEnum(LiquiditySide, name="liquidity_side_enum"), nullable=True
     )
     venue: Mapped[str | None] = mapped_column(String, nullable=True)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    meta: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB, nullable=True)
