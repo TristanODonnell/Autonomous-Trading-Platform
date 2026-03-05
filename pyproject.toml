@@ -47,6 +47,7 @@ dev = [
   "pytest-cov>=5.0",
   "types-requests",
   "types-PyYAML",
+    "pre-commit",
 ]
 cli = [
   "typer>=0.12",

@@ -12,7 +12,7 @@ def test_database_connectivity(monkeypatch):
     monkeypatch.setenv("APP_ENV", "local")
     monkeypatch.setenv(
         "DATABASE_URL",
-        "postgresql+psycopg://ratp:ratp_password@localhost:5432/ratp",
+        "postgresql+psycopg://ratp:ratp_password@localhost:5433/ratp",
     )
     engine = get_engine()
 
