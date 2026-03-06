@@ -312,3 +312,99 @@ declaring v1 complete. Implementation must satisfy these gates before promotion.
 - Added initial env + DB connectivity tests
 - Added pre-commit quality gates
 - Added MkDocs documentation scaffold
+
+## v1.1.0 — Phase 1 Data Model & Contract Implementation
+
+Added:
+- Concrete implementation of canonical trading contracts using Pydantic models:
+  - MarketBar
+  - CorporateAction
+  - UniverseSnapshot
+  - Signal
+  - OrderIntent
+  - BrokerOrder
+  - Fill
+  - PositionSnapshot
+  - CashSnapshot
+  - RiskSnapshot
+  - RunManifest
+
+- Deterministic identifier generation for core records
+  - Example: bar_id derived from (symbol, interval, timestamp, price_basis)
+
+- Strong typing and enumerations for domain concepts:
+  - BarInterval
+  - PriceBasis
+  - OrderSide
+  - OrderType
+  - TimeInForce
+  - Environment
+
+- Validator framework for enforcing contract invariants:
+  - Bar timestamp alignment (5-minute boundary)
+  - Monotonic timestamp guarantees
+  - Price sanity checks (OHLC relationships)
+  - Non-negative quantities and balances
+  - Order lifecycle constraints
+
+- Validation rule execution engine with structured violation reporting.
+
+- Unit test coverage for validator rules including:
+  - Positive acceptance cases
+  - Invalid data rejection cases
+  - Exception handling behavior
+
+Database Implementation:
+- Alembic migrations introduced for canonical system-of-record tables:
+  - market_bars
+  - corporate_actions
+  - universe_snapshots
+  - signals
+  - order_intents
+  - broker_orders
+  - fills
+  - position_snapshots
+  - cash_snapshots
+  - risk_snapshots
+  - run_manifests
+
+- Primary key and uniqueness constraints implemented to enforce invariants:
+  - market_bars unique(symbol, interval, timestamp, price_basis)
+  - foreign keys for lifecycle relationships (e.g. fills → broker_orders)
+
+Parquet Storage Layer:
+- Parquet schema definitions for:
+  - Raw market bars
+  - Adjusted market bars
+  - Corporate actions
+
+- Dataset partitioning strategy implemented:
+  - symbol
+  - date
+
+- Metadata versioning fields:
+  - schema_version
+  - data_version
+
+- Utilities added for:
+  - deterministic parquet writing
+  - schema-safe dataset reading
+
+Reproducibility:
+- RunManifest model implemented capturing:
+  - git commit
+  - dataset versions
+  - universe version
+  - strategy configuration
+  - cost model versions
+  - random seed
+  - environment metadata
+
+- Serialization utilities added for:
+  - JSON export
+  - database persistence
+
+Notes:
+This release marks the transition from architecture specification to concrete
+implementation of the canonical contract layer. All future ingestion,
+research, and execution systems must operate strictly through these models.

@@ -83,10 +83,20 @@ Populate required variables before running the app.
 - docs/storage/audit-log.md
 
 ## Status
-- Current Phase: Phase 9 — Paper Trading Readiness Gates (Pre-v1 Acceptance)
-- Mode: Design / Architecture Only (No Implementation)
-- - Baseline: 5-minute bars - Alpaca - single strategy - single universe - single capital bucket
-- Default: NO_LIVE_TRADING (paper/shadow only)
+
+Current Phase: Phase 1 — Data Model & Contract Implementation
+Mode: Active Implementation
+
+Baseline assumptions:
+- 5-minute bars
+- Alpaca market data + brokerage
+- Single strategy (v1 vertical slice)
+- Single universe
+- Single capital bucket
+- Paper trading only (NO_LIVE_TRADING enforced)
+
+The system is transitioning from architecture specification to concrete
+implementation beginning with the canonical data contract layer.
 
 ### Phase 1 Complete
 The following are now locked and versioned:
@@ -282,3 +292,82 @@ The repository can now:
 - Run tests with coverage
 - Connect to a local Postgres system-of-record
 - Serve documentation locally via MkDocs
+
+## Phase 1 — Data Model & Contract Implementation
+
+Phase 1 implements the canonical contract layer defined in the architecture
+specification. These contracts represent the core data structures used across:
+
+- ingestion
+- research/backtesting
+- execution
+- ledger/accounting
+- reporting
+
+All system components must exchange data exclusively through these models.
+
+### Implemented Contracts
+
+- MarketBar
+- CorporateAction
+- UniverseSnapshot
+- Signal
+- OrderIntent
+- BrokerOrder
+- Fill
+- PositionSnapshot
+- CashSnapshot
+- RiskSnapshot
+- RunManifest
+
+These models enforce strict type validation and invariant rules.
+
+### Validation System
+
+A reusable validator framework enforces domain invariants such as:
+
+- bar timestamp alignment (5-minute boundaries)
+- monotonic time progression
+- OHLC sanity checks
+- non-negative balances and quantities
+- valid order lifecycle transitions
+
+Validation rules can be executed during:
+
+- ingestion
+- backtesting
+- strategy evaluation
+- execution reconciliation
+
+### Storage Implementation
+
+Postgres tables have been created using Alembic migrations to serve as the
+system-of-record (SOR) for trading state.
+
+Implemented tables:
+
+- market_bars
+- corporate_actions
+- universe_snapshots
+- signals
+- order_intents
+- broker_orders
+- fills
+- position_snapshots
+- cash_snapshots
+- risk_snapshots
+- run_manifests
+
+Database constraints enforce many of the same invariants as the contract layer.
+
+### Parquet Datasets
+
+Market data is stored in Parquet datasets for efficient analytical access.
+
+Datasets include:
+
+- raw market bars
+- adjusted market bars
+- corporate actions
+
+Partitioning strategy:
