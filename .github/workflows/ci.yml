@@ -16,7 +16,7 @@ jobs:
           cp infra/.env.example infra/.env
 
       - name: Start Postgres
-        run: docker compose -f docker-compose.yml up -d
+        run: docker compose -f docker-compose.yml up -d postgres
 
       - name: Wait for Postgres
         run: |
