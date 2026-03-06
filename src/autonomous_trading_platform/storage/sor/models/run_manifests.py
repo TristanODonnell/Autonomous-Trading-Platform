@@ -18,7 +18,7 @@ from .base import Base
 from .helpers.sa_types import UUID_PK, MoneyType, UTCDateTimeType
 
 
-class RunManifest(Base):
+class RunManifestRow(Base):
     __tablename__ = "run_manifests"
 
     run_id: Mapped[UUID] = mapped_column(UUID_PK, primary_key=True)
@@ -42,7 +42,7 @@ class RunManifest(Base):
     universe_version: Mapped[str] = mapped_column(String, nullable=False)
     cost_model: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     fill_model: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    random_seed: Mapped[int] = mapped_column(Integer, nullable=False)
+    random_seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
     git_commit: Mapped[str] = mapped_column(String, nullable=False)
     docker_image: Mapped[str | None] = mapped_column(String, nullable=True)
     python_version: Mapped[str | None] = mapped_column(String, nullable=True)

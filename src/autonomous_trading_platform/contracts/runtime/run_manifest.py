@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -35,3 +35,11 @@ class RunManifest(BaseModel):
     python_version: str | None = None
     dependency_lock_hash: str | None = None
     notes: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return manifest as a Python dictionary."""
+        return cast(dict[str, Any], self.model_dump(mode="json"))
+
+    def to_json(self) -> str:
+        """Return manifest serialized to JSON."""
+        return cast(str, self.model_dump_json(indent=2))
