@@ -1,50 +1,46 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date
 
 from autonomous_trading_platform.contracts.common.enums import CorporateActionType
 from autonomous_trading_platform.contracts.market.corporate_action import CorporateAction
 
-from .core import Rule, is_aligned_to_minutes, is_positive
+from .core import Rule, is_positive
 
 CORPORATE_ACTION_RULES: list[Rule[CorporateAction]] = [
-    # effective_date is present and valid date.
     Rule(
         code="EFFECTIVE_DATE_PRESENT_AND_VALID",
         field="effective_date",
-        check=lambda ca, _ctx: (
-            isinstance(ca.effective_date, datetime) and is_aligned_to_minutes(ca.effective_date, 5)
-        ),
-        message=lambda ca, _ctx: "effective date must be present and valid",
+        check=lambda ca, _ctx: isinstance(ca.effective_date, date),
+        message=lambda ca, _ctx: "effective_date must be a valid date",
     ),
-    # ratio_or_amount > 0.
     Rule(
         code="RATIO_OR_AMOUNT_POSITIVE",
         field="ratio_or_amount",
         check=lambda ca, _ctx: is_positive(ca.ratio_or_amount),
-        message=lambda ca, _ctx: "ratio_or_amount must be positive",
+        message=lambda ca, _ctx: "ratio_or_amount must be > 0",
     ),
-    # If type is a split: ratio_or_amount != 1.0.
     Rule(
-        code="IF_ACTIONTYPE_SPLIT_RATIO_OR_AMOUNT_NE_1.0",
+        code="RATIO_OR_AMOUNT_NOT_ONE_WHEN_SPLIT",
         field="ratio_or_amount",
         check=lambda ca, _ctx: (
             (
-                ca.CorporateActionType != CorporateActionType.SPLIT_FORWARD
-                and ca.CorporateActionType != CorporateActionType.SPLIT_REVERSE
+                ca.type != CorporateActionType.SPLIT_FORWARD
+                and ca.type != CorporateActionType.SPLIT_REVERSE
             )
-            or (ca.ratio_or_amount != 1.0)
+            or ca.ratio_or_amount != 1.0
         ),
-        message=lambda ca, _ctx: "When type is a split, ratio_or_amount must not equal 1.0",
+        message=lambda ca, _ctx: "when type is split, ratio_or_amount must not equal 1.0",
     ),
-    # If type="name_change" then new_symbol must be present.
     Rule(
-        code="IF_ACTIONTYPE_NAME_CHANGE_THEN_NEW_SYMBOL_MUST_EXIST",
-        field="action_type",
+        code="NEW_SYMBOL_PRESENT_WHEN_NAME_CHANGE",
+        field="new_symbol",
         check=lambda ca, _ctx: (
-            (ca.CorporateActionType != CorporateActionType.NAME_CHANGE)
-            or isinstance(ca.new_symbol, str)
+            ca.type != CorporateActionType.NAME_CHANGE
+            or (isinstance(ca.new_symbol, str) and ca.new_symbol.strip() != "")
         ),
-        message=lambda ca, _ctx: "When type is name_change, new_symbol must not be empty",
+        message=lambda ca, _ctx: (
+            "when type is name_change, new_symbol must be present and non-empty"
+        ),
     ),
 ]

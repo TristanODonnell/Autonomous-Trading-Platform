@@ -8,46 +8,55 @@ from autonomous_trading_platform.contracts.trading.broker_order import BrokerOrd
 from .core import Rule, is_non_negative, is_positive
 
 BROKER_ORDER_RULES: list[Rule[BrokerOrder]] = [
-    # filled_qty >= 0
     Rule(
-        code="ORDER_FILLED_QTY_NONNEG",
+        code="ORDER_FILLED_QTY_NON_NEGATIVE",
         field="filled_qty",
         check=lambda order, _ctx: is_non_negative(order.filled_qty),
         message=lambda order, _ctx: "filled_qty must be >= 0",
     ),
-    # If status == filled then filled_qty == requested_qty (or broker final)
     Rule(
-        code="ORDER_FILLED_QTY_EQUALS_REQUESTED_WHEN_FILLED",
-        field="filled_qty",
+        code="ORDER_REQUESTED_QTY_PRESENT_WHEN_EXECUTED",
+        field="requested_qty",
         check=lambda order, _ctx: (
-            (order.status != OrderStatus.FILLED) or (order.filled_qty == order.requested_qty)
+            order.status not in {OrderStatus.PARTIALLY_FILLED, OrderStatus.FILLED}
+            or order.requested_qty is not None
         ),
         message=lambda order, _ctx: (
-            f"status='filled' requires filled_qty == requested_qty "
+            f"requested_qty must be present when status='{order.status.value}'"
+        ),
+    ),
+    Rule(
+        code="ORDER_FILLED_QTY_EQUALS_REQUESTED_QTY_WHEN_FILLED",
+        field=None,
+        check=lambda order, _ctx: (
+            order.status != OrderStatus.FILLED
+            or (order.requested_qty is not None and order.filled_qty == order.requested_qty)
+        ),
+        message=lambda order, _ctx: (
+            "when status='filled', filled_qty must equal requested_qty "
             f"(filled_qty={order.filled_qty}, requested_qty={order.requested_qty})"
         ),
     ),
-    # If status == filled then filled_qty > 0
     Rule(
         code="ORDER_FILLED_QTY_POSITIVE_WHEN_FILLED",
         field="filled_qty",
         check=lambda order, _ctx: (
-            (order.status != OrderStatus.FILLED) or is_positive(order.filled_qty)
+            order.status != OrderStatus.FILLED or is_positive(order.filled_qty)
         ),
         message=lambda order, _ctx: (
-            f"status='filled' requires filled_qty > 0 (got {order.filled_qty})"
+            f"when status='filled', filled_qty must be > 0 (filled_qty={order.filled_qty})"
         ),
     ),
-    # If status == partially_filled then 0 < filled_qty < requested_qty
     Rule(
-        code="ORDER_FILLED_QTY_BOUNDS_WHEN_PARTIALLY_FILLED",
-        field="filled_qty",
+        code="ORDER_FILLED_QTY_STRICTLY_BETWEEN_ZERO_AND_REQUESTED_QTY_WHEN_PARTIALLY_FILLED",
+        field=None,
         check=lambda order, _ctx: (
-            (order.status != OrderStatus.PARTIALLY_FILLED)
+            order.status != OrderStatus.PARTIALLY_FILLED
             or (order.requested_qty is not None and 0 < order.filled_qty < order.requested_qty)
         ),
         message=lambda order, _ctx: (
-            "status='partially_filled' requires 0 < filled_qty < requested_qty "
+            "when status='partially_filled', filled_qty must satisfy "
+            "0 < filled_qty < requested_qty "
             f"(filled_qty={order.filled_qty}, requested_qty={order.requested_qty})"
         ),
     ),

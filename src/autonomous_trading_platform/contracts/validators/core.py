@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from dataclasses import field as dc_field
@@ -134,12 +135,27 @@ def run_rules(
 Number = int | float | Decimal
 
 
+def is_finite(x: Number) -> bool:
+    try:
+        if isinstance(x, Decimal):
+            return x.is_finite()
+        return math.isfinite(x)
+    except (TypeError, ValueError):
+        return False
+
+
 def is_non_negative(x: Number) -> bool:
-    return x >= 0
+    try:
+        return is_finite(x) and x >= 0
+    except (TypeError, ValueError):
+        return False
 
 
 def is_positive(x: Number) -> bool:
-    return x > 0
+    try:
+        return is_finite(x) and x > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def is_ohlc_sane(open_price: float, high: float, low: float, close: float) -> bool:
@@ -150,6 +166,8 @@ def is_ohlc_sane(open_price: float, high: float, low: float, close: float) -> bo
 
 
 def is_aligned_to_minutes(ts: datetime, minutes: int) -> bool:
+    if minutes <= 0:
+        return False
     return (ts.minute % minutes == 0) and ts.second == 0 and ts.microsecond == 0
 
 
