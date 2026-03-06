@@ -29,7 +29,7 @@ class RunManifest(BaseModel):
     universe_version: str
     cost_model: dict[str, Any] | None = None
     fill_model: dict[str, Any] | None = None
-    random_seed: int
+    random_seed: int | None = None
     git_commit: str
     docker_image: str | None = None
     python_version: str | None = None

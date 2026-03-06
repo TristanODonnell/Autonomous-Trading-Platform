@@ -38,10 +38,4 @@ RUN_MANIFEST_RULES: list[Rule[RunManifest]] = [
         ),
         message=lambda rm, _ctx: "backtest runs must define cost_model and fill_model",
     ),
-    Rule(
-        code="DATASET_AND_UNIVERSE_VERSION_REQUIRED",
-        field=None,
-        check=lambda rm, _ctx: rm.dataset_version is not None and rm.universe_version is not None,
-        message=lambda rm, _ctx: "dataset_version and universe_version must be defined",
-    ),
 ]
