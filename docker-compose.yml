@@ -9,7 +9,7 @@ services:
     env_file:
       - infra/.env
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - ratp_pgdata:/var/lib/postgresql/data
       - ./sql/init:/docker-entrypoint-initdb.d:ro
@@ -31,7 +31,7 @@ services:
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
     ports:
-      - "5433:5432"  # host 5433 -> container 5432 (avoids clashing with ratp_postgres)
+      - "5434:5432"  # host 5434-> container 5432 (avoids clashing with ratp_postgres)
     volumes:
       - airflow_pgdata:/var/lib/postgresql/data
     healthcheck:
