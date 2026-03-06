@@ -371,3 +371,27 @@ Datasets include:
 - corporate actions
 
 Partitioning strategy:
+- dataset/
+- symbol=XYZ/
+- date=YYYY-MM-DD/
+- part-*.parquet
+
+
+Each dataset includes metadata fields:
+
+- schema_version
+- data_version
+
+### Run Manifest
+
+Every research or trading run produces a RunManifest capturing:
+
+- git commit
+- dataset versions
+- universe version
+- strategy configuration
+- cost/fill model versions
+- random seed
+- environment metadata
+
+This ensures deterministic replay of historical runs.
