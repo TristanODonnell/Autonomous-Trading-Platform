@@ -6,35 +6,32 @@ import pyarrow as pa
 import pyarrow.dataset as ds
 
 from .datasets import ParquetDataset
-from .metadata import attach_metadata, build_metadata
+from .metadata import extract_metadata, validate_required_metadata
 from .paths import dataset_root
 
 
-def write_table(
-    table: pa.Table,
+def read_dataset(
     dataset: ParquetDataset,
     base_path: str | Path,
-    data_version: str,
-) -> None:
+) -> pa.Table:
     """
-    Write a PyArrow table to a Parquet dataset with partitioning and metadata.
+    Read an entire Parquet dataset and validate metadata.
     """
-
-    # Build metadata
-    metadata = build_metadata(dataset, data_version)
-
-    # Attach metadata to schema
-    schema_with_meta = attach_metadata(dataset.schema, metadata)
-
-    # Enforce schema
-    table = table.cast(schema_with_meta)
 
     root = dataset_root(base_path, dataset)
 
-    ds.write_dataset(
-        table,
-        base_dir=str(root),
-        format="parquet",
-        partitioning=list(dataset.partition_cols),
-        existing_data_behavior="overwrite_or_ignore",
-    )
+    dataset_obj = ds.dataset(str(root), format="parquet")
+
+    table = dataset_obj.to_table()
+
+    metadata = extract_metadata(table.schema)
+
+    validate_required_metadata(metadata)
+
+    if metadata.get("schema_version") != dataset.schema_version:
+        raise ValueError(
+            f"Schema version mismatch: expected {dataset.schema_version}, "
+            f"found {metadata.get('schema_version')}"
+        )
+
+    return table
