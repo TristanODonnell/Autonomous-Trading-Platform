@@ -15,7 +15,7 @@ class SignalRepository(BaseRepository):
     # Basic lookup
     # -----------------------------
 
-    def get_by_id(self, id_value: str) -> Signal | None:
+    def get_by_signal_id(self, id_value: str) -> Signal | None:
         """Fetch a single row by deterministic ID."""
         stmt = select(Signal).where(Signal.signal_id == id_value)
         result: Signal | None = self.session.execute(stmt).scalar_one_or_none()
@@ -41,7 +41,7 @@ class SignalRepository(BaseRepository):
         """
         Insert or update based on deterministic ID.
         """
-        existing = self.get_by_id(row.signal_id)
+        existing = self.get_by_signal_id(row.signal_id)
 
         if existing is None:
             self.session.add(row)
@@ -57,8 +57,8 @@ class SignalRepository(BaseRepository):
     # Deletes (optional)
     # -----------------------------
 
-    def delete_by_id(self, id_value: str) -> None:
+    def delete_by_signal_id(self, id_value: str) -> None:
         """Delete a row by ID."""
-        obj = self.get_by_id(id_value)
+        obj = self.get_by_signal_id(id_value)
         if obj is not None:
             self.session.delete(obj)

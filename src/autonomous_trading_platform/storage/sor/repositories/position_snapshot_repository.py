@@ -15,7 +15,7 @@ class PositionSnapshotRepository(BaseRepository):
     # Basic lookup
     # -----------------------------
 
-    def get_by_id(self, id_value: str) -> PositionSnapshot | None:
+    def get_by_snapshot_id(self, id_value: str) -> PositionSnapshot | None:
         """Fetch a single row by deterministic ID."""
         stmt = select(PositionSnapshot).where(PositionSnapshot.snapshot_id == id_value)
         result: PositionSnapshot | None = self.session.execute(stmt).scalar_one_or_none()
@@ -41,7 +41,7 @@ class PositionSnapshotRepository(BaseRepository):
         """
         Insert or update based on deterministic ID.
         """
-        existing = self.get_by_id(row.snapshot_id)
+        existing = self.get_by_snapshot_id(row.snapshot_id)
 
         if existing is None:
             self.session.add(row)
@@ -57,8 +57,8 @@ class PositionSnapshotRepository(BaseRepository):
     # Deletes (optional)
     # -----------------------------
 
-    def delete_by_id(self, id_value: str) -> None:
+    def delete_by_snapshot_id(self, id_value: str) -> None:
         """Delete a row by ID."""
-        obj = self.get_by_id(id_value)
+        obj = self.get_by_snapshot_id(id_value)
         if obj is not None:
             self.session.delete(obj)

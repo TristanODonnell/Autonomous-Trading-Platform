@@ -57,7 +57,7 @@ class BrokerOrderRepository(BaseRepository):
     # Deletes (optional)
     # -----------------------------
 
-    def delete_by_id(self, id_value: str) -> None:
+    def delete_by_broker_order_id(self, id_value: str) -> None:
         """Delete a row by ID."""
         obj = self.get_by_broker_order_id(id_value)
         if obj is not None:
