@@ -1,10 +1,10 @@
 from sqlalchemy import select
 
+from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
-from autonomous_trading_platform.storage.sor.models.<model_file> import <ModelORM>
 
 
-class <ModelName>Repository(BaseRepository):
+class CashSnapshotRepository(BaseRepository):
     """
     Repository for interacting with the <table_name> table.
 
@@ -15,20 +15,21 @@ class <ModelName>Repository(BaseRepository):
     # Basic lookup
     # -----------------------------
 
-    def get_by_id(self, id_value: str) -> <ModelORM> | None:
+    def get_by_id(self, id_value: str) -> CashSnapshot | None:
         """Fetch a single row by deterministic ID."""
-        stmt = select(<ModelORM>).where(<ModelORM>.id == id_value)
-        result: <ModelORM> | None = self.session.execute(stmt).scalar_one_or_none()
+        stmt = select(CashSnapshot).where(CashSnapshot.snapshot_id == id_value)
+        result: CashSnapshot | None = self.session.execute(stmt).scalar_one_or_none()
         return result
+
     # -----------------------------
     # Inserts
     # -----------------------------
 
-    def insert(self, row: <ModelORM>) -> None:
+    def insert(self, row: CashSnapshot) -> None:
         """Insert a single row."""
         self.session.add(row)
 
-    def insert_many(self, rows: list[<ModelORM>]) -> None:
+    def insert_many(self, rows: list[CashSnapshot]) -> None:
         """Insert multiple rows."""
         self.session.add_all(rows)
 
@@ -36,18 +37,18 @@ class <ModelName>Repository(BaseRepository):
     # Upserts
     # -----------------------------
 
-    def upsert(self, row: <ModelORM>) -> <ModelORM>:
+    def upsert(self, row: CashSnapshot) -> CashSnapshot:
         """
         Insert or update based on deterministic ID.
         """
-        existing = self.get_by_id(row.id)
+        existing = self.get_by_id(row.snapshot_id)
 
         if existing is None:
             self.session.add(row)
             return row
 
         # Update fields (explicit updates recommended)
-        for column in <ModelORM>.__table__.columns:
+        for column in CashSnapshot.__table__.columns:
             setattr(existing, column.name, getattr(row, column.name))
 
         return existing
