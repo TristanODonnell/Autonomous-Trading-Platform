@@ -7,8 +7,12 @@ from typing import Any
 from .datasets import ParquetDataset
 
 
-def dataset_root(base_path: str | Path, dataset: ParquetDataset) -> Path:
-    return Path(base_path) / dataset.name
+def dataset_version_root(
+    base_path: str | Path,
+    dataset: ParquetDataset,
+    data_version: str,
+) -> Path:
+    return Path(base_path) / dataset.name / data_version
 
 
 def format_partition_value(value: Any) -> str:
@@ -27,9 +31,10 @@ def format_partition_value(value: Any) -> str:
 def partition_path(
     base_path: str | Path,
     dataset: ParquetDataset,
+    data_version: str,
     partitions: dict[str, Any],
 ) -> Path:
-    root = dataset_root(base_path, dataset)
+    root = dataset_version_root(base_path, dataset, data_version)
 
     path = root
     for col in dataset.partition_cols:

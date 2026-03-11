@@ -10,17 +10,23 @@ REQUIRED_METADATA_KEYS = (
     "dataset_name",
     "schema_version",
     "data_version",
+    "ingestion_timestamp",
+    "checksum",
 )
 
 
 def build_metadata(
     dataset: ParquetDataset,
     data_version: str,
+    ingestion_timestamp: str,
+    checksum: str,
 ) -> dict[str, str]:
     return {
         "dataset_name": dataset.name,
         "schema_version": dataset.schema_version,
         "data_version": data_version,
+        "ingestion_timestamp": ingestion_timestamp,
+        "checksum": checksum,
     }
 
 
