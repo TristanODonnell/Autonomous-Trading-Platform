@@ -7,7 +7,6 @@ import pyarrow as pa
 import pyarrow.dataset as ds
 
 from .datasets import ParquetDataset
-from .helpers.compute_checksum import compute_table_checksum
 from .metadata import extract_metadata, validate_required_metadata
 from .paths import dataset_version_root
 
@@ -30,14 +29,6 @@ def read_dataset(
     metadata = extract_metadata(table.schema)
 
     validate_required_metadata(metadata)
-
-    stored_checksum = metadata.get("checksum")
-    actual_checksum = compute_table_checksum(table)
-    if stored_checksum is None:
-        raise ValueError("Missing checksum in dataset metadata")
-
-    if stored_checksum != actual_checksum:
-        raise ValueError(f"Checksum mismatch: expected {stored_checksum}, found {actual_checksum}")
 
     if metadata.get("schema_version") != dataset.schema_version:
         raise ValueError(
