@@ -3,7 +3,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.storage.sor.models.universe_snapshots import UniverseSnapshot
-from autonomous_trading_platform.storage.sor.unit_of_work import SorUnitOfWork
+from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 
 class UniverseSnapshotService:
