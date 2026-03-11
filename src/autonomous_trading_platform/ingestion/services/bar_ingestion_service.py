@@ -21,11 +21,12 @@ class BarIngestionService:
         print(market_bar)
 
     @staticmethod
-    def _build_bar_id(self, symbol, timestamp, interval, price_basis) -> str:
+    def _build_bar_id(symbol, timestamp, interval, price_basis) -> str:
         key = f"{symbol}:{interval}:{price_basis}:{timestamp.isoformat()}"
         return hashlib.sha256(key.encode()).hexdigest()
 
-    def _convert_provider_bar(self, provider_bar: Bar) -> MarketBar:
+    @staticmethod
+    def _convert_provider_bar(provider_bar: Bar) -> MarketBar:
         """
         Convert a provider-specific minute bar into the platform's
         canonical MarketBar model.
@@ -40,11 +41,10 @@ class BarIngestionService:
 
         return MarketBar(
             bar_id=BarIngestionService._build_bar_id(
-                self=self,
                 symbol=provider_bar.symbol,
                 timestamp=timestamp_utc,
-                interval="1m",
-                price_basis="raw",
+                interval=BarInterval.ONE_MIN,
+                price_basis=PriceBasis.RAW,
             ),
             timestamp=timestamp_utc,
             end_timestamp=timestamp_utc + timedelta(minutes=1),
