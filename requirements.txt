@@ -60,3 +60,5 @@ tzdata==2025.3
     #   psycopg
 urllib3==2.6.3
     # via requests
+
+alpaca

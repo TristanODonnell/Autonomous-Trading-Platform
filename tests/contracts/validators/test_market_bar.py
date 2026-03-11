@@ -1,7 +1,11 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
+from autonomous_trading_platform.contracts.common.enums import (
+    BarInterval,
+    MarketSession,
+    PriceBasis,
+)
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 from autonomous_trading_platform.contracts.validators.core import run_rules
 from autonomous_trading_platform.contracts.validators.market_bar import MARKET_BAR_RULES
@@ -28,6 +32,7 @@ def make_market_bar(**overrides) -> MarketBar:
         "source": "alpaca",
         "ingested_at": datetime.now(UTC),
         "quality_flags": None,
+        "session": MarketSession.REGULAR,
     }
 
     data.update(overrides)
