@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pyarrow as pa
@@ -7,7 +9,7 @@ import pyarrow.dataset as ds
 
 from .datasets import ParquetDataset
 from .metadata import attach_metadata, build_metadata
-from .paths import dataset_root
+from .paths import dataset_version_root
 
 
 def write_table(
@@ -19,9 +21,15 @@ def write_table(
     """
     Write a PyArrow table to a Parquet dataset with partitioning and metadata.
     """
-
+    ingestion_timestamp = datetime.now(UTC).isoformat()
+    checksum = hashlib.sha256(str(table).encode()).hexdigest()
     # Build metadata
-    metadata = build_metadata(dataset, data_version)
+    metadata = build_metadata(
+        dataset=dataset,
+        data_version=data_version,
+        ingestion_timestamp=ingestion_timestamp,
+        checksum=checksum,
+    )
 
     # Attach metadata to schema
     schema_with_meta = attach_metadata(dataset.schema, metadata)
@@ -29,7 +37,7 @@ def write_table(
     # Enforce schema
     table = table.cast(schema_with_meta)
 
-    root = dataset_root(base_path, dataset)
+    root = dataset_version_root(base_path, dataset, data_version)
 
     ds.write_dataset(
         table,

@@ -31,14 +31,14 @@ def test_parquet_write_read(tmp_path):
     }
 
     table = pa.table(data)
-
+    data_version = "test-run"
     write_table(
         table=table,
         dataset=RAW_BARS_DATASET,
         base_path=tmp_path,
-        data_version="test-run",
+        data_version=data_version,
     )
 
-    result = read_dataset(RAW_BARS_DATASET, tmp_path)
+    result = read_dataset(RAW_BARS_DATASET, tmp_path, data_version)
 
     assert result.num_rows == 1
