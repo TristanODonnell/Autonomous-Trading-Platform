@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -8,6 +7,7 @@ import pyarrow as pa
 import pyarrow.dataset as ds
 
 from .datasets import ParquetDataset
+from .helpers.compute_checksum import compute_table_checksum
 from .metadata import attach_metadata, build_metadata
 from .paths import dataset_version_root
 
@@ -22,8 +22,7 @@ def write_table(
     Write a PyArrow table to a Parquet dataset with partitioning and metadata.
     """
     ingestion_timestamp = datetime.now(UTC).isoformat()
-    checksum = hashlib.sha256(str(table).encode()).hexdigest()
-    # Build metadata
+    checksum = compute_table_checksum(table)  # Build metadata
     metadata = build_metadata(
         dataset=dataset,
         data_version=data_version,
