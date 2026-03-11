@@ -9,6 +9,7 @@ from autonomous_trading_platform.contracts.common.enums import BarInterval, Pric
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 
 from ..helpers.bar_identity import build_bar_id
+from ..helpers.session import classify_market_session
 from .bar_aggregation_service import BarAggregationService
 
 
@@ -70,4 +71,5 @@ class BarIngestionService:
             source="alpaca",
             ingested_at=datetime.now(UTC),
             quality_flags=[],
+            session=classify_market_session(timestamp_utc),
         )

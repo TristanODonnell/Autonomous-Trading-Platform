@@ -7,7 +7,11 @@ from sqlalchemy import Float, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
+from autonomous_trading_platform.contracts.common.enums import (
+    BarInterval,
+    MarketSession,
+    PriceBasis,
+)
 from autonomous_trading_platform.contracts.common.types import Money, UTCDateTime
 
 from .base import Base
@@ -51,6 +55,11 @@ class MarketBar(Base):
     ingested_at: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
 
     quality_flags: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+
+    market_session: Mapped[MarketSession] = mapped_column(
+        SAEnum(MarketSession, name="market_session_enum"),
+        nullable=False,
+    )
 
     __table_args__ = (
         UniqueConstraint(
