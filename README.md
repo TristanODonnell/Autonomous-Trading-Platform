@@ -84,7 +84,7 @@ Populate required variables before running the app.
 
 ## Status
 
-Current Phase: Phase 1 — Data Model & Contract Implementation
+Current Phase: Phase 2 - Storage Layer & Versioning
 Mode: Active Implementation
 
 Baseline assumptions:
@@ -395,3 +395,108 @@ Every research or trading run produces a RunManifest capturing:
 - environment metadata
 
 This ensures deterministic replay of historical runs.
+
+## Phase 2 — Storage Layer Implementation
+
+Phase 2 implements the storage architecture defined in the system design documentation.
+
+This layer provides deterministic persistence and retrieval for all datasets and trading state.
+
+---
+
+### Repository Layer
+
+Repository classes have been introduced to encapsulate database access for all system-of-record tables.
+
+Repositories provide structured interfaces for:
+
+- insert operations
+- updates
+- selects
+- deletes
+- idempotent upserts based on deterministic identifiers
+
+These repositories operate within a **UnitOfWork transactional boundary** to ensure atomic writes across related records.
+
+Example use cases include:
+
+- inserting an order and its fills
+- writing ingestion results across multiple tables
+- updating run state and audit records together
+
+---
+
+### Versioned Parquet Datasets
+
+Market data and corporate actions are stored in **versioned Parquet datasets**.
+
+Dataset structure:
+- dataset_root/
+- bars/
+- {data_version}/
+- symbol=XYZ/
+- date=YYYY-MM-DD/
+- part-*.parquet
+
+
+Each dataset version contains metadata describing:
+
+- schema_version
+- dataset_name
+- data_version
+- ingestion timestamp
+
+Reader utilities allow loading datasets using:
+
+- dataset version
+- symbol
+- date range
+
+This ensures historical runs can always access the **exact dataset version used during execution**.
+
+---
+
+### Universe Snapshot Versioning
+
+Universe membership is stored as versioned snapshots.
+
+Each snapshot records:
+
+- snapshot_date
+- list of symbols
+- eligibility criteria
+- version identifier
+
+Utility services allow deterministic queries such as:
+- was_symbol_eligible(symbol, date)
+
+
+This ensures:
+
+- survivorship bias is eliminated
+- historical runs use the correct universe
+- delistings and ticker changes do not corrupt backtests
+
+---
+
+### Audit Logging
+
+An immutable **audit log** table captures key lifecycle events across the system.
+
+Recorded events include:
+
+- run lifecycle transitions
+- configuration changes
+- order state transitions
+- reconciliation outcomes
+- operational incidents
+
+These logs provide the foundation for monitoring, debugging, and regulatory traceability.
+
+---
+
+### Data Integrity
+
+The storage layer is designed to support checksum validation for Parquet datasets and row-level integrity checks in Postgres.
+
+Checksum verification during dataset reads is planned for a future update.

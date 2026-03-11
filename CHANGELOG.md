@@ -408,3 +408,44 @@ Notes:
 This release marks the transition from architecture specification to concrete
 implementation of the canonical contract layer. All future ingestion,
 research, and execution systems must operate strictly through these models.
+
+## v1.2.0 — Phase 2 Storage Layer & Versioning
+
+Added:
+
+Postgres Repository Layer
+- Implemented repository classes for system-of-record tables to encapsulate database operations.
+- Repositories provide structured interfaces for inserts, updates, selects, and deletes.
+- Idempotent upsert patterns implemented using deterministic identifiers (e.g. bar_id, intent_id).
+
+Transaction Boundaries
+- Introduced UnitOfWork pattern to enforce transactional consistency.
+- Atomic write boundaries implemented for related operations across repositories.
+
+Versioned Dataset Storage
+- Implemented versioned Parquet dataset layout:
+  bars/{data_version}/symbol=.../date=.../*.parquet
+- Dataset version metadata recorded including ingestion timestamp and schema version.
+- Reader utilities implemented for loading versioned datasets by symbol and date range.
+
+Universe Versioning
+- Implemented UniverseSnapshot storage and retrieval utilities.
+- Snapshot metadata includes:
+  - snapshot_date
+  - symbols
+  - selection criteria
+  - version identifier
+- Added deterministic membership query:
+  "Was this symbol eligible on this date?"
+
+Audit Logging
+- Implemented immutable audit log table capturing:
+  - run lifecycle events
+  - configuration changes
+  - order state transitions
+  - reconciliation results
+  - operational incidents
+
+Notes:
+This release implements the storage and versioning infrastructure defined in Phase 2.
+Checksum validation for Parquet partitions is planned but not yet implemented.
