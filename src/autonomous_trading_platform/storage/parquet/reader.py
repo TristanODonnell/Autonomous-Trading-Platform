@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -29,6 +30,15 @@ def read_dataset(
     metadata = extract_metadata(table.schema)
 
     validate_required_metadata(metadata)
+
+    stored_checksum = metadata.get("checksum")
+    actual_checksum = hashlib.sha256(str(table).encode("utf-8")).hexdigest()
+
+    if stored_checksum is None:
+        raise ValueError("Missing checksum in dataset metadata")
+
+    if stored_checksum != actual_checksum:
+        raise ValueError(f"Checksum mismatch: expected {stored_checksum}, found {actual_checksum}")
 
     if metadata.get("schema_version") != dataset.schema_version:
         raise ValueError(
