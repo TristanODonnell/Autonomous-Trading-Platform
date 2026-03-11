@@ -5,6 +5,8 @@ from datetime import UTC, datetime, timedelta
 from autonomous_trading_platform.contracts.common.enums import BarInterval
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 
+from ..helpers.bar_identity import build_bar_id
+
 
 class BarAggregationService:
     def __init__(self):
@@ -45,7 +47,12 @@ class BarAggregationService:
         vwap = last.vwap
 
         return MarketBar(
-            bar_id="TODO_BUILD_BAR_ID",
+            bar_id=build_bar_id(
+                symbol=first.symbol,
+                timestamp=first.timestamp,
+                interval=BarInterval.FIVE_MIN,
+                price_basis=first.price_basis,
+            ),
             timestamp=first.timestamp,
             end_timestamp=first.timestamp + timedelta(minutes=5),
             interval=BarInterval.FIVE_MIN,

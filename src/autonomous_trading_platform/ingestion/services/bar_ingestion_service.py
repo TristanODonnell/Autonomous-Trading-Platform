@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -9,6 +8,7 @@ from alpaca.data.models.bars import Bar
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 
+from ..helpers.bar_identity import build_bar_id
 from .bar_aggregation_service import BarAggregationService
 
 
@@ -32,11 +32,6 @@ class BarIngestionService:
         print(five_min_bar)
 
     @staticmethod
-    def _build_bar_id(symbol, timestamp, interval, price_basis) -> str:
-        key = f"{symbol}:{interval}:{price_basis}:{timestamp.isoformat()}"
-        return hashlib.sha256(key.encode()).hexdigest()
-
-    @staticmethod
     def _convert_provider_bar(provider_bar: Bar) -> MarketBar:
         """
         Convert a provider-specific minute bar into the platform's
@@ -51,11 +46,11 @@ class BarIngestionService:
         timestamp_utc = ts.astimezone(UTC)
 
         return MarketBar(
-            bar_id=BarIngestionService._build_bar_id(
+            bar_id=build_bar_id(
                 symbol=provider_bar.symbol,
                 timestamp=timestamp_utc,
-                interval=BarInterval.ONE_MIN.value,
-                price_basis=PriceBasis.RAW.value,
+                interval=BarInterval.ONE_MIN,
+                price_basis=PriceBasis.RAW,
             ),
             timestamp=timestamp_utc,
             end_timestamp=timestamp_utc + timedelta(minutes=1),
