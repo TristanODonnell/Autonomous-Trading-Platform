@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from autonomous_trading_platform.contracts.common.enums import (
     BarInterval,
+    MarketSession,
     PriceBasis,
 )
 from autonomous_trading_platform.contracts.common.types import Money, UTCDateTime
@@ -29,3 +30,4 @@ class MarketBar(BaseModel):
     source: str
     ingested_at: UTCDateTime
     quality_flags: list[str] | None = None
+    session: MarketSession

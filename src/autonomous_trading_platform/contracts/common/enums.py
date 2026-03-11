@@ -74,3 +74,10 @@ class SignalDirection(enum.StrEnum):
     BUY = "buy"
     SELL = "sell"
     FLAT = "flat"
+
+
+class MarketSession(enum.StrEnum):
+    PREMARKET = "premarket"
+    REGULAR = "regular"
+    POSTMARKET = "postmarket"
+    OVERNIGHT = "overnight"
