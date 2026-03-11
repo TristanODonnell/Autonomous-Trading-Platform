@@ -1,3 +1,5 @@
+from datetime import date
+
 from sqlalchemy import select
 
 from autonomous_trading_platform.storage.sor.models.universe_snapshots import UniverseSnapshot
@@ -18,6 +20,12 @@ class UniverseSnapshotRepository(BaseRepository):
     def get_by_universe_id(self, id_value: str) -> UniverseSnapshot | None:
         """Fetch a single row by deterministic ID."""
         stmt = select(UniverseSnapshot).where(UniverseSnapshot.universe_id == id_value)
+        result: UniverseSnapshot | None = self.session.execute(stmt).scalar_one_or_none()
+        return result
+
+    def get_by_snapshot_date(self, snapshot_date: date) -> UniverseSnapshot | None:
+        """Fetch a single row by snapshot date."""
+        stmt = select(UniverseSnapshot).where(UniverseSnapshot.snapshot_date == snapshot_date)
         result: UniverseSnapshot | None = self.session.execute(stmt).scalar_one_or_none()
         return result
 
