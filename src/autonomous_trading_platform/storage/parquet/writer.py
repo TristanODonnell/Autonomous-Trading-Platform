@@ -22,7 +22,11 @@ def write_table(
     Write a PyArrow table to a Parquet dataset with partitioning and metadata.
     """
     ingestion_timestamp = datetime.now(UTC).isoformat()
+
+    table = table.cast(dataset.schema)
+
     checksum = compute_table_checksum(table)  # Build metadata
+
     metadata = build_metadata(
         dataset=dataset,
         data_version=data_version,
@@ -30,10 +34,7 @@ def write_table(
         checksum=checksum,
     )
 
-    # Attach metadata to schema
     schema_with_meta = attach_metadata(dataset.schema, metadata)
-
-    # Enforce schema
     table = table.cast(schema_with_meta)
 
     root = dataset_version_root(base_path, dataset, data_version)
