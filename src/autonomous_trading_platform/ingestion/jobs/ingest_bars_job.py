@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .. import alpaca_market_data_client as client
+from ..clients import alpaca_market_data_client as client
 from ..services.bar_ingestion_service import BarIngestionService
 
 
