@@ -12,10 +12,10 @@ from autonomous_trading_platform.contracts.common.enums import (
     PriceBasis,
 )
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
+from autonomous_trading_platform.ingestion.helpers.bar_identity import build_bar_id
+from autonomous_trading_platform.ingestion.helpers.session import classify_market_session
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
-from ..helpers.bar_identity import build_bar_id
-from ..helpers.session import classify_market_session
 from .bar_aggregation_service import BarAggregationService
 from .bar_validation_service import BarValidationService
 

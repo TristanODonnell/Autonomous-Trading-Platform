@@ -4,8 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
-
-from ..helpers.bar_identity import build_bar_id
+from autonomous_trading_platform.ingestion.helpers.bar_identity import build_bar_id
 
 
 class BarAggregationService:

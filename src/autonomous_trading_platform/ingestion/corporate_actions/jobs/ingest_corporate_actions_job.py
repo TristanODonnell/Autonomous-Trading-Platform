@@ -3,11 +3,16 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.market.corporate_action import CorporateAction
+from autonomous_trading_platform.ingestion.corporate_actions.clients import (
+    alpaca_corporate_action_client as client,
+)
+from autonomous_trading_platform.ingestion.corporate_actions.services.corporate_action_adjustment_service import (
+    CorporateActionAdjustmentService,
+)
+from autonomous_trading_platform.ingestion.corporate_actions.services.corporate_action_normalization_service import (
+    CorporateActionNormalizationService,
+)
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
-
-from ..clients import alpaca_corporate_action_client as client
-from ..services.corporate_action_adjustment_service import CorporateActionAdjustmentService
-from ..services.corporate_action_normalization_service import CorporateActionNormalizationService
 
 
 class IngestCorporateActionsJob:
