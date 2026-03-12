@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 
 from .core import Rule, is_aligned_to_minutes, is_non_negative, is_positive
@@ -103,5 +103,23 @@ MARKET_BAR_RULES: list[Rule[MarketBar]] = [
         field="adjustment_factor",
         check=lambda mb, _ctx: mb.price_basis != PriceBasis.RAW or mb.adjustment_factor == 1.0,
         message=lambda mb, _ctx: "when price_basis='raw', adjustment_factor must equal 1.0",
+    ),
+    Rule(
+        code="INTERVAL_IS_FIVE_MIN",
+        field="interval",
+        check=lambda mb, _ctx: mb.interval == BarInterval.FIVE_MIN,
+        message=lambda mb, _ctx: "interval must be FIVE_MIN",
+    ),
+    Rule(
+        code="SYMBOL_NON_EMPTY",
+        field="symbol",
+        check=lambda mb, _ctx: isinstance(mb.symbol, str) and mb.symbol.strip() != "",
+        message=lambda mb, _ctx: "symbol must be a non-empty string",
+    ),
+    Rule(
+        code="VWAP_NON_NEGATIVE_WHEN_PRESENT",
+        field="vwap",
+        check=lambda mb, _ctx: mb.vwap is None or is_non_negative(mb.vwap),
+        message=lambda mb, _ctx: "vwap must be >= 0 when present",
     ),
 ]

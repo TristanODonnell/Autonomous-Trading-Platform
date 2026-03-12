@@ -17,7 +17,7 @@ class BarAggregationService:
         minute = (timestamp.minute // 5) * 5
         return timestamp.replace(minute=minute, second=0, microsecond=0)
 
-    def add_minute_bar(self, bar: MarketBar):
+    def add_minute_bar(self, bar: MarketBar) -> MarketBar | None:
         bucket = BarAggregationService._get_bucket(bar.timestamp)
 
         self.buffer.setdefault(bucket, []).append(bar)

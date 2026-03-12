@@ -81,3 +81,9 @@ class MarketSession(enum.StrEnum):
     REGULAR = "regular"
     POSTMARKET = "postmarket"
     OVERNIGHT = "overnight"
+
+
+class BarQualityFlag(enum.StrEnum):
+    LATE = "late"
+    SUSPECTED_OUTLIER = "suspected_outlier"
+    MISSING_CYCLE_PEER = "missing_cycle_peer"
