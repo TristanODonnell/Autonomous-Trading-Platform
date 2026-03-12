@@ -22,8 +22,6 @@ class CorporateActionNormalizationService:
             "stock_merger": CorporateActionType.MERGER_STOCK,
             "name_change": CorporateActionType.NAME_CHANGE,
         }
-        provider_type = raw.get("type")
-
         if not isinstance(provider_type, str):
             raise ValueError("Corporate action missing valid 'type' field")
 
