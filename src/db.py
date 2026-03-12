@@ -14,8 +14,10 @@ def get_engine() -> Engine:
     return create_engine(settings.database_url)
 
 
-SessionLocal = sessionmaker(bind=get_engine(), autoflush=False, autocommit=False)
-
-
 def get_session() -> Session:
-    return SessionLocal()
+    session_local = sessionmaker(
+        bind=get_engine(),
+        autoflush=False,
+        autocommit=False,
+    )
+    return session_local()
