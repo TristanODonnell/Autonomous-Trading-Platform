@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from pydantic import BaseModel
 
 from autonomous_trading_platform.contracts.common.enums import (
@@ -26,7 +28,7 @@ class MarketBar(BaseModel):
     vwap: Money | None = None
     trade_count: int | None = None
     price_basis: PriceBasis
-    adjustment_factor: float
+    adjustment_factor: Decimal
     source: str
     ingested_at: UTCDateTime
     quality_flags: list[str] | None = None

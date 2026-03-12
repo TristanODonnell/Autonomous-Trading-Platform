@@ -1,5 +1,9 @@
+from datetime import date
+from typing import cast
+
 from sqlalchemy import select
 
+from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.storage.sor.models.market_bars import MarketBar
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
 
@@ -20,6 +24,23 @@ class MarketBarRepository(BaseRepository):
         stmt = select(MarketBar).where(MarketBar.bar_id == id_value)
         result: MarketBar | None = self.session.execute(stmt).scalar_one_or_none()
         return result
+
+    def get_raw_bars_before_date(
+        self,
+        symbol: str,
+        effective_date: date,
+    ) -> list[MarketBar]:
+
+        stmt = (
+            select(MarketBar)
+            .where(MarketBar.symbol == symbol)
+            .where(MarketBar.timestamp < effective_date)
+            .where(MarketBar.price_basis == PriceBasis.RAW)
+        )
+
+        rows = self.session.execute(stmt).scalars().all()
+
+        return cast(list[MarketBar], rows)
 
     # -----------------------------
     # Inserts
