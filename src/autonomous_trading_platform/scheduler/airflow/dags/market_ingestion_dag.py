@@ -44,7 +44,7 @@ with DAG(
     max_active_runs=1,
     tags=["market-data", "ingestion", "scheduler"],
 ) as dag:
-    run_ingestion = PythonOperator(
+    PythonOperator(
         task_id="run_market_ingestion_cycle",
         python_callable=run_market_ingestion_cycle,
         execution_timeout=timedelta(minutes=4),

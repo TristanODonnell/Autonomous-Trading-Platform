@@ -59,21 +59,23 @@ class IngestBarsJob:
         #     symbols=symbols_to_evaluate,
         # )
 
+    async def _process_symbol_bars(self, symbol_bars) -> None:
+        for provider_bar in symbol_bars:
+            await self.on_provider_bar(provider_bar)
+
     def run_once(self, start: datetime, end: datetime) -> None:
-        """
-        Fetch a bounded window of minute bars, process them, finalize, and return.
-        """
         response = client.fetch_minute_bars(
             symbols=sorted(self.expected_symbols),
             start=start,
             end=end,
         )
 
-        for symbol in sorted(self.expected_symbols):
-            symbol_bars = response.data.get(symbol, [])
+        async def _run() -> None:
+            for symbol in sorted(self.expected_symbols):
+                symbol_bars = response.data.get(symbol, [])
+                await self._process_symbol_bars(symbol_bars)
 
-            for provider_bar in symbol_bars:
-                asyncio.run(self.on_provider_bar(provider_bar))
+        asyncio.run(_run())
 
         if self.current_cycle_timestamp is not None:
             self.finalize_cycle(self.current_cycle_timestamp)
