@@ -20,6 +20,19 @@ CORPORATE_ACTION_RULES: list[Rule[CorporateAction]] = [
         message=lambda ca, _ctx: "when action_type is a split, split_ratio must be > 0",
     ),
     Rule(
+        code="SPLIT_RATIO_REQUIRED_FOR_SPLITS",
+        field="split_ratio",
+        check=lambda ca, _ctx: (
+            ca.action_type
+            not in {
+                CorporateActionType.SPLIT_FORWARD,
+                CorporateActionType.SPLIT_REVERSE,
+            }
+            or ca.split_ratio is not None
+        ),
+        message=lambda ca, _ctx: "split_ratio must be present for split actions",
+    ),
+    Rule(
         code="RATIO_OR_AMOUNT_NOT_ONE_WHEN_SPLIT",
         field="split_ratio",
         check=lambda ca, _ctx: (
@@ -42,5 +55,23 @@ CORPORATE_ACTION_RULES: list[Rule[CorporateAction]] = [
         message=lambda ca, _ctx: (
             "when action_type is NAME_CHANGE, new_symbol must be present and non-empty"
         ),
+    ),
+    Rule(
+        code="SYMBOL_PRESENT",
+        field="symbol",
+        check=lambda ca, _ctx: isinstance(ca.symbol, str) and ca.symbol.strip() != "",
+        message=lambda ca, _ctx: "symbol must be present and non-empty",
+    ),
+    Rule(
+        code="EFFECTIVE_DATE_PRESENT",
+        field="effective_date",
+        check=lambda ca, _ctx: ca.effective_date is not None,
+        message=lambda ca, _ctx: "effective_date must be present",
+    ),
+    Rule(
+        code="EFFECTIVE_DATE_PRESENT",
+        field="effective_date",
+        check=lambda ca, _ctx: ca.effective_date is not None,
+        message=lambda ca, _ctx: "effective_date must be present",
     ),
 ]

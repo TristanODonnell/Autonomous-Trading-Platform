@@ -4,8 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
-
-from ..helpers.bar_identity import build_bar_id
+from autonomous_trading_platform.ingestion.helpers.bar_identity import build_bar_id
 
 
 class BarAggregationService:
@@ -17,7 +16,7 @@ class BarAggregationService:
         minute = (timestamp.minute // 5) * 5
         return timestamp.replace(minute=minute, second=0, microsecond=0)
 
-    def add_minute_bar(self, bar: MarketBar):
+    def add_minute_bar(self, bar: MarketBar) -> MarketBar | None:
         bucket = BarAggregationService._get_bucket(bar.timestamp)
 
         self.buffer.setdefault(bucket, []).append(bar)

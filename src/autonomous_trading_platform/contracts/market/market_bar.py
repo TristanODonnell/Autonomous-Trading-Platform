@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from autonomous_trading_platform.contracts.common.enums import (
     BarInterval,
+    BarQualityFlag,
     MarketSession,
     PriceBasis,
 )
@@ -31,5 +32,5 @@ class MarketBar(BaseModel):
     adjustment_factor: Decimal
     source: str
     ingested_at: UTCDateTime
-    quality_flags: list[str] | None = None
+    quality_flags: list[BarQualityFlag] = []
     session: MarketSession

@@ -5,6 +5,7 @@ from decimal import Decimal
 from autonomous_trading_platform.contracts.common.enums import CorporateActionType, PriceBasis
 from autonomous_trading_platform.contracts.market.corporate_action import CorporateAction
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
+from autonomous_trading_platform.ingestion.helpers.bar_identity import build_bar_id
 
 
 class CorporateActionAdjustmentService:
@@ -43,8 +44,16 @@ class CorporateActionAdjustmentService:
 
     @staticmethod
     def _apply_factor(bar: MarketBar, factor: Decimal) -> MarketBar:
+
+        adjusted_bar_id = build_bar_id(
+            symbol=bar.symbol,
+            timestamp=bar.timestamp,
+            interval=bar.interval,
+            price_basis=PriceBasis.ADJUSTED,
+        )
+
         return MarketBar(
-            bar_id=bar.bar_id,
+            bar_id=adjusted_bar_id,
             symbol=bar.symbol,
             timestamp=bar.timestamp,
             end_timestamp=bar.end_timestamp,
@@ -62,3 +71,9 @@ class CorporateActionAdjustmentService:
             quality_flags=bar.quality_flags,
             session=bar.session,
         )
+
+    def supports_adjustment(self, action: CorporateAction) -> bool:
+        return action.action_type in {
+            CorporateActionType.SPLIT_FORWARD,
+            CorporateActionType.SPLIT_REVERSE,
+        }

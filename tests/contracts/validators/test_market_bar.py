@@ -28,10 +28,10 @@ def make_market_bar(**overrides) -> MarketBar:
         "vwap": Decimal("103"),
         "trade_count": 25,
         "price_basis": PriceBasis.RAW,
-        "adjustment_factor": 1.0,
+        "adjustment_factor": Decimal("1"),
         "source": "alpaca",
         "ingested_at": datetime.now(UTC),
-        "quality_flags": None,
+        "quality_flags": [],
         "session": MarketSession.REGULAR,
     }
 
