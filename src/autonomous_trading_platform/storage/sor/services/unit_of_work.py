@@ -1,5 +1,8 @@
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.storage.sor.repositories.audit_logs_repository import (
+    AuditLogRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.broker_order_repository import (
     BrokerOrderRepository,
 )
@@ -22,6 +25,9 @@ from autonomous_trading_platform.storage.sor.repositories.position_snapshot_repo
 from autonomous_trading_platform.storage.sor.repositories.risk_snapshot_repository import (
     RiskSnapshotRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.run_manifests_repository import (
+    RunManifestRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.signals_repository import SignalRepository
 from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
     UniverseSnapshotRepository,
@@ -43,6 +49,8 @@ class SorUnitOfWork:
         self.position_snapshots = PositionSnapshotRepository(session)
         self.cash_snapshots = CashSnapshotRepository(session)
         self.risk_snapshots = RiskSnapshotRepository(session)
+        self.audit_logs = AuditLogRepository(session)
+        self.run_manifests = RunManifestRepository(session)
 
     def __enter__(self) -> "SorUnitOfWork":
         self.session.begin()
