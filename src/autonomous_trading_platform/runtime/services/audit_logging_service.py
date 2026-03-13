@@ -22,51 +22,6 @@ class AuditLoggingService:
             metadata=metadata,
         )
 
-    def record_bar_missing(self, run_id: str, symbol: str, cycle_timestamp: datetime) -> None:
-        self._record_event(
-            run_id=run_id,
-            event_type="BAR_MISSING",
-            component="market_ingestion",
-            message=f"Missing bar detected for {symbol}",
-            metadata={
-                "symbol": symbol,
-                "cycle_timestamp": cycle_timestamp.isoformat(),
-            },
-        )
-
-    def record_bar_late(self, run_id: str, symbol: str, bar_end_timestamp: datetime) -> None:
-        self._record_event(
-            run_id=run_id,
-            event_type="BAR_LATE",
-            component="market_ingestion",
-            message=f"Late bar detected for {symbol}",
-            metadata={
-                "symbol": symbol,
-                "bar_end_timestamp": bar_end_timestamp.isoformat(),
-            },
-        )
-
-    def record_bar_outlier(
-        self,
-        run_id: str,
-        symbol: str,
-        cycle_timestamp: datetime,
-        reference_close: Decimal,
-        observed_close: Decimal,
-    ) -> None:
-        self._record_event(
-            run_id=run_id,
-            event_type="BAR_OUTLIER",
-            component="market_ingestion",
-            message=f"Suspected outlier detected for {symbol}",
-            metadata={
-                "symbol": symbol,
-                "cycle_timestamp": cycle_timestamp.isoformat(),
-                "reference_close": str(reference_close),
-                "observed_close": str(observed_close),
-            },
-        )
-
     def record_run_completed(
         self,
         run_id: str,
@@ -130,3 +85,97 @@ class AuditLoggingService:
 
         with SorUnitOfWork(self.session) as uow:
             uow.audit_logs.add(event)
+
+    # ============================================================
+    # MARKET BAR AUDITING FUNCTIONS
+    # ============================================================
+    def record_bar_missing(self, run_id: str, symbol: str, cycle_timestamp: datetime) -> None:
+        self._record_event(
+            run_id=run_id,
+            event_type="BAR_MISSING",
+            component="market_ingestion",
+            message=f"Missing bar detected for {symbol}",
+            metadata={
+                "symbol": symbol,
+                "cycle_timestamp": cycle_timestamp.isoformat(),
+            },
+        )
+
+    def record_bar_late(self, run_id: str, symbol: str, bar_end_timestamp: datetime) -> None:
+        self._record_event(
+            run_id=run_id,
+            event_type="BAR_LATE",
+            component="market_ingestion",
+            message=f"Late bar detected for {symbol}",
+            metadata={
+                "symbol": symbol,
+                "bar_end_timestamp": bar_end_timestamp.isoformat(),
+            },
+        )
+
+    def record_bar_outlier(
+        self,
+        run_id: str,
+        symbol: str,
+        cycle_timestamp: datetime,
+        reference_close: Decimal,
+        observed_close: Decimal,
+    ) -> None:
+        self._record_event(
+            run_id=run_id,
+            event_type="BAR_OUTLIER",
+            component="market_ingestion",
+            message=f"Suspected outlier detected for {symbol}",
+            metadata={
+                "symbol": symbol,
+                "cycle_timestamp": cycle_timestamp.isoformat(),
+                "reference_close": str(reference_close),
+                "observed_close": str(observed_close),
+            },
+        )
+
+    # ============================================================
+    # CORPORATE ACTION AUDITING FUNCTIONS
+    # ============================================================
+
+    def record_corporate_action_parse_failed(
+        self, run_id: str, symbol: str, cycle_timestamp: datetime
+    ) -> None:
+        self._record_event(
+            run_id=run_id,
+            event_type="PARSE_FAILED",
+            component="corporate_action_ingestion",
+            message=f"parse failed for {symbol}",
+            metadata={
+                "symbol": symbol,
+                "cycle_timestamp": cycle_timestamp.isoformat(),
+            },
+        )
+
+    def record_corporate_action_validation_failed(
+        self, run_id: str, symbol: str, cycle_timestamp: datetime
+    ) -> None:
+        self._record_event(
+            run_id=run_id,
+            event_type="CORPORATE_ACTION_VALIDATION_FAILED",
+            component="corporate_action_ingestion",
+            message=f"corporate action validation failed for {symbol}",
+            metadata={
+                "symbol": symbol,
+                "cycle_timestamp": cycle_timestamp.isoformat(),
+            },
+        )
+
+    def record_corporate_action_adjustment_applied(
+        self, run_id: str, symbol: str, cycle_timestamp: datetime
+    ) -> None:
+        self._record_event(
+            run_id=run_id,
+            event_type="CORPORATE_ACTION_ADJUSTMENT_APPLIED",
+            component="corporate_action_ingestion",
+            message=f"corporate action adjustment applied for {symbol}",
+            metadata={
+                "symbol": symbol,
+                "cycle_timestamp": cycle_timestamp.isoformat(),
+            },
+        )
