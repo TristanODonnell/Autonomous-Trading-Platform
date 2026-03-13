@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -58,7 +59,21 @@ class IngestBarsJob:
         #     symbols=symbols_to_evaluate,
         # )
 
-    def ingest_bars_job(self) -> None:
-        stream = client.get_stock_data_stream()
-        stream.subscribe_bars(self.on_provider_bar, "SPY")
-        stream.run()
+    def run_once(self, start: datetime, end: datetime) -> None:
+        """
+        Fetch a bounded window of minute bars, process them, finalize, and return.
+        """
+        response = client.fetch_minute_bars(
+            symbols=sorted(self.expected_symbols),
+            start=start,
+            end=end,
+        )
+
+        for symbol in sorted(self.expected_symbols):
+            symbol_bars = response.data.get(symbol, [])
+
+            for provider_bar in symbol_bars:
+                asyncio.run(self.on_provider_bar(provider_bar))
+
+        if self.current_cycle_timestamp is not None:
+            self.finalize_cycle(self.current_cycle_timestamp)
