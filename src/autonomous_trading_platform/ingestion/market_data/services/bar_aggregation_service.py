@@ -9,7 +9,7 @@ from autonomous_trading_platform.ingestion.helpers.bar_identity import build_bar
 
 class BarAggregationService:
     def __init__(self):
-        self.buffer = {}
+        self.buffer: dict[tuple[str, datetime], list[MarketBar]] = {}
 
     @staticmethod
     def _get_bucket(timestamp: datetime) -> datetime:
@@ -19,12 +19,14 @@ class BarAggregationService:
     def add_minute_bar(self, bar: MarketBar) -> MarketBar | None:
         bucket = BarAggregationService._get_bucket(bar.timestamp)
 
-        self.buffer.setdefault(bucket, []).append(bar)
+        key = (bar.symbol, bucket)
 
-        if len(self.buffer[bucket]) < 5:
+        self.buffer.setdefault(key, []).append(bar)
+
+        if len(self.buffer[key]) < 5:
             return None
 
-        bars = self.buffer.pop(bucket)
+        bars = self.buffer.pop(key)
 
         return self._aggregate(bars)
 
