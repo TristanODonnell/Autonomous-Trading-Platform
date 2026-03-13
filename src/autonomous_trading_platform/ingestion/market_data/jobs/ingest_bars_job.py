@@ -31,7 +31,7 @@ class IngestBarsJob:
         if self.current_cycle_timestamp is None:
             self.current_cycle_timestamp = cycle_timestamp
 
-        if cycle_timestamp != self.current_cycle_timestamp:
+        if cycle_timestamp > self.current_cycle_timestamp:
             self.finalize_cycle(self.current_cycle_timestamp)
             self.received_symbols.clear()
             self.current_cycle_timestamp = cycle_timestamp
@@ -41,12 +41,17 @@ class IngestBarsJob:
         print(five_min_bar)
 
     def finalize_cycle(self, cycle_timestamp: datetime) -> None:
+
         missing_symbols = self.expected_symbols - self.received_symbols
         # TODO symbols_to_evaluate = self.received_symbols.copy()
 
         for symbol in missing_symbols:
             print(f"Missing symbol for cycle {cycle_timestamp}: {symbol}")
-            # mark_symbol_missing(symbol, cycle_timestamp)
+
+        missing_ratio = len(missing_symbols) / len(self.expected_symbols)
+
+        if missing_ratio > 0.2:
+            raise RuntimeError(f"Too many missing bars ({missing_ratio:.2%}) at {cycle_timestamp}")
 
         # evaluate_symbols(
         #     cycle_timestamp=cycle_timestamp,
