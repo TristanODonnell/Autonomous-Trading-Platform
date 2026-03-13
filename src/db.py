@@ -1,23 +1,25 @@
 from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.config import Settings
 
-settings = Settings()
 
-# Create engine once
-engine = create_engine(settings.database_url)
-
-# Create session factory once
-SessionLocal = sessionmaker(
-    bind=engine,
-    autoflush=False,
-    autocommit=False,
-)
+def get_engine() -> Engine:
+    """
+    Returns the shared SQLAlchemy engine.
+    """
+    settings = Settings()
+    return create_engine(settings.database_url)
 
 
 def get_session() -> Session:
     """
     Returns a new SQLAlchemy session.
     """
-    return SessionLocal()
+    session_local = sessionmaker(
+        bind=get_engine(),
+        autoflush=False,
+        autocommit=False,
+    )
+    return session_local()
