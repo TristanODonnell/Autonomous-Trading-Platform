@@ -14,6 +14,7 @@ from autonomous_trading_platform.contracts.common.enums import (
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 from autonomous_trading_platform.ingestion.helpers.bar_identity import build_bar_id
 from autonomous_trading_platform.ingestion.helpers.session import classify_market_session
+from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 from .bar_aggregation_service import BarAggregationService
@@ -26,12 +27,18 @@ class BarIngestionService:
     platform's canonical MarketBar contract.
     """
 
-    def __init__(self, session: Session):
+    def __init__(
+        self,
+        session: Session,
+        run_id: str,
+        audit_logger: AuditLoggingService,
+    ) -> None:
         self.aggregator = BarAggregationService()
         self.validation_service = BarValidationService()
-        # store last completed 5-minute bar per symbol
         self.last_bar_by_symbol: dict[str, MarketBar] = {}
         self.session = session
+        self.run_id = run_id
+        self.audit_logger = audit_logger
 
     async def handle_minute_bar(self, provider_bar: Bar) -> MarketBar | None:
         minute_bar = self._convert_provider_bar(provider_bar)
@@ -52,9 +59,13 @@ class BarIngestionService:
             now_utc=datetime.now(UTC),
             allowed_delay=timedelta(seconds=30),
         )
-
         if is_late:
             five_min_bar.quality_flags.append(BarQualityFlag.LATE)
+            self.audit_logger.record_bar_late(
+                run_id=self.run_id,
+                symbol=five_min_bar.symbol,
+                bar_end_timestamp=five_min_bar.end_timestamp,
+            )
 
         previous_bar = self.last_bar_by_symbol.get(five_min_bar.symbol)
         reference_close = previous_bar.close if previous_bar else None
@@ -63,9 +74,17 @@ class BarIngestionService:
             five_min_bar,
             reference_close,
         )
-
         if is_suspected_outlier:
             five_min_bar.quality_flags.append(BarQualityFlag.SUSPECTED_OUTLIER)
+
+            if reference_close is not None:
+                self.audit_logger.record_bar_outlier(
+                    run_id=self.run_id,
+                    symbol=five_min_bar.symbol,
+                    cycle_timestamp=five_min_bar.timestamp,
+                    reference_close=reference_close,
+                    observed_close=five_min_bar.close,
+                )
 
         with SorUnitOfWork(self.session) as uow:
             uow.market_bars.upsert(five_min_bar)

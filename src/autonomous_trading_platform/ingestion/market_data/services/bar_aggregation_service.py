@@ -8,7 +8,7 @@ from autonomous_trading_platform.ingestion.helpers.bar_identity import build_bar
 
 
 class BarAggregationService:
-    def __init__(self):
+    def __init__(self) -> None:
         self.buffer: dict[tuple[str, datetime], list[MarketBar]] = {}
 
     @staticmethod
