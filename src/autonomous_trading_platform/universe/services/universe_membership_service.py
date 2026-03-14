@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import cast
 
 from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
     UniverseSnapshotRepository,
@@ -16,11 +15,11 @@ class UniverseMembershipService:
         snapshot = self.repository.get_by_snapshot_date(snapshot_date)
         if snapshot is None:
             return []
-        return cast(list[str], snapshot.symbols)
+        return list(snapshot.symbols)
 
     def is_symbol_in_snapshot(self, symbol: str, snapshot_date: date) -> bool:
         snapshot = self.repository.get_by_snapshot_date(snapshot_date)
         if snapshot is None:
             return False
-        symbols = cast(list[str], snapshot.symbols)
+        symbols = list(snapshot.symbols)
         return symbol in symbols
