@@ -64,7 +64,9 @@ class UniverseSnapshotService:
             source=source,
             notes=notes,
         )
-        return self.save_snapshot(snapshot)
+        self.repository.close_open_snapshot(snapshot.effective_start)
+
+        return self.repository.upsert(snapshot)
 
     def _compute_version(self, symbols: list[str]) -> str:
         payload = json.dumps(sorted(symbols), separators=(",", ":"), ensure_ascii=True)
