@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import cast
 
 from sqlalchemy import select
@@ -40,6 +40,29 @@ class MarketBarRepository(BaseRepository):
 
         rows = self.session.execute(stmt).scalars().all()
 
+        return cast(list[MarketBar], rows)
+
+    def get_bars_for_symbols_between(
+        self,
+        *,
+        symbols: list[str],
+        start_ts: datetime,
+        end_ts: datetime,
+    ) -> list[MarketBar]:
+        if not symbols:
+            return []
+
+        stmt = (
+            select(MarketBar)
+            .where(
+                MarketBar.symbol.in_(symbols),
+                MarketBar.timestamp >= start_ts,
+                MarketBar.timestamp <= end_ts,
+            )
+            .order_by(MarketBar.timestamp.asc(), MarketBar.symbol.asc())
+        )
+
+        rows = self.session.execute(stmt).scalars().all()
         return cast(list[MarketBar], rows)
 
     # -----------------------------

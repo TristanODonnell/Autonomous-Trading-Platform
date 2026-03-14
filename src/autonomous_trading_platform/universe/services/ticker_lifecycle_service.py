@@ -36,7 +36,17 @@ class TickerLifecycleService:
         return event.event_type == TickerLifecycleEventType.DELISTING
 
     def resolve_symbol(self, symbol: str, as_of: datetime) -> str:
-        successor = self.get_successor_symbol(symbol, as_of)
-        if successor:
-            return successor
-        return symbol
+        return self.resolve_symbol_chain(symbol, as_of)
+
+    def resolve_symbol_chain(self, symbol: str, as_of: datetime) -> str:
+        current = symbol
+        seen: set[str] = set()
+
+        while current not in seen:
+            seen.add(current)
+            successor = self.get_successor_symbol(current, as_of)
+            if successor is None or successor == current:
+                return current
+            current = successor
+
+        return current

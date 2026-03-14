@@ -68,6 +68,11 @@ def run_universe_selection_cycle() -> None:
     selected_symbols, criteria = selection_service.select_symbols(as_of=now_utc)
     criteria["rebalance_cadence"] = cadence
 
+    if not selected_symbols:
+        raise RuntimeError(
+            "Universe selection produced zero symbols; refusing to create empty snapshot"
+        )
+
     snapshot = snapshot_service.build_snapshot(
         snapshot_date=now_utc.date(),
         effective_start=now_utc,

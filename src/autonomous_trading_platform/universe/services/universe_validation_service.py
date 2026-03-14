@@ -35,6 +35,9 @@ class UniverseValidationService:
     ) -> UniverseValidationResult:
         errors: list[str] = []
 
+        if not snapshot.symbols:
+            errors.append("UniverseSnapshot must contain at least one symbol")
+
         rule_result = run_rules(snapshot, UNIVERSE_SNAPSHOT_RULES)
         errors.extend(self._format_rule_errors(rule_result))
 
