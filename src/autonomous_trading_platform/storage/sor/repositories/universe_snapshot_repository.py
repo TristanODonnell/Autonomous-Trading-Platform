@@ -49,7 +49,7 @@ class UniverseSnapshotRepository(BaseRepository):
         """
         Insert or update based on deterministic ID.
         """
-        existing = self.get_by_universe_id(row.universe_id)
+        existing = self.get_by_universe_id(str(row.universe_id))
 
         if existing is None:
             self.session.add(row)
