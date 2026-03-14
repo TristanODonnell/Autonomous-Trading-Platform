@@ -449,3 +449,56 @@ Audit Logging
 Notes:
 This release implements the storage and versioning infrastructure defined in Phase 2.
 Checksum validation for Parquet partitions is planned but not yet implemented.
+
+## v1.3.0 — Phase 3 Data Ingestion Pipeline Implementation
+
+Added:
+
+Market Data Ingestion
+- Alpaca market data adapter for provider integration
+- Minute bar aggregation into aligned 5-minute bars
+- Deterministic UTC timestamp normalization
+- Market session classification (pre-market, regular, post-market, overnight)
+
+Corporate Actions Ingestion
+- Corporate action ingestion pipeline for dividends, splits, mergers, and symbol changes
+- Canonical `CorporateAction` contract parsing and persistence
+- Adjustment factor handling for maintaining raw and adjusted price series
+
+Data Validation Layer
+- Bar validation service enforcing:
+  - timestamp alignment
+  - OHLC sanity rules
+  - monotonic time progression
+  - volume validation
+- Structured quality flags for anomalous bars
+
+Outlier & Missing Data Handling
+- Statistical detection of abnormal price movements
+- Explicit policies for:
+  - missing bars
+  - late bars
+  - outlier detection
+- Deterministic action policies (SKIP / DEGRADE / HALT)
+
+Scheduling & SLAs
+- Airflow DAGs for ingestion orchestration
+- 5-minute ingestion cycle scheduling
+- Defined ingestion SLAs:
+  - freshness target (bar_close + 30s)
+  - hard deadline (bar_close + 90s)
+- Daily backfill job for historical dataset bootstrap
+
+Monitoring & Observability
+- Audit logging integration for ingestion pipelines
+- Incident recording for:
+  - SLA breaches
+  - missing bars
+  - outliers
+  - validation failures
+- RunManifest persistence for pipeline executions
+
+Notes:
+This release implements the ingestion pipeline architecture defined in Phase 3.
+The system now supports deterministic market data collection, validation,
+incident monitoring, and reproducible ingestion runs required for the trading engine.

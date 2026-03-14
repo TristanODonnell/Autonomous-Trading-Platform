@@ -84,7 +84,7 @@ Populate required variables before running the app.
 
 ## Status
 
-Current Phase: Phase 2 - Storage Layer & Versioning
+Current Phase: Phase 3 - Data Ingestion Pipeline
 Mode: Active Implementation
 
 Baseline assumptions:
@@ -500,3 +500,172 @@ These logs provide the foundation for monitoring, debugging, and regulatory trac
 The storage layer is designed to support checksum validation for Parquet datasets and row-level integrity checks in Postgres.
 
 Checksum verification during dataset reads is planned for a future update.
+
+## Phase 3 — Data Ingestion Pipeline Implementation
+
+Phase 3 implements the ingestion architecture defined in the system design documentation.
+This phase introduces the operational pipeline responsible for collecting market data and corporate
+actions, validating incoming data, enforcing SLAs, and recording operational incidents.
+
+---
+
+### Market Data Ingestion
+
+The system now ingests **5-minute market bars** using Alpaca’s market data APIs.
+
+Key behaviors:
+
+- Alpaca SDK adapter for provider data access
+- Minute bars aggregated into **aligned 5-minute bars**
+- All timestamps normalized to **UTC**
+- Deterministic bar boundary alignment enforced
+
+Bars are tagged with **market session identifiers**:
+
+- `PRE_MARKET`
+- `REGULAR`
+- `POST_MARKET`
+- `OVERNIGHT`
+
+Extended-hours trading is supported at the data layer, while execution restrictions remain enforced
+by the trading subsystem.
+
+---
+
+### Corporate Actions Ingestion
+
+Corporate action events are ingested from Alpaca free data feeds.
+
+Supported event types include:
+
+- Dividends
+- Stock splits
+- Mergers
+- Symbol/name changes
+
+Events are parsed into the canonical `CorporateAction` contract and stored in the system-of-record.
+
+Corporate actions are used to maintain **price continuity across adjusted datasets**:
+
+- Raw bars remain provider-native
+- Adjusted bars apply split adjustment factors
+- Dividend events are recorded separately
+
+---
+
+### Data Validation & Quality Flags
+
+Incoming market data passes through a validation layer before persistence.
+
+Validation checks include:
+
+- Bar timestamp alignment to 5-minute boundaries
+- OHLC sanity checks
+- Non-negative volume validation
+- Monotonic timestamp enforcement
+- Corporate action continuity validation
+
+Bars that violate validation rules are not silently discarded.
+Instead they are flagged using structured **quality flags** such as:
+
+- `BAR_MISSING`
+- `BAR_OUTLIER`
+- `BAR_INVALID`
+- `BAR_LATE`
+
+This preserves full auditability of data anomalies.
+
+---
+
+### Outlier Detection & Missing Data Policy
+
+Statistical safeguards are applied to identify abnormal price movements.
+
+Detection methods include:
+
+- log-return deviation thresholds
+- range sanity checks
+- stale or zero-volume detection
+
+Outliers are **flagged rather than deleted** to preserve raw provider truth.
+
+Missing data behavior follows a deterministic policy:
+
+- Missing bars are recorded as incidents
+- Symbol evaluation is skipped for that cycle
+- Prices are **never synthesized**
+- If many symbols are missing, the cycle may escalate to a **HALT incident**
+
+This guarantees that strategy logic never executes on fabricated market data.
+
+---
+
+### Scheduler & Ingestion SLAs
+
+The ingestion pipeline is orchestrated through **Airflow DAGs**.
+
+Implemented jobs include:
+
+- `run_market_ingestion_cycle`
+- `run_market_backfill_cycle`
+- `run_corporate_action_ingestion_cycle`
+
+Market data ingestion runs **every 5 minutes** with defined SLAs:
+
+| SLA Stage | Target |
+|-----------|--------|
+| Freshness Window | bar_close + 30 seconds |
+| Hard Deadline | bar_close + 90 seconds |
+
+If the ingestion job breaches its SLA:
+
+- incidents are recorded
+- fallback logic may trigger
+- the evaluation cycle may skip or halt depending on severity
+
+A **daily backfill pipeline** is also implemented for dataset bootstrap and historical recovery.
+
+---
+
+### Monitoring & Incident Recording
+
+Operational monitoring is implemented through the **audit logging system**.
+
+Each ingestion pipeline records:
+
+- run start / end timestamps
+- success or failure state
+- ingestion incidents
+- SLA breaches
+- validation anomalies
+
+Examples of recorded incidents include:
+
+- `INGESTION_SLA_MISSED`
+- `MARKETBAR_MISSING`
+- `MARKETBAR_OUTLIER`
+- `CORPORATE_ACTION_CONTINUITY_BREACH`
+
+Each pipeline execution also generates a **RunManifest** capturing:
+
+- environment metadata
+- dataset versions
+- universe version
+- runtime configuration
+- git commit hash
+
+This provides deterministic traceability for every ingestion run.
+
+---
+
+### Result
+
+The ingestion layer now provides:
+
+- deterministic 5-minute market data collection
+- corporate action continuity handling
+- strict validation and anomaly detection
+- SLA enforcement and incident tracking
+- fully auditable pipeline runs
+
+This completes the **operational data ingestion foundation required for trading execution and research replay.**
