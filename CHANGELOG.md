@@ -502,3 +502,43 @@ Notes:
 This release implements the ingestion pipeline architecture defined in Phase 3.
 The system now supports deterministic market data collection, validation,
 incident monitoring, and reproducible ingestion runs required for the trading engine.
+
+
+## v1.4.0 — Phase 4 Universe Governance Implementation
+
+Added:
+
+Universe Selection
+- Universe selection script querying Alpaca tradable symbols
+- Eligibility filters applied including price floor and liquidity thresholds
+- Deterministic symbol list generation for the v1 trading universe
+- UniverseSnapshot persistence including selection criteria metadata
+
+Rebalance Cadence
+- Universe rebalance job (`run_universe_selection_cycle`)
+- Snapshot generation for each rebalance event
+- Snapshot date tracking and deterministic version hashing
+- Historical membership query utilities
+
+Ticker Lifecycle Handling
+- Symbol lifecycle mapping for ticker renames, mergers, and successor symbols
+- Utilities for resolving successor tickers
+- Historical continuity preserved across ticker changes and delistings
+
+Survivorship Bias Controls
+- Historical universe membership enforcement
+- Helper services to filter bars and corporate actions using the
+  UniverseSnapshot valid for the evaluation date
+- Deterministic reconstruction of the tradable universe for any date
+
+Validation & Invariants
+- UniverseSnapshot validation enforcing:
+  - non-empty universe
+  - dataset membership validation
+  - stored selection criteria
+  - deterministic version identifiers
+
+Notes:
+This release implements the universe governance layer required to ensure
+deterministic universe membership, survivorship-bias-free backtesting,
+and reproducible universe definitions across research and execution systems.

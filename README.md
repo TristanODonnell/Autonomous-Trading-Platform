@@ -84,7 +84,7 @@ Populate required variables before running the app.
 
 ## Status
 
-Current Phase: Phase 3 - Data Ingestion Pipeline
+Current Phase: Phase 4 Universe Governance Implementation
 Mode: Active Implementation
 
 Baseline assumptions:
@@ -669,3 +669,115 @@ The ingestion layer now provides:
 - fully auditable pipeline runs
 
 This completes the **operational data ingestion foundation required for trading execution and research replay.**
+
+## Phase 4 — Universe Governance Implementation
+
+Phase 4 implements the universe governance layer responsible for selecting,
+maintaining, and versioning the trading universe used by the system.
+
+This layer ensures that universe membership is deterministic, reproducible,
+and free of survivorship bias during historical analysis.
+
+---
+
+### Universe Selection Script
+
+A universe selection pipeline has been implemented to determine the eligible
+trading symbols for the system.
+
+Selection logic:
+
+- Query Alpaca’s available tradable symbols
+- Apply deterministic eligibility filters including:
+  - minimum price threshold (≥ $1)
+  - liquidity thresholds (average daily dollar volume)
+  - additional free-data compatibility filters
+
+The resulting symbol set is persisted as a **UniverseSnapshot**.
+
+Each snapshot records:
+
+- snapshot_date
+- symbol list
+- selection criteria used
+- deterministic version identifier
+
+The version identifier is computed using a **hash of the sorted symbol list**
+to ensure reproducible universe definitions.
+
+---
+
+### Rebalance Cadence
+
+A universe rebalance job has been introduced:
+- run_universe_selection_cycle
+
+
+This job recalculates the universe at the configured cadence
+(daily or weekly depending on configuration).
+
+For each rebalance:
+
+- a new `UniverseSnapshot` is generated
+- the snapshot date is recorded
+- the version hash is stored
+- the selection criteria are persisted
+
+Utility functions allow querying universe membership for **any historical date**.
+
+---
+
+### Ticker Lifecycle Handling
+
+Symbol lifecycle handling has been implemented to ensure continuity when
+tickers change due to corporate actions.
+
+Supported lifecycle events include:
+
+- ticker renames
+- mergers
+- successor symbols
+- delistings
+
+Mapping tables and lifecycle utilities allow:
+
+- resolving successor symbols
+- maintaining historical membership for delisted tickers
+- mapping historical tickers to their current equivalents when required
+
+Historical snapshots always preserve the original symbol that was tradable
+at that time.
+
+---
+
+### Survivorship Bias Control
+
+The system enforces survivorship-bias-free historical evaluation.
+
+Backtests and historical queries must reference the **UniverseSnapshot
+valid for the evaluation date** rather than the current universe.
+
+Helper services allow:
+
+- filtering market bars using historical universe membership
+- filtering corporate actions based on historical eligibility
+- resolving valid tradable symbols at any point in time
+
+This guarantees that historical simulations only operate on assets that were
+tradable at the time.
+
+---
+
+### Validation & Invariants
+
+Universe snapshot validation has been implemented to enforce governance rules.
+
+Validation checks include:
+
+- every symbol in a UniverseSnapshot must exist in the dataset
+- universe membership lists cannot be empty
+- snapshot criteria must be recorded
+- deterministic version identifiers must be stored
+
+These rules ensure that universe definitions remain reproducible and safe
+for both live trading and historical research.
