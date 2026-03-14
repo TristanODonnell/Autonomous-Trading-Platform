@@ -68,6 +68,7 @@ class RunType(enum.StrEnum):
     PAPER = "paper"
     LIVE = "live"
     SHADOW = "shadow"
+    INGESTION = "ingestion"
 
 
 class SignalDirection(enum.StrEnum):

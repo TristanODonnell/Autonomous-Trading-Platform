@@ -11,15 +11,28 @@ from autonomous_trading_platform.ingestion.market_data.clients import (
 from autonomous_trading_platform.ingestion.market_data.services.bar_ingestion_service import (
     BarIngestionService,
 )
+from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 
 
 class IngestBarsJob:
-    def __init__(self, expected_symbols: set[str], session: Session) -> None:
+    def __init__(
+        self,
+        expected_symbols: set[str],
+        session: Session,
+        run_id: str,
+        audit_logger: AuditLoggingService,
+    ) -> None:
         self.session = session
         self.expected_symbols = expected_symbols
         self.received_symbols: set[str] = set()
         self.current_cycle_timestamp: datetime | None = None
-        self.ingestion_service = BarIngestionService(session)
+        self.ingestion_service = BarIngestionService(
+            session=session,
+            run_id=run_id,
+            audit_logger=audit_logger,
+        )
+        self.run_id = run_id
+        self.audit_logger = audit_logger
 
     async def on_provider_bar(self, provider_bar) -> None:
         five_min_bar = await self.ingestion_service.handle_minute_bar(provider_bar)
@@ -47,13 +60,34 @@ class IngestBarsJob:
         # TODO symbols_to_evaluate = self.received_symbols.copy()
 
         for symbol in missing_symbols:
-            print(f"Missing symbol for cycle {cycle_timestamp}: {symbol}")
+            self.audit_logger.record_bar_missing(
+                run_id=self.run_id,
+                symbol=symbol,
+                cycle_timestamp=cycle_timestamp,
+            )
 
-        missing_ratio = len(missing_symbols) / len(self.expected_symbols)
+        if self.expected_symbols:
+            missing_ratio = len(missing_symbols) / len(self.expected_symbols)
+        else:
+            missing_ratio = 0
 
         if missing_ratio > 0.2:
-            raise RuntimeError(f"Too many missing bars ({missing_ratio:.2%}) at {cycle_timestamp}")
+            self.audit_logger.record_sla_breach(
+                run_id=self.run_id,
+                component="market_ingestion",
+                message="Missing bar ratio exceeded SLA threshold",
+                metadata={
+                    "cycle_timestamp": cycle_timestamp.isoformat(),
+                    "missing_ratio": missing_ratio,
+                    "missing_count": len(missing_symbols),
+                    "expected_count": len(self.expected_symbols),
+                    "threshold": 0.2,
+                    "missing_symbols": sorted(missing_symbols),
+                },
+            )
 
+            raise RuntimeError(f"Too many missing bars ({missing_ratio:.2%}) at {cycle_timestamp}")
+        # TODO
         # evaluate_symbols(
         #     cycle_timestamp=cycle_timestamp,
         #     symbols=symbols_to_evaluate,

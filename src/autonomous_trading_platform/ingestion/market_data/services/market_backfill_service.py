@@ -4,6 +4,8 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
+
 from ..clients.alpaca_historical_bars_client import AlpacaHistoricalBarsClient
 from .bar_ingestion_service import BarIngestionService
 
@@ -17,10 +19,16 @@ class MarketBackfillService:
         self,
         session: Session,
         historical_client: AlpacaHistoricalBarsClient,
+        run_id: str,
+        audit_logger: AuditLoggingService,
     ) -> None:
         self.session = session
         self.historical_client = historical_client
-        self.bar_ingestion_service = BarIngestionService(session)
+        self.bar_ingestion_service = BarIngestionService(
+            session,
+            run_id=run_id,
+            audit_logger=audit_logger,
+        )
 
     async def backfill(
         self,
