@@ -20,3 +20,18 @@ class EnvironmentSafetyPolicy:
                 raise EnvironmentIsolationError(
                     "Live trading modules are not included in this build."
                 )
+
+    def assert_account_allowed(self, account_id: str) -> None:
+        if (
+            self.settings.trading_environment is TradingEnvironment.PAPER
+            and self.settings.paper_allowed_account_ids
+            and account_id not in self.settings.paper_allowed_account_ids
+        ):
+            raise EnvironmentIsolationError(f"Paper account {account_id} is not allowlisted.")
+
+        if (
+            self.settings.trading_environment is TradingEnvironment.LIVE
+            and self.settings.live_allowed_account_ids
+            and account_id not in self.settings.live_allowed_account_ids
+        ):
+            raise EnvironmentIsolationError(f"Live account {account_id} is not allowlisted.")
