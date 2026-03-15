@@ -20,3 +20,31 @@ class BuildGateDisabledError(SafetyError):
 
 class ConfigGateDisabledError(SafetyError):
     """Raised when config does not explicitly allow live trading."""
+
+
+class GrossExposureLimitExceededError(SafetyError):
+    """Raised when a proposed order would exceed the configured gross exposure limit."""
+
+
+class SymbolExposureLimitExceededError(SafetyError):
+    """Raised when a proposed order would exceed the configured per-symbol exposure limit."""
+
+
+class DailyNotionalLimitExceededError(SafetyError):
+    """Raised when a proposed order would exceed the configured daily notional traded limit."""
+
+
+class OrdersPerHourLimitExceededError(SafetyError):
+    """Raised when the maximum number of orders per hour has been reached."""
+
+
+class OrdersPerBarLimitExceededError(SafetyError):
+    """Raised when the maximum number of orders per bar has been reached."""
+
+
+class RepeatedOrderInBarError(SafetyError):
+    """Raised when an order is repeated for the same symbol/side within the same bar."""
+
+
+class DuplicateIdempotencyKeyError(SafetyError):
+    """Raised when an order is submitted with an idempotency key that already exists."""
