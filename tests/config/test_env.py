@@ -1,6 +1,5 @@
 import pytest
-
-from src.config import Settings
+from autonomous_trading_platform.config.config import Settings
 
 
 def test_environment_loads_required_variables(monkeypatch):

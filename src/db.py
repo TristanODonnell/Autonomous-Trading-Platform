@@ -1,8 +1,7 @@
+from autonomous_trading_platform.config.config import Settings
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
-
-from src.config import Settings
 
 
 def get_engine() -> Engine:
