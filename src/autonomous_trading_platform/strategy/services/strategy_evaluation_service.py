@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from autonomous_trading_platform.contracts.trading.signal import Signal
 
+from ..contracts.strategy_context import StrategyContext
 from ..contracts.strategy_evaluation_result import StrategyEvaluationResult
+from ..implementations.base_strategy import BaseStrategy
 
 
 class MarketBarReaderProtocol:
@@ -23,32 +26,25 @@ class UniverseMembershipReaderProtocol:
         raise NotImplementedError
 
 
-class StrategyModuleProtocol:
-    strategy_id: str
-
-    def evaluate_symbol(
-        self,
-        symbol: str,
-        bars: list[Any],
-        bar_timestamp: datetime,
-    ) -> Signal | None:
-        raise NotImplementedError
-
-
 class StrategyEvaluationService:
     def __init__(
         self,
         market_bar_reader: MarketBarReaderProtocol,
         universe_reader: UniverseMembershipReaderProtocol,
-        strategy_module: StrategyModuleProtocol,
+        strategy: BaseStrategy,
         lookback_bars: int = 20,
     ) -> None:
         self.market_bar_reader = market_bar_reader
         self.universe_reader = universe_reader
-        self.strategy_module = strategy_module
+        self.strategy = strategy
         self.lookback_bars = lookback_bars
 
-    def evaluate(self, bar_timestamp: datetime) -> StrategyEvaluationResult:
+    def evaluate(
+        self,
+        bar_timestamp: datetime,
+        run_id: UUID,
+        evaluation_timestamp: datetime,
+    ) -> StrategyEvaluationResult:
         symbols = self.universe_reader.get_symbols_for_timestamp(bar_timestamp)
         signals: list[Signal] = []
 
@@ -62,16 +58,22 @@ class StrategyEvaluationService:
             if len(bars) < self.lookback_bars:
                 continue
 
-            signal = self.strategy_module.evaluate_symbol(
+            context = StrategyContext(
+                run_id=run_id,
+                strategy_id=self.strategy.strategy_id,
                 symbol=symbol,
-                bars=bars,
                 bar_timestamp=bar_timestamp,
+                evaluation_timestamp=evaluation_timestamp,
+                bars=bars,
             )
+
+            signal = self.strategy.evaluate_symbol(context)
+
             if signal is not None:
                 signals.append(signal)
 
         return StrategyEvaluationResult(
-            strategy_id=self.strategy_module.strategy_id,
+            strategy_id=self.strategy.strategy_id,
             bar_timestamp=bar_timestamp,
             signals=signals,
         )

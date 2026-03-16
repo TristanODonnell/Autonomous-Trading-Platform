@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from uuid import uuid4
 
 from autonomous_trading_platform.contracts.trading.signal import Signal
 from autonomous_trading_platform.strategy.services.strategy_bar_readiness_service import (
@@ -45,6 +46,7 @@ class EvaluateStrategyJob:
 
     def run(self, now: datetime) -> EvaluateStrategyJobResult:
         readiness = self.readiness_service.get_next_ready_bar(now)
+        run_id = uuid4()
 
         if readiness.target_bar_timestamp is None:
             return EvaluateStrategyJobResult(
@@ -53,8 +55,11 @@ class EvaluateStrategyJob:
                 signals_emitted=0,
                 target_bar_timestamp=None,
             )
-
-        result = self.evaluation_service.evaluate(readiness.target_bar_timestamp)
+        result = self.evaluation_service.evaluate(
+            bar_timestamp=readiness.target_bar_timestamp,
+            run_id=run_id,
+            evaluation_timestamp=now,
+        )
 
         if result.signals:
             self.signal_writer.save_many(result.signals)
