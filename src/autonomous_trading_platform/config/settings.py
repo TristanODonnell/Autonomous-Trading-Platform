@@ -42,6 +42,10 @@ class Settings:
         self.block_repeat_orders_same_bar = self._get_bool(
             "BLOCK_REPEAT_ORDERS_SAME_BAR", default=True
         )
+        self.idempotency_deduplication_window_minutes = self._get_int(
+            "IDEMPOTENCY_DEDUPLICATION_WINDOW_MINUTES",
+            15,
+        )
 
     def _get_required(self, key: str) -> str:
         value = os.getenv(key)

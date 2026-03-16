@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.safety.errors import (
-    DuplicateIdempotencyKeyError,
     OrdersPerBarLimitExceededError,
     OrdersPerHourLimitExceededError,
     RepeatedOrderInBarError,
@@ -20,16 +19,11 @@ class OrderThrottleService:
         now: datetime,
         bar_timestamp: datetime,
     ) -> None:
-        self._assert_idempotency_key_is_new(order_intent.idempotency_key)
         self._assert_hourly_order_limit(now)
         self._assert_bar_order_limit(bar_timestamp)
 
         if self.settings.block_repeat_orders_same_bar:
             self._assert_not_repeated_within_bar(order_intent, bar_timestamp)
-
-    def _assert_idempotency_key_is_new(self, idempotency_key: str) -> None:
-        if self.order_activity_reader.idempotency_key_exists(idempotency_key):
-            raise DuplicateIdempotencyKeyError(f"Idempotency key already exists: {idempotency_key}")
 
     def _assert_hourly_order_limit(self, now: datetime) -> None:
         hour_start = now - timedelta(hours=1)
