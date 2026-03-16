@@ -88,3 +88,8 @@ class BarQualityFlag(enum.StrEnum):
     LATE = "late"
     SUSPECTED_OUTLIER = "suspected_outlier"
     MISSING_CYCLE_PEER = "missing_cycle_peer"
+
+
+class IntentExecutionStatus(enum.StrEnum):
+    SUBMITTED = "submitted"
+    SHADOW_SUPPRESSED = "shadow_suppressed"
