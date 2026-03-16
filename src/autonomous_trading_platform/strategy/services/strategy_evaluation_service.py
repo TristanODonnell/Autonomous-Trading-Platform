@@ -1,17 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from autonomous_trading_platform.contracts.trading.signal import Signal
 
-
-@dataclass(frozen=True)
-class StrategyEvaluationResult:
-    strategy_id: str
-    bar_timestamp: datetime
-    signals: list[Signal]
+from ..contracts.strategy_evaluation_result import StrategyEvaluationResult
 
 
 class MarketBarReaderProtocol:

@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-
-@dataclass(frozen=True)
-class StrategyBarReadinessResult:
-    target_bar_timestamp: datetime | None
-    reason: str | None = None
+from ..contracts.strategy_bar_readiness_result import StrategyBarReadinessResult
 
 
 class IngestionStatusReaderProtocol:
