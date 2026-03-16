@@ -22,7 +22,7 @@ class Settings:
         self.no_live_trading = self._get_bool("NO_LIVE_TRADING", default=True)
         self.enable_live_trading = self._get_bool("ENABLE_LIVE_TRADING", default=False)
         self.include_live_modules = self._get_bool("INCLUDE_LIVE_MODULES", default=False)
-
+        self.shadow_mode_enabled = self._get_bool("SHADOW_MODE_ENABLED", default=True)
         self.paper_allowed_account_ids = self._get_list("PAPER_ALLOWED_ACCOUNT_IDS")
         self.live_allowed_account_ids = self._get_list("LIVE_ALLOWED_ACCOUNT_IDS")
 
