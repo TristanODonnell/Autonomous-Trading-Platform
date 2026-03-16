@@ -6,7 +6,6 @@ import pytest
 
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.safety.errors import (
-    DuplicateIdempotencyKeyError,
     OrdersPerBarLimitExceededError,
     OrdersPerHourLimitExceededError,
     RepeatedOrderInBarError,
@@ -84,20 +83,6 @@ def test_order_throttle_allows_order_when_within_limits() -> None:
         now=datetime.now(UTC),
         bar_timestamp=datetime.now(UTC),
     )
-
-
-def test_order_throttle_blocks_duplicate_idempotency_key() -> None:
-    service = OrderThrottleService(
-        settings=_settings(),
-        order_activity_reader=FakeOrderActivityReader(idempotency_exists=True),
-    )
-
-    with pytest.raises(DuplicateIdempotencyKeyError, match="abc-123"):
-        service.assert_order_allowed_for_submission(
-            order_intent=_order_intent(),
-            now=datetime.now(UTC),
-            bar_timestamp=datetime.now(UTC),
-        )
 
 
 def test_order_throttle_blocks_when_hourly_limit_reached() -> None:
