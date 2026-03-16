@@ -84,7 +84,7 @@ Populate required variables before running the app.
 
 ## Status
 
-Current Phase: Phase 4 Universe Governance Implementation
+Current Phase: Phase 5 Safety System & Risk Controls
 Mode: Active Implementation
 
 Baseline assumptions:
@@ -781,3 +781,132 @@ Validation checks include:
 
 These rules ensure that universe definitions remain reproducible and safe
 for both live trading and historical research.
+
+## Phase 5 — Safety System & Risk Controls Implementation
+
+Phase 5 introduces the first concrete implementation of the system's
+capital protection architecture. These components enforce strict
+risk controls before any order can be submitted to a broker.
+
+---
+
+### Environment Isolation
+
+Trading environments are explicitly separated into:
+
+- `paper`
+- `live`
+
+Each environment has:
+
+- independent broker credentials
+- environment-scoped account allowlists
+- isolated configuration namespaces
+
+The system defaults to **`NO_LIVE_TRADING`**, ensuring that live trading
+cannot occur unless explicitly enabled.
+
+---
+
+### Layered Enablement Gates
+
+Multiple independent gates protect against accidental live trading.
+
+Implemented gates:
+
+1. **Build Gate**
+   - Paper-only builds exclude live trading modules by default.
+
+2. **Configuration Gate**
+   - `enable_live_trading=true` must be explicitly configured.
+
+3. **Runtime Gate**
+   - Runtime activation checks required before execution is allowed.
+
+Command-line utilities are provided to verify and toggle these gates.
+
+This layered model ensures that **no single bug can enable live trading**.
+
+---
+
+### Exposure Caps & Risk Limits
+
+A pre-trade risk validation service evaluates every `OrderIntent`
+before execution.
+
+Supported controls include:
+
+- Maximum gross exposure
+- Per-symbol exposure limits
+- Daily notional traded limits
+- Order rate limits (per bar or per hour)
+
+Orders violating these limits are rejected before reaching the
+execution layer.
+
+---
+
+### Idempotency & Duplicate Protection
+
+To prevent accidental duplicate orders, each `OrderIntent`
+generates a deterministic **idempotency key**.
+
+Key inputs:
+
+- run_id
+- strategy_id
+- bar_timestamp
+- symbol
+- side
+- target_qty
+
+Before creating a broker order, the system checks whether an order
+with the same key already exists within a configurable time window.
+
+Duplicate orders are automatically suppressed.
+
+---
+
+### Shadow Mode
+
+Shadow mode allows the trading system to run fully in production
+without placing broker orders.
+
+In shadow mode:
+
+- strategy signals are generated
+- `OrderIntent` objects are created
+- execution logic is simulated
+- broker API calls are disabled
+
+This mode allows safe validation of strategy logic and risk controls.
+
+---
+
+### Kill Switch (Planned)
+
+A kill switch service interface has been introduced to support
+out-of-band trading halts.
+
+Future implementation will support:
+
+- external kill switch storage (Redis / S3)
+- runtime checks by scheduler and strategy engine
+- automatic cancellation of open orders when triggered
+
+External kill switch infrastructure is planned for a future phase.
+
+---
+
+### Result
+
+The system now enforces:
+
+- strict environment separation
+- multiple live-trading safety gates
+- deterministic idempotency guarantees
+- pre-trade risk validation
+- safe strategy validation via shadow mode
+
+These protections form the **core safety layer required before
+implementing broker execution.**

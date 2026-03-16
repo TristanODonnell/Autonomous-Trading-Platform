@@ -542,3 +542,49 @@ Notes:
 This release implements the universe governance layer required to ensure
 deterministic universe membership, survivorship-bias-free backtesting,
 and reproducible universe definitions across research and execution systems.
+
+## v1.5.0 — Phase 5 Safety System & Risk Controls Implementation
+
+Added:
+
+Environment Isolation
+- Explicit configuration namespaces for `paper` and `live` trading environments
+- Environment-scoped broker credentials and account allowlists
+- Default enforcement of `NO_LIVE_TRADING`
+- Environment validation service preventing cross-environment execution
+
+Layered Enablement Gates
+- Multi-layer trading enablement protections:
+  - build-time gate (paper-only build path for v1)
+  - configuration gate (`enable_live_trading` flag)
+  - runtime activation requirement
+- CLI tooling for enabling and validating trading gates
+
+Exposure Caps & Throttling
+- Pre-trade risk validation service enforcing configurable limits:
+  - maximum gross exposure
+  - per-symbol exposure limits
+  - daily notional traded
+  - order rate limits per bar / hour
+- Deterministic pre-execution validation of `OrderIntent` objects
+
+Idempotency & Deduplication
+- Deterministic idempotency key generation based on:
+  `(run_id, strategy_id, bar_timestamp, symbol, side, target_qty)`
+- Duplicate order prevention within configurable time window
+- Repository-backed duplicate detection checks
+
+Shadow Mode
+- Signal-only execution mode where strategy logic runs but broker calls are suppressed
+- Allows safe validation of strategy decision logic in production environments
+- Signals and `OrderIntent` objects are still logged and auditable
+
+Kill Switch (Internal Stub)
+- Initial kill switch service interface introduced
+- Internal kill switch checks integrated with runtime control flow
+- External out-of-band kill switch storage (S3 / Redis) deferred to future phase
+
+Notes:
+This release implements the core safety controls required before introducing
+broker execution logic. External kill switch infrastructure and distributed
+control mechanisms will be implemented in a later phase.
