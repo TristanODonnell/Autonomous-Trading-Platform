@@ -34,6 +34,14 @@ class OrderStatus(enum.StrEnum):
     REJECTED = "rejected"
 
 
+class OrderEvent(enum.StrEnum):
+    SUBMIT = "submit"
+    PARTIAL_FILL = "partial_fill"
+    FULL_FILL = "full_fill"
+    CANCEL = "cancel"
+    REJECT = "reject"
+
+
 class CorporateActionType(enum.StrEnum):
     CASH_DIVIDEND = "cash_dividend"
     STOCK_DIVIDEND = "stock_dividend"
