@@ -15,7 +15,6 @@ class Settings:
     def __init__(self) -> None:
         self.app_env = self._get_required("APP_ENV")
         self.database_url = self._get_required("DATABASE_URL")
-        self.alpaca_base_url = self._get_required("ALPACA_BASE_URL")
         self.trading_environment = TradingEnvironment(
             os.getenv("TRADING_ENVIRONMENT", TradingEnvironment.PAPER.value)
         )
@@ -46,6 +45,12 @@ class Settings:
             "IDEMPOTENCY_DEDUPLICATION_WINDOW_MINUTES",
             15,
         )
+
+    @property
+    def alpaca_base_url(self) -> str:
+        if self.trading_environment == TradingEnvironment.PAPER:
+            return "https://paper-api.alpaca.markets"
+        return "https://api.alpaca.markets"
 
     def _get_required(self, key: str) -> str:
         value = os.getenv(key)

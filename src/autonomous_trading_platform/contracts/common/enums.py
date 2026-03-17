@@ -26,7 +26,7 @@ class OrderSource(enum.StrEnum):
 
 
 class OrderStatus(enum.StrEnum):
-    CREATED = "created"
+    NEW = "new"
     SUBMITTED = "submitted"
     PARTIALLY_FILLED = "partially_filled"
     FILLED = "filled"
