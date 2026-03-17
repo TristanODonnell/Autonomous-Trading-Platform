@@ -1,6 +1,5 @@
 from autonomous_trading_platform.contracts.common.enums import StrategyEvent, StrategyState
-
-from ..errors import InvalidStrategyTransitionError
+from autonomous_trading_platform.execution.errors import InvalidStrategyTransitionError
 
 VALID_TRANSITIONS = {
     StrategyState.IDLE: {

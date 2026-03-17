@@ -4,3 +4,7 @@ class ExecutionError(RuntimeError):
 
 class InvalidOrderTransitionError(ExecutionError):
     pass
+
+
+class InvalidStrategyTransitionError(ExecutionError):
+    """Raised when a strategy lifecycle event is invalid for the current state."""
