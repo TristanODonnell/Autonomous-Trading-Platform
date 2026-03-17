@@ -15,7 +15,7 @@ class Settings:
     def __init__(self) -> None:
         self.app_env = self._get_required("APP_ENV")
         self.database_url = self._get_required("DATABASE_URL")
-
+        self.alpaca_base_url = self._get_required("ALPACA_BASE_URL")
         self.trading_environment = TradingEnvironment(
             os.getenv("TRADING_ENVIRONMENT", TradingEnvironment.PAPER.value)
         )

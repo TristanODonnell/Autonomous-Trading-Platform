@@ -26,12 +26,20 @@ class OrderSource(enum.StrEnum):
 
 
 class OrderStatus(enum.StrEnum):
-    NEW = "new"
+    CREATED = "created"
     SUBMITTED = "submitted"
     PARTIALLY_FILLED = "partially_filled"
     FILLED = "filled"
     CANCELED = "canceled"
     REJECTED = "rejected"
+
+
+class OrderEvent(enum.StrEnum):
+    SUBMIT = "submit"
+    PARTIAL_FILL = "partial_fill"
+    FULL_FILL = "full_fill"
+    CANCEL = "cancel"
+    REJECT = "reject"
 
 
 class CorporateActionType(enum.StrEnum):
