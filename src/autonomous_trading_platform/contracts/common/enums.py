@@ -101,3 +101,22 @@ class BarQualityFlag(enum.StrEnum):
 class IntentExecutionStatus(enum.StrEnum):
     SUBMITTED = "submitted"
     SHADOW_SUPPRESSED = "shadow_suppressed"
+
+
+class StrategyEvent(enum.StrEnum):
+    SIGNAL_GENERATED = "signal_generated"
+    ORDER_INTENTS_CREATED = "order_intents_created"
+    TARGET_POSITION_REACHED = "target_position_reached"
+    EXIT_SIGNAL_GENERATED = "exit_signal_generated"
+    POSITION_CLOSED = "position_closed"
+    COOLDOWN_COMPLETED = "cooldown_completed"
+    RESET = "reset"
+
+
+class StrategyState(enum.StrEnum):
+    IDLE = "idle"
+    SIGNALLED = "signalled"
+    PENDING = "pending"
+    IN_POSITION = "in_position"
+    EXIT_PENDING = "exit_pending"
+    COOLDOWN = "cooldown"
