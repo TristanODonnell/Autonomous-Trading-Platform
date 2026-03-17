@@ -10,7 +10,7 @@ from autonomous_trading_platform.storage.sor.repositories.audit_logs_repository 
 from ..errors import InvalidOrderTransitionError
 
 VALID_TRANSITIONS = {
-    OrderStatus.CREATED: {
+    OrderStatus.NEW: {
         OrderEvent.SUBMIT: OrderStatus.SUBMITTED,
         OrderEvent.REJECT: OrderStatus.REJECTED,
     },
