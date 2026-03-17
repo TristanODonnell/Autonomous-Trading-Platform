@@ -1,21 +1,41 @@
+from datetime import datetime
+from decimal import Decimal
+from uuid import UUID, uuid4
+
+from autonomous_trading_platform.contracts.common.enums import OrderType, Side, TimeInForce
+from autonomous_trading_platform.contracts.common.types import UTCDateTime
+from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
 from autonomous_trading_platform.contracts.trading.signal import Signal
+from autonomous_trading_platform.safety.services.pre_trade_risk_service import PreTradeRiskService
 
 
 class PortfolioConstructionService:
-    def __init__(self, risk_service) -> None:
-        self.risk_service = risk_service
+    def __init__(self, pre_trade_risk_service: PreTradeRiskService) -> None:
+        self.pre_trade_risk_service = pre_trade_risk_service
 
     def generate_order_intents(
         self,
         signals: list[Signal],
         positions: dict[str, int],
+        prices: dict[str, float],
+        run_id: UUID,
+        strategy_id: str,
+        bar_timestamp: UTCDateTime,
+        now: datetime,
     ):
         target_positions = self.position_sizer(signals)
         deltas = self.calculate_deltas(positions, target_positions)
 
         for delta in deltas:
-            order_intent = self.build_order_intent(delta)
-            self.risk_service.assert_allowed(order_intent)
+            order_intent = self.build_order_intent(
+                delta=delta,
+                prices=prices,
+                run_id=run_id,
+                strategy_id=strategy_id,
+                bar_timestamp=bar_timestamp,
+                now=now,
+            )
+            self.pre_trade_risk_service.assert_order_allowed(order_intent, now=now)
             yield order_intent
 
     def position_sizer(
@@ -63,11 +83,27 @@ class PortfolioConstructionService:
 
         return deltas
 
-    def build_order_intent(self, delta):
-        side = "buy" if delta["delta_qty"] > 0 else "sell"
-
-        return {
-            "symbol": delta["symbol"],
-            "side": side,
-            "qty": abs(delta["delta_qty"]),
-        }
+    def build_order_intent(
+        self, delta, prices: dict[str, float], run_id, strategy_id, bar_timestamp, now
+    ) -> OrderIntent:
+        side = Side.BUY if delta["delta_qty"] > 0 else Side.SELL
+        price = Decimal(str(prices[delta["symbol"]]))
+        return OrderIntent(
+            intent_id=uuid4(),
+            idempotency_key="pending",
+            run_id=run_id,
+            strategy_id=strategy_id,
+            timestamp=now,
+            bar_timestamp=bar_timestamp,
+            symbol=delta["symbol"],
+            side=side,
+            qty=abs(delta["delta_qty"]),
+            notional=None,
+            order_type=OrderType.MARKET,
+            limit_price=price,
+            stop_price=None,
+            time_in_force=TimeInForce.DAY,
+            extended_hours=False,
+            client_order_id=f"{strategy_id}-{delta['symbol']}-{int(now.timestamp())}",
+            metadata=None,
+        )

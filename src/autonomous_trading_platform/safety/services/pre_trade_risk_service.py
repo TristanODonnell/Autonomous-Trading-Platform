@@ -45,12 +45,13 @@ class PreTradeRiskService:
             )
 
     def _estimate_order_notional(self, order_intent: OrderIntent) -> float:
+        if order_intent.qty is None:
+            raise ValueError("Order intent qty must be set for pre-trade risk checks.")
+
         price = self._resolve_reference_price(order_intent)
-        return abs(float(order_intent.quantity)) * price
+        return abs(float(order_intent.qty)) * price
 
     def _resolve_reference_price(self, order_intent) -> float:
-        if getattr(order_intent, "limit_price", None) is not None:
+        if order_intent.limit_price is not None:
             return float(order_intent.limit_price)
-        if getattr(order_intent, "reference_price", None) is not None:
-            return float(order_intent.reference_price)
-        raise ValueError("Order intent must provide limit_price or reference_price.")
+        raise ValueError("Order intent must provide limit_price.")
