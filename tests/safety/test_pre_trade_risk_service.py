@@ -51,7 +51,7 @@ def _settings() -> Settings:
 def _order_intent(
     *,
     symbol: str = "AAPL",
-    quantity: float = 10,
+    qty: float = 10,
     limit_price: float | None = 100.0,
     reference_price: float | None = None,
 ) -> OrderIntent:
@@ -59,7 +59,7 @@ def _order_intent(
         OrderIntent,
         SimpleNamespace(
             symbol=symbol,
-            quantity=quantity,
+            qty=qty,
             limit_price=limit_price,
             reference_price=reference_price,
         ),
@@ -76,7 +76,7 @@ def test_pre_trade_risk_allows_order_when_within_limits() -> None:
         ),
     )
 
-    order_intent = _order_intent(quantity=10, limit_price=100.0)
+    order_intent = _order_intent(qty=10, limit_price=100.0)
     now = datetime.now(UTC)
 
     service.assert_order_allowed(order_intent=order_intent, now=now)
@@ -92,7 +92,7 @@ def test_pre_trade_risk_blocks_when_gross_exposure_limit_exceeded() -> None:
         ),
     )
 
-    order_intent = _order_intent(quantity=10, limit_price=100.0)
+    order_intent = _order_intent(qty=10, limit_price=100.0)
     now = datetime.now(UTC)
 
     with pytest.raises(GrossExposureLimitExceededError, match="gross exposure"):
@@ -109,7 +109,7 @@ def test_pre_trade_risk_blocks_when_symbol_exposure_limit_exceeded() -> None:
         ),
     )
 
-    order_intent = _order_intent(symbol="AAPL", quantity=10, limit_price=100.0)
+    order_intent = _order_intent(symbol="AAPL", qty=10, limit_price=100.0)
     now = datetime.now(UTC)
 
     with pytest.raises(SymbolExposureLimitExceededError, match="AAPL"):
@@ -126,7 +126,7 @@ def test_pre_trade_risk_blocks_when_daily_notional_limit_exceeded() -> None:
         ),
     )
 
-    order_intent = _order_intent(quantity=10, limit_price=100.0)
+    order_intent = _order_intent(qty=10, limit_price=100.0)
     now = datetime.now(UTC)
 
     with pytest.raises(DailyNotionalLimitExceededError, match="daily notional"):
@@ -139,24 +139,23 @@ def test_estimate_order_notional_uses_limit_price_when_present() -> None:
         risk_state_reader=FakeRiskStateReader(),
     )
 
-    order_intent = _order_intent(quantity=5, limit_price=123.0, reference_price=999.0)
+    order_intent = _order_intent(qty=5, limit_price=123.0, reference_price=999.0)
 
     notional = service._estimate_order_notional(order_intent)
 
     assert notional == 615.0
 
 
-def test_estimate_order_notional_uses_reference_price_when_limit_price_missing() -> None:
+def test_estimate_order_notional_raises_when_limit_price_missing() -> None:
     service = PreTradeRiskService(
         settings=_settings(),
         risk_state_reader=FakeRiskStateReader(),
     )
 
-    order_intent = _order_intent(quantity=5, limit_price=None, reference_price=120.0)
+    order_intent = _order_intent(qty=5, limit_price=None)
 
-    notional = service._estimate_order_notional(order_intent)
-
-    assert notional == 600.0
+    with pytest.raises(ValueError, match="limit_price"):
+        service._estimate_order_notional(order_intent)
 
 
 def test_estimate_order_notional_uses_absolute_quantity() -> None:
@@ -165,7 +164,7 @@ def test_estimate_order_notional_uses_absolute_quantity() -> None:
         risk_state_reader=FakeRiskStateReader(),
     )
 
-    order_intent = _order_intent(quantity=-5, limit_price=100.0)
+    order_intent = _order_intent(qty=-5, limit_price=100.0)
 
     notional = service._estimate_order_notional(order_intent)
 
@@ -178,9 +177,9 @@ def test_pre_trade_risk_raises_when_no_price_is_available() -> None:
         risk_state_reader=FakeRiskStateReader(),
     )
 
-    order_intent = _order_intent(limit_price=None, reference_price=None)
+    order_intent = _order_intent(limit_price=None)
 
-    with pytest.raises(ValueError, match="limit_price or reference_price"):
+    with pytest.raises(ValueError, match="limit_price"):
         service.assert_order_allowed(
             order_intent=order_intent,
             now=datetime.now(UTC),
