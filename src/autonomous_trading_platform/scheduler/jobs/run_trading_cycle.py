@@ -26,6 +26,9 @@ from autonomous_trading_platform.scheduler.jobs.run_order_reconciliation_job imp
 from autonomous_trading_platform.scheduler.jobs.run_order_submission_job import (
     run_order_submission_job,
 )
+from autonomous_trading_platform.scheduler.jobs.run_risk_snapshot_job import (
+    run_risk_snapshot_job,
+)
 from autonomous_trading_platform.scheduler.jobs.run_trading_evaluation_job import (
     run_trading_evaluation_job,
 )
@@ -181,6 +184,18 @@ def run_trading_cycle():
             raise
 
         manifest.last_successful_step = "order_reconciliation"
+        manifest_service.save(manifest)
+
+        manifest.current_step = "risk_snapshot"
+        manifest_service.save(manifest)
+
+        run_risk_snapshot_job(
+            now_utc=now_utc,
+            trading_cycle_dependencies=trading_cycle_dependencies,
+            run_id=run_id,
+        )
+
+        manifest.last_successful_step = "risk_snapshot"
         manifest_service.save(manifest)
 
         audit_logger.record_run_completed(

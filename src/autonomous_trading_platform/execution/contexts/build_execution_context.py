@@ -27,6 +27,9 @@ from autonomous_trading_platform.execution.services.post_fill_accounting_service
 from autonomous_trading_platform.execution.services.realised_slippage_service import (
     RealisedSlippageService,
 )
+from autonomous_trading_platform.execution.services.risk_snapshot_service import (
+    RiskSnapshotService,
+)
 from autonomous_trading_platform.execution.services.strategy_runtime_state_service import (
     StrategyRuntimeStateService,
 )
@@ -79,6 +82,7 @@ def build_execution_context(
         position_ledger_service=position_ledger_service,
         cash_ledger_service=cash_ledger_service,
     )
+    risk_snapshot_service = RiskSnapshotService()
     return ExecutionContext(
         broker_client=broker_client,
         broker_adapter=broker_adapter,
@@ -92,4 +96,5 @@ def build_execution_context(
         order_runtime_state_service=order_runtime_state_service,
         strategy_runtime_state_service=strategy_runtime_state_service,
         post_fill_accounting_service=post_fill_accounting_service,
+        risk_snapshot_service=risk_snapshot_service,
     )

@@ -24,6 +24,9 @@ from autonomous_trading_platform.execution.services.post_fill_accounting_service
 from autonomous_trading_platform.execution.services.realised_slippage_service import (
     RealisedSlippageService,
 )
+from autonomous_trading_platform.execution.services.risk_snapshot_service import (
+    RiskSnapshotService,
+)
 from autonomous_trading_platform.execution.services.strategy_runtime_state_service import (
     StrategyRuntimeStateService,
 )
@@ -46,3 +49,4 @@ class ExecutionContext:
     order_runtime_state_service: OrderRuntimeStateService
     strategy_runtime_state_service: StrategyRuntimeStateService
     post_fill_accounting_service: PostFillAccountingService
+    risk_snapshot_service: RiskSnapshotService
