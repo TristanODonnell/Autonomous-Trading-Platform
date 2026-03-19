@@ -8,6 +8,9 @@ from autonomous_trading_platform.execution.services.order_execution_service impo
 from autonomous_trading_platform.execution.services.order_reconciliation_service import (
     OrderReconciliationService,
 )
+from autonomous_trading_platform.execution.services.order_runtime_state_service import (
+    OrderRuntimeStateService,
+)
 from autonomous_trading_platform.execution.services.order_state_machine_service import (
     OrderStateMachineService,
 )
@@ -16,6 +19,9 @@ from autonomous_trading_platform.execution.services.portfolio_construction_servi
 )
 from autonomous_trading_platform.execution.services.realised_slippage_service import (
     RealisedSlippageService,
+)
+from autonomous_trading_platform.execution.services.strategy_runtime_state_service import (
+    StrategyRuntimeStateService,
 )
 from autonomous_trading_platform.execution.services.strategy_state_machine_service import (
     StrategyStateMachineService,
@@ -55,6 +61,11 @@ def build_execution_context(
         broker_order_mapper=broker_order_mapper,
         order_state_machine_service=order_state_machine_service,
     )
+
+    order_runtime_state_service = OrderRuntimeStateService()
+    strategy_runtime_state_service = StrategyRuntimeStateService(
+        strategy_state_machine_service=strategy_state_machine_service
+    )
     return ExecutionContext(
         broker_client=broker_client,
         broker_adapter=broker_adapter,
@@ -65,4 +76,6 @@ def build_execution_context(
         realised_slippage_service=realised_slippage_service,
         broker_order_mapper=broker_order_mapper,
         order_reconciliation_service=order_reconciliation_service,
+        order_runtime_state_service=order_runtime_state_service,
+        strategy_runtime_state_service=strategy_runtime_state_service,
     )

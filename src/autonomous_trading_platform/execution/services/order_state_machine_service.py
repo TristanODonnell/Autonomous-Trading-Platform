@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from autonomous_trading_platform.contracts.common.enums import OrderEvent, OrderStatus
 from autonomous_trading_platform.contracts.runtime.audit_log import AuditLogEvent
@@ -37,7 +37,7 @@ class OrderStateMachineService:
 
     def apply_event(
         self,
-        order_id: str,
+        order_id: UUID,
         current_status: OrderStatus,
         event: OrderEvent,
         event_timestamp: datetime | None = None,

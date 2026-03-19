@@ -13,7 +13,6 @@ from autonomous_trading_platform.contracts.common.enums import (
     OrderStatus,
     RunType,
     StrategyEvent,
-    StrategyState,
 )
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.execution.contexts.build_execution_context import (
@@ -127,19 +126,18 @@ def run_trading_cycle():
             checkpoint_writer=strategy_context.strategy_evaluation_checkpoint_reader_protocol,
         )
 
-        strategy_state = StrategyState.IDLE
-        order_intents_created = False
         shadow_mode_enabled = safety_context.shadow_mode_service.is_enabled()
 
         strategy_job_result = evaluate_strategy_job.run(now_utc)
 
         if strategy_job_result.signals:
-            strategy_state = execution_context.strategy_state_machine_service.apply_event(
-                strategy_id=manifest.strategy_id,
-                current_state=strategy_state,
-                event=StrategyEvent.SIGNAL_GENERATED,
-            )
-
+            with SorUnitOfWork(session) as uow:
+                execution_context.strategy_runtime_state_service.apply_event(
+                    uow=uow,
+                    strategy_id=manifest.strategy_id,
+                    event=StrategyEvent.SIGNAL_GENERATED,
+                    now_utc=now_utc,
+                )
         generated_intents = execution_context.portfolio_construction_service.generate_order_intents(
             signals=strategy_job_result.signals,
             positions={},
@@ -150,13 +148,17 @@ def run_trading_cycle():
             now=now_utc,
         )
 
+        order_intents_created = False
+
         for intent in generated_intents:
             if not order_intents_created:
-                strategy_state = execution_context.strategy_state_machine_service.apply_event(
-                    strategy_id=manifest.strategy_id,
-                    current_state=strategy_state,
-                    event=StrategyEvent.ORDER_INTENTS_CREATED,
-                )
+                with SorUnitOfWork(session) as uow:
+                    execution_context.strategy_runtime_state_service.apply_event(
+                        uow=uow,
+                        strategy_id=manifest.strategy_id,
+                        event=StrategyEvent.SIGNAL_GENERATED,
+                        now_utc=now_utc,
+                    )
                 order_intents_created = True
 
             order_status = OrderStatus.NEW
@@ -188,10 +190,6 @@ def run_trading_cycle():
                     account_id=manifest.broker_account_id,
                 )
 
-                with SorUnitOfWork(session) as uow:
-                    # also persist the intent here if not already persisted elsewhere
-                    uow.broker_orders.upsert(broker_order)
-
                 order_status = execution_context.order_state_machine_service.apply_event(
                     order_id=intent.order_id,
                     current_status=order_status,
@@ -206,8 +204,20 @@ def run_trading_cycle():
                     },
                 )
 
+                with SorUnitOfWork(session) as uow:
+                    uow.broker_orders.upsert(broker_order)
+                    execution_context.order_runtime_state_service.record_submitted_order(
+                        uow=uow,
+                        intent=intent,
+                        broker_order=broker_order,
+                        run_id=run_id,
+                        strategy_id=manifest.strategy_id,
+                        account_id=manifest.broker_account_id,
+                        now_utc=now_utc,
+                    )
+
             except Exception as exc:
-                order_status = execution_context.order_state_machine_service.apply_event(
+                execution_context.order_state_machine_service.apply_event(
                     order_id=intent.order_id,
                     current_status=order_status,
                     event=OrderEvent.REJECT,
@@ -219,12 +229,28 @@ def run_trading_cycle():
                         "error": str(exc),
                     },
                 )
+
+                with SorUnitOfWork(session) as uow:
+                    execution_context.order_runtime_state_service.record_rejected_order(
+                        uow=uow,
+                        intent=intent,
+                        run_id=run_id,
+                        strategy_id=manifest.strategy_id,
+                        account_id=manifest.broker_account_id,
+                        now_utc=now_utc,
+                    )
+
                 raise
 
         # -----------------------------
         # Reconciliation stage
         # -----------------------------
-        tracked_orders = ...  # load submitted / partially filled tracked orders
+        with SorUnitOfWork(session) as uow:
+            tracked_orders = (
+                execution_context.order_runtime_state_service.list_reconciliation_inputs(
+                    uow=uow,
+                )
+            )
 
         for tracked_order in tracked_orders:
             result = execution_context.order_reconciliation_service.reconcile_order(
@@ -237,6 +263,12 @@ def run_trading_cycle():
 
                 if result.fill is not None:
                     uow.fills.upsert(result.fill)
+
+                execution_context.order_runtime_state_service.apply_reconciliation_result(
+                    uow=uow,
+                    result=result,
+                    now_utc=now_utc,
+                )
 
         audit_logger.record_run_completed(
             run_id=str(run_id),

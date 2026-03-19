@@ -19,7 +19,7 @@ from autonomous_trading_platform.execution.services.order_state_machine_service 
 
 @dataclass(frozen=True)
 class ReconciliationInput:
-    order_id: str
+    order_id: UUID
     broker_order_id: str
     intent_id: UUID
     run_id: UUID
@@ -31,7 +31,7 @@ class ReconciliationInput:
 
 @dataclass(frozen=True)
 class ReconciliationResult:
-    order_id: str
+    order_id: UUID
     broker_order: BrokerOrder
     next_status: OrderStatus
     event_applied: OrderEvent | None

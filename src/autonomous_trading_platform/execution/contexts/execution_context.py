@@ -9,6 +9,9 @@ from autonomous_trading_platform.execution.services.order_execution_service impo
 from autonomous_trading_platform.execution.services.order_reconciliation_service import (
     OrderReconciliationService,
 )
+from autonomous_trading_platform.execution.services.order_runtime_state_service import (
+    OrderRuntimeStateService,
+)
 from autonomous_trading_platform.execution.services.order_state_machine_service import (
     OrderStateMachineService,
 )
@@ -17,6 +20,9 @@ from autonomous_trading_platform.execution.services.portfolio_construction_servi
 )
 from autonomous_trading_platform.execution.services.realised_slippage_service import (
     RealisedSlippageService,
+)
+from autonomous_trading_platform.execution.services.strategy_runtime_state_service import (
+    StrategyRuntimeStateService,
 )
 from autonomous_trading_platform.execution.services.strategy_state_machine_service import (
     StrategyStateMachineService,
@@ -34,3 +40,5 @@ class ExecutionContext:
     realised_slippage_service: RealisedSlippageService
     broker_order_mapper: BrokerOrderMapper
     order_reconciliation_service: OrderReconciliationService
+    order_runtime_state_service: OrderRuntimeStateService
+    strategy_runtime_state_service: StrategyRuntimeStateService
