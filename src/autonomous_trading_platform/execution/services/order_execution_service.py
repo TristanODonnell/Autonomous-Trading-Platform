@@ -36,3 +36,12 @@ class OrderExecutionService:
                     raise
                 time.sleep(backoff)
                 backoff *= 2
+
+    def get_order(self, broker_order_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self.client.get_order_by_id(broker_order_id))
+
+    def list_open_orders(self) -> list[dict[str, Any]]:
+        return cast(list[dict[str, Any]], self.client.list_open_orders())
+
+    def cancel_order(self, broker_order_id: str) -> None:
+        self.client.cancel_order(broker_order_id)
