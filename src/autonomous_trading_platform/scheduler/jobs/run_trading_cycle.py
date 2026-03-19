@@ -1,109 +1,64 @@
-import platform
-import uuid
-from datetime import UTC, datetime, timedelta
-from decimal import Decimal
-
-from sqlalchemy.orm import Session
+from datetime import UTC, datetime
 
 from autonomous_trading_platform.config.enums import TradingEnvironment
-from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.contracts.common.enums import (
-    BarInterval,
     OrderEvent,
     OrderStatus,
-    RunType,
     StrategyEvent,
 )
-from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
-from autonomous_trading_platform.execution.contexts.build_execution_context import (
-    build_execution_context,
+from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
+    build_trading_base_metadata,
+    build_trading_cycle_dependencies,
+    build_trading_cycle_window,
+    build_trading_run_manifest,
+    new_trading_run_id,
 )
-from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
-from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
-from autonomous_trading_platform.safety.contexts.build_safety_context import build_safety_context
-from autonomous_trading_platform.safety.environment_policy import EnvironmentSafetyPolicy
-from autonomous_trading_platform.safety.readers.order_activity_reader import StubOrderActivityReader
-from autonomous_trading_platform.safety.readers.risk_state_reader import StubRiskStateReader
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
-from autonomous_trading_platform.strategy.contexts.build_strategy_context import (
-    build_strategy_context,
-)
-from autonomous_trading_platform.strategy.implementations.stub_strategy import StubStrategy
-from autonomous_trading_platform.strategy.jobs.evaluate_strategy_job import (
-    EvaluateStrategyJob,
-)
-from src.db import get_session
-
-
-def floor_to_five_minutes(timestamp: datetime) -> datetime:
-    minute = (timestamp.minute // 5) * 5
-    return timestamp.replace(minute=minute, second=0, microsecond=0)
+from autonomous_trading_platform.strategy.jobs.evaluate_strategy_job import EvaluateStrategyJob
 
 
 def run_trading_cycle():
     """
     Entry point for airflow DAG.
     """
+    now_utc = datetime.now(UTC)
+    trading_cycle_dependencies = build_trading_cycle_dependencies()
 
-    settings = Settings()
-    environment_safety_policy = EnvironmentSafetyPolicy(settings=settings)
-    session: Session = get_session()
-    audit_logger = AuditLoggingService(session)
-    manifest_service = RunManifestService(session)
+    settings = trading_cycle_dependencies.settings
+    session = trading_cycle_dependencies.session
+    audit_logger = trading_cycle_dependencies.audit_logger
+    manifest_service = trading_cycle_dependencies.manifest_service
 
-    strategy_stub = StubStrategy()
-    strategy_context = build_strategy_context(strategy=strategy_stub)
-    risk_state_reader = StubRiskStateReader()
-    order_activity_reader = StubOrderActivityReader()
+    strategy_context = trading_cycle_dependencies.strategy_context
+    safety_context = trading_cycle_dependencies.safety_context
+    execution_context = trading_cycle_dependencies.execution_context
 
-    safety_context = build_safety_context(
-        settings=settings,
-        environment_policy=environment_safety_policy,
-        risk_state_reader=risk_state_reader,
-        order_activity_reader=order_activity_reader,
+    signal_writer = strategy_context.signal_writer
+    strategy_checkpoint_writer = strategy_context.strategy_checkpoint_writer
+    run_id = new_trading_run_id()
+
+    trading_cycle_window = build_trading_cycle_window(
+        now_utc=now_utc,
+        # ingestion_grace_seconds= # overload default
     )
 
-    execution_context = build_execution_context(
-        pre_trade_risk_service=safety_context.pre_trade_risk_service,
-        audit_log_repository=audit_logger,
-        alpaca_settings=settings,
-    )
-
-    run_id = uuid.uuid4()
     component = "scheduler.run_trading_cycle"
     expected_symbols = {"SPY"}
-    now_utc = datetime.now(UTC)
-    cycle_end = floor_to_five_minutes(now_utc)
-    cycle_start = cycle_end - timedelta(minutes=5)
 
-    manifest = RunManifest(
+    manifest = build_trading_run_manifest(
         run_id=run_id,
-        run_type=RunType.BACKTEST,
-        created_at=now_utc,
-        environment="local",
-        broker="alpaca",
-        broker_account_id="paper",
-        strategy_id="baseline_strategy",
-        strategy_version="v1",
-        strategy_config={},
-        capital_bucket=Decimal("10000.00"),
-        interval=BarInterval.FIVE_MIN,
-        start_date=cycle_start.date(),
-        end_date=cycle_end.date(),
-        dataset_version="v1",
-        universe_version="v1",
-        git_commit="dev",
-        python_version=platform.python_version(),
-        notes="5-minute trading cycle",
+        now_utc=now_utc,
+        cycle_start=trading_cycle_window.cycle_start,
+        cycle_end=trading_cycle_window.cycle_end,
     )
     manifest_service.save(manifest)
-    base_metadata = {
-        "cycle_start": cycle_start.isoformat(),
-        "cycle_end": cycle_end.isoformat(),
-        "expected_symbols": sorted(expected_symbols),
-        "manifest_run_type": manifest.run_type.value,
-        "manifest_interval": manifest.interval.value,
-    }
+
+    base_metadata = build_trading_base_metadata(
+        cycle_start=trading_cycle_window.cycle_start,
+        cycle_end=trading_cycle_window.cycle_end,
+        expected_symbols=expected_symbols,
+        manifest=manifest,
+    )
 
     try:
         audit_logger.record_run_started(
@@ -112,18 +67,16 @@ def run_trading_cycle():
             metadata=base_metadata,
         )
 
-        safety_context.shadow_mode_service.is_enabled()
-        # only check live gate if actually in LIVE mode
         if settings.trading_environment is TradingEnvironment.LIVE:
             safety_context.live_trading_gate_service.assert_live_trading_allowed(
                 manifest.broker_account_id
             )
 
         evaluate_strategy_job = EvaluateStrategyJob(
-            readiness_service=strategy_context.readiness_service,
+            readiness_service=strategy_context.strategy_bar_readiness_service,
             evaluation_service=strategy_context.strategy_evaluation_service,
-            signal_writer=strategy_context.signal_writer,
-            checkpoint_writer=strategy_context.strategy_evaluation_checkpoint_reader_protocol,
+            signal_writer=signal_writer,
+            checkpoint_writer=strategy_checkpoint_writer,
         )
 
         shadow_mode_enabled = safety_context.shadow_mode_service.is_enabled()
