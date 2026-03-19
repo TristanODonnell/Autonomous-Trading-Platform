@@ -2,6 +2,7 @@ from autonomous_trading_platform.execution.clients.alpaca_broker_client import A
 from autonomous_trading_platform.execution.contexts.execution_context import ExecutionContext
 from autonomous_trading_platform.execution.mappers.broker_order_mapper import BrokerOrderMapper
 from autonomous_trading_platform.execution.services.broker_adaptor import AlpacaBrokerAdapter
+from autonomous_trading_platform.execution.services.cash_ledger_service import CashLedgerService
 from autonomous_trading_platform.execution.services.order_execution_service import (
     OrderExecutionService,
 )
@@ -16,6 +17,12 @@ from autonomous_trading_platform.execution.services.order_state_machine_service 
 )
 from autonomous_trading_platform.execution.services.portfolio_construction_service import (
     PortfolioConstructionService,
+)
+from autonomous_trading_platform.execution.services.position_ledger_service import (
+    PositionLedgerService,
+)
+from autonomous_trading_platform.execution.services.post_fill_accounting_service import (
+    PostFillAccountingService,
 )
 from autonomous_trading_platform.execution.services.realised_slippage_service import (
     RealisedSlippageService,
@@ -66,6 +73,12 @@ def build_execution_context(
     strategy_runtime_state_service = StrategyRuntimeStateService(
         strategy_state_machine_service=strategy_state_machine_service
     )
+    position_ledger_service = PositionLedgerService()
+    cash_ledger_service = CashLedgerService()
+    post_fill_accounting_service = PostFillAccountingService(
+        position_ledger_service=position_ledger_service,
+        cash_ledger_service=cash_ledger_service,
+    )
     return ExecutionContext(
         broker_client=broker_client,
         broker_adapter=broker_adapter,
@@ -78,4 +91,5 @@ def build_execution_context(
         order_reconciliation_service=order_reconciliation_service,
         order_runtime_state_service=order_runtime_state_service,
         strategy_runtime_state_service=strategy_runtime_state_service,
+        post_fill_accounting_service=post_fill_accounting_service,
     )

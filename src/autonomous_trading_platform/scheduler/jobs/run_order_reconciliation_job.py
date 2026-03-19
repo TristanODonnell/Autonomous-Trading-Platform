@@ -40,6 +40,11 @@ def run_order_reconciliation_job(now_utc: datetime | None = None) -> None:
 
                 if result.fill is not None:
                     uow.fills.upsert(result.fill)
+                    execution_context.post_fill_accounting_service.apply_fill(
+                        uow=uow,
+                        fill=result.fill,
+                        now_utc=resolved_now,
+                    )
 
                 execution_context.order_runtime_state_service.apply_reconciliation_result(
                     uow=uow,
