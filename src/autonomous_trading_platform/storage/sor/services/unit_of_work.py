@@ -29,6 +29,12 @@ from autonomous_trading_platform.storage.sor.repositories.run_manifests_reposito
     RunManifestRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.signals_repository import SignalRepository
+from autonomous_trading_platform.storage.sor.repositories.strategy_runtime_state_repository import (
+    StrategyRuntimeStateRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.tracked_order_repository import (
+    TrackedOrderRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
     UniverseSnapshotRepository,
 )
@@ -51,6 +57,8 @@ class SorUnitOfWork:
         self.risk_snapshots = RiskSnapshotRepository(session)
         self.audit_logs = AuditLogRepository(session)
         self.run_manifests = RunManifestRepository(session)
+        self.tracked_orders = TrackedOrderRepository(session)
+        self.strategy_runtime_states = StrategyRuntimeStateRepository(session)
 
     def __enter__(self) -> "SorUnitOfWork":
         self.session.begin()

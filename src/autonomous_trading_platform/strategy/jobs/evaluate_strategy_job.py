@@ -29,6 +29,7 @@ class EvaluateStrategyJobResult:
     reason: str | None
     signals_emitted: int
     target_bar_timestamp: datetime | None
+    signals: list[Signal]
 
 
 class EvaluateStrategyJob:
@@ -54,6 +55,7 @@ class EvaluateStrategyJob:
                 reason=readiness.reason,
                 signals_emitted=0,
                 target_bar_timestamp=None,
+                signals=[],
             )
         result = self.evaluation_service.evaluate(
             bar_timestamp=readiness.target_bar_timestamp,
@@ -71,4 +73,5 @@ class EvaluateStrategyJob:
             reason=None,
             signals_emitted=len(result.signals),
             target_bar_timestamp=readiness.target_bar_timestamp,
+            signals=result.signals,
         )
