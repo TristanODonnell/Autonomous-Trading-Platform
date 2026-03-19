@@ -1,12 +1,18 @@
 from datetime import UTC, datetime
 
 from autonomous_trading_platform.config.enums import TradingEnvironment
+from autonomous_trading_platform.execution.services.trading_freeze_service import (
+    TradingFreezeService,
+)
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_base_metadata,
     build_trading_cycle_dependencies,
     build_trading_cycle_window,
     build_trading_run_manifest,
     new_trading_run_id,
+)
+from autonomous_trading_platform.scheduler.jobs.check_ingestion_readiness_job import (
+    check_ingestion_readiness_job,
 )
 from autonomous_trading_platform.scheduler.jobs.run_order_reconciliation_job import (
     run_order_reconciliation_job,
@@ -30,18 +36,26 @@ def run_trading_cycle():
     session = trading_cycle_dependencies.session
     audit_logger = trading_cycle_dependencies.audit_logger
     manifest_service = trading_cycle_dependencies.manifest_service
-
     safety_context = trading_cycle_dependencies.safety_context
+    freeze_service = TradingFreezeService()
+    component = "scheduler.run_trading_cycle"
+    expected_symbols = {"SPY"}
 
+    if freeze_service.is_trading_frozen():
+        audit_logger.record_run_completed(
+            run_id="frozen_skip",
+            component=component,
+            metadata={
+                "status": "skipped_due_to_freeze",
+            },
+        )
+        return
     run_id = new_trading_run_id()
 
     trading_cycle_window = build_trading_cycle_window(
         now_utc=now_utc,
         # ingestion_grace_seconds= # overload default
     )
-
-    component = "scheduler.run_trading_cycle"
-    expected_symbols = {"SPY"}
 
     manifest = build_trading_run_manifest(
         run_id=run_id,
@@ -70,11 +84,40 @@ def run_trading_cycle():
                 manifest.broker_account_id
             )
 
-        strategy_job_result, generated_intents = run_trading_evaluation_job(
-            now_utc=now_utc,
-            trading_cycle_dependencies=trading_cycle_dependencies,
-            manifest=manifest,
-        )
+        ingestion_result = check_ingestion_readiness_job(now_utc=now_utc)
+
+        if not ingestion_result.ready:
+            if settings.skip_evaluation_on_ingestion_failure:
+                audit_logger.record_run_completed(
+                    run_id=str(run_id),
+                    component=component,
+                    metadata={
+                        **base_metadata,
+                        "degraded_mode": "skip_evaluation",
+                        "reason": ingestion_result.reason,
+                    },
+                )
+                return
+            raise RuntimeError(f"Ingestion readiness failed: {ingestion_result.reason}")
+        try:
+            _, generated_intents = run_trading_evaluation_job(
+                now_utc=now_utc,
+                trading_cycle_dependencies=trading_cycle_dependencies,
+                manifest=manifest,
+            )
+        except Exception as exc:
+            if settings.hold_positions_on_evaluation_failure:
+                audit_logger.record_run_completed(
+                    run_id=str(run_id),
+                    component=component,
+                    metadata={
+                        **base_metadata,
+                        "degraded_mode": "hold_positions",
+                        "reason": str(exc),
+                    },
+                )
+                return
+            raise
 
         run_order_submission_job(
             now_utc=now_utc,
@@ -84,7 +127,25 @@ def run_trading_cycle():
             generated_intents=generated_intents,
         )
 
-        run_order_reconciliation_job(now_utc=now_utc)
+        try:
+            run_order_reconciliation_job(now_utc=now_utc)
+        except Exception as exc:
+            if settings.freeze_trading_on_reconciliation_failure:
+                freeze_service.freeze_trading(
+                    reason=f"reconciliation_failure: {exc}",
+                    source=component,
+                )
+
+            audit_logger.record_run_failed(
+                run_id=str(run_id),
+                component=component,
+                metadata={
+                    **base_metadata,
+                    "failure_type": "reconciliation_failure",
+                    "error": str(exc),
+                },
+            )
+            raise
 
         audit_logger.record_run_completed(
             run_id=str(run_id),

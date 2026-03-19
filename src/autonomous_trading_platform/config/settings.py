@@ -46,6 +46,48 @@ class Settings:
             15,
         )
 
+        self.market_bar_freshness_sla_seconds = self._get_int(
+            "MARKET_BAR_FRESHNESS_SLA_SECONDS",
+            30,
+        )
+        self.trading_evaluation_timeout_seconds = self._get_int(
+            "TRADING_EVALUATION_TIMEOUT_SECONDS",
+            60,
+        )
+        self.order_submission_timeout_seconds = self._get_int(
+            "ORDER_SUBMISSION_TIMEOUT_SECONDS",
+            60,
+        )
+        self.reconciliation_timeout_seconds = self._get_int(
+            "RECONCILIATION_TIMEOUT_SECONDS",
+            120,
+        )
+
+        self.skip_evaluation_on_ingestion_failure = self._get_bool(
+            "SKIP_EVALUATION_ON_INGESTION_FAILURE",
+            default=True,
+        )
+        self.hold_positions_on_evaluation_failure = self._get_bool(
+            "HOLD_POSITIONS_ON_EVALUATION_FAILURE",
+            default=True,
+        )
+        self.freeze_trading_on_reconciliation_failure = self._get_bool(
+            "FREEZE_TRADING_ON_RECONCILIATION_FAILURE",
+            default=True,
+        )
+        self.trading_cycle_timeout_seconds = self._get_int(
+            "TRADING_CYCLE_TIMEOUT_SECONDS",
+            240,
+        )
+        self.trading_cycle_sla_seconds = self._get_int(
+            "TRADING_CYCLE_SLA_SECONDS",
+            240,
+        )
+        self.trading_cycle_timeout_seconds = self._get_int(
+            "TRADING_CYCLE_TIMEOUT_SECONDS",
+            300,
+        )
+
     @property
     def alpaca_base_url(self) -> str:
         if self.trading_environment == TradingEnvironment.PAPER:
