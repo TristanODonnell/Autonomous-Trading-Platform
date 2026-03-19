@@ -1,5 +1,9 @@
 from dataclasses import dataclass
 
+from autonomous_trading_platform.strategy.jobs.evaluate_strategy_job import (
+    SignalWriterProtocol,
+    StrategyCheckpointWriterProtocol,
+)
 from autonomous_trading_platform.strategy.services.strategy_bar_readiness_service import (
     IngestionStatusReaderProtocol,
     StrategyBarReadinessService,
@@ -22,3 +26,6 @@ class StrategyContext:
 
     strategy_evaluation_service: StrategyEvaluationService
     strategy_bar_readiness_service: StrategyBarReadinessService
+
+    signal_writer: SignalWriterProtocol
+    strategy_checkpoint_writer: StrategyCheckpointWriterProtocol

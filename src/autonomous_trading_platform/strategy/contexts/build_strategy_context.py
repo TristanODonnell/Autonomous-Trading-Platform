@@ -1,5 +1,9 @@
 from autonomous_trading_platform.strategy.contexts.strategy_context import StrategyContext
 from autonomous_trading_platform.strategy.implementations.base_strategy import BaseStrategy
+from autonomous_trading_platform.strategy.jobs.evaluate_strategy_job import (
+    SignalWriterProtocol,
+    StrategyCheckpointWriterProtocol,
+)
 from autonomous_trading_platform.strategy.services.strategy_bar_readiness_service import (
     IngestionStatusReaderProtocol,
     StrategyBarReadinessService,
@@ -20,7 +24,8 @@ def build_strategy_context(
     universe_membership_reader_protocol = UniverseMembershipReaderProtocol()
     ingestion_status_reader_protocol = IngestionStatusReaderProtocol()
     strategy_evaluation_checkpoint_reader_protocol = StrategyEvaluationCheckpointReaderProtocol()
-
+    signal_writer_protocol = SignalWriterProtocol()
+    strategy_checkpoint_writer_protocol = StrategyCheckpointWriterProtocol()
     strategy_evaluation_service = StrategyEvaluationService(
         market_bar_reader=market_bar_reader_protocol,
         universe_reader=universe_membership_reader_protocol,
@@ -38,4 +43,6 @@ def build_strategy_context(
         strategy_evaluation_checkpoint_reader_protocol=strategy_evaluation_checkpoint_reader_protocol,
         strategy_bar_readiness_service=strategy_bar_readiness_service,
         strategy_evaluation_service=strategy_evaluation_service,
+        strategy_checkpoint_writer=strategy_checkpoint_writer_protocol,
+        signal_writer=signal_writer_protocol,
     )
