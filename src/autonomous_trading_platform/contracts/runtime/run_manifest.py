@@ -35,6 +35,11 @@ class RunManifest(BaseModel):
     python_version: str | None = None
     dependency_lock_hash: str | None = None
     notes: str | None = None
+    bar_timestamp: UTCDateTime | None = None
+    status: str | None = None
+    current_step: str | None = None
+    last_successful_step: str | None = None
+    error_message: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return manifest as a Python dictionary."""

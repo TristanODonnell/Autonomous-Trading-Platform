@@ -30,6 +30,11 @@ class RunManifestRepository(BaseRepository):
             python_version=manifest.python_version,
             dependency_lock_hash=manifest.dependency_lock_hash,
             notes=manifest.notes,
+            bar_timestamp=manifest.bar_timestamp,
+            status=manifest.status,
+            current_step=manifest.current_step,
+            last_successful_step=manifest.last_successful_step,
+            error_message=manifest.error_message,
         )
 
         self.session.add(row)

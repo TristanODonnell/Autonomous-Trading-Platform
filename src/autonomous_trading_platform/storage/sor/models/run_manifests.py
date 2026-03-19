@@ -48,3 +48,8 @@ class RunManifestRow(Base):
     python_version: Mapped[str | None] = mapped_column(String, nullable=True)
     dependency_lock_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     notes: Mapped[str | None] = mapped_column(String, nullable=True)
+    bar_timestamp: Mapped[UTCDateTime | None] = mapped_column(UTCDateTimeType(), nullable=True)
+    status: Mapped[str | None] = mapped_column(String, nullable=True)
+    current_step: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_successful_step: Mapped[str | None] = mapped_column(String, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String, nullable=True)
