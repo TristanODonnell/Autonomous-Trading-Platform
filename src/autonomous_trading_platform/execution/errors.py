@@ -1,9 +1,9 @@
 class ExecutionError(RuntimeError):
-    """Base class for exceptions in this module."""
+    """Base class for execution-domain failures."""
 
 
 class InvalidOrderTransitionError(ExecutionError):
-    pass
+    """Raised when an order lifecycle event is invalid for the current state."""
 
 
 class InvalidStrategyTransitionError(ExecutionError):

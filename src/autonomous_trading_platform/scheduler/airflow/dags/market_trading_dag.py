@@ -31,4 +31,7 @@ with DAG(
         execution_timeout=trading_cycle_timeout,
         sla=trading_cycle_sla,
         on_failure_callback=airflow_task_failure_callback,
+        retries=settings.trading_cycle_retry_attempts,
+        retry_delay=timedelta(seconds=settings.trading_cycle_retry_delay_seconds),
+        retry_exponential_backoff=True,
     )
