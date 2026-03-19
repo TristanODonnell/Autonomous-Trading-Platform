@@ -69,6 +69,11 @@ def run_trading_cycle():
         cycle_start=trading_cycle_window.cycle_start,
         cycle_end=trading_cycle_window.cycle_end,
     )
+    manifest.status = "running"
+    manifest.current_step = "starting"
+    manifest.last_successful_step = None
+    manifest.bar_timestamp = trading_cycle_window.cycle_end
+    manifest.error_message = None
     manifest_service.save(manifest)
 
     base_metadata = build_trading_base_metadata(
@@ -90,6 +95,8 @@ def run_trading_cycle():
                 manifest.broker_account_id
             )
 
+        manifest.current_step = "ingestion_readiness"
+        manifest_service.save(manifest)
         ingestion_result = check_ingestion_readiness_job(now_utc=now_utc)
 
         if not ingestion_result.ready:
@@ -103,8 +110,19 @@ def run_trading_cycle():
                         "reason": ingestion_result.reason,
                     },
                 )
+                manifest.status = "completed"
+                manifest.current_step = None
+                manifest.error_message = ingestion_result.reason
+                manifest_service.save(manifest)
                 return
             raise RuntimeError(f"Ingestion readiness failed: {ingestion_result.reason}")
+
+        manifest.last_successful_step = "ingestion_readiness"
+        manifest_service.save(manifest)
+
+        manifest.current_step = "trading_evaluation"
+        manifest_service.save(manifest)
+
         try:
             _, generated_intents = run_trading_evaluation_job(
                 now_utc=now_utc,
@@ -122,8 +140,18 @@ def run_trading_cycle():
                         "reason": str(exc),
                     },
                 )
+                manifest.status = "completed"
+                manifest.current_step = None
+                manifest.error_message = str(exc)
+                manifest_service.save(manifest)
                 return
             raise
+
+        manifest.last_successful_step = "trading_evaluation"
+        manifest_service.save(manifest)
+
+        manifest.current_step = "order_submission"
+        manifest_service.save(manifest)
 
         run_order_submission_job(
             now_utc=now_utc,
@@ -133,6 +161,12 @@ def run_trading_cycle():
             generated_intents=generated_intents,
         )
 
+        manifest.last_successful_step = "order_submission"
+        manifest_service.save(manifest)
+
+        manifest.current_step = "order_reconciliation"
+        manifest_service.save(manifest)
+
         try:
             run_order_reconciliation_job(now_utc=now_utc)
         except Exception as exc:
@@ -141,23 +175,25 @@ def run_trading_cycle():
                     reason=f"reconciliation_failure: {exc}",
                     source=component,
                 )
-
-            audit_logger.record_run_failed(
-                run_id=str(run_id),
-                component=component,
-                metadata={
-                    **base_metadata,
-                    "failure_type": "reconciliation_failure",
-                    "error": str(exc),
-                },
-            )
+            manifest.status = "failed"
+            manifest.error_message = str(exc)
+            manifest_service.save(manifest)
             raise
+
+        manifest.last_successful_step = "order_reconciliation"
+        manifest_service.save(manifest)
 
         audit_logger.record_run_completed(
             run_id=str(run_id),
             component=component,
             metadata=base_metadata,
         )
+
+        manifest.status = "completed"
+        manifest.current_step = None
+        manifest.error_message = None
+        manifest_service.save(manifest)
+
     except TransientInfrastructureError as exc:
         # retry case → let Airflow retry
         audit_logger.record_run_failed(
@@ -170,6 +206,9 @@ def run_trading_cycle():
                 "action": "retry_by_airflow",
             },
         )
+        manifest.status = "failed"
+        manifest.error_message = str(exc)
+        manifest_service.save(manifest)
         raise
     except (SafetyError, ExecutionError, PersistentInfrastructureError) as exc:
         # persistent failure → stop trading, require manual intervention
@@ -187,6 +226,9 @@ def run_trading_cycle():
                 "action": "manual_intervention_required",
             },
         )
+        manifest.status = "failed"
+        manifest.error_message = str(exc)
+        manifest_service.save(manifest)
         raise
 
     except Exception as exc:
@@ -200,6 +242,9 @@ def run_trading_cycle():
                 "failure_class": "unknown",
             },
         )
+        manifest.status = "failed"
+        manifest.error_message = str(exc)
+        manifest_service.save(manifest)
         raise
     finally:
         session.close()
