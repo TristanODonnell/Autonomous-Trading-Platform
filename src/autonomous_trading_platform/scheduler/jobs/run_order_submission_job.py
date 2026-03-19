@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
+from autonomous_trading_platform.common.errors import (
+    TransientInfrastructureError,
+)
 from autonomous_trading_platform.contracts.common.enums import (
     OrderEvent,
     OrderStatus,
@@ -62,7 +65,12 @@ def run_order_submission_job(
             continue
 
         try:
-            response = execution_context.order_execution_service.submit(intent)
+            try:
+                response = execution_context.order_execution_service.submit(intent)
+            except TimeoutError as exc:
+                raise TransientInfrastructureError(f"broker timeout: {exc}") from exc
+            except ConnectionError as exc:
+                raise TransientInfrastructureError(f"broker connection error: {exc}") from exc
 
             broker_order = execution_context.broker_order_mapper.to_broker_order(
                 payload=response,
@@ -96,6 +104,9 @@ def run_order_submission_job(
                     account_id=manifest.broker_account_id,
                     now_utc=now_utc,
                 )
+
+        except TransientInfrastructureError:
+            raise
 
         except Exception as exc:
             execution_context.order_state_machine_service.apply_event(

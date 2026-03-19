@@ -1,9 +1,15 @@
 from datetime import UTC, datetime
 
+from autonomous_trading_platform.common.errors import (
+    PersistentInfrastructureError,
+    TransientInfrastructureError,
+)
 from autonomous_trading_platform.config.enums import TradingEnvironment
+from autonomous_trading_platform.execution.errors import ExecutionError
 from autonomous_trading_platform.execution.services.trading_freeze_service import (
     TradingFreezeService,
 )
+from autonomous_trading_platform.safety.errors import SafetyError
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_base_metadata,
     build_trading_cycle_dependencies,
@@ -152,13 +158,46 @@ def run_trading_cycle():
             component=component,
             metadata=base_metadata,
         )
-    except Exception as exc:
+    except TransientInfrastructureError as exc:
+        # retry case → let Airflow retry
         audit_logger.record_run_failed(
             run_id=str(run_id),
             component=component,
             metadata={
                 **base_metadata,
                 "error": str(exc),
+                "failure_class": "transient",
+                "action": "retry_by_airflow",
+            },
+        )
+        raise
+    except (SafetyError, ExecutionError, PersistentInfrastructureError) as exc:
+        # persistent failure → stop trading, require manual intervention
+        freeze_service.freeze_trading(
+            reason=f"critical_failure: {exc}",
+            source=component,
+        )
+        audit_logger.record_run_failed(
+            run_id=str(run_id),
+            component=component,
+            metadata={
+                **base_metadata,
+                "error": str(exc),
+                "failure_class": "persistent",
+                "action": "manual_intervention_required",
+            },
+        )
+        raise
+
+    except Exception as exc:
+        # unknown → fail closed
+        audit_logger.record_run_failed(
+            run_id=str(run_id),
+            component=component,
+            metadata={
+                **base_metadata,
+                "error": str(exc),
+                "failure_class": "unknown",
             },
         )
         raise

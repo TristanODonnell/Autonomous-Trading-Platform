@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from autonomous_trading_platform.common.errors import TransientInfrastructureError
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_cycle_dependencies,
 )
@@ -22,10 +23,17 @@ def run_order_reconciliation_job(now_utc: datetime | None = None) -> None:
             )
 
         for tracked_order in tracked_orders:
-            result = execution_context.order_reconciliation_service.reconcile_order(
-                tracked_order,
-                now=resolved_now,
-            )
+            try:
+                result = execution_context.order_reconciliation_service.reconcile_order(
+                    tracked_order,
+                    now=resolved_now,
+                )
+            except TimeoutError as exc:
+                raise TransientInfrastructureError(f"reconciliation timeout: {exc}") from exc
+            except ConnectionError as exc:
+                raise TransientInfrastructureError(
+                    f"reconciliation connection error: {exc}"
+                ) from exc
 
             with SorUnitOfWork(session) as uow:
                 uow.broker_orders.upsert(result.broker_order)

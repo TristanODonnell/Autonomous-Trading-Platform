@@ -87,6 +87,14 @@ class Settings:
             "TRADING_CYCLE_TIMEOUT_SECONDS",
             300,
         )
+        self.trading_cycle_retry_attempts = self._get_int(
+            "TRADING_CYCLE_RETRY_ATTEMPTS",
+            3,
+        )
+        self.trading_cycle_retry_delay_seconds = self._get_int(
+            "TRADING_CYCLE_RETRY_DELAY_SECONDS",
+            30,
+        )
 
     @property
     def alpaca_base_url(self) -> str:
