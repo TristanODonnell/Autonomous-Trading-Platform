@@ -10,7 +10,7 @@ from autonomous_trading_platform.scheduler.callbacks.airflow_callbacks import (
     airflow_sla_miss_callback,
     airflow_task_failure_callback,
 )
-from autonomous_trading_platform.scheduler.jobs.run_trading_cycle import (
+from autonomous_trading_platform.scheduler.cycles.run_trading_cycle import (
     run_trading_cycle,
 )
 

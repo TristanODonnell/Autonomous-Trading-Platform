@@ -1,8 +1,18 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 
 from autonomous_trading_platform.cli.formatters import print_header, print_json
+from autonomous_trading_platform.cli.helpers import parse_datetime
+from autonomous_trading_platform.scheduler.cycles.run_trading_evaluation_cycle import (
+    run_trading_evaluation_cycle,
+)
+
+
+@dataclass
+class StrategyDependencies:
+    pass
 
 
 def register(subparsers) -> None:
@@ -24,7 +34,6 @@ def register(subparsers) -> None:
         "evaluate-bar",
         help="Evaluate strategy for one bar",
     )
-    evaluate_bar_parser.add_argument("--symbol", required=True)
     evaluate_bar_parser.add_argument("--timestamp", required=True)
     evaluate_bar_parser.set_defaults(func=handle_evaluate_bar)
 
@@ -49,7 +58,13 @@ def handle_evaluate_symbol(args: argparse.Namespace) -> int:
 
 
 def handle_evaluate_bar(args: argparse.Namespace) -> int:
-    print_header("Evaluate Bar")
+
+    timestamp = parse_datetime(args.timestamp)
+
+    run_trading_evaluation_cycle(
+        timestamp=timestamp,
+    )
+    print_header("Evaluate Symbol")
     print_json(
         {
             "symbol": args.symbol,

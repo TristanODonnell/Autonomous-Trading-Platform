@@ -5,10 +5,10 @@ from dataclasses import dataclass
 
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.cli.helpers import parse_datetime
-from autonomous_trading_platform.scheduler.jobs.run_market_backfill_cycle import (
+from autonomous_trading_platform.scheduler.cycles.run_market_backfill_cycle import (
     run_market_backfill_cycle,
 )
-from autonomous_trading_platform.scheduler.jobs.run_market_ingestion_cycle import (
+from autonomous_trading_platform.scheduler.cycles.run_market_ingestion_cycle import (
     run_market_ingestion_cycle,
 )
 
