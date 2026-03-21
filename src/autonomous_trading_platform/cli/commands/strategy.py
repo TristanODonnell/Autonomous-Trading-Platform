@@ -8,6 +8,9 @@ from autonomous_trading_platform.cli.helpers import parse_datetime
 from autonomous_trading_platform.scheduler.cycles.run_trading_evaluation_cycle import (
     run_trading_evaluation_cycle,
 )
+from autonomous_trading_platform.scheduler.jobs.check_ingestion_readiness_job import (
+    check_ingestion_readiness_job,
+)
 
 
 @dataclass
@@ -22,14 +25,6 @@ def register(subparsers) -> None:
         required=True,
     )
 
-    evaluate_symbol_parser = strategy_subparsers.add_parser(
-        "evaluate-symbol",
-        help="Evaluate strategy for one symbol",
-    )
-    evaluate_symbol_parser.add_argument("--symbol", required=True)
-    evaluate_symbol_parser.add_argument("--timestamp")
-    evaluate_symbol_parser.set_defaults(func=handle_evaluate_symbol)
-
     evaluate_bar_parser = strategy_subparsers.add_parser(
         "evaluate-bar",
         help="Evaluate strategy for one bar",
@@ -41,20 +36,8 @@ def register(subparsers) -> None:
         "inspect-readiness",
         help="Inspect strategy readiness",
     )
-    inspect_readiness_parser.add_argument("--symbol")
+    inspect_readiness_parser.add_argument("--timestamp")
     inspect_readiness_parser.set_defaults(func=handle_inspect_readiness)
-
-
-def handle_evaluate_symbol(args: argparse.Namespace) -> int:
-    print_header("Evaluate Symbol")
-    print_json(
-        {
-            "symbol": args.symbol,
-            "timestamp": args.timestamp,
-            "status": "not_implemented",
-        }
-    )
-    return 0
 
 
 def handle_evaluate_bar(args: argparse.Namespace) -> int:
@@ -64,18 +47,28 @@ def handle_evaluate_bar(args: argparse.Namespace) -> int:
     run_trading_evaluation_cycle(
         timestamp=timestamp,
     )
-    print_header("Evaluate Symbol")
+    print_header("Evaluate Bar")
     print_json(
         {
-            "symbol": args.symbol,
             "timestamp": args.timestamp,
-            "status": "not_implemented",
+            "status": "success",
         }
     )
     return 0
 
 
 def handle_inspect_readiness(args: argparse.Namespace) -> int:
+    timestamp = parse_datetime(args.timestamp) if args.timestamp else None
+    result = check_ingestion_readiness_job(
+        now_utc=timestamp,
+    )
     print_header("Inspect Readiness")
-    print_json({"symbol": args.symbol, "status": "not_implemented"})
+    print_json(
+        {
+            "timestamp": args.timestamp,
+            "ready": result.ready,
+            "safe_mode": result.safe_mode,
+            "reason": result.reason,
+        }
+    )
     return 0
