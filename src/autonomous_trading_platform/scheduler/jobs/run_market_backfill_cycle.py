@@ -24,7 +24,11 @@ from autonomous_trading_platform.runtime.services.run_manifest_service import Ru
 from src.db import get_session
 
 
-def run_market_backfill_cycle() -> None:
+def run_market_backfill_cycle(
+    symbols: list[str] | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> None:
     """
     Entry point for the Airflow historical market-data backfill DAG.
     """
@@ -32,10 +36,18 @@ def run_market_backfill_cycle() -> None:
     audit_logger = AuditLoggingService(session=session)
     manifest_service = RunManifestService(session=session)
     run_id = uuid.uuid4()
+
     # TODO: Replace with universe symbols
-    symbols = ["SPY"]
-    end = datetime.now(UTC)
-    start = end - timedelta(days=30)
+    if symbols is None:
+        symbols = ["SPY"]  # default universe (temporary)
+
+    now = datetime.now(UTC)
+
+    if end is None:
+        end = now
+
+    if start is None:
+        start = end - timedelta(days=30)
 
     manifest = RunManifest(
         run_id=run_id,

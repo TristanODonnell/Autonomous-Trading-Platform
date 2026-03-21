@@ -20,7 +20,9 @@ def floor_to_five_minutes(timestamp: datetime) -> datetime:
     return timestamp.replace(minute=minute, second=0, microsecond=0)
 
 
-def run_market_ingestion_cycle() -> None:
+def run_market_ingestion_cycle(
+    now_utc: datetime | None = None,
+) -> None:
     """
     Entry point for the Airflow DAG.
     """
@@ -31,8 +33,11 @@ def run_market_ingestion_cycle() -> None:
 
     run_id = uuid.uuid4()
     component = "scheduler.run_market_ingestion_cycle"
+
     expected_symbols = {"SPY"}
-    now_utc = datetime.now(UTC)
+    if now_utc is None:
+        now_utc = datetime.now(UTC)
+
     cycle_end = floor_to_five_minutes(now_utc)
     cycle_start = cycle_end - timedelta(minutes=5)
 

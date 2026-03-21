@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import argparse
-import os
+from dataclasses import dataclass
+
+from dotenv import load_dotenv
 
 from autonomous_trading_platform.cli.formatters import (
     print_header,
     print_json,
     print_kv_rows,
-    print_success,
 )
+from autonomous_trading_platform.config.settings import Settings
 
 
 def register(subparsers) -> None:
@@ -35,27 +37,64 @@ def register(subparsers) -> None:
     inspect_failed_runs_parser.set_defaults(func=handle_list_failed_runs)
 
 
-def handle_show_config(args: argparse.Namespace) -> int:
+@dataclass
+class AdminDependencies:
+    settings: Settings
+
+
+def build_dependencies() -> AdminDependencies:
+    load_dotenv()  # ensures .env is loaded for CLI
+
+    settings = Settings()
+
+    return AdminDependencies(
+        settings=settings,
+    )
+
+
+def handle_show_config(_args: argparse.Namespace) -> int:
+    deps = build_dependencies()
+
     print_header("Config")
-    print_success("Config inspection not wired yet")
+
+    data = deps.settings.__dict__
+
+    redacted_keys = {
+        "database_url",
+        "paper_broker_api_key",
+        "paper_broker_api_secret",
+        "live_broker_api_key",
+        "live_broker_api_secret",
+    }
+
+    safe_data = {
+        key: "<redacted>" if key in redacted_keys else value for key, value in data.items()
+    }
+
+    print_json(safe_data)
     return 0
 
 
-def handle_show_env(args: argparse.Namespace) -> int:
+def handle_show_env(_args: argparse.Namespace) -> int:
+    deps = build_dependencies()
+
     print_header("Environment")
-    keys = [
-        "ENV",
-        "LOG_LEVEL",
-        "DATABASE_URL",
-        "ALPACA_API_KEY",
-        "ALPACA_API_SECRET",
-    ]
-    data = {key: os.getenv(key, "<unset>") for key in keys}
+
+    data = {
+        "ENV": deps.settings.app_env,
+        "LOG_LEVEL": deps.settings.log_level,
+        "DATABASE_URL": "<set>" if deps.settings.database_url else "<unset>",
+        "ALPACA_API_KEY": "<set>" if deps.settings.paper_broker_api_key else "<unset>",
+        "ALPACA_API_SECRET": "<set>" if deps.settings.paper_broker_api_secret else "<unset>",
+    }
+
     print_kv_rows(data)
     return 0
 
 
 def handle_list_failed_runs(args: argparse.Namespace) -> int:
+    # TODO NEED TO IMPLEMENT STILL
+
     print_header("Failed Runs")
     print_json(
         {

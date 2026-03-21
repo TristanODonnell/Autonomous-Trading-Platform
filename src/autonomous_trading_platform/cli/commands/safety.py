@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.config.settings import Settings
@@ -48,13 +49,17 @@ def register(subparsers) -> None:
     gate_status_parser.set_defaults(func=handle_gate_status)
 
 
-def build_services() -> tuple[
-    RuntimeGateService,
-    KillSwitchService,
-    LiveTradingGateService,
-]:
+@dataclass
+class SafetyDependencies:
+    runtime_gate_service: RuntimeGateService
+    kill_switch_service: KillSwitchService
+    live_gate_service: LiveTradingGateService
+
+
+def build_dependencies() -> SafetyDependencies:
     settings = Settings()
     environment_policy = EnvironmentSafetyPolicy(settings)
+
     runtime_gate_service = RuntimeGateService()
     kill_switch_service = KillSwitchService()
     live_gate_service = LiveTradingGateService(
@@ -62,43 +67,48 @@ def build_services() -> tuple[
         runtime_gate_service=runtime_gate_service,
         kill_switch_service=kill_switch_service,
     )
-    return runtime_gate_service, kill_switch_service, live_gate_service
+
+    return SafetyDependencies(
+        runtime_gate_service=runtime_gate_service,
+        kill_switch_service=kill_switch_service,
+        live_gate_service=live_gate_service,
+    )
 
 
 def handle_gate_status(args: argparse.Namespace) -> int:
-    _, _, live_gate_service = build_services()
+    deps = build_dependencies()
     print_header("Gate Status")
-    print_json(live_gate_service.get_gate_status(account_id=args.account_id))
+    print_json(deps.live_gate_service.get_gate_status(account_id=args.account_id))
     return 0
 
 
 def handle_arm_live(args: argparse.Namespace) -> int:
-    runtime_gate_service, _, _ = build_services()
-    runtime_gate_service.arm(reason=args.reason, armed_by=args.armed_by)
+    deps = build_dependencies()
+    deps.runtime_gate_service.arm(reason=args.reason, armed_by=args.armed_by)
     print_header("Arm Live")
-    print_json(runtime_gate_service.get_status())
+    print_json(deps.runtime_gate_service.get_status())
     return 0
 
 
 def handle_disarm_live(args: argparse.Namespace) -> int:
-    runtime_gate_service, _, _ = build_services()
-    runtime_gate_service.disarm()
+    deps = build_dependencies()
+    deps.runtime_gate_service.disarm()
     print_header("Disarm Live")
-    print_json(runtime_gate_service.get_status())
+    print_json(deps.runtime_gate_service.get_status())
     return 0
 
 
 def handle_enable_kill_switch(args: argparse.Namespace) -> int:
-    _, kill_switch_service, _ = build_services()
-    kill_switch_service.enable(reason=args.reason, updated_by=args.updated_by)
+    deps = build_dependencies()
+    deps.kill_switch_service.enable(reason=args.reason, updated_by=args.updated_by)
     print_header("Enable Kill Switch")
-    print_json(kill_switch_service.get_status())
+    print_json(deps.kill_switch_service.get_status())
     return 0
 
 
 def handle_disable_kill_switch(args: argparse.Namespace) -> int:
-    _, kill_switch_service, _ = build_services()
-    kill_switch_service.disable(reason=args.reason, updated_by=args.updated_by)
+    deps = build_dependencies()
+    deps.kill_switch_service.disable(reason=args.reason, updated_by=args.updated_by)
     print_header("Disable Kill Switch")
-    print_json(kill_switch_service.get_status())
+    print_json(deps.kill_switch_service.get_status())
     return 0
