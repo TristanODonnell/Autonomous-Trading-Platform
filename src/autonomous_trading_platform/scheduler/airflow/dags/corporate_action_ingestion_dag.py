@@ -5,11 +5,11 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
+from autonomous_trading_platform.scheduler.cycles.run_corporate_action_ingestion_cycle import (
+    run_corporate_action_ingestion_cycle,
+)
 from autonomous_trading_platform.scheduler.jobs.handle_ingestion_incident import (
     handle_ingestion_incident,
-)
-from autonomous_trading_platform.scheduler.jobs.run_corporate_action_ingestion_cycle import (
-    run_corporate_action_ingestion_cycle,
 )
 
 default_args = {

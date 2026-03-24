@@ -1,4 +1,6 @@
-from sqlalchemy import select
+from typing import cast
+
+from sqlalchemy import desc, select
 
 from autonomous_trading_platform.storage.sor.models.position_snapshots import PositionSnapshot
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
@@ -16,10 +18,30 @@ class PositionSnapshotRepository(BaseRepository):
     # -----------------------------
 
     def get_by_snapshot_id(self, id_value: str) -> PositionSnapshot | None:
-        """Fetch a single row by deterministic ID."""
         stmt = select(PositionSnapshot).where(PositionSnapshot.snapshot_id == id_value)
-        result: PositionSnapshot | None = self.session.execute(stmt).scalar_one_or_none()
-        return result
+        return cast(PositionSnapshot | None, self.session.scalars(stmt).one_or_none())
+
+    def get_latest(self) -> PositionSnapshot | None:
+        stmt = select(PositionSnapshot).order_by(desc(PositionSnapshot.snapshot_timestamp)).limit(1)
+        return cast(PositionSnapshot | None, self.session.scalars(stmt).one_or_none())
+
+    def get_latest_for_symbol(self, symbol: str) -> PositionSnapshot | None:
+        stmt = (
+            select(PositionSnapshot)
+            .where(PositionSnapshot.symbol == symbol)
+            .order_by(desc(PositionSnapshot.snapshot_timestamp))
+            .limit(1)
+        )
+        return cast(PositionSnapshot | None, self.session.scalars(stmt).one_or_none())
+
+    def list_recent_for_symbol(self, symbol: str, limit: int = 20) -> list[PositionSnapshot]:
+        stmt = (
+            select(PositionSnapshot)
+            .where(PositionSnapshot.symbol == symbol)
+            .order_by(desc(PositionSnapshot.snapshot_timestamp))
+            .limit(limit)
+        )
+        return list(self.session.execute(stmt).scalars().all())
 
     # -----------------------------
     # Inserts

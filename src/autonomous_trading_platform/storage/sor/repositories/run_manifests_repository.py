@@ -38,3 +38,17 @@ class RunManifestRepository(BaseRepository):
         )
 
         self.session.add(row)
+
+    def get_by_run_id(self, run_id):
+        return (
+            self.session.query(RunManifestRow).filter(RunManifestRow.run_id == run_id).one_or_none()
+        )
+
+    def list_failed_runs(self, limit: int = 25):
+        return (
+            self.session.query(RunManifestRow)
+            .filter(RunManifestRow.status == "failed")
+            .order_by(RunManifestRow.bar_timestamp.desc())
+            .limit(limit)
+            .all()
+        )

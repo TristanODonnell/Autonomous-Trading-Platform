@@ -1,7 +1,16 @@
-from sqlalchemy import select
+from typing import cast
 
+from sqlalchemy import desc, select
+
+from autonomous_trading_platform.contracts.common.enums import OrderStatus
 from autonomous_trading_platform.storage.sor.models.broker_orders import BrokerOrder
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
+
+OPEN_STATUSES = {
+    OrderStatus.NEW.value,
+    OrderStatus.SUBMITTED.value,
+    OrderStatus.PARTIALLY_FILLED.value,
+}
 
 
 class BrokerOrderRepository(BaseRepository):
@@ -16,10 +25,29 @@ class BrokerOrderRepository(BaseRepository):
     # -----------------------------
 
     def get_by_broker_order_id(self, id_value: str) -> BrokerOrder | None:
-        """Fetch a single row by deterministic ID."""
         stmt = select(BrokerOrder).where(BrokerOrder.broker_order_id == id_value)
-        result: BrokerOrder | None = self.session.execute(stmt).scalar_one_or_none()
-        return result
+        return cast(BrokerOrder | None, self.session.scalars(stmt).one_or_none())
+
+    def get_latest_for_order_id(self, order_id: str) -> BrokerOrder | None:
+        stmt = (
+            select(BrokerOrder)
+            .where(BrokerOrder.order_id == order_id)
+            .order_by(desc(BrokerOrder.updated_at))
+            .limit(1)
+        )
+        return cast(BrokerOrder | None, self.session.scalars(stmt).one_or_none())
+
+    def list_open_orders(self) -> list[BrokerOrder]:
+        stmt = (
+            select(BrokerOrder)
+            .where(BrokerOrder.status.in_(OPEN_STATUSES))
+            .order_by(desc(BrokerOrder.updated_at))
+        )
+        return list(self.session.execute(stmt).scalars().all())
+
+    def list_recent(self, limit: int = 20) -> list[BrokerOrder]:
+        stmt = select(BrokerOrder).order_by(desc(BrokerOrder.updated_at)).limit(limit)
+        return list(self.session.execute(stmt).scalars().all())
 
     # -----------------------------
     # Inserts

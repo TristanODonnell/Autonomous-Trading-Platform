@@ -20,10 +20,20 @@ class MarketBarRepository(BaseRepository):
     # -----------------------------
 
     def get_by_bar_id(self, id_value: str) -> MarketBar | None:
-        """Fetch a single row by deterministic ID."""
         stmt = select(MarketBar).where(MarketBar.bar_id == id_value)
-        result: MarketBar | None = self.session.execute(stmt).scalar_one_or_none()
-        return result
+        return cast(MarketBar | None, self.session.scalars(stmt).one_or_none())
+
+    def get_by_symbol_timestamp(
+        self,
+        *,
+        symbol: str,
+        timestamp: datetime,
+    ) -> MarketBar | None:
+        stmt = select(MarketBar).where(
+            MarketBar.symbol == symbol,
+            MarketBar.timestamp == timestamp,
+        )
+        return cast(MarketBar | None, self.session.scalars(stmt).one_or_none())
 
     def get_raw_bars_before_date(
         self,

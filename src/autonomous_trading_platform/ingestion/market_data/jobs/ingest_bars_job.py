@@ -57,8 +57,7 @@ class IngestBarsJob:
     def finalize_cycle(self, cycle_timestamp: datetime) -> None:
 
         missing_symbols = self.expected_symbols - self.received_symbols
-        # TODO symbols_to_evaluate = self.received_symbols.copy()
-
+        symbols_to_evaluate = sorted(self.expected_symbols & self.received_symbols)
         for symbol in missing_symbols:
             self.audit_logger.record_bar_missing(
                 run_id=self.run_id,
@@ -87,11 +86,13 @@ class IngestBarsJob:
             )
 
             raise RuntimeError(f"Too many missing bars ({missing_ratio:.2%}) at {cycle_timestamp}")
-        # TODO
-        # evaluate_symbols(
-        #     cycle_timestamp=cycle_timestamp,
-        #     symbols=symbols_to_evaluate,
-        # )
+
+        # TODO TEMP: evaluation hook
+        if symbols_to_evaluate:
+            print(
+                f"[EVALUATION_TRIGGER] {cycle_timestamp.isoformat()} "
+                f"symbols={len(symbols_to_evaluate)}"
+            )
 
     async def _process_symbol_bars(self, symbol_bars) -> None:
         for provider_bar in symbol_bars:

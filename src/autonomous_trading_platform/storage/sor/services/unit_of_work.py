@@ -32,6 +32,9 @@ from autonomous_trading_platform.storage.sor.repositories.signals_repository imp
 from autonomous_trading_platform.storage.sor.repositories.strategy_runtime_state_repository import (
     StrategyRuntimeStateRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.ticker_lifecycle_repository import (
+    TickerLifecycleRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.tracked_order_repository import (
     TrackedOrderRepository,
 )
@@ -59,6 +62,7 @@ class SorUnitOfWork:
         self.run_manifests = RunManifestRepository(session)
         self.tracked_orders = TrackedOrderRepository(session)
         self.strategy_runtime_states = StrategyRuntimeStateRepository(session)
+        self.ticker_lifecycles = TickerLifecycleRepository(session)
 
     def __enter__(self) -> "SorUnitOfWork":
         self.session.begin()

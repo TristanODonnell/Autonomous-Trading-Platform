@@ -14,6 +14,7 @@ class Settings:
 
     def __init__(self) -> None:
         self.app_env = self._get_required("APP_ENV")
+        self.log_level = os.getenv("LOG_LEVEL", "INFO")
         self.database_url = self._get_required("DATABASE_URL")
         self.trading_environment = TradingEnvironment(
             os.getenv("TRADING_ENVIRONMENT", TradingEnvironment.PAPER.value)
