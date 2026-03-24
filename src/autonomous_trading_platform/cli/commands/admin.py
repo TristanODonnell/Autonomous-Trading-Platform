@@ -11,6 +11,10 @@ from autonomous_trading_platform.cli.formatters import (
     print_kv_rows,
 )
 from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
+    build_trading_cycle_dependencies,
+)
+from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 
 def register(subparsers) -> None:
@@ -93,13 +97,34 @@ def handle_show_env(_args: argparse.Namespace) -> int:
 
 
 def handle_list_failed_runs(args: argparse.Namespace) -> int:
-    # TODO NEED TO IMPLEMENT STILL
+    deps = build_trading_cycle_dependencies()
+    session = deps.session
 
-    print_header("Failed Runs")
-    print_json(
-        {
-            "status": "not_implemented",
-            "limit": args.limit,
-        }
-    )
-    return 0
+    try:
+        with SorUnitOfWork(session) as uow:
+            failed_runs = uow.run_manifests.list_failed_runs(limit=args.limit)
+
+        print_header("Failed Runs")
+        print_json(
+            {
+                "count": len(failed_runs),
+                "runs": [
+                    {
+                        "run_id": str(row.run_id),
+                        "run_type": row.run_type,
+                        "status": row.status,
+                        "bar_timestamp": (
+                            row.bar_timestamp.isoformat() if row.bar_timestamp is not None else None
+                        ),
+                        "current_step": row.current_step,
+                        "last_successful_step": row.last_successful_step,
+                        "error_message": row.error_message,
+                    }
+                    for row in failed_runs
+                ],
+            }
+        )
+        return 0
+
+    finally:
+        session.close()

@@ -18,3 +18,11 @@ class AuditLogRepository(BaseRepository):
         )
 
         self.session.add(row)
+
+    def list_by_run_id(self, run_id):
+        return (
+            self.session.query(AuditLogRow)
+            .filter(AuditLogRow.run_id == run_id)
+            .order_by(AuditLogRow.event_timestamp.asc())
+            .all()
+        )

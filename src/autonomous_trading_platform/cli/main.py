@@ -8,6 +8,7 @@ from autonomous_trading_platform.cli.commands import (
     runtime,
     safety,
     strategy,
+    universe,
 )
 from autonomous_trading_platform.cli.runner import run_handler
 
@@ -23,7 +24,7 @@ def build_parser():
     runtime.register(subparsers)
     backtesting.register(subparsers)
     admin.register(subparsers)
-
+    universe.register(subparsers)
     return parser
 
 

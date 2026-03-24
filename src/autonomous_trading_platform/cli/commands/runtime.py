@@ -3,6 +3,11 @@ from __future__ import annotations
 import argparse
 
 from autonomous_trading_platform.cli.formatters import print_header, print_json
+from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
+    build_trading_cycle_dependencies,
+)
+from autonomous_trading_platform.scheduler.cycles.run_trading_cycle import run_trading_cycle
+from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 
 def register(subparsers) -> None:
@@ -33,17 +38,44 @@ def register(subparsers) -> None:
 
 def handle_run_cycle(args: argparse.Namespace) -> int:
     print_header("Run Trading Cycle")
-    print_json({"timestamp": args.timestamp, "status": "not_implemented"})
+    run_trading_cycle()
+    print_json({"status": "completed"})
     return 0
 
 
 def handle_inspect_manifest(args: argparse.Namespace) -> int:
     print_header("Inspect Manifest")
-    print_json({"run_id": args.run_id, "status": "not_implemented"})
-    return 0
+    deps = build_trading_cycle_dependencies()
+    session = deps.session
+    try:
+        with SorUnitOfWork(session) as uow:
+            manifest = uow.run_manifests.get_by_run_id(args.run_id)
+
+        print_json(
+            {
+                "run_id": args.run_id,
+                "manifest": manifest.model_dump(mode="json") if manifest else None,
+            }
+        )
+        return 0
+    finally:
+        session.close()
 
 
 def handle_inspect_audit(args: argparse.Namespace) -> int:
     print_header("Inspect Audit")
-    print_json({"run_id": args.run_id, "status": "not_implemented"})
-    return 0
+    deps = build_trading_cycle_dependencies()
+    session = deps.session
+    try:
+        with SorUnitOfWork(session) as uow:
+            audit_logs = uow.audit_logs.list_by_run_id(args.run_id)
+
+        print_json(
+            {
+                "run_id": args.run_id,
+                "audit_logs": [log.model_dump(mode="json") for log in audit_logs],
+            }
+        )
+        return 0
+    finally:
+        session.close()

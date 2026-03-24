@@ -1,4 +1,6 @@
-from sqlalchemy import select
+from typing import cast
+
+from sqlalchemy import desc, select
 
 from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
@@ -16,10 +18,16 @@ class CashSnapshotRepository(BaseRepository):
     # -----------------------------
 
     def get_by_snapshot_id(self, id_value: str) -> CashSnapshot | None:
-        """Fetch a single row by deterministic ID."""
         stmt = select(CashSnapshot).where(CashSnapshot.snapshot_id == id_value)
-        result: CashSnapshot | None = self.session.execute(stmt).scalar_one_or_none()
-        return result
+        return cast(CashSnapshot | None, self.session.scalars(stmt).one_or_none())
+
+    def get_latest(self) -> CashSnapshot | None:
+        stmt = select(CashSnapshot).order_by(desc(CashSnapshot.snapshot_timestamp)).limit(1)
+        return cast(CashSnapshot | None, self.session.scalars(stmt).one_or_none())
+
+    def list_recent(self, limit: int = 20) -> list[CashSnapshot]:
+        stmt = select(CashSnapshot).order_by(desc(CashSnapshot.snapshot_timestamp)).limit(limit)
+        return list(self.session.execute(stmt).scalars().all())
 
     # -----------------------------
     # Inserts
