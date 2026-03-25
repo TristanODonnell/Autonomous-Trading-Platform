@@ -1,34 +1,30 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.contracts.runtime.audit_log import AuditLogEvent
 from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
 from autonomous_trading_platform.safety.errors import DuplicateIdempotencyKeyError
+from autonomous_trading_platform.storage.sor.repositories.audit_logs_repository import (
+    AuditLogRepository,
+)
 
 
 class OrderIdempotencyService:
-    def __init__(self, settings: Settings, order_activity_reader) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        order_activity_reader,
+        audit_log_repository: AuditLogRepository,
+    ) -> None:
         self.settings = settings
         self.order_activity_reader = order_activity_reader
+        self.audit_log_repository = audit_log_repository
 
     def build_idempotency_key(self, order_intent: OrderIntent) -> str:
-        """
-        Build a deterministic idempotency key from the logical identity of an
-        order intent.
-
-        The key is based on:
-        - run_id
-        - strategy_id
-        - bar_timestamp
-        - symbol
-        - side
-        - qty
-
-        Returns:
-            Stable SHA-256 hex digest string.
-        """
         if order_intent.qty is None:
             raise ValueError("Order intent qty must be set for idempotency key generation.")
 
@@ -36,7 +32,7 @@ class OrderIdempotencyService:
             [
                 str(order_intent.run_id),
                 order_intent.strategy_id,
-                order_intent.bar_timestamp.isoformat(),
+                order_intent.bar_timestamp.astimezone(UTC).isoformat(),
                 order_intent.symbol.upper(),
                 order_intent.side.value
                 if hasattr(order_intent.side, "value")
@@ -52,13 +48,6 @@ class OrderIdempotencyService:
         order_intent: OrderIntent,
         now: datetime,
     ) -> str:
-        """
-        Build the deterministic idempotency key and raise if an order with the
-        same key already exists within the configured dedupe window.
-
-        Returns:
-            The generated idempotency key if no duplicate is found.
-        """
         idempotency_key = self.build_idempotency_key(order_intent)
 
         window_minutes = self.settings.idempotency_deduplication_window_minutes
@@ -71,8 +60,57 @@ class OrderIdempotencyService:
         )
 
         if duplicate_exists:
+            self.audit_log_repository.add(
+                AuditLogEvent(
+                    event_id=str(uuid4()),
+                    run_id=str(order_intent.run_id),
+                    event_type="ORDER_IDEMPOTENCY_DUPLICATE_DETECTED",
+                    component="safety.order_idempotency",
+                    event_timestamp=now,
+                    message="Duplicate order intent detected within deduplication window.",
+                    metadata={
+                        "idempotency_key": idempotency_key,
+                        "strategy_id": order_intent.strategy_id,
+                        "symbol": order_intent.symbol,
+                        "side": (
+                            order_intent.side.value
+                            if hasattr(order_intent.side, "value")
+                            else str(order_intent.side)
+                        ),
+                        "qty": str(order_intent.qty),
+                        "bar_timestamp": order_intent.bar_timestamp.astimezone(UTC).isoformat(),
+                        "window_start": window_start.astimezone(UTC).isoformat(),
+                        "checked_at": now.astimezone(UTC).isoformat(),
+                    },
+                )
+            )
             raise DuplicateIdempotencyKeyError(
                 f"Duplicate order intent detected within deduplication window: {idempotency_key}"
             )
+
+        self.audit_log_repository.add(
+            AuditLogEvent(
+                event_id=str(uuid4()),
+                run_id=str(order_intent.run_id),
+                event_type="ORDER_IDEMPOTENCY_CHECK_PASSED",
+                component="safety.order_idempotency",
+                event_timestamp=now,
+                message="Order intent passed idempotency duplicate check.",
+                metadata={
+                    "idempotency_key": idempotency_key,
+                    "strategy_id": order_intent.strategy_id,
+                    "symbol": order_intent.symbol,
+                    "side": (
+                        order_intent.side.value
+                        if hasattr(order_intent.side, "value")
+                        else str(order_intent.side)
+                    ),
+                    "qty": str(order_intent.qty),
+                    "bar_timestamp": order_intent.bar_timestamp.astimezone(UTC).isoformat(),
+                    "window_start": window_start.astimezone(UTC).isoformat(),
+                    "checked_at": now.astimezone(UTC).isoformat(),
+                },
+            )
+        )
 
         return idempotency_key

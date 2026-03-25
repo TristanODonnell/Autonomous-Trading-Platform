@@ -39,7 +39,7 @@ class CashLedgerService:
             raise ValueError("fees cannot be negative")
 
         starting_cash = Decimal(existing_snapshot.cash) if existing_snapshot is not None else ZERO
-        reserved_cash = (
+        starting_reserved_cash = (
             Decimal(existing_snapshot.reserved_cash) if existing_snapshot is not None else ZERO
         )
 
@@ -54,7 +54,8 @@ class CashLedgerService:
             raise ValueError(f"unsupported fill side: {fill.side}")
 
         cash = starting_cash + cash_delta
-
+        released_reserved_cash = min(starting_reserved_cash, gross_notional)
+        reserved_cash = starting_reserved_cash - released_reserved_cash
         # v1 simplification:
         # buying power just mirrors available cash.
         buying_power = cash
