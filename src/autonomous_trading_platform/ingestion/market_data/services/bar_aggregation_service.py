@@ -16,35 +16,90 @@ class BarAggregationService:
         minute = (timestamp.minute // 5) * 5
         return timestamp.replace(minute=minute, second=0, microsecond=0)
 
-    def add_minute_bar(self, bar: MarketBar) -> MarketBar | None:
-        bucket = BarAggregationService._get_bucket(bar.timestamp)
+    @staticmethod
+    def _validate_minute_bar(bar: MarketBar) -> None:
+        if bar.timestamp.tzinfo is None:
+            raise ValueError("Bar timestamp must be timezone-aware.")
 
+        if bar.end_timestamp != bar.timestamp + timedelta(minutes=1):
+            raise ValueError("Minute bar end_timestamp must equal timestamp + 1 minute.")
+
+    def _handle_cross_bucket_gap(self, symbol: str, incoming_bucket: datetime) -> None:
+        """
+        Prevent a new bucket from starting while an older bucket for the same symbol
+        remains incomplete.
+        """
+        for (buffered_symbol, buffered_bucket), buffered_bars in list(self.buffer.items()):
+            if buffered_symbol != symbol:
+                continue
+
+            if buffered_bucket < incoming_bucket and len(buffered_bars) < 5:
+                raise ValueError(
+                    f"Incomplete prior bucket detected for {symbol} at "
+                    f"{buffered_bucket.isoformat()} before receiving bar for "
+                    f"{incoming_bucket.isoformat()}."
+                )
+
+    @staticmethod
+    def _validate_bucket_continuity(bars: list[MarketBar], bucket: datetime) -> None:
+        if len(bars) != 5:
+            raise ValueError(
+                f"Expected 5 one-minute bars for bucket {bucket.isoformat()}, got {len(bars)}."
+            )
+
+        bars_sorted = sorted(bars, key=lambda bar: bar.timestamp)
+
+        expected_timestamps = [bucket + timedelta(minutes=i) for i in range(5)]
+        actual_timestamps = [bar.timestamp for bar in bars_sorted]
+
+        if actual_timestamps != expected_timestamps:
+            raise ValueError(
+                "Gap or discontinuity detected in 5-minute bucket. "
+                f"Expected {expected_timestamps}, got {actual_timestamps}."
+            )
+
+        if len({bar.timestamp for bar in bars_sorted}) != 5:
+            raise ValueError("Duplicate minute bars detected in aggregation bucket.")
+
+    def add_minute_bar(self, bar: MarketBar) -> MarketBar | None:
+        self._validate_minute_bar(bar)
+
+        bucket = self._get_bucket(bar.timestamp)
         key = (bar.symbol, bucket)
 
-        self.buffer.setdefault(key, []).append(bar)
+        self._handle_cross_bucket_gap(symbol=bar.symbol, incoming_bucket=bucket)
 
-        if len(self.buffer[key]) < 5:
+        bars = self.buffer.setdefault(key, [])
+
+        if any(existing.timestamp == bar.timestamp for existing in bars):
+            raise ValueError(
+                f"Duplicate minute bar for symbol={bar.symbol} at {bar.timestamp.isoformat()}."
+            )
+
+        bars.append(bar)
+
+        if len(bars) < 5:
             return None
 
-        bars = self.buffer.pop(key)
-
-        return self._aggregate(bars)
+        self._validate_bucket_continuity(bars, bucket)
+        completed_bars = self.buffer.pop(key)
+        return self._aggregate(completed_bars)
 
     @staticmethod
     def _aggregate(bars: list[MarketBar]) -> MarketBar:
-        first = bars[0]
-        last = bars[-1]
+        bars_sorted = sorted(bars, key=lambda bar: bar.timestamp)
 
+        first = bars_sorted[0]
+        last = bars_sorted[-1]
+        session = first.session
         open_price = first.open
         close_price = last.close
+        high_price = max(bar.high for bar in bars_sorted)
+        low_price = min(bar.low for bar in bars_sorted)
+        volume = sum(bar.volume for bar in bars_sorted)
+        trade_count = sum(bar.trade_count or 0 for bar in bars_sorted)
 
-        high_price = max(bar.high for bar in bars)
-        low_price = min(bar.low for bar in bars)
-
-        volume = sum(bar.volume for bar in bars)
-
-        trade_count = sum(bar.trade_count for bar in bars if bar.trade_count is not None)
-
+        # Keep this behavior for now so your current existing test still passes.
         vwap = last.vwap
 
         return MarketBar(
@@ -70,4 +125,5 @@ class BarAggregationService:
             source="aggregation",
             ingested_at=datetime.now(UTC),
             quality_flags=[],
+            session=session,
         )

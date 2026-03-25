@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel
@@ -20,7 +21,7 @@ class CorporateAction(BaseModel):
     record_date: date | None = None
     payable_date: date | None = None
 
-    split_ratio: float | None = None
+    split_ratio: Decimal | None = None
     cash_amount: Money | None = None
     currency: str
 

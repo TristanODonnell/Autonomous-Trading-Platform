@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Any
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -45,7 +46,7 @@ class UniverseValidationService:
         if missing_symbols:
             errors.append(
                 "UniverseSnapshot contains symbols missing from dataset: "
-                + ", ".join(missing_symbols[:10])
+                + ", ".join(sorted(missing_symbols)[:10])
             )
 
         lookback_days_raw = snapshot.criteria.get("lookback_days")
@@ -53,25 +54,31 @@ class UniverseValidationService:
 
         if lookback_days_raw is not None and selection_timestamp_raw is not None:
             try:
-                lookback_days = int(lookback_days_raw)
-                as_of = datetime.fromisoformat(selection_timestamp_raw)
-                min_days_required = max(1, int(lookback_days * 0.8))
-
-                insufficient_symbols = self._find_symbols_with_insufficient_recent_coverage(
-                    symbols=snapshot.symbols,
-                    as_of=as_of,
-                    lookback_days=lookback_days,
-                    min_days_required=min_days_required,
+                lookback_days, as_of = self._parse_coverage_criteria(
+                    lookback_days_raw=lookback_days_raw,
+                    selection_timestamp_raw=selection_timestamp_raw,
                 )
-                if insufficient_symbols:
-                    errors.append(
-                        "UniverseSnapshot contains symbols with insufficient recent coverage: "
-                        + ", ".join(insufficient_symbols[:10])
-                    )
             except (TypeError, ValueError):
                 errors.append(
                     "UniverseSnapshot criteria has invalid lookback_days or selection_timestamp"
                 )
+            else:
+                if lookback_days <= 0:
+                    errors.append("lookback_days must be positive")
+                else:
+                    min_days_required = max(1, int(lookback_days * 0.8))
+
+                    insufficient_symbols = self._find_symbols_with_insufficient_recent_coverage(
+                        symbols=snapshot.symbols,
+                        as_of=as_of,
+                        lookback_days=lookback_days,
+                        min_days_required=min_days_required,
+                    )
+                    if insufficient_symbols:
+                        errors.append(
+                            "UniverseSnapshot contains symbols with insufficient recent coverage: "
+                            + ", ".join(sorted(insufficient_symbols)[:10])
+                        )
 
         return UniverseValidationResult(
             ok=not errors,
@@ -120,6 +127,20 @@ class UniverseValidationService:
                 formatted.append(f"{code}: {message}")
 
         return formatted
+
+    @staticmethod
+    def _parse_coverage_criteria(
+        *,
+        lookback_days_raw: Any,
+        selection_timestamp_raw: Any,
+    ) -> tuple[int, datetime]:
+        lookback_days = int(lookback_days_raw)
+
+        if not isinstance(selection_timestamp_raw, str):
+            raise TypeError("selection_timestamp must be an ISO-8601 string")
+
+        as_of = datetime.fromisoformat(selection_timestamp_raw)
+        return lookback_days, as_of
 
     def _find_symbols_missing_from_dataset(
         self,
