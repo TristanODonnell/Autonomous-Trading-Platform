@@ -36,7 +36,11 @@ dependencies = [
 
   # HTTP + time
   "requests>=2.31",
+  "httpx",
   "python-dateutil>=2.9",
+
+  #external APIs
+  "alpaca-py"
 ]
 
 [project.optional-dependencies]
