@@ -32,7 +32,7 @@ jobs:
       - name: Run tests
         env:
           APP_ENV: test
-          DATABASE_URL: postgresql+psycopg://ratp:ratp@localhost:5433/ratp
+          DATABASE_URL: postgresql+psycopg://ratp:ratp_password@localhost:5433/ratp
         run: python -m pytest
 
       - name: Tear down
