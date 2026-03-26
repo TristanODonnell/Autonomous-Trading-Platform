@@ -1,3 +1,5 @@
+from typing import Literal
+
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.storage.sor.repositories.audit_logs_repository import (
@@ -65,11 +67,18 @@ class SorUnitOfWork:
         self.ticker_lifecycles = TickerLifecycleRepository(session)
 
     def __enter__(self) -> "SorUnitOfWork":
-        self.session.begin()
+        self._started_transaction = False
+
+        if not self.session.in_transaction():
+            self.session.begin()
+            self._started_transaction = True
+
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
-        if exc_type is None:
-            self.session.commit()
-        else:
-            self.session.rollback()
+    def __exit__(self, exc_type, exc, tb) -> Literal[False]:
+        if self._started_transaction:
+            if exc_type is None:
+                self.session.commit()
+            else:
+                self.session.rollback()
+        return False

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 from uuid import UUID
 
 from autonomous_trading_platform.contracts.trading.signal import Signal
@@ -11,19 +11,23 @@ from ..contracts.strategy_evaluation_result import StrategyEvaluationResult
 from ..implementations.base_strategy import BaseStrategy
 
 
-class MarketBarReaderProtocol:
+class MarketBarReaderProtocol(Protocol):
     def get_bars_up_to_timestamp(
         self,
         symbol: str,
         end_timestamp: datetime,
         lookback_bars: int,
-    ) -> list[Any]:
-        raise NotImplementedError
+    ) -> list[Any]: ...
 
 
-class UniverseMembershipReaderProtocol:
-    def get_symbols_for_timestamp(self, as_of: datetime) -> list[str]:
-        raise NotImplementedError
+class UniverseMembershipReaderProtocol(Protocol):
+    def get_symbols_for_timestamp(self, as_of: datetime) -> list[str]: ...
+
+
+class StrategyProtocol(Protocol):
+    strategy_id: str
+
+    def evaluate_symbol(self, context: StrategyContext) -> Signal | None: ...
 
 
 class StrategyEvaluationService:

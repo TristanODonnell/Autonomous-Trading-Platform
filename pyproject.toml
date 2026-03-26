@@ -77,10 +77,12 @@ ignore = ["E501"]  # let formatter handle line length
 # --- pytest ---
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 addopts = "-q"
 pythonpath = ["."]
 markers = [
-  "integration: tests that require external services like Postgres"
+  "integration: tests that require external services like Postgres",
+  "asyncio: mark test as async"
 ]
 
 # --- mypy ---

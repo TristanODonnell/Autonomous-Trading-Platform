@@ -8,6 +8,11 @@ class RunManifestService:
     def __init__(self, session: Session):
         self.session = session
 
-    def save(self, manifest: RunManifest):
+    def save(self, manifest: RunManifest) -> RunManifest:
         with SorUnitOfWork(self.session) as uow:
-            uow.run_manifests.add(manifest)
+            existing = uow.run_manifests.get_by_run_id(manifest.run_id)
+            if existing is not None:
+                return uow.run_manifests.to_contract(existing)
+
+            row = uow.run_manifests.add(manifest)
+            return uow.run_manifests.to_contract(row)

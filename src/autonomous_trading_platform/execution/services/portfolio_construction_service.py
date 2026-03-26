@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 from datetime import datetime
 from decimal import Decimal
-from uuid import UUID, uuid4
+from typing import Any
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from autonomous_trading_platform.contracts.common.enums import OrderType, Side, TimeInForce
 from autonomous_trading_platform.contracts.common.types import UTCDateTime
@@ -45,12 +48,12 @@ class PortfolioConstructionService:
         target_positions: dict[str, int] = {}
 
         for signal in signals:
-            # placeholder sizing rule
             target_qty = 10
+            direction = signal.direction.value.lower()
 
-            if signal.direction.value == "long":
+            if direction in {"long", "buy"}:
                 target_positions[signal.symbol] = target_qty
-            elif signal.direction.value == "short":
+            elif direction in {"short", "sell"}:
                 target_positions[signal.symbol] = -target_qty
             else:
                 target_positions[signal.symbol] = 0
@@ -61,8 +64,8 @@ class PortfolioConstructionService:
         self,
         current_positions: dict[str, int],
         target_positions: dict[str, int],
-    ):
-        deltas = []
+    ) -> list[dict[str, int | str]]:
+        deltas: list[dict[str, int | str]] = []
 
         all_symbols = set(current_positions) | set(target_positions)
 
@@ -84,26 +87,72 @@ class PortfolioConstructionService:
         return deltas
 
     def build_order_intent(
-        self, delta, prices: dict[str, float], run_id, strategy_id, bar_timestamp, now
+        self,
+        delta: dict[str, Any],
+        prices: dict[str, float],
+        run_id: UUID,
+        strategy_id: str,
+        bar_timestamp: UTCDateTime,
+        now: datetime,
     ) -> OrderIntent:
-        side = Side.BUY if delta["delta_qty"] > 0 else Side.SELL
-        price = Decimal(str(prices[delta["symbol"]]))
+        symbol = str(delta["symbol"])
+        delta_qty = int(delta["delta_qty"])
+
+        side = Side.BUY if delta_qty > 0 else Side.SELL
+        qty = abs(delta_qty)
+        price = Decimal(str(prices[symbol]))
+
+        client_order_id = self._build_client_order_id(
+            run_id=run_id,
+            strategy_id=strategy_id,
+            bar_timestamp=bar_timestamp,
+            symbol=symbol,
+            side=side,
+            qty=qty,
+        )
+        intent_id = self._build_intent_id(client_order_id=client_order_id)
+
         return OrderIntent(
-            intent_id=uuid4(),
-            idempotency_key="pending",
+            intent_id=intent_id,
+            idempotency_key=client_order_id,
             run_id=run_id,
             strategy_id=strategy_id,
             timestamp=now,
             bar_timestamp=bar_timestamp,
-            symbol=delta["symbol"],
+            symbol=symbol,
             side=side,
-            qty=abs(delta["delta_qty"]),
+            qty=qty,
             notional=None,
             order_type=OrderType.MARKET,
             limit_price=price,
             stop_price=None,
             time_in_force=TimeInForce.DAY,
             extended_hours=False,
-            client_order_id=f"{strategy_id}-{delta['symbol']}-{int(now.timestamp())}",
+            client_order_id=client_order_id,
             metadata=None,
         )
+
+    @staticmethod
+    def _build_client_order_id(
+        *,
+        run_id: UUID,
+        strategy_id: str,
+        bar_timestamp: UTCDateTime,
+        symbol: str,
+        side: Side,
+        qty: int,
+    ) -> str:
+        seed = (
+            f"run_id={run_id}|"
+            f"strategy_id={strategy_id}|"
+            f"bar_timestamp={bar_timestamp.isoformat()}|"
+            f"symbol={symbol}|"
+            f"side={side.value}|"
+            f"qty={qty}"
+        )
+        deterministic_uuid = uuid5(NAMESPACE_URL, seed)
+        return f"{strategy_id}-{symbol}-{deterministic_uuid.hex[:16]}"
+
+    @staticmethod
+    def _build_intent_id(*, client_order_id: str) -> UUID:
+        return uuid5(NAMESPACE_URL, f"order-intent:{client_order_id}")
