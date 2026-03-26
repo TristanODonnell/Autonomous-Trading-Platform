@@ -61,4 +61,4 @@ tzdata==2025.3
 urllib3==2.6.3
     # via requests
 
-alpaca
+alpaca-py
