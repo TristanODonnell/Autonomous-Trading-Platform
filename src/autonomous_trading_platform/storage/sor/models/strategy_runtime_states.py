@@ -42,3 +42,7 @@ class StrategyRuntimeState(Base):
         nullable=False,
         default=lambda: datetime.now(UTC),
     )
+    last_evaluated_bar_timestamp: Mapped[UTCDateTime | None] = mapped_column(
+        UTCDateTimeType(),
+        nullable=True,
+    )

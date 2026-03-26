@@ -1,19 +1,22 @@
-from datetime import datetime
-from typing import cast
+from dataclasses import dataclass
+from datetime import date
+from typing import Generic, TypeVar, cast
 
 from sqlalchemy import select
 
 from autonomous_trading_platform.storage.sor.models.corporate_actions import CorporateAction
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
 
+T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class UpsertResult(Generic[T]):
+    entity: T
+    created: bool
+
 
 class CorporateActionRepository(BaseRepository):
-    """
-    Repository for interacting with the <table_name> table.
-
-    Handles reads, writes, and idempotent upserts for <ModelName>.
-    """
-
     # -----------------------------
     # Basic lookup
     # -----------------------------
@@ -28,8 +31,8 @@ class CorporateActionRepository(BaseRepository):
         self,
         *,
         symbols: list[str],
-        start_ts: datetime,
-        end_ts: datetime,
+        start_date: date,
+        end_date: date,
     ) -> list[CorporateAction]:
         if not symbols:
             return []
@@ -38,10 +41,10 @@ class CorporateActionRepository(BaseRepository):
             select(CorporateAction)
             .where(
                 CorporateAction.symbol.in_(symbols),
-                CorporateAction.ex_date >= start_ts,
-                CorporateAction.ex_date <= end_ts,
+                CorporateAction.effective_date >= start_date,
+                CorporateAction.effective_date <= end_date,
             )
-            .order_by(CorporateAction.ex_date.asc(), CorporateAction.symbol.asc())
+            .order_by(CorporateAction.effective_date.asc(), CorporateAction.symbol.asc())
         )
 
         rows = self.session.execute(stmt).scalars().all()
@@ -63,21 +66,33 @@ class CorporateActionRepository(BaseRepository):
     # Upserts
     # -----------------------------
 
-    def upsert(self, row: CorporateAction) -> CorporateAction:
-        """
-        Insert or update based on deterministic ID.
-        """
+    def upsert(self, row: CorporateAction) -> UpsertResult[CorporateAction]:
         existing = self.get_by_action_id(row.action_id)
 
         if existing is None:
             self.session.add(row)
-            return row
+            return UpsertResult(entity=row, created=True)
 
-        # Update fields (explicit updates recommended)
-        for column in CorporateAction.__table__.columns:
-            setattr(existing, column.name, getattr(row, column.name))
+        updatable_columns = (
+            "symbol",
+            "action_type",
+            "effective_date",
+            "announced_date",
+            "record_date",
+            "payable_date",
+            "cash_amount",
+            "split_ratio",
+            "currency",
+            "new_symbol",
+            "source",
+            "ingested_at",
+            "meta",
+        )
 
-        return existing
+        for name in updatable_columns:
+            setattr(existing, name, getattr(row, name))
+
+        return UpsertResult(entity=existing, created=False)
 
     # -----------------------------
     # Deletes (optional)

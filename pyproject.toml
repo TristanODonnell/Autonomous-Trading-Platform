@@ -36,7 +36,11 @@ dependencies = [
 
   # HTTP + time
   "requests>=2.31",
+  "httpx",
   "python-dateutil>=2.9",
+
+  #external APIs
+  "alpaca-py"
 ]
 
 [project.optional-dependencies]
@@ -45,9 +49,10 @@ dev = [
   "mypy>=1.10",
   "pytest>=8.2",
   "pytest-cov>=5.0",
+  "pytest-asyncio",
   "types-requests",
   "types-PyYAML",
-    "pre-commit",
+  "pre-commit",
 ]
 cli = [
   "typer>=0.12",
@@ -77,10 +82,12 @@ ignore = ["E501"]  # let formatter handle line length
 # --- pytest ---
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 addopts = "-q"
 pythonpath = ["."]
 markers = [
-  "integration: tests that require external services like Postgres"
+  "integration: tests that require external services like Postgres",
+  "asyncio: mark test as async"
 ]
 
 # --- mypy ---

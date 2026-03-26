@@ -28,14 +28,15 @@ class UniverseSnapshotService:
         source: str,
         notes: str | None = None,
     ) -> UniverseSnapshot:
-        version = self._compute_version(symbols)
+        normalized_symbols = self._normalize_symbols(symbols)
+        version = self._compute_version(normalized_symbols)
 
         return UniverseSnapshot(
             universe_id=str(uuid.uuid4()),
             snapshot_date=snapshot_date,
             effective_start=self._ensure_utc(effective_start),
             effective_end=None,
-            symbols=sorted(symbols),
+            symbols=normalized_symbols,
             criteria=criteria,
             version=version,
             source=source,
@@ -65,12 +66,23 @@ class UniverseSnapshotService:
             notes=notes,
         )
         self.repository.close_open_snapshot(snapshot.effective_start)
-
         return self.repository.upsert(snapshot)
 
     def _compute_version(self, symbols: list[str]) -> str:
-        payload = json.dumps(sorted(symbols), separators=(",", ":"), ensure_ascii=True)
+        normalized_symbols = self._normalize_symbols(symbols)
+        payload = json.dumps(
+            normalized_symbols,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _normalize_symbols(symbols: list[str]) -> list[str]:
+        normalized = {
+            symbol.strip().upper() for symbol in symbols if symbol is not None and symbol.strip()
+        }
+        return sorted(normalized)
 
     @staticmethod
     def _ensure_utc(value: datetime) -> datetime:

@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -10,6 +11,17 @@ from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUni
 
 
 class AuditLoggingService:
+    _SENSITIVE_KEYS = {
+        "api_key",
+        "access_token",
+        "refresh_token",
+        "token",
+        "password",
+        "secret",
+        "client_secret",
+        "authorization",
+    }
+
     def __init__(self, session: Session) -> None:
         self.session = session
 
@@ -71,8 +83,10 @@ class AuditLoggingService:
         event_type: str,
         component: str,
         message: str,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
+        sanitized_metadata = self._sanitize_metadata(metadata)
+
         event = AuditLogEvent(
             event_id=str(uuid.uuid4()),
             run_id=run_id,
@@ -80,11 +94,37 @@ class AuditLoggingService:
             component=component,
             event_timestamp=datetime.now(UTC),
             message=message,
-            metadata=metadata,
+            metadata=sanitized_metadata,
         )
 
         with SorUnitOfWork(self.session) as uow:
             uow.audit_logs.add(event)
+
+    @classmethod
+    def _sanitize_metadata(cls, metadata: dict[str, Any] | None) -> dict[str, Any] | None:
+        if metadata is None:
+            return None
+
+        return {key: cls._sanitize_value(key, value) for key, value in metadata.items()}
+
+    @classmethod
+    def _sanitize_value(cls, key: str, value: Any) -> Any:
+        if key.lower() in cls._SENSITIVE_KEYS:
+            return "[REDACTED]"
+
+        if isinstance(value, Mapping):
+            return {
+                nested_key: cls._sanitize_value(str(nested_key), nested_value)
+                for nested_key, nested_value in value.items()
+            }
+
+        if isinstance(value, list):
+            return [cls._sanitize_value(key, item) for item in value]
+
+        if isinstance(value, tuple):
+            return tuple(cls._sanitize_value(key, item) for item in value)
+
+        return value
 
     # ============================================================
     # MARKET BAR AUDITING FUNCTIONS

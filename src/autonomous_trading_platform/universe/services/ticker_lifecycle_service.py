@@ -50,3 +50,49 @@ class TickerLifecycleService:
             current = successor
 
         return current
+
+    def resolve_symbol_for_universe_cleanup(
+        self,
+        symbol: str,
+        as_of: datetime,
+    ) -> str | None:
+        """
+        Resolve a symbol through rename/merger/successor chains, but return None
+        when the original symbol or the final resolved symbol is delisted.
+        """
+        if self.is_delisted(symbol, as_of):
+            return None
+
+        resolved = self.resolve_symbol_chain(symbol, as_of)
+
+        if self.is_delisted(resolved, as_of):
+            return None
+
+        return resolved
+
+    def resolve_universe_symbols(
+        self,
+        symbols: list[str],
+        as_of: datetime,
+    ) -> list[str]:
+        """
+        Resolve a universe symbol list by:
+        - replacing renamed/merged/successor tickers
+        - removing delisted tickers
+        - deduplicating results while preserving first-seen order
+        """
+        cleaned: list[str] = []
+        seen: set[str] = set()
+
+        for symbol in symbols:
+            resolved = self.resolve_symbol_for_universe_cleanup(symbol, as_of)
+            if resolved is None:
+                continue
+
+            if resolved in seen:
+                continue
+
+            seen.add(resolved)
+            cleaned.append(resolved)
+
+        return cleaned

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from autonomous_trading_platform.contracts.common.enums import CorporateActionType
 from autonomous_trading_platform.contracts.market.corporate_action import CorporateAction
@@ -10,6 +10,8 @@ from autonomous_trading_platform.contracts.market.corporate_action import Corpor
 class CorporateActionNormalizationService:
     @staticmethod
     def parse_alpaca_corporate_action(raw: dict) -> CorporateAction:
+        CorporateActionNormalizationService._validate_required_fields(raw)
+
         provider_type = raw.get("ca_type") or raw.get("type")
 
         action_type_map = {
@@ -22,11 +24,11 @@ class CorporateActionNormalizationService:
             "stock_merger": CorporateActionType.MERGER_STOCK,
             "name_change": CorporateActionType.NAME_CHANGE,
         }
+
         if not isinstance(provider_type, str):
             raise ValueError("Corporate action missing valid 'type' field")
 
         action_type = action_type_map.get(provider_type)
-
         if action_type is None:
             raise ValueError(f"Unsupported corporate action type: {provider_type}")
 
@@ -35,14 +37,9 @@ class CorporateActionNormalizationService:
             CorporateActionType.SPLIT_FORWARD,
             CorporateActionType.SPLIT_REVERSE,
         }:
-            old_shares = raw.get("old_rate")
-            new_shares = raw.get("new_rate")
-
-            if old_shares is not None and new_shares is not None:
-                split_ratio = Decimal(str(new_shares)) / Decimal(str(old_shares))
+            split_ratio = CorporateActionNormalizationService._parse_split_ratio(raw)
 
         cash_amount = None
-
         if (
             action_type
             in {
@@ -51,11 +48,14 @@ class CorporateActionNormalizationService:
             }
             and raw.get("cash") is not None
         ):
-            cash_amount = Decimal(str(raw["cash"]))
+            try:
+                cash_amount = Decimal(str(raw["cash"]))
+            except (InvalidOperation, TypeError) as exc:
+                raise ValueError("Corporate action has invalid cash amount") from exc
 
         return CorporateAction(
             action_id=str(raw["id"]),
-            symbol=raw["symbol"],
+            symbol=str(raw["symbol"]),
             action_type=action_type,
             effective_date=raw["ex_date"],
             announced_date=raw.get("declaration_date"),
@@ -69,3 +69,32 @@ class CorporateActionNormalizationService:
             ingested_at=datetime.now(UTC),
             metadata=raw,
         )
+
+    @staticmethod
+    def _validate_required_fields(raw: dict) -> None:
+        required_fields = ("id", "symbol", "ex_date")
+
+        for field_name in required_fields:
+            value = raw.get(field_name)
+            if value is None or (isinstance(value, str) and value.strip() == ""):
+                raise ValueError(f"Corporate action missing required field: {field_name}")
+
+    @staticmethod
+    def _parse_split_ratio(raw: dict) -> Decimal | None:
+        old_shares = raw.get("old_rate")
+        new_shares = raw.get("new_rate")
+
+        if old_shares is None or new_shares is None:
+            return None
+
+        try:
+            old_decimal = Decimal(str(old_shares))
+            new_decimal = Decimal(str(new_shares))
+        except (InvalidOperation, TypeError) as exc:
+            raise ValueError("Corporate action has invalid split rate fields") from exc
+
+        if old_decimal == 0:
+            raise ValueError("Corporate action old_rate cannot be zero")
+
+        ratio = new_decimal / old_decimal
+        return ratio.normalize()

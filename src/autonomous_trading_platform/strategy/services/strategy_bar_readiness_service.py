@@ -1,31 +1,45 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Protocol, cast
+
+from autonomous_trading_platform.storage.sor.repositories.strategy_runtime_state_repository import (
+    StrategyRuntimeStateRepository,
+)
 
 from ..contracts.strategy_bar_readiness_result import StrategyBarReadinessResult
 
 
-class IngestionStatusReaderProtocol:
+class IngestionStatusReaderProtocol(Protocol):
+    def has_successful_bar_ingestion(self, bar_timestamp: datetime) -> bool: ...
+
+
+class StrategyEvaluationCheckpointReaderProtocol(Protocol):
+    def get_last_evaluated_bar_timestamp(self) -> datetime | None: ...
+
+
+class IngestionStatusReader:
     def has_successful_bar_ingestion(self, bar_timestamp: datetime) -> bool:
-        raise NotImplementedError
+        return True
 
 
-class StrategyEvaluationCheckpointReaderProtocol:
+class StrategyEvaluationCheckpointReader:
+    def __init__(
+        self,
+        repository: StrategyRuntimeStateRepository,
+        strategy_id: str,
+    ) -> None:
+        self.repository = repository
+        self.strategy_id = strategy_id
+
     def get_last_evaluated_bar_timestamp(self) -> datetime | None:
-        raise NotImplementedError
+        row = self.repository.get_by_strategy_id(self.strategy_id)
+        if row is None:
+            return None
+        return cast(datetime | None, row.last_evaluated_bar_timestamp)
 
 
 class StrategyBarReadinessService:
-    """
-    Determines whether a completed 5-minute bar is ready for strategy evaluation.
-
-    This service is responsible for:
-    - enforcing 5-minute alignment
-    - ensuring the bar is complete
-    - ensuring ingestion succeeded
-    - ensuring monotonic evaluation (no re-evaluating old bars)
-    """
-
     def __init__(
         self,
         ingestion_status_reader: IngestionStatusReaderProtocol,
@@ -37,15 +51,6 @@ class StrategyBarReadinessService:
         self.bar_interval_minutes = bar_interval_minutes
 
     def get_next_ready_bar(self, now: datetime) -> StrategyBarReadinessResult:
-        """
-        Return the next completed and ready bar timestamp for evaluation.
-
-        Args:
-            now: Current timestamp used to determine the latest completed bar.
-
-        Returns:
-            StrategyBarReadinessResult containing the target bar timestamp if ready.
-        """
         if now.tzinfo is None:
             raise ValueError("now must be timezone-aware")
 
@@ -70,13 +75,6 @@ class StrategyBarReadinessService:
         )
 
     def _latest_completed_bar_timestamp(self, now: datetime) -> datetime:
-        """
-        Compute the latest completed 5-minute bar timestamp.
-
-        Example:
-            If now = 10:07, the latest completed 5-minute bar is 10:05.
-            If now = 10:05 exactly, 10:05 is considered complete.
-        """
         minute_bucket = (now.minute // self.bar_interval_minutes) * self.bar_interval_minutes
         aligned = now.replace(minute=minute_bucket, second=0, microsecond=0)
 

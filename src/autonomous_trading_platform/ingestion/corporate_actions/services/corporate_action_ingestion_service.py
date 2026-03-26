@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -16,22 +17,22 @@ from autonomous_trading_platform.ingestion.corporate_actions.services.corporate_
 from autonomous_trading_platform.ingestion.corporate_actions.services.corporate_action_validation_service import (
     CorporateActionValidationService,
 )
-from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 
 class CorporateActionIngestionService:
     def __init__(
         self,
+        *,
         session: Session,
         run_id: str,
-        audit_logger: AuditLoggingService,
+        audit_logger: Any,
         cycle_timestamp: datetime,
     ) -> None:
         self.session = session
-        self.normalization_service = CorporateActionNormalizationService()
-        self.adjustment_service = CorporateActionAdjustmentService()
-        self.validation_service = CorporateActionValidationService()
+        self.normalization_service: Any = CorporateActionNormalizationService()
+        self.validation_service: Any = CorporateActionValidationService()
+        self.adjustment_service: Any = CorporateActionAdjustmentService()
         self.run_id = run_id
         self.cycle_timestamp = cycle_timestamp
         self.audit_logger = audit_logger
@@ -61,7 +62,10 @@ class CorporateActionIngestionService:
                     )
                     continue
 
-                uow.corporate_actions.upsert(action)
+                result = uow.corporate_actions.upsert(action)
+
+                if not result.created:
+                    continue
 
                 if not self.adjustment_service.supports_adjustment(action):
                     continue

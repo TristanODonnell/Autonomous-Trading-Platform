@@ -35,6 +35,7 @@ class Settings:
         self.max_gross_exposure = self._get_float("MAX_GROSS_EXPOSURE", 100000.0)
         self.max_symbol_exposure = self._get_float("MAX_SYMBOL_EXPOSURE", 10000.0)
         self.max_daily_notional_traded = self._get_float("MAX_DAILY_NOTIONAL_TRADED", 25000.0)
+        self.max_reserved_cash = self._get_float("MAX_RESERVED_CASH", 25000.0)
 
         self.max_orders_per_hour = self._get_int("MAX_ORDERS_PER_HOUR", 20)
         self.max_orders_per_bar = self._get_int("MAX_ORDERS_PER_BAR", 1)

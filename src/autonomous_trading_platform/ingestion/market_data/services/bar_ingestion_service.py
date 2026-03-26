@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -21,6 +23,13 @@ from .bar_aggregation_service import BarAggregationService
 from .bar_validation_service import BarValidationService
 
 
+@dataclass(frozen=True)
+class NextBarDecision:
+    should_schedule_evaluation: bool
+    reason: str
+    bar: MarketBar | None = None
+
+
 class BarIngestionService:
     """
     Handle incoming provider minute bars and convert them into the
@@ -32,31 +41,51 @@ class BarIngestionService:
         session: Session,
         run_id: str,
         audit_logger: AuditLoggingService,
+        *,
+        aggregator: BarAggregationService | None = None,
+        validation_service: BarValidationService | None = None,
+        uow_factory: Callable[[Session], SorUnitOfWork] | None = None,
+        now_provider: Callable[[], datetime] | None = None,
     ) -> None:
-        self.aggregator = BarAggregationService()
-        self.validation_service = BarValidationService()
+        self.aggregator = aggregator or BarAggregationService()
+        self.validation_service = validation_service or BarValidationService()
         self.last_bar_by_symbol: dict[str, MarketBar] = {}
         self.session = session
         self.run_id = run_id
         self.audit_logger = audit_logger
+        self.uow_factory = uow_factory or SorUnitOfWork
+        self.now_provider = now_provider or (lambda: datetime.now(UTC))
+
+        self.next_bar_decision: NextBarDecision = NextBarDecision(
+            should_schedule_evaluation=False,
+            reason="service_initialized",
+            bar=None,
+        )
 
     async def handle_minute_bar(self, provider_bar: Bar) -> MarketBar | None:
         minute_bar = self._convert_provider_bar(provider_bar)
 
         five_min_bar = self.aggregator.add_minute_bar(minute_bar)
-
         if five_min_bar is None:
+            self.next_bar_decision = NextBarDecision(
+                should_schedule_evaluation=False,
+                reason="incomplete_bar",
+                bar=None,
+            )
             return None
 
         validation_result = self.validation_service.validate_bar(five_min_bar)
-
         if not validation_result.ok:
-            print(validation_result.violations)
+            self.next_bar_decision = NextBarDecision(
+                should_schedule_evaluation=False,
+                reason="invalid_bar",
+                bar=five_min_bar,
+            )
             return None
 
         is_late = self.validation_service.is_late_bar(
             five_min_bar,
-            now_utc=datetime.now(UTC),
+            now_utc=self.now_provider(),
             allowed_delay=timedelta(seconds=30),
         )
         if is_late:
@@ -86,16 +115,24 @@ class BarIngestionService:
                     observed_close=five_min_bar.close,
                 )
 
-        with SorUnitOfWork(self.session) as uow:
+        with self.uow_factory(self.session) as uow:
             uow.market_bars.upsert(five_min_bar)
 
         if is_late:
+            self.next_bar_decision = NextBarDecision(
+                should_schedule_evaluation=False,
+                reason="late_bar",
+                bar=five_min_bar,
+            )
             return None
 
-        # update cache for next bar comparison
         self.last_bar_by_symbol[five_min_bar.symbol] = five_min_bar
 
-        print(five_min_bar)
+        self.next_bar_decision = NextBarDecision(
+            should_schedule_evaluation=True,
+            reason="complete_valid_bar",
+            bar=five_min_bar,
+        )
         return five_min_bar
 
     @staticmethod
@@ -111,6 +148,7 @@ class BarIngestionService:
             ts = ts.replace(tzinfo=UTC)
 
         timestamp_utc = ts.astimezone(UTC)
+        ingested_at = datetime.now(UTC)
 
         return MarketBar(
             bar_id=build_bar_id(
@@ -135,7 +173,7 @@ class BarIngestionService:
             price_basis=PriceBasis.RAW,
             adjustment_factor=Decimal("1"),
             source="alpaca",
-            ingested_at=datetime.now(UTC),
+            ingested_at=ingested_at,
             quality_flags=[],
             session=classify_market_session(timestamp_utc),
         )
