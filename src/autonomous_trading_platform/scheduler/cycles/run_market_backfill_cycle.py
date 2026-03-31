@@ -39,8 +39,16 @@ def run_market_backfill_cycle(
 
     # TODO: Replace with universe symbols
     if symbols is None:
-        symbols = ["SPY"]  # default universe (temporary)
-
+        symbols = [
+            "SPY",
+            "AAPL",
+            "MSFT",
+            "NVDA",
+            "AMZN",
+            "META",
+            "GOOGL",
+            "TSLA",
+        ]
     now = datetime.now(UTC)
 
     if end is None:

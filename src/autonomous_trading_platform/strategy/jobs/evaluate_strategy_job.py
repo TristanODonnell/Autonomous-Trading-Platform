@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Protocol
 from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
@@ -29,12 +30,8 @@ class SignalWriter:
         self.repository.insert_many(signals)
 
 
-class StrategyCheckpointWriter:
-    def __init__(self, session: Session) -> None:
-        self.session = session
-
-    def mark_evaluated(self, bar_timestamp: datetime) -> None:
-        raise NotImplementedError("Checkpoint persistence not implemented yet.")
+class StrategyCheckpointWriter(Protocol):
+    def mark_evaluated(self, bar_timestamp: datetime) -> None: ...
 
 
 @dataclass(frozen=True)

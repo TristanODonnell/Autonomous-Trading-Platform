@@ -1,64 +1,150 @@
+from decimal import Decimal
+from typing import Any
+from uuid import UUID
+
 from sqlalchemy import select
 
-from autonomous_trading_platform.storage.sor.models.risk_snapshots import RiskSnapshot
+from autonomous_trading_platform.contracts.accounting.risk_snapshot import (
+    RiskSnapshot as RiskSnapshotContract,
+)
+from autonomous_trading_platform.storage.sor.models.risk_snapshots import (
+    RiskSnapshot as RiskSnapshotRow,
+)
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
 
 
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    return value
+
+
 class RiskSnapshotRepository(BaseRepository):
-    """
-    Repository for interacting with the <table_name> table.
+    def _to_row(self, row: RiskSnapshotContract) -> RiskSnapshotRow:
+        breach_gross = getattr(row, "breach_gross_exposure", False)
+        breach_net = getattr(row, "breach_net_exposure", False)
+        breach_leverage = getattr(row, "breach_leverage", False)
 
-    Handles reads, writes, and idempotent upserts for <ModelName>.
-    """
+        block_reasons: list[str] = []
+        if breach_gross:
+            block_reasons.append("gross_exposure")
+        if breach_net:
+            block_reasons.append("net_exposure")
+        if breach_leverage:
+            block_reasons.append("leverage")
 
-    # -----------------------------
-    # Basic lookup
-    # -----------------------------
+        is_blocked = getattr(
+            row,
+            "is_blocked",
+            breach_gross or breach_net or breach_leverage,
+        )
 
-    def get_by_snapshot_id(self, id_value: str) -> RiskSnapshot | None:
-        """Fetch a single row by deterministic ID."""
-        stmt = select(RiskSnapshot).where(RiskSnapshot.snapshot_id == id_value)
-        result: RiskSnapshot | None = self.session.execute(stmt).scalar_one_or_none()
+        drawdown_pct = getattr(row, "drawdown_pct", None)
+
+        limits = _json_safe(
+            {
+                "max_gross_exposure": getattr(row, "max_gross_exposure", None),
+                "max_net_exposure": getattr(row, "max_net_exposure", None),
+                "max_leverage": getattr(row, "max_leverage", None),
+            }
+        )
+
+        utilization = _json_safe(
+            {
+                "gross_exposure": row.gross_exposure,
+                "net_exposure": row.net_exposure,
+                "leverage": row.leverage,
+                "breach_gross_exposure": breach_gross,
+                "breach_net_exposure": breach_net,
+                "breach_leverage": breach_leverage,
+            }
+        )
+
+        return RiskSnapshotRow(
+            snapshot_id=row.snapshot_id,
+            run_id=row.run_id,
+            timestamp=row.timestamp,
+            gross_exposure=row.gross_exposure,
+            net_exposure=row.net_exposure,
+            leverage=row.leverage,
+            drawdown_pct=drawdown_pct,
+            limits=limits,
+            utilization=utilization,
+            is_blocked=is_blocked,
+            block_reasons=block_reasons or None,
+        )
+
+    def get_by_snapshot_id(self, id_value: UUID) -> RiskSnapshotRow | None:
+        stmt = select(RiskSnapshotRow).where(RiskSnapshotRow.snapshot_id == id_value)
+        result: RiskSnapshotRow | None = self.session.execute(stmt).scalar_one_or_none()
         return result
 
-    # -----------------------------
-    # Inserts
-    # -----------------------------
+    def insert(self, row: RiskSnapshotContract) -> None:
+        orm_row = self._to_row(row)
+        self.session.add(orm_row)
 
-    def insert(self, row: RiskSnapshot) -> None:
-        """Insert a single row."""
-        self.session.add(row)
+    def insert_many(self, rows: list[RiskSnapshotContract]) -> None:
+        orm_rows = [self._to_row(row) for row in rows]
+        self.session.add_all(orm_rows)
 
-    def insert_many(self, rows: list[RiskSnapshot]) -> None:
-        """Insert multiple rows."""
-        self.session.add_all(rows)
-
-    # -----------------------------
-    # Upserts
-    # -----------------------------
-
-    def upsert(self, row: RiskSnapshot) -> RiskSnapshot:
-        """
-        Insert or update based on deterministic ID.
-        """
+    def upsert(self, row: RiskSnapshotContract) -> RiskSnapshotRow:
         existing = self.get_by_snapshot_id(row.snapshot_id)
 
         if existing is None:
-            self.session.add(row)
-            return row
+            orm_row = self._to_row(row)
+            self.session.add(orm_row)
+            self.session.flush()
+            return orm_row
 
-        # Update fields (explicit updates recommended)
-        for column in RiskSnapshot.__table__.columns:
-            setattr(existing, column.name, getattr(row, column.name))
+        breach_gross = getattr(row, "breach_gross_exposure", False)
+        breach_net = getattr(row, "breach_net_exposure", False)
+        breach_leverage = getattr(row, "breach_leverage", False)
 
+        block_reasons: list[str] = []
+        if breach_gross:
+            block_reasons.append("gross_exposure")
+        if breach_net:
+            block_reasons.append("net_exposure")
+        if breach_leverage:
+            block_reasons.append("leverage")
+
+        existing.run_id = row.run_id
+        existing.timestamp = row.timestamp
+        existing.gross_exposure = row.gross_exposure
+        existing.net_exposure = row.net_exposure
+        existing.leverage = row.leverage
+        existing.drawdown_pct = getattr(row, "drawdown_pct", None)
+
+        existing.limits = {
+            "max_gross_exposure": getattr(row, "max_gross_exposure", None),
+            "max_net_exposure": getattr(row, "max_net_exposure", None),
+            "max_leverage": getattr(row, "max_leverage", None),
+        }
+
+        existing.utilization = {
+            "gross_exposure": row.gross_exposure,
+            "net_exposure": row.net_exposure,
+            "leverage": row.leverage,
+            "breach_gross_exposure": breach_gross,
+            "breach_net_exposure": breach_net,
+            "breach_leverage": breach_leverage,
+        }
+
+        existing.is_blocked = getattr(
+            row,
+            "is_blocked",
+            breach_gross or breach_net or breach_leverage,
+        )
+        existing.block_reasons = block_reasons or None
+
+        self.session.flush()
         return existing
 
-    # -----------------------------
-    # Deletes (optional)
-    # -----------------------------
-
-    def delete_by_snapshot_id(self, id_value: str) -> None:
-        """Delete a row by ID."""
+    def delete_by_snapshot_id(self, id_value: UUID) -> None:
         obj = self.get_by_snapshot_id(id_value)
         if obj is not None:
             self.session.delete(obj)

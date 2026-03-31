@@ -18,6 +18,7 @@ def build_safety_context(
     environment_policy,
     risk_state_reader,
     order_activity_reader,
+    audit_log_repository,
 ):
     kill_switch_service = KillSwitchService()
     runtime_gate_service = RuntimeGateService()
@@ -30,6 +31,7 @@ def build_safety_context(
     order_idempotency_service = OrderIdempotencyService(
         settings=settings,
         order_activity_reader=order_activity_reader,
+        audit_log_repository=audit_log_repository,
     )
     order_throttle_service = OrderThrottleService(
         settings=settings,

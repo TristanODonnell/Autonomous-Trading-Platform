@@ -53,6 +53,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres:5432/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      PYTHONPATH: /opt/airflow/src
       _AIRFLOW_WWW_USER_USERNAME: admin
       _AIRFLOW_WWW_USER_PASSWORD: admin
       _AIRFLOW_WWW_USER_FIRSTNAME: Tristan
@@ -60,12 +61,12 @@ services:
       _AIRFLOW_WWW_USER_ROLE: Admin
       _AIRFLOW_WWW_USER_EMAIL: admin@example.com
     volumes:
-      - ./orchestration/dags:/opt/airflow/dags
+      - ./src/autonomous_trading_platform/scheduler/airflow/dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
       - ./orchestration/logs:/opt/airflow/logs
       - ./orchestration/plugins:/opt/airflow/plugins
     entrypoint: /bin/bash
-    command: -c "airflow db migrate && airflow users create --username $$(_AIRFLOW_WWW_USER_USERNAME) --password $$(_AIRFLOW_WWW_USER_PASSWORD) --firstname $$(_AIRFLOW_WWW_USER_FIRSTNAME) --lastname $$(_AIRFLOW_WWW_USER_LASTNAME) --role $$(_AIRFLOW_WWW_USER_ROLE) --email $$(_AIRFLOW_WWW_USER_EMAIL) || true"
-
+    command: -c "airflow db migrate && airflow users create --username admin --password admin --firstname Tristan --lastname ODonnell --role Admin --email admin@example.com || true"
   # ----------------------------
   # Airflow webserver
   # ----------------------------
@@ -81,10 +82,12 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres:5432/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+      PYTHONPATH: /opt/airflow/src
     ports:
       - "8080:8080"
     volumes:
-      - ./orchestration/dags:/opt/airflow/dags
+      - ./src/autonomous_trading_platform/scheduler/airflow/dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
       - ./orchestration/logs:/opt/airflow/logs
       - ./orchestration/plugins:/opt/airflow/plugins
     command: webserver
@@ -103,8 +106,10 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres:5432/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      PYTHONPATH: /opt/airflow/src
     volumes:
-      - ./orchestration/dags:/opt/airflow/dags
+      - ./src/autonomous_trading_platform/scheduler/airflow/dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
       - ./orchestration/logs:/opt/airflow/logs
       - ./orchestration/plugins:/opt/airflow/plugins
     command: scheduler

@@ -4,9 +4,6 @@ import argparse
 
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.cli.helpers import parse_datetime
-from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
-    build_trading_cycle_dependencies,
-)
 from autonomous_trading_platform.scheduler.cycles.run_corporate_action_ingestion_cycle import (
     run_corporate_action_ingestion_cycle,
 )
@@ -17,6 +14,14 @@ from autonomous_trading_platform.scheduler.cycles.run_market_ingestion_cycle imp
     run_market_ingestion_cycle,
 )
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
+from src.db import get_session
+
+
+def _parse_symbols(raw: str) -> list[str]:
+    symbols = [symbol.strip().upper() for symbol in raw.split(",") if symbol.strip()]
+    if not symbols:
+        raise ValueError("At least one symbol must be provided")
+    return symbols
 
 
 def register(subparsers) -> None:
@@ -37,7 +42,11 @@ def register(subparsers) -> None:
         "run-backfill",
         help="Run historical backfill",
     )
-    run_backfill_parser.add_argument("--symbol", required=True)
+    run_backfill_parser.add_argument(
+        "--symbols",
+        required=True,
+        help="Comma-separated list of symbols, e.g. SPY,AAPL,MSFT",
+    )
     run_backfill_parser.add_argument("--start", required=True)
     run_backfill_parser.add_argument("--end", required=True)
     run_backfill_parser.set_defaults(func=handle_run_backfill)
@@ -69,7 +78,7 @@ def handle_run_corporate_actions(_args: argparse.Namespace) -> int:
     return 0
 
 
-def handle_run_bars(args) -> int:
+def handle_run_bars(args: argparse.Namespace) -> int:
     now_utc = parse_datetime(args.timestamp) if args.timestamp else None
 
     run_market_ingestion_cycle(now_utc=now_utc)
@@ -81,9 +90,10 @@ def handle_run_bars(args) -> int:
 def handle_run_backfill(args: argparse.Namespace) -> int:
     start = parse_datetime(args.start)
     end = parse_datetime(args.end)
+    symbols = _parse_symbols(args.symbols)
 
     run_market_backfill_cycle(
-        symbols=[args.symbol],
+        symbols=symbols,
         start=start,
         end=end,
     )
@@ -91,7 +101,8 @@ def handle_run_backfill(args: argparse.Namespace) -> int:
     print_header("Run Backfill")
     print_json(
         {
-            "symbol": args.symbol,
+            "symbols": symbols,
+            "symbol_count": len(symbols),
             "start": args.start,
             "end": args.end,
             "status": "success",
@@ -104,8 +115,7 @@ def handle_inspect_bar(args: argparse.Namespace) -> int:
     print_header("Inspect Bar")
     timestamp = parse_datetime(args.timestamp)
 
-    deps = build_trading_cycle_dependencies()
-    session = deps.session
+    session = get_session()
     try:
         with SorUnitOfWork(session) as uow:
             bar = uow.market_bars.get_by_symbol_timestamp(
@@ -153,4 +163,4 @@ def handle_inspect_bar(args: argparse.Namespace) -> int:
         )
         return 0
     finally:
-        deps.session.close()
+        session.close()

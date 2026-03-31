@@ -33,6 +33,15 @@ def run_order_submission_job(
     shadow_mode_enabled = safety_context.shadow_mode_service.is_enabled()
 
     order_intents_created = False
+    with SorUnitOfWork(session) as uow:
+        current_state = execution_context.strategy_runtime_state_service.get_current_state(
+            uow=uow,
+            strategy_id=manifest.strategy_id,
+        )
+        print(
+            f"[SUBMISSION] strategy_id={manifest.strategy_id} "
+            f"current_state_before_transition={current_state}"
+        )
 
     for intent in generated_intents:
         if not order_intents_created:

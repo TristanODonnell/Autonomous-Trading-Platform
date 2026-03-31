@@ -24,25 +24,36 @@ def run_trading_evaluation_job(
         evaluation_service=strategy_context.strategy_evaluation_service,
         signal_writer=strategy_context.signal_writer,
         checkpoint_writer=strategy_context.strategy_checkpoint_writer,
+        run_manifest_service=trading_cycle_dependencies.manifest_service,
     )
 
     strategy_job_result = evaluate_strategy_job.run(now_utc)
 
     if strategy_job_result.signals:
         with SorUnitOfWork(session) as uow:
-            execution_context.strategy_runtime_state_service.apply_event(
+            next_state = execution_context.strategy_runtime_state_service.apply_event(
                 uow=uow,
                 strategy_id=manifest.strategy_id,
                 event=StrategyEvent.SIGNAL_GENERATED,
                 now_utc=now_utc,
             )
+            persisted_state = execution_context.strategy_runtime_state_service.get_current_state(
+                uow=uow,
+                strategy_id=manifest.strategy_id,
+            )
+            print(
+                f"[EVAL] strategy_id={manifest.strategy_id} "
+                f"next_state={next_state} persisted_state={persisted_state}"
+            )
     if strategy_job_result.target_bar_timestamp is None:
         raise ValueError("target_bar_timestamp is required for order intent generation")
+
+    signal_symbols = sorted({signal.symbol for signal in strategy_job_result.signals})
 
     generated_intents = execution_context.portfolio_construction_service.generate_order_intents(
         signals=strategy_job_result.signals,
         positions={},
-        prices={"SPY": 500.0},
+        prices={symbol: 500.0 for symbol in signal_symbols},
         run_id=manifest.run_id,
         strategy_id=manifest.strategy_id,
         bar_timestamp=strategy_job_result.target_bar_timestamp,

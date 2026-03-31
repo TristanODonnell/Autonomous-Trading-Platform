@@ -6,7 +6,7 @@ from enum import StrEnum
 from sqlalchemy import DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from autonomous_trading_platform.storage.sor.models import Base
+from autonomous_trading_platform.storage.sor.models.base import Base
 
 
 class TickerLifecycleEventType(StrEnum):

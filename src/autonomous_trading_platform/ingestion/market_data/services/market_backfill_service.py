@@ -43,4 +43,14 @@ class MarketBackfillService:
         )
 
         for provider_bar in bars:
-            await self.bar_ingestion_service.handle_minute_bar(provider_bar)
+            try:
+                await self.bar_ingestion_service.handle_minute_bar(provider_bar)
+            except ValueError as exc:
+                message = str(exc)
+                if "Incomplete prior bucket detected" in message:
+                    self.bar_ingestion_service.aggregator.drop_incomplete_buckets_for_symbol(
+                        provider_bar.symbol
+                    )
+                    await self.bar_ingestion_service.handle_minute_bar(provider_bar)
+                    continue
+                raise

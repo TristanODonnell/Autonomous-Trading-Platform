@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from autonomous_trading_platform.cli.helpers import parse_datetime
 from autonomous_trading_platform.common.errors import (
     PersistentInfrastructureError,
     TransientInfrastructureError,
@@ -34,11 +35,10 @@ from autonomous_trading_platform.scheduler.jobs.run_trading_evaluation_job impor
 )
 
 
-def run_trading_cycle():
-    """
-    Entry point for airflow DAG.
-    """
-    now_utc = datetime.now(UTC)
+def run_trading_cycle(now_utc: datetime | None = None):
+    if now_utc is None:
+        now_utc = datetime.now(UTC)
+
     trading_cycle_dependencies = build_trading_cycle_dependencies()
 
     settings = trading_cycle_dependencies.settings
@@ -97,10 +97,13 @@ def run_trading_cycle():
             safety_context.live_trading_gate_service.assert_live_trading_allowed(
                 manifest.broker_account_id
             )
-
+        print("step: ingestion_readiness")
         manifest.current_step = "ingestion_readiness"
         manifest_service.save(manifest)
         ingestion_result = check_ingestion_readiness_job(now_utc=now_utc)
+        print("readiness:", ingestion_result.ready)
+        print("safe_mode:", ingestion_result.safe_mode)
+        print("reason:", ingestion_result.reason)
 
         if not ingestion_result.ready:
             if settings.skip_evaluation_on_ingestion_failure:
@@ -122,6 +125,8 @@ def run_trading_cycle():
 
         manifest.last_successful_step = "ingestion_readiness"
         manifest_service.save(manifest)
+
+        print("step: trading_evaluation")
 
         manifest.current_step = "trading_evaluation"
         manifest_service.save(manifest)
@@ -153,6 +158,8 @@ def run_trading_cycle():
         manifest.last_successful_step = "trading_evaluation"
         manifest_service.save(manifest)
 
+        print("step: order_submission")
+
         manifest.current_step = "order_submission"
         manifest_service.save(manifest)
 
@@ -166,6 +173,8 @@ def run_trading_cycle():
 
         manifest.last_successful_step = "order_submission"
         manifest_service.save(manifest)
+
+        print("step: order_reconciliation")
 
         manifest.current_step = "order_reconciliation"
         manifest_service.save(manifest)
@@ -185,6 +194,8 @@ def run_trading_cycle():
 
         manifest.last_successful_step = "order_reconciliation"
         manifest_service.save(manifest)
+
+        print("step: risk_snapshot")
 
         manifest.current_step = "risk_snapshot"
         manifest_service.save(manifest)
@@ -263,3 +274,9 @@ def run_trading_cycle():
         raise
     finally:
         session.close()
+
+
+if __name__ == "__main__":
+    print("starting trading cycle")
+    run_trading_cycle(parse_datetime("2025-02-14T21:00:00Z"))
+    print("returned from trading cycle")

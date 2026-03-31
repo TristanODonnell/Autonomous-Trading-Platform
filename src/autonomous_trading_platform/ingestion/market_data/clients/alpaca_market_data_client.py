@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from datetime import datetime
 
 from alpaca.data.historical import StockHistoricalDataClient
@@ -8,10 +7,13 @@ from alpaca.data.live import StockDataStream
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 
+from autonomous_trading_platform.config.settings import Settings
+
 
 def _get_credentials() -> tuple[str, str]:
-    api_key = os.getenv("ALPACA_API_KEY")
-    secret_key = os.getenv("ALPACA_SECRET_KEY")
+    settings = Settings()
+    api_key = settings.paper_broker_api_key
+    secret_key = settings.paper_broker_api_secret
 
     if not api_key or not secret_key:
         raise ValueError(
