@@ -1,9 +1,9 @@
-import os
 from datetime import UTC, datetime
 
 from alpaca.trading.client import TradingClient
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
     UniverseSnapshotRepository,
 )
@@ -46,14 +46,15 @@ def should_rebalance(now_utc: datetime, cadence: str) -> bool:
     raise ValueError(f"Unsupported cadence: {cadence}")
 
 
-def run_universe_selection_cycle() -> None:
-    api_key = os.getenv("ALPACA_API_KEY")
-    secret_key = os.getenv("ALPACA_SECRET_KEY")
-    cadence = os.getenv("UNIVERSE_REBALANCE_CADENCE", "daily")
+def run_universe_selection_cycle(*, cycle_timestamp: datetime | None = None) -> None:
+    settings = Settings()
+    api_key = settings.paper_broker_api_key
+    secret_key = settings.paper_broker_api_secret
+    cadence = settings.universe_rebalance_cadence
 
     session: Session = get_session()
 
-    now_utc = datetime.now(UTC)
+    now_utc = cycle_timestamp or datetime.now(UTC)
     if not should_rebalance(now_utc, cadence):
         return
 

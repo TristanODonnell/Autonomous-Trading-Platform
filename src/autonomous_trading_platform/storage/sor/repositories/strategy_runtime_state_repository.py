@@ -20,8 +20,8 @@ class StrategyRuntimeStateRepository(BaseRepository):
         existing = self.get_by_strategy_id(row.strategy_id)
         if existing is None:
             self.session.add(row)
+            self.session.flush()
             return row
 
-        for column in StrategyRuntimeState.__table__.columns:
-            setattr(existing, column.name, getattr(row, column.name))
+        self.session.flush()
         return existing

@@ -28,7 +28,10 @@ class PortfolioConstructionService:
     ):
         target_positions = self.position_sizer(signals)
         deltas = self.calculate_deltas(positions, target_positions)
-
+        print("signal symbols:", [signal.symbol for signal in signals])
+        print("target_positions:", target_positions)
+        print("deltas:", deltas)
+        print("prices keys:", list(prices.keys()))
         for delta in deltas:
             order_intent = self.build_order_intent(
                 delta=delta,
@@ -67,8 +70,7 @@ class PortfolioConstructionService:
     ) -> list[dict[str, int | str]]:
         deltas: list[dict[str, int | str]] = []
 
-        all_symbols = set(current_positions) | set(target_positions)
-
+        all_symbols = sorted(set(current_positions) | set(target_positions))
         for symbol in all_symbols:
             current_qty = current_positions.get(symbol, 0)
             target_qty = target_positions.get(symbol, 0)

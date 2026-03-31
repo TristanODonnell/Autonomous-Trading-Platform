@@ -39,8 +39,11 @@ class CorporateActionIngestionService:
 
     def ingest_corporate_actions(self) -> None:
         payload: dict = client.fetch_corporate_actions()
-        raw_actions = payload.get("corporate_actions", [])
+        actions_block = payload.get("corporate_actions", {})
 
+        raw_actions = actions_block.get("cash_dividends", []) + actions_block.get(
+            "reverse_splits", []
+        )
         with SorUnitOfWork(self.session) as uow:
             for raw_action in raw_actions:
                 try:
@@ -75,9 +78,11 @@ class CorporateActionIngestionService:
                     effective_date=action.effective_date,
                 )
 
+                raw_bar_contracts = uow.market_bars.to_contracts(raw_bars)
+
                 adjusted_bars = self.adjustment_service.apply_action_to_bars(
                     action,
-                    raw_bars,
+                    raw_bar_contracts,
                 )
 
                 self.audit_logger.record_corporate_action_adjustment_applied(

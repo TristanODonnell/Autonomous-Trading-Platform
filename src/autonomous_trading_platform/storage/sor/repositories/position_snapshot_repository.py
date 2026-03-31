@@ -22,14 +22,14 @@ class PositionSnapshotRepository(BaseRepository):
         return cast(PositionSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     def get_latest(self) -> PositionSnapshot | None:
-        stmt = select(PositionSnapshot).order_by(desc(PositionSnapshot.snapshot_timestamp)).limit(1)
+        stmt = select(PositionSnapshot).order_by(desc(PositionSnapshot.timestamp)).limit(1)
         return cast(PositionSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     def get_latest_for_symbol(self, symbol: str) -> PositionSnapshot | None:
         stmt = (
             select(PositionSnapshot)
             .where(PositionSnapshot.symbol == symbol)
-            .order_by(desc(PositionSnapshot.snapshot_timestamp))
+            .order_by(desc(PositionSnapshot.timestamp))
             .limit(1)
         )
         return cast(PositionSnapshot | None, self.session.scalars(stmt).one_or_none())
@@ -38,7 +38,7 @@ class PositionSnapshotRepository(BaseRepository):
         stmt = (
             select(PositionSnapshot)
             .where(PositionSnapshot.symbol == symbol)
-            .order_by(desc(PositionSnapshot.snapshot_timestamp))
+            .order_by(desc(PositionSnapshot.timestamp))
             .limit(limit)
         )
         return list(self.session.execute(stmt).scalars().all())

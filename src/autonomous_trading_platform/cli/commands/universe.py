@@ -76,6 +76,7 @@ def register(subparsers) -> None:
         "select-now",
         help="Run the universe selection cycle now",
     )
+    select_now_parser.add_argument("--timestamp")
     select_now_parser.set_defaults(func=handle_select_now)
 
     inspect_active_parser = universe_subparsers.add_parser(
@@ -114,6 +115,67 @@ def register(subparsers) -> None:
     inspect_ingestion_input_parser.add_argument("--timestamp")
     inspect_ingestion_input_parser.set_defaults(func=handle_inspect_ingestion_input)
 
+    seed_parser = universe_subparsers.add_parser(
+        "seed",
+        help="Create a universe snapshot from explicit symbols",
+    )
+    seed_parser.add_argument(
+        "--symbols",
+        required=True,
+        help="Comma-separated list of symbols, e.g. SPY,AAPL,MSFT",
+    )
+    seed_parser.add_argument("--timestamp")
+    seed_parser.add_argument(
+        "--source",
+        default="manual_seed",
+        help="Source label for the seeded universe snapshot",
+    )
+    seed_parser.set_defaults(func=handle_seed)
+
+
+def handle_seed(args: argparse.Namespace) -> int:
+    deps = build_dependencies()
+    try:
+        timestamp = _resolve_timestamp(args.timestamp)
+        symbols = _parse_symbols(args.symbols)
+
+        criteria = {
+            "seeded": True,
+            "input_symbols": symbols,
+            "symbol_count": len(symbols),
+        }
+
+        snapshot = deps.snapshot_service.build_snapshot(
+            snapshot_date=timestamp.date(),
+            effective_start=timestamp,
+            symbols=symbols,
+            criteria=criteria,
+            source=args.source,
+        )
+
+        validation = deps.validation_service.validate_row(snapshot)
+        if not validation.ok:
+            raise RuntimeError(validation.errors)
+
+        deps.snapshot_repository.close_open_snapshot(snapshot.effective_start)
+        deps.snapshot_service.save_snapshot(snapshot)
+        deps.session.commit()
+
+        print_header("Seed Universe")
+        print_json(
+            {
+                "status": "success",
+                "timestamp": timestamp.isoformat(),
+                "symbol_count": len(symbols),
+                "symbols": symbols,
+                "source": args.source,
+                "universe_id": snapshot.universe_id,
+            }
+        )
+        return 0
+    finally:
+        deps.session.close()
+
 
 def _resolve_timestamp(raw: str | None) -> datetime:
     if raw:
@@ -121,10 +183,16 @@ def _resolve_timestamp(raw: str | None) -> datetime:
     return datetime.now(UTC)
 
 
-def handle_select_now(_args: argparse.Namespace) -> int:
-    run_universe_selection_cycle()
+def handle_select_now(args: argparse.Namespace) -> int:
+    timestamp = _resolve_timestamp(args.timestamp)
+    run_universe_selection_cycle(cycle_timestamp=timestamp)
     print_header("Universe Select Now")
-    print_json({"status": "success"})
+    print_json(
+        {
+            "status": "success",
+            "timestamp": timestamp.isoformat(),
+        }
+    )
     return 0
 
 
@@ -234,3 +302,10 @@ def handle_inspect_ingestion_input(args: argparse.Namespace) -> int:
         }
     )
     return 0
+
+
+def _parse_symbols(raw: str) -> list[str]:
+    symbols = [symbol.strip().upper() for symbol in raw.split(",") if symbol.strip()]
+    if not symbols:
+        raise ValueError("At least one symbol must be provided")
+    return symbols

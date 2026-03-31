@@ -85,6 +85,20 @@ class BarAggregationService:
         completed_bars = self.buffer.pop(key)
         return self._aggregate(completed_bars)
 
+    def reset_symbol(self, symbol: str) -> None:
+        keys_to_delete = [key for key in self.buffer if key[0] == symbol]
+        for key in keys_to_delete:
+            self.buffer.pop(key, None)
+
+    def drop_incomplete_buckets_for_symbol(self, symbol: str) -> None:
+        keys_to_delete = [
+            key
+            for key, buffered_bars in self.buffer.items()
+            if key[0] == symbol and len(buffered_bars) < 5
+        ]
+        for key in keys_to_delete:
+            self.buffer.pop(key, None)
+
     @staticmethod
     def _aggregate(bars: list[MarketBar]) -> MarketBar:
         bars_sorted = sorted(bars, key=lambda bar: bar.timestamp)

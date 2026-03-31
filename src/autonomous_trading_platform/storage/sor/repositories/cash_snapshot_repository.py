@@ -22,11 +22,11 @@ class CashSnapshotRepository(BaseRepository):
         return cast(CashSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     def get_latest(self) -> CashSnapshot | None:
-        stmt = select(CashSnapshot).order_by(desc(CashSnapshot.snapshot_timestamp)).limit(1)
+        stmt = select(CashSnapshot).order_by(desc(CashSnapshot.timestamp)).limit(1)
         return cast(CashSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     def list_recent(self, limit: int = 20) -> list[CashSnapshot]:
-        stmt = select(CashSnapshot).order_by(desc(CashSnapshot.snapshot_timestamp)).limit(limit)
+        stmt = select(CashSnapshot).order_by(desc(CashSnapshot.timestamp)).limit(limit)
         return list(self.session.execute(stmt).scalars().all())
 
     # -----------------------------

@@ -32,6 +32,11 @@ class Settings:
         self.live_broker_api_key = os.getenv("LIVE_BROKER_API_KEY")
         self.live_broker_api_secret = os.getenv("LIVE_BROKER_API_SECRET")
 
+        self.universe_rebalance_cadence = os.getenv(
+            "UNIVERSE_REBALANCE_CADENCE",
+            "daily",
+        )
+
         self.max_gross_exposure = self._get_float("MAX_GROSS_EXPOSURE", 100000.0)
         self.max_symbol_exposure = self._get_float("MAX_SYMBOL_EXPOSURE", 10000.0)
         self.max_daily_notional_traded = self._get_float("MAX_DAILY_NOTIONAL_TRADED", 25000.0)
@@ -97,6 +102,8 @@ class Settings:
             "TRADING_CYCLE_RETRY_DELAY_SECONDS",
             30,
         )
+        self.max_net_exposure = self._get_float("MAX_NET_EXPOSURE", 50000.0)
+        self.max_leverage = self._get_float("MAX_LEVERAGE", 2.0)
 
     @property
     def alpaca_base_url(self) -> str:

@@ -1,6 +1,8 @@
 from sqlalchemy import select
 
+from autonomous_trading_platform.contracts.trading.signal import Signal as SignalContract
 from autonomous_trading_platform.storage.sor.models.signals import Signal
+from autonomous_trading_platform.storage.sor.models.signals import Signal as SignalRow
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
 
 
@@ -10,6 +12,20 @@ class SignalRepository(BaseRepository):
 
     Handles reads, writes, and idempotent upserts for <ModelName>.
     """
+
+    def _to_row(self, signal: SignalContract) -> SignalRow:
+        return SignalRow(
+            signal_id=signal.signal_id,
+            run_id=signal.run_id,
+            timestamp=signal.timestamp,
+            bar_timestamp=signal.bar_timestamp,
+            strategy_id=signal.strategy_id,
+            symbol=signal.symbol,
+            direction=signal.direction,
+            confidence=signal.confidence,
+            target_position=signal.target_position,
+            params=signal.params,
+        )
 
     # -----------------------------
     # Basic lookup
@@ -25,12 +41,12 @@ class SignalRepository(BaseRepository):
     # Inserts
     # -----------------------------
 
-    def insert(self, row: Signal) -> None:
-        """Insert a single row."""
+    def insert(self, signal: SignalContract) -> None:
+        row = self._to_row(signal)
         self.session.add(row)
 
-    def insert_many(self, rows: list[Signal]) -> None:
-        """Insert multiple rows."""
+    def insert_many(self, signals: list[SignalContract]) -> None:
+        rows = [self._to_row(signal) for signal in signals]
         self.session.add_all(rows)
 
     # -----------------------------

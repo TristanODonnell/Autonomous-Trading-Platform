@@ -31,7 +31,7 @@ def run_corporate_action_ingestion_cycle() -> None:
 
     manifest = RunManifest(
         run_id=run_id,
-        run_type=RunType.INGESTION,
+        run_type=RunType.PAPER,
         created_at=now_utc,
         environment="local",
         broker="alpaca",
@@ -51,7 +51,7 @@ def run_corporate_action_ingestion_cycle() -> None:
     )
     manifest_service.save(manifest)
     base_metadata = {
-        "run_id": run_id,
+        "run_id": str(run_id),
         "cycle_start": cycle_start.isoformat(),
         "cycle_end": cycle_end.isoformat(),
         "pipeline": "corporate_actions_ingestion",
