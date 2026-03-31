@@ -11,7 +11,11 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
-from autonomous_trading_platform.contracts.common.enums import CorporateActionType, PriceBasis
+from autonomous_trading_platform.contracts.common.enums import (
+    CorporateActionType,
+    MarketSession,
+    PriceBasis,
+)
 from autonomous_trading_platform.ingestion.corporate_actions.services.corporate_action_ingestion_service import (
     CorporateActionIngestionService,
 )
@@ -222,6 +226,9 @@ class FakeMarketBarsRepository:
         self.raw_bars_by_key = raw_bars_by_key or {}
         self.get_raw_bars_calls: list[dict[str, object]] = []
 
+    def to_contracts(self, rows: list[object]) -> list[object]:
+        return list(rows)
+
     def get_raw_bars_before_date(
         self,
         *,
@@ -349,12 +356,15 @@ def test_ingest_corporate_actions_normalizes_validates_stores_and_adjusts_affect
     - parse failures and validation failures are logged and skipped
     """
     raw_payload = {
-        "corporate_actions": [
-            {"id": "ca-001", "symbol": "AAPL"},
-            {"id": "ca-parse-fail", "symbol": "MSFT"},
-            {"id": "ca-invalid", "symbol": "TSLA"},
-            {"id": "ca-002", "symbol": "NVDA"},
-        ]
+        "corporate_actions": {
+            "cash_dividends": [
+                {"id": "ca-001", "symbol": "AAPL"},
+                {"id": "ca-parse-fail", "symbol": "MSFT"},
+                {"id": "ca-invalid", "symbol": "TSLA"},
+                {"id": "ca-002", "symbol": "NVDA"},
+            ],
+            "reverse_splits": [],
+        }
     }
 
     action_1 = FakeCorporateAction(
@@ -482,9 +492,12 @@ def test_ingest_corporate_actions_commits_transaction_on_success(
     service: CorporateActionIngestionService,
 ) -> None:
     raw_payload = {
-        "corporate_actions": [
-            {"id": "ca-001", "symbol": "AAPL"},
-        ]
+        "corporate_actions": {
+            "cash_dividends": [
+                {"id": "ca-001", "symbol": "AAPL"},
+            ],
+            "reverse_splits": [],
+        }
     }
 
     action = FakeCorporateAction(
@@ -529,9 +542,12 @@ def test_ingest_corporate_actions_rolls_back_transaction_on_persistence_failure(
     service: CorporateActionIngestionService,
 ) -> None:
     raw_payload = {
-        "corporate_actions": [
-            {"id": "ca-001", "symbol": "AAPL"},
-        ]
+        "corporate_actions": {
+            "cash_dividends": [
+                {"id": "ca-001", "symbol": "AAPL"},
+            ],
+            "reverse_splits": [],
+        }
     }
 
     action = FakeCorporateAction(
@@ -589,9 +605,12 @@ def test_reprocessing_same_payload_does_not_duplicate_entries_when_repositories_
     - stored actions and adjusted bars are not duplicated
     """
     raw_payload = {
-        "corporate_actions": [
-            {"id": "ca-001", "symbol": "AAPL"},
-        ]
+        "corporate_actions": {
+            "cash_dividends": [
+                {"id": "ca-001", "symbol": "AAPL"},
+            ],
+            "reverse_splits": [],
+        }
     }
 
     action = FakeCorporateAction(
@@ -671,9 +690,12 @@ def test_reprocessing_same_payload_is_idempotent_against_real_storage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     raw_payload = {
-        "corporate_actions": [
-            {"id": "ca-001", "symbol": "AAPL"},
-        ]
+        "corporate_actions": {
+            "cash_dividends": [
+                {"id": "ca-001", "symbol": "AAPL"},
+            ],
+            "reverse_splits": [],
+        }
     }
 
     test_id = uuid4().hex
@@ -707,23 +729,18 @@ def test_reprocessing_same_payload_is_idempotent_against_real_storage(
         market_session="regular",
     )
 
-    adjusted_bar = MarketBar(
-        bar_id=f"bar-adjusted-{test_id}",
-        symbol="AAPL",
+    adjusted_bar = make_minute_bar(
         timestamp=raw_bar.timestamp,
-        end_timestamp=raw_bar.end_timestamp,
-        interval="1m",
-        open=Decimal("25"),
-        high=Decimal("25"),
-        low=Decimal("25"),
-        close=Decimal("25"),
+        symbol="AAPL",
+        close_price="25.00",
         volume=400,
-        price_basis=PriceBasis.ADJUSTED,
-        adjustment_factor=Decimal("0.25"),
-        source="adjusted",
-        ingested_at=datetime.now(tz=UTC),
-        market_session="regular",
     )
+
+    adjusted_bar.price_basis = PriceBasis.ADJUSTED
+    adjusted_bar.adjustment_factor = Decimal("0.25")
+    adjusted_bar.source = "adjusted"
+    adjusted_bar.end_timestamp = raw_bar.end_timestamp
+    adjusted_bar.session = MarketSession.REGULAR
 
     db_session.add(raw_bar)
     db_session.commit()

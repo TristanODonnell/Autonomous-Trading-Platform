@@ -36,9 +36,34 @@ class MarketBarRepository(BaseRepository):
             adjustment_factor=float(bar.adjustment_factor),
             source=bar.source,
             ingested_at=bar.ingested_at,
-            quality_flags=[flag.value for flag in bar.quality_flags],
+            quality_flags=[flag.value for flag in bar.quality_flags] if bar.quality_flags else [],
             market_session=bar.session,
         )
+
+    def to_contract(self, row: MarketBarRow) -> MarketBarContract:
+        return MarketBarContract(
+            bar_id=row.bar_id,
+            timestamp=row.timestamp,
+            end_timestamp=row.end_timestamp,
+            interval=row.interval,
+            symbol=row.symbol,
+            open=row.open,
+            high=row.high,
+            low=row.low,
+            close=row.close,
+            volume=row.volume,
+            vwap=row.vwap,
+            trade_count=row.trade_count,
+            price_basis=row.price_basis,
+            adjustment_factor=row.adjustment_factor,
+            source=row.source,
+            ingested_at=row.ingested_at,
+            quality_flags=[],
+            session=row.market_session,
+        )
+
+    def to_contracts(self, rows: list[MarketBarRow]) -> list[MarketBarContract]:
+        return [self.to_contract(row) for row in rows]
 
     def get_by_bar_id(self, id_value: str) -> MarketBarRow | None:
         stmt = select(MarketBarRow).where(MarketBarRow.bar_id == id_value)
@@ -130,7 +155,9 @@ class MarketBarRepository(BaseRepository):
         existing.adjustment_factor = float(bar.adjustment_factor)
         existing.source = bar.source
         existing.ingested_at = bar.ingested_at
-        existing.quality_flags = [flag.value for flag in bar.quality_flags]
+        existing.quality_flags = (
+            [flag.value for flag in bar.quality_flags] if bar.quality_flags else []
+        )
         existing.market_session = bar.session
         self.session.flush()
         return existing
