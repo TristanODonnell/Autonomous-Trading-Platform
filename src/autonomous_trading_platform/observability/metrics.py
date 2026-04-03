@@ -165,3 +165,117 @@ symbols_received = meter.create_observable_gauge(
     callbacks=[_symbols_received_callback],
     unit="1",
 )
+
+# =============================
+# MARKET BACKFILL CYCLE METRICS
+# =============================
+
+# --- Cycle-level metrics ---
+
+market_backfill_cycle_runs = meter.create_counter(
+    name="ratp_market_backfill_cycle_runs_total",
+    description="Total number of market backfill cycle executions",
+    unit="1",
+)
+
+market_backfill_cycle_failures = meter.create_counter(
+    name="ratp_market_backfill_cycle_failures_total",
+    description="Total number of market backfill cycle failures",
+    unit="1",
+)
+
+market_backfill_cycle_duration = meter.create_histogram(
+    name="ratp_market_backfill_cycle_duration_seconds",
+    description="Market backfill cycle execution duration",
+    unit="s",
+)
+
+market_backfill_cycle_step_runs = meter.create_counter(
+    name="ratp_market_backfill_cycle_step_runs_total",
+    description="Total number of market backfill cycle step executions",
+    unit="1",
+)
+
+market_backfill_cycle_step_duration = meter.create_histogram(
+    name="ratp_market_backfill_cycle_step_duration_seconds",
+    description="Market backfill cycle step execution duration",
+    unit="s",
+)
+
+
+# --- Data throughput & processing metrics ---
+
+historical_bars_backfilled = meter.create_counter(
+    name="ratp_historical_bars_backfilled_total",
+    description="Total number of historical market bars successfully backfilled",
+    unit="1",
+)
+
+backfill_symbols_processed = meter.create_counter(
+    name="ratp_backfill_symbols_processed_total",
+    description="Total number of symbols processed during backfill",
+    unit="1",
+)
+
+backfill_symbol_failures = meter.create_counter(
+    name="ratp_backfill_symbol_failures_total",
+    description="Total number of symbol-level failures during backfill",
+    unit="1",
+)
+
+backfill_windows_processed = meter.create_counter(
+    name="ratp_backfill_windows_processed_total",
+    description="Total number of time windows processed during backfill",
+    unit="1",
+)
+
+backfill_api_requests = meter.create_counter(
+    name="ratp_backfill_api_requests_total",
+    description="Total number of API requests made during backfill",
+    unit="1",
+)
+
+backfill_api_request_failures = meter.create_counter(
+    name="ratp_backfill_api_request_failures_total",
+    description="Total number of failed API requests during backfill",
+    unit="1",
+)
+
+
+# --- Performance & distribution metrics ---
+
+backfill_symbol_duration_seconds = meter.create_histogram(
+    name="ratp_backfill_symbol_duration_seconds",
+    description="Time taken to backfill data for a single symbol",
+    unit="s",
+)
+
+backfill_window_duration_seconds = meter.create_histogram(
+    name="ratp_backfill_window_duration_seconds",
+    description="Time taken to process a single time window during backfill",
+    unit="s",
+)
+
+backfill_batch_size = meter.create_histogram(
+    name="ratp_backfill_batch_size",
+    description="Number of bars processed per batch during backfill",
+    unit="1",
+)
+
+backfill_days_requested = meter.create_histogram(
+    name="ratp_backfill_days_requested",
+    description="Number of days requested per backfill operation",
+    unit="1",
+)
+
+backfill_bars_per_symbol = meter.create_histogram(
+    name="ratp_backfill_bars_per_symbol",
+    description="Number of bars retrieved per symbol during backfill",
+    unit="1",
+)
+
+backfill_request_latency_seconds = meter.create_histogram(
+    name="ratp_backfill_request_latency_seconds",
+    description="Latency of API requests during backfill",
+    unit="s",
+)
