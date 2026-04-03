@@ -38,7 +38,7 @@ logger = get_logger(__name__)
 
 def _record_cycle_started(*, component: str, run_id: str) -> None:
     logger.info(
-        "ingestion_cycle_started run_id=%s component=%s",
+        "market_backfill_cycle_started run_id=%s component=%s",
         run_id,
         component,
     )
@@ -46,7 +46,7 @@ def _record_cycle_started(*, component: str, run_id: str) -> None:
 
 def _record_cycle_completed(*, component: str, run_id: str, duration_seconds: float) -> None:
     logger.info(
-        "ingestion_cycle_completed run_id=%s component=%s duration_seconds=%.6f",
+        "market_backfill_cycle_completed run_id=%s component=%s duration_seconds=%.6f",
         run_id,
         component,
         duration_seconds,
@@ -75,7 +75,7 @@ def _record_cycle_failed(
     duration_seconds: float,
 ) -> None:
     logger.exception(
-        "ingestion_cycle_failed run_id=%s component=%s duration_seconds=%.6f error=%s",
+        "market_backfill_cycle_failed run_id=%s component=%s duration_seconds=%.6f error=%s",
         run_id,
         component,
         duration_seconds,
@@ -106,7 +106,7 @@ def _record_cycle_failed(
 
 def _record_step_started(*, step: str, component: str, run_id: str) -> None:
     logger.info(
-        "ingestion_cycle_step_started run_id=%s component=%s step=%s",
+        "market_backfill_cycle_step_started run_id=%s component=%s step=%s",
         run_id,
         component,
         step,
@@ -129,7 +129,7 @@ def _record_step_completed(
     duration_seconds: float,
 ) -> None:
     logger.info(
-        "ingestion_cycle_step_completed run_id=%s component=%s step=%s duration_seconds=%.6f",
+        "market_backfill_cycle_step_completed run_id=%s component=%s step=%s duration_seconds=%.6f",
         run_id,
         component,
         step,
@@ -162,7 +162,7 @@ def _record_step_failed(
     duration_seconds: float,
 ) -> None:
     logger.exception(
-        "ingestion_cycle_step_failed run_id=%s component=%s step=%s duration_seconds=%.6f error=%s",
+        "market_backfill_cycle_step_failed run_id=%s component=%s step=%s duration_seconds=%.6f error=%s",
         run_id,
         component,
         step,

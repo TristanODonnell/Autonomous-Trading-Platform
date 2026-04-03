@@ -279,3 +279,129 @@ backfill_request_latency_seconds = meter.create_histogram(
     description="Latency of API requests during backfill",
     unit="s",
 )
+
+# ==========================================
+# CORPORATE ACTION INGESTION CYCLE METRICS
+# ==========================================
+
+# --- Cycle-level metrics ---
+
+corporate_action_ingestion_cycle_runs = meter.create_counter(
+    name="ratp_corporate_action_ingestion_cycle_runs_total",
+    description="Total number of corporate action ingestion cycle executions",
+    unit="1",
+)
+
+corporate_action_ingestion_cycle_failures = meter.create_counter(
+    name="ratp_corporate_action_ingestion_cycle_failures_total",
+    description="Total number of corporate action ingestion cycle failures",
+    unit="1",
+)
+
+corporate_action_ingestion_cycle_duration = meter.create_histogram(
+    name="ratp_corporate_action_ingestion_cycle_duration_seconds",
+    description="Corporate action ingestion cycle execution duration",
+    unit="s",
+)
+
+corporate_action_ingestion_cycle_step_runs = meter.create_counter(
+    name="ratp_corporate_action_ingestion_cycle_step_runs_total",
+    description="Total number of corporate action ingestion cycle step executions",
+    unit="1",
+)
+
+corporate_action_ingestion_cycle_step_duration = meter.create_histogram(
+    name="ratp_corporate_action_ingestion_cycle_step_duration_seconds",
+    description="Corporate action ingestion cycle step execution duration",
+    unit="s",
+)
+
+
+# --- Data throughput & processing metrics ---
+
+corporate_actions_ingested = meter.create_counter(
+    name="ratp_corporate_actions_ingested_total",
+    description="Total number of corporate actions successfully ingested",
+    unit="1",
+)
+
+corporate_action_records_processed = meter.create_counter(
+    name="ratp_corporate_action_records_processed_total",
+    description="Total number of corporate action records processed",
+    unit="1",
+)
+
+affected_symbols_processed = meter.create_counter(
+    name="ratp_affected_symbols_processed_total",
+    description="Total number of symbols affected by processed corporate actions",
+    unit="1",
+)
+
+adjustments_applied = meter.create_counter(
+    name="ratp_adjustments_applied_total",
+    description="Total number of price/history adjustments applied due to corporate actions",
+    unit="1",
+)
+
+adjustment_failures = meter.create_counter(
+    name="ratp_adjustment_failures_total",
+    description="Total number of failures while applying corporate action adjustments",
+    unit="1",
+)
+
+corporate_action_validation_failures = meter.create_counter(
+    name="ratp_corporate_action_validation_failures_total",
+    description="Total number of corporate action validation failures",
+    unit="1",
+)
+
+corporate_action_normalization_failures = meter.create_counter(
+    name="ratp_corporate_action_normalization_failures_total",
+    description="Total number of corporate action normalization failures",
+    unit="1",
+)
+
+unsupported_corporate_actions = meter.create_counter(
+    name="ratp_unsupported_corporate_actions_total",
+    description="Total number of unsupported corporate action records encountered",
+    unit="1",
+)
+
+
+# --- Performance & distribution metrics ---
+
+corporate_action_ingestion_batch_size = meter.create_histogram(
+    name="ratp_corporate_action_ingestion_batch_size",
+    description="Number of corporate action records processed per batch",
+    unit="1",
+)
+
+corporate_action_request_latency_seconds = meter.create_histogram(
+    name="ratp_corporate_action_request_latency_seconds",
+    description="Latency of upstream corporate action data requests",
+    unit="s",
+)
+
+corporate_action_processing_duration_seconds = meter.create_histogram(
+    name="ratp_corporate_action_processing_duration_seconds",
+    description="Time taken to process a corporate action record or batch",
+    unit="s",
+)
+
+corporate_action_adjustment_duration_seconds = meter.create_histogram(
+    name="ratp_corporate_action_adjustment_duration_seconds",
+    description="Time taken to apply historical adjustments for a corporate action",
+    unit="s",
+)
+
+affected_bars_per_action = meter.create_histogram(
+    name="ratp_affected_bars_per_action",
+    description="Number of historical bars affected by a single corporate action",
+    unit="1",
+)
+
+actions_per_symbol = meter.create_histogram(
+    name="ratp_actions_per_symbol",
+    description="Number of corporate actions processed per symbol",
+    unit="1",
+)
