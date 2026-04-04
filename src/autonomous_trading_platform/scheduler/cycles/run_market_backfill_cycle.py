@@ -177,7 +177,7 @@ def _record_step_failed(
             "status": "failed",
         },
     )
-    market_backfill_cycle_duration.record(
+    market_backfill_cycle_step_duration.record(
         duration_seconds,
         {
             "component": component,
@@ -195,7 +195,6 @@ def run_market_backfill_cycle(
     """
     Entry point for the Airflow historical market-data backfill DAG.
     """
-
     now = datetime.now(UTC)
     cycle_wall_start = perf_counter()
 
@@ -205,9 +204,11 @@ def run_market_backfill_cycle(
 
     run_id = uuid.uuid4()
     component = "scheduler.run_market_backfill_cycle"
+    base_metadata: dict[str, object] = {}
+
     _record_cycle_started(component=component, run_id=str(run_id))
+
     try:
-        # TODO: Replace with universe symbols
         if symbols is None:
             symbols = [
                 "SPY",
@@ -246,6 +247,7 @@ def run_market_backfill_cycle(
             notes="Historical market bar backfill cycle",
         )
         manifest_service.save(manifest)
+
         base_metadata = {
             "pipeline": "market_backfill",
             "symbols": symbols,
@@ -255,7 +257,7 @@ def run_market_backfill_cycle(
             "manifest_interval": manifest.interval.value,
         }
 
-        with start_span("market_backfill_cycle") as cycle_span:
+        with start_span("market_backfill_cycle.run") as cycle_span:
             cycle_span.set_attribute("ratp.run_id", str(run_id))
             cycle_span.set_attribute("ratp.component", component)
             cycle_span.set_attribute("ratp.cycle_start", start.isoformat())
@@ -264,9 +266,10 @@ def run_market_backfill_cycle(
 
             audit_logger.record_run_started(
                 run_id=str(run_id),
-                component="market_backfill",
+                component=component,
                 metadata=base_metadata,
             )
+
             raw_client = get_stock_historical_client()
             historical_client = AlpacaHistoricalBarsClient(raw_client)
 
@@ -276,29 +279,61 @@ def run_market_backfill_cycle(
                 run_id=str(run_id),
                 audit_logger=audit_logger,
             )
-            asyncio.run(
-                job.run(
-                    symbols=symbols,
-                    start=start,
-                    end=end,
+
+            step = "backfill_market_bars"
+            _record_step_started(step=step, component=component, run_id=str(run_id))
+
+            step_start = perf_counter()
+            try:
+                with start_span("market_backfill_cycle.backfill_market_bars") as step_span:
+                    step_span.set_attribute("ratp.run_id", str(run_id))
+                    step_span.set_attribute("ratp.step", step)
+                    step_span.set_attribute("ratp.expected_symbol_count", len(symbols))
+
+                    asyncio.run(
+                        job.run(
+                            symbols=symbols,
+                            start=start,
+                            end=end,
+                        )
+                    )
+
+                step_duration = perf_counter() - step_start
+                _record_step_completed(
+                    step=step,
+                    component=component,
+                    run_id=str(run_id),
+                    duration_seconds=step_duration,
                 )
-            )
+            except Exception as exc:
+                step_duration = perf_counter() - step_start
+                _record_step_failed(
+                    step=step,
+                    component=component,
+                    run_id=str(run_id),
+                    exc=exc,
+                    duration_seconds=step_duration,
+                )
+                raise
+
             audit_logger.record_run_completed(
                 run_id=str(run_id),
-                component="market_backfill",
+                component=component,
                 metadata=base_metadata,
             )
+
             total_duration = perf_counter() - cycle_wall_start
             _record_cycle_completed(
                 component=component,
                 run_id=str(run_id),
                 duration_seconds=total_duration,
             )
+
     except Exception as exc:
         total_duration = perf_counter() - cycle_wall_start
         audit_logger.record_run_failed(
             run_id=str(run_id),
-            component="market_backfill",
+            component=component,
             metadata={
                 **base_metadata,
                 "error": str(exc),

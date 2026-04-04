@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import platform
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -168,7 +170,7 @@ def _record_step_failed(
             "status": "failed",
         },
     )
-    corporate_action_ingestion_cycle_duration.record(
+    corporate_action_ingestion_cycle_step_duration.record(
         duration_seconds,
         {
             "component": component,
@@ -190,11 +192,12 @@ def run_corporate_action_ingestion_cycle() -> None:
     manifest_service = RunManifestService(session=session)
 
     run_id = uuid.uuid4()
-    component = "corporate_action_ingestion_cycle"
+    component = "scheduler.run_corporate_action_ingestion_cycle"
+    base_metadata: dict[str, object] = {}
+
     _record_cycle_started(component=component, run_id=str(run_id))
 
     try:
-        # Daily ingestion window
         cycle_end = now_utc
         cycle_start = cycle_end - timedelta(days=1)
 
@@ -219,47 +222,47 @@ def run_corporate_action_ingestion_cycle() -> None:
             notes="Daily corporate actions ingestion cycle",
         )
         manifest_service.save(manifest)
+
         base_metadata = {
             "run_id": str(run_id),
             "cycle_start": cycle_start.isoformat(),
             "cycle_end": cycle_end.isoformat(),
             "pipeline": "corporate_actions_ingestion",
-            "manifest_run_type": manifest.run_type,
+            "manifest_run_type": manifest.run_type.value,
         }
 
-        with start_span("corporate_action_ingestion_cycle") as cycle_span:
+        with start_span("corporate_action_ingestion_cycle.run") as cycle_span:
             cycle_span.set_attribute("ratp.run_id", str(run_id))
             cycle_span.set_attribute("ratp.component", component)
             cycle_span.set_attribute("ratp.cycle_start", cycle_start.isoformat())
             cycle_span.set_attribute("ratp.cycle_end", cycle_end.isoformat())
 
-            manifest_service.save(manifest)
-
             audit_logger.record_run_started(
                 run_id=str(run_id),
-                component="corporate_actions_ingestion",
+                component=component,
                 metadata=base_metadata,
             )
+
             step = "ingest_corporate_actions"
             _record_step_started(step=step, component=component, run_id=str(run_id))
 
             step_start = perf_counter()
             try:
-                job = IngestCorporateActionsJob(
-                    session=session,
-                    run_id=str(run_id),
-                    audit_logger=audit_logger,
-                    cycle_timestamp=cycle_end,
-                )
-                job.ingest_corporate_actions_job()
-                step_duration = perf_counter() - step_start
+                with start_span(
+                    "corporate_action_ingestion_cycle.ingest_corporate_actions"
+                ) as step_span:
+                    step_span.set_attribute("ratp.run_id", str(run_id))
+                    step_span.set_attribute("ratp.step", step)
 
-                audit_logger.record_run_completed(
-                    run_id=str(run_id),
-                    component="corporate_actions_ingestion",
-                    metadata=base_metadata,
-                )
-                total_duration = perf_counter() - cycle_wall_start
+                    job = IngestCorporateActionsJob(
+                        session=session,
+                        run_id=str(run_id),
+                        audit_logger=audit_logger,
+                        cycle_timestamp=cycle_end,
+                    )
+                    job.ingest_corporate_actions_job()
+
+                step_duration = perf_counter() - step_start
                 _record_step_completed(
                     step=step,
                     component=component,
@@ -279,29 +282,27 @@ def run_corporate_action_ingestion_cycle() -> None:
 
             audit_logger.record_run_completed(
                 run_id=str(run_id),
-                component="corporate_actions_ingestion",
+                component=component,
                 metadata=base_metadata,
             )
 
             total_duration = perf_counter() - cycle_wall_start
-
             _record_cycle_completed(
                 component=component,
                 run_id=str(run_id),
                 duration_seconds=total_duration,
             )
+
     except Exception as exc:
         total_duration = perf_counter() - cycle_wall_start
-
         audit_logger.record_run_failed(
             run_id=str(run_id),
-            component="corporate_actions_ingestion",
+            component=component,
             metadata={
                 **base_metadata,
                 "error": str(exc),
             },
         )
-
         _record_cycle_failed(
             component=component,
             run_id=str(run_id),
