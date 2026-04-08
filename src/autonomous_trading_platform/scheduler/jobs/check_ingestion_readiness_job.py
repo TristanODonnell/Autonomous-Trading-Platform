@@ -15,6 +15,7 @@ from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
     ingestion_readiness_job_duration,
     ingestion_readiness_job_failures,
+    ingestion_readiness_job_ingestion_lag,
     ingestion_readiness_job_runs,
 )
 from autonomous_trading_platform.observability.tracing import start_span
@@ -67,6 +68,19 @@ def check_ingestion_readiness_job(
             job_span.set_attribute("ratp.now_utc", resolved_now.isoformat())
 
             cycle_window = build_trading_cycle_window(now_utc=resolved_now)
+
+            ingestion_lag_seconds = max(
+                0.0,
+                (resolved_now - cycle_window.ingestion_deadline).total_seconds(),
+            )
+            ingestion_readiness_job_ingestion_lag.record(
+                ingestion_lag_seconds,
+                {
+                    "component": component,
+                    "job": job,
+                },
+            )
+            job_span.set_attribute("ratp.ingestion.lag_seconds", ingestion_lag_seconds)
 
             if resolved_now > cycle_window.ingestion_deadline:
                 result = IngestionReadinessResult(

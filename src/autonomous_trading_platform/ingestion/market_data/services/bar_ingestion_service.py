@@ -16,6 +16,8 @@ from autonomous_trading_platform.contracts.common.enums import (
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 from autonomous_trading_platform.ingestion.helpers.bar_identity import build_bar_id
 from autonomous_trading_platform.ingestion.helpers.session import classify_market_session
+from autonomous_trading_platform.observability.enums import SpanTimespan
+from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
@@ -63,77 +65,96 @@ class BarIngestionService:
         )
 
     async def handle_minute_bar(self, provider_bar: Bar) -> MarketBar | None:
-        minute_bar = self._convert_provider_bar(provider_bar)
+        with start_span(
+            "bar_ingestion_service.ingest_bar",
+            timespan=SpanTimespan.STEP,
+        ) as ingest_span:
+            ingest_span.set_attribute("ratp.run_id", self.run_id)
+            ingest_span.set_attribute("ratp.symbol", provider_bar.symbol)
+            minute_bar = self._convert_provider_bar(provider_bar)
+            five_min_bar = self.aggregator.add_minute_bar(minute_bar)
+            if five_min_bar is None:
+                self.next_bar_decision = NextBarDecision(
+                    should_schedule_evaluation=False,
+                    reason="incomplete_bar",
+                    bar=None,
+                )
+                return None
 
-        five_min_bar = self.aggregator.add_minute_bar(minute_bar)
-        if five_min_bar is None:
-            self.next_bar_decision = NextBarDecision(
-                should_schedule_evaluation=False,
-                reason="incomplete_bar",
-                bar=None,
+        with start_span(
+            "bar_ingestion_service.validate_bar",
+            timespan=SpanTimespan.STEP,
+        ) as validation_span:
+            validation_span.set_attribute("ratp.run_id", self.run_id)
+            validation_span.set_attribute("ratp.symbol", five_min_bar.symbol)
+            validation_span.set_attribute("ratp.bar_timestamp", five_min_bar.timestamp.isoformat())
+            validation_result = self.validation_service.validate_bar(five_min_bar)
+            if not validation_result.ok:
+                self.next_bar_decision = NextBarDecision(
+                    should_schedule_evaluation=False,
+                    reason="invalid_bar",
+                    bar=five_min_bar,
+                )
+                return None
+
+            is_late = self.validation_service.is_late_bar(
+                five_min_bar,
+                now_utc=self.now_provider(),
+                allowed_delay=timedelta(seconds=30),
             )
-            return None
-
-        validation_result = self.validation_service.validate_bar(five_min_bar)
-        if not validation_result.ok:
-            self.next_bar_decision = NextBarDecision(
-                should_schedule_evaluation=False,
-                reason="invalid_bar",
-                bar=five_min_bar,
-            )
-            return None
-
-        is_late = self.validation_service.is_late_bar(
-            five_min_bar,
-            now_utc=self.now_provider(),
-            allowed_delay=timedelta(seconds=30),
-        )
-        if is_late:
-            five_min_bar.quality_flags.append(BarQualityFlag.LATE)
-            self.audit_logger.record_bar_late(
-                run_id=self.run_id,
-                symbol=five_min_bar.symbol,
-                bar_end_timestamp=five_min_bar.end_timestamp,
-            )
-
-        previous_bar = self.last_bar_by_symbol.get(five_min_bar.symbol)
-        reference_close = previous_bar.close if previous_bar else None
-
-        is_suspected_outlier = self.validation_service.is_suspected_outlier(
-            five_min_bar,
-            reference_close,
-        )
-        if is_suspected_outlier:
-            five_min_bar.quality_flags.append(BarQualityFlag.SUSPECTED_OUTLIER)
-
-            if reference_close is not None:
-                self.audit_logger.record_bar_outlier(
+            if is_late:
+                five_min_bar.quality_flags.append(BarQualityFlag.LATE)
+                self.audit_logger.record_bar_late(
                     run_id=self.run_id,
                     symbol=five_min_bar.symbol,
-                    cycle_timestamp=five_min_bar.timestamp,
-                    reference_close=reference_close,
-                    observed_close=five_min_bar.close,
+                    bar_end_timestamp=five_min_bar.end_timestamp,
                 )
 
-        with self.uow_factory(self.session) as uow:
-            uow.market_bars.upsert(five_min_bar)
+            previous_bar = self.last_bar_by_symbol.get(five_min_bar.symbol)
+            reference_close = previous_bar.close if previous_bar else None
 
-        if is_late:
+            is_suspected_outlier = self.validation_service.is_suspected_outlier(
+                five_min_bar,
+                reference_close,
+            )
+            if is_suspected_outlier:
+                five_min_bar.quality_flags.append(BarQualityFlag.SUSPECTED_OUTLIER)
+
+                if reference_close is not None:
+                    self.audit_logger.record_bar_outlier(
+                        run_id=self.run_id,
+                        symbol=five_min_bar.symbol,
+                        cycle_timestamp=five_min_bar.timestamp,
+                        reference_close=reference_close,
+                        observed_close=five_min_bar.close,
+                    )
+
+        with start_span(
+            "bar_ingestion_service.persist_bar",
+            timespan=SpanTimespan.STEP,
+        ) as persistence_span:
+            persistence_span.set_attribute("ratp.run_id", self.run_id)
+            persistence_span.set_attribute("ratp.symbol", five_min_bar.symbol)
+            persistence_span.set_attribute("ratp.bar_timestamp", five_min_bar.timestamp.isoformat())
+            with self.uow_factory(self.session) as uow:
+                uow.market_bars.upsert(five_min_bar)
+
+            if is_late:
+                self.next_bar_decision = NextBarDecision(
+                    should_schedule_evaluation=False,
+                    reason="late_bar",
+                    bar=five_min_bar,
+                )
+                return None
+
+            self.last_bar_by_symbol[five_min_bar.symbol] = five_min_bar
+
             self.next_bar_decision = NextBarDecision(
-                should_schedule_evaluation=False,
-                reason="late_bar",
+                should_schedule_evaluation=True,
+                reason="complete_valid_bar",
                 bar=five_min_bar,
             )
-            return None
-
-        self.last_bar_by_symbol[five_min_bar.symbol] = five_min_bar
-
-        self.next_bar_decision = NextBarDecision(
-            should_schedule_evaluation=True,
-            reason="complete_valid_bar",
-            bar=five_min_bar,
-        )
-        return five_min_bar
+            return five_min_bar
 
     @staticmethod
     def _convert_provider_bar(provider_bar: Bar) -> MarketBar:

@@ -12,6 +12,7 @@ from autonomous_trading_platform.observability.metrics import (
     backfill_batch_size,
     backfill_request_latency_seconds,
     backfill_symbol_failures,
+    backfill_throughput,
     historical_bars_backfilled,
 )
 from autonomous_trading_platform.observability.tracing import start_span
@@ -53,7 +54,7 @@ class MarketBackfillService:
     ) -> None:
         component = "ingestion.market_backfill_service"
         request_start = perf_counter()
-
+        service_start = perf_counter()
         logger.info(
             "market_backfill_service_started run_id=%s component=%s symbol_count=%s start=%s end=%s",
             self.run_id,
@@ -209,6 +210,20 @@ class MarketBackfillService:
                         str(exc),
                     )
                     raise
+
+            service_duration = perf_counter() - service_start
+            throughput = processed_bars / service_duration if service_duration > 0 else 0.0
+
+            backfill_throughput.record(
+                throughput,
+                {
+                    "component": component,
+                },
+            )
+
+            service_span.set_attribute("ratp.backfill.processed_bars", processed_bars)
+            service_span.set_attribute("ratp.backfill.duration_seconds", service_duration)
+            service_span.set_attribute("ratp.backfill.throughput_bars_per_second", throughput)
 
             logger.info(
                 "market_backfill_service_completed run_id=%s component=%s processed_bars=%s",

@@ -8,3 +8,7 @@ class InvalidOrderTransitionError(ExecutionError):
 
 class InvalidStrategyTransitionError(ExecutionError):
     """Raised when a strategy lifecycle event is invalid for the current state."""
+
+
+class OrderNotAllowedForSubmissionError(ExecutionError):
+    """Raised when an order submission is blocked by pre-trade controls."""

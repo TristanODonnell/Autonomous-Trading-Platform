@@ -71,6 +71,13 @@ ingestion_readiness_job_duration = meter.create_histogram(
     unit="s",
 )
 
+ingestion_readiness_job_ingestion_lag = meter.create_histogram(
+    name="ratp_ingestion_readiness_job_ingestion_lag_seconds",
+    description="Ingestion readiness job ingestion lag seconds",
+    unit="s",
+)
+
+
 # --- Strategy Evaluation ---
 
 evaluate_strategy_job_runs = meter.create_counter(
@@ -131,6 +138,18 @@ order_submission_job_duration = meter.create_histogram(
     unit="s",
 )
 
+order_submission_latency_seconds = meter.create_histogram(
+    name="ratp_order_submission_latency_seconds",
+    description="Latency of broker order submission requests",
+    unit="s",
+)
+
+order_submission_risk_rejection_count = meter.create_counter(
+    name="ratp_order_submission_risk_rejection_count_total",
+    description="Total number of order submission risk rejection count",
+    unit="1",
+)
+
 # --- Order Reconciliation ---
 
 order_reconciliation_job_runs = meter.create_counter(
@@ -149,6 +168,12 @@ order_reconciliation_job_duration = meter.create_histogram(
     name="ratp_order_reconciliation_job_duration_seconds",
     description="Order reconciliation job execution duration",
     unit="s",
+)
+
+order_reconciliation_mismatches = meter.create_counter(
+    name="ratp_order_reconciliation_mismatches_total",
+    description="Total number of reconciliation mismatches detected",
+    unit="1",
 )
 
 # --- Risk Snapshot ---
@@ -227,6 +252,7 @@ ingestion_job_duration = meter.create_histogram(
     description="Ingestion job execution duration",
     unit="s",
 )
+
 
 # --- Data throughput metrics ---
 
@@ -363,6 +389,12 @@ market_backfill_job_duration = meter.create_histogram(
     name="ratp_market_backfill_job_duration_seconds",
     description="Market backfill job execution duration",
     unit="s",
+)
+
+backfill_throughput = meter.create_histogram(
+    name="ratp_backfill_throughput_bars_per_second",
+    description="Backfill throughput measured in bars processed per second",
+    unit="bars/s",
 )
 
 # --- Data throughput & processing metrics ---
