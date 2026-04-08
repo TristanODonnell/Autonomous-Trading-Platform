@@ -16,6 +16,7 @@ from autonomous_trading_platform.observability.metrics import (
     order_reconciliation_job_duration,
     order_reconciliation_job_failures,
     order_reconciliation_job_runs,
+    order_reconciliation_mismatches,
 )
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
@@ -71,12 +72,22 @@ def run_order_reconciliation_job(
                     )
                 )
 
+            mismatch_count = 0
             for tracked_order in tracked_orders:
                 try:
                     result = execution_context.order_reconciliation_service.reconcile_order(
                         tracked_order,
                         now=resolved_now,
                     )
+                    if result.event_applied is not None:
+                        mismatch_count += 1
+                        order_reconciliation_mismatches.add(
+                            1,
+                            {
+                                "component": component,
+                                "job": job,
+                            },
+                        )
                 except TimeoutError as exc:
                     raise TransientInfrastructureError(f"reconciliation timeout: {exc}") from exc
                 except ConnectionError as exc:
@@ -100,7 +111,7 @@ def run_order_reconciliation_job(
                         result=result,
                         now_utc=resolved_now,
                     )
-
+            job_span.set_attribute("ratp.reconciliation.mismatch_count", mismatch_count)
         duration = perf_counter() - job_start
         record_job_completed(
             logger=logger,

@@ -137,24 +137,41 @@ class CorporateActionIngestionService:
                         },
                     )
 
-                    try:
-                        action = self.normalization_service.parse_alpaca_corporate_action(
-                            raw_action
+                    with start_span(
+                        "corporate_action_ingestion_service.normalize_action",
+                        timespan=SpanTimespan.STEP,
+                    ) as normalization_span:
+                        normalization_span.set_attribute("ratp.run_id", self.run_id)
+                        normalization_span.set_attribute(
+                            "ratp.symbol", raw_action.get("symbol", "UNKNOWN")
                         )
-                    except ValueError:
-                        corporate_action_normalization_failures.add(
-                            1,
-                            {
-                                "component": component,
-                                "symbol": symbol,
-                            },
-                        )
-                        self.audit_logger.record_corporate_action_parse_failed(
-                            run_id=self.run_id,
-                            symbol=symbol,
-                            cycle_timestamp=self.cycle_timestamp,
-                        )
-                        continue
+                        try:
+                            action = self.normalization_service.parse_alpaca_corporate_action(
+                                raw_action
+                            )
+                            normalization_span.set_attribute("ratp.normalization.failed", False)
+                            normalization_span.set_attribute(
+                                "ratp.action_type", action.action_type.value
+                            )
+                            normalization_span.set_attribute(
+                                "ratp.effective_date",
+                                action.effective_date.isoformat(),
+                            )
+                        except ValueError:
+                            normalization_span.set_attribute("ratp.normalization.failed", True)
+                            corporate_action_normalization_failures.add(
+                                1,
+                                {
+                                    "component": component,
+                                    "symbol": symbol,
+                                },
+                            )
+                            self.audit_logger.record_corporate_action_parse_failed(
+                                run_id=self.run_id,
+                                symbol=symbol,
+                                cycle_timestamp=self.cycle_timestamp,
+                            )
+                            continue
 
                     actions_per_symbol.record(
                         1,
@@ -164,23 +181,35 @@ class CorporateActionIngestionService:
                         },
                     )
 
-                    validation_result = self.validation_service.validate(action)
-                    if not validation_result.ok:
-                        corporate_action_validation_failures.add(
-                            1,
-                            {
-                                "component": component,
-                                "symbol": action.symbol,
-                            },
-                        )
-                        self.audit_logger.record_corporate_action_validation_failed(
-                            run_id=self.run_id,
-                            symbol=action.symbol,
-                            cycle_timestamp=self.cycle_timestamp,
-                        )
-                        continue
+                    with start_span(
+                        "corporate_action_ingestion_service.validate_action",
+                        timespan=SpanTimespan.STEP,
+                    ) as validation_span:
+                        validation_span.set_attribute("ratp.run_id", self.run_id)
+                        validation_span.set_attribute("ratp.symbol", action.symbol)
+                        validation_result = self.validation_service.validate(action)
+                        if not validation_result.ok:
+                            corporate_action_validation_failures.add(
+                                1,
+                                {
+                                    "component": component,
+                                    "symbol": action.symbol,
+                                },
+                            )
+                            self.audit_logger.record_corporate_action_validation_failed(
+                                run_id=self.run_id,
+                                symbol=action.symbol,
+                                cycle_timestamp=self.cycle_timestamp,
+                            )
+                            continue
 
-                    result = uow.corporate_actions.upsert(action)
+                    with start_span(
+                        "corporate_action_ingestion_service.persist_action",
+                        timespan=SpanTimespan.STEP,
+                    ) as persistence_span:
+                        persistence_span.set_attribute("ratp.run_id", self.run_id)
+                        persistence_span.set_attribute("ratp.symbol", action.symbol)
+                        result = uow.corporate_actions.upsert(action)
 
                     if not result.created:
                         continue

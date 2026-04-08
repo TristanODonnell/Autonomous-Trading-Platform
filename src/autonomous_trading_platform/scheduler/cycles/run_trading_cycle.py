@@ -138,6 +138,10 @@ def run_trading_cycle(now_utc: datetime | None = None):
         cycle_span.set_attribute("ratp.cycle_end", trading_cycle_window.cycle_end.isoformat())
         cycle_span.set_attribute("ratp.expected_symbol_count", len(expected_symbols))
         cycle_span.set_attribute("ratp.trading_environment", settings.trading_environment.value)
+        cycle_span.set_attribute("ratp.strategy_id", manifest.strategy_id)
+        cycle_span.set_attribute("ratp.dataset_version", manifest.dataset_version)
+        cycle_span.set_attribute("ratp.universe_version", manifest.universe_version)
+        cycle_span.set_attribute("ratp.bar_timestamp", manifest.bar_timestamp.isoformat())
 
         try:
             audit_logger.record_run_started(

@@ -13,6 +13,7 @@ from autonomous_trading_platform.contracts.common.enums import (
     StrategyEvent,
 )
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
+from autonomous_trading_platform.execution.errors import OrderNotAllowedForSubmissionError
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     JobMetricSet,
@@ -25,6 +26,8 @@ from autonomous_trading_platform.observability.metrics import (
     order_submission_job_duration,
     order_submission_job_failures,
     order_submission_job_runs,
+    order_submission_latency_seconds,
+    order_submission_risk_rejection_count,
 )
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
@@ -107,19 +110,55 @@ def run_order_submission_job(
                     )
                 )
                 intent.idempotency_key = idempotency_key
+                with start_span(
+                    "order_submission_job.risk_check",
+                    timespan=SpanTimespan.STEP,
+                ) as risk_span:
+                    risk_span.set_attribute("ratp.run_id", str(run_id))
+                    risk_span.set_attribute("ratp.component", component)
+                    risk_span.set_attribute("ratp.job", job)
+                    risk_span.set_attribute("ratp.order_intent_id", str(intent.intent_id))
+                    risk_span.set_attribute("ratp.symbol", intent.symbol)
+                    risk_span.set_attribute("ratp.bar_timestamp", intent.bar_timestamp.isoformat())
 
-                safety_context.order_throttle_service.assert_order_allowed_for_submission(
-                    order_intent=intent,
-                    now=now_utc,
-                    bar_timestamp=intent.bar_timestamp,
-                )
+                    try:
+                        safety_context.order_throttle_service.assert_order_allowed_for_submission(
+                            order_intent=intent,
+                            now=now_utc,
+                            bar_timestamp=intent.bar_timestamp,
+                        )
+                        risk_span.set_attribute("ratp.risk_check.allowed", True)
 
+                    except OrderNotAllowedForSubmissionError:
+                        risk_span.set_attribute("ratp.risk_check.allowed", False)
+                        risk_span.set_attribute("ratp.risk_check.rejected", True)
+
+                        order_submission_risk_rejection_count.add(
+                            1,
+                            {
+                                "component": component,
+                                "job": job,
+                            },
+                        )
+                        raise
                 if shadow_mode_enabled:
                     continue
 
                 try:
                     try:
+                        submit_start = perf_counter()
                         response = execution_context.order_execution_service.submit(intent)
+                        submit_duration = perf_counter() - submit_start
+                        order_submission_latency_seconds.record(
+                            submit_duration,
+                            {
+                                "component": component,
+                                "job": job,
+                            },
+                        )
+                        job_span.set_attribute(
+                            "ratp.order_submission.last_latency_seconds", submit_duration
+                        )
                     except TimeoutError as exc:
                         raise TransientInfrastructureError(f"broker timeout: {exc}") from exc
                     except ConnectionError as exc:
