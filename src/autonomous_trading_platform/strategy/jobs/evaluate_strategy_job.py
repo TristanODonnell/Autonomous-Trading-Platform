@@ -14,6 +14,7 @@ from autonomous_trading_platform.common.errors import (
 from autonomous_trading_platform.contracts.common.enums import BarInterval, RunType
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.contracts.trading.signal import Signal
+from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     JobMetricSet,
     record_job_completed,
@@ -26,6 +27,7 @@ from autonomous_trading_platform.observability.metrics import (
     evaluate_strategy_job_failures,
     evaluate_strategy_job_runs,
 )
+from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.run_manifest_service import (
     RunManifestService,
 )
@@ -102,59 +104,81 @@ class EvaluateStrategyJob:
         )
 
         try:
-            readiness = self.readiness_service.get_next_ready_bar(now)
+            with start_span(
+                "evaluate_strategy_job.run",
+                timespan=SpanTimespan.JOB,
+            ) as job_span:
+                job_span.set_attribute("ratp.run_id", parent_run_id)
+                job_span.set_attribute("ratp.component", component)
+                job_span.set_attribute("ratp.job", job)
+                job_span.set_attribute("ratp.now_utc", now.isoformat())
 
-            if readiness.target_bar_timestamp is None:
-                result = EvaluateStrategyJobResult(
-                    evaluated=False,
-                    reason=readiness.reason,
-                    signals_emitted=0,
-                    target_bar_timestamp=None,
-                    signals=[],
-                    run_id=None,
+                readiness = self.readiness_service.get_next_ready_bar(now)
+
+                if readiness.target_bar_timestamp is None:
+                    result = EvaluateStrategyJobResult(
+                        evaluated=False,
+                        reason=readiness.reason,
+                        signals_emitted=0,
+                        target_bar_timestamp=None,
+                        signals=[],
+                        run_id=None,
+                    )
+
+                    job_span.set_attribute("ratp.evaluated", result.evaluated)
+                    if result.reason is not None:
+                        job_span.set_attribute("ratp.reason", result.reason)
+
+                    duration = perf_counter() - job_start
+                    record_job_completed(
+                        logger=logger,
+                        metrics=EVALUATE_STRATEGY_JOB_METRICS,
+                        job=job,
+                        component=component,
+                        run_id=parent_run_id,
+                        duration_seconds=duration,
+                    )
+                    return result
+
+                job_span.set_attribute(
+                    "ratp.target_bar_timestamp",
+                    readiness.target_bar_timestamp.isoformat(),
                 )
 
-                duration = perf_counter() - job_start
-                record_job_completed(
-                    logger=logger,
-                    metrics=EVALUATE_STRATEGY_JOB_METRICS,
-                    job=job,
-                    component=component,
-                    run_id=parent_run_id,
-                    duration_seconds=duration,
+                evaluation_run_id = uuid4()
+
+                result = self.evaluation_service.evaluate(
+                    bar_timestamp=readiness.target_bar_timestamp,
+                    run_id=evaluation_run_id,
+                    evaluation_timestamp=now,
                 )
-                return result
 
-            evaluation_run_id = uuid4()
+                if result.signals:
+                    self.signal_writer.save_many(result.signals)
 
-            result = self.evaluation_service.evaluate(
-                bar_timestamp=readiness.target_bar_timestamp,
-                run_id=evaluation_run_id,
-                evaluation_timestamp=now,
-            )
+                self.checkpoint_writer.mark_evaluated(readiness.target_bar_timestamp)
 
-            if result.signals:
-                self.signal_writer.save_many(result.signals)
+                manifest = self._build_run_manifest(
+                    run_id=evaluation_run_id,
+                    bar_timestamp=readiness.target_bar_timestamp,
+                    evaluation_timestamp=now,
+                    strategy_id=result.strategy_id,
+                    signals_emitted=len(result.signals),
+                )
+                self.run_manifest_service.save(manifest)
 
-            self.checkpoint_writer.mark_evaluated(readiness.target_bar_timestamp)
+                final_result = EvaluateStrategyJobResult(
+                    evaluated=True,
+                    reason=None,
+                    signals_emitted=len(result.signals),
+                    target_bar_timestamp=readiness.target_bar_timestamp,
+                    signals=result.signals,
+                    run_id=evaluation_run_id,
+                )
 
-            manifest = self._build_run_manifest(
-                run_id=evaluation_run_id,
-                bar_timestamp=readiness.target_bar_timestamp,
-                evaluation_timestamp=now,
-                strategy_id=result.strategy_id,
-                signals_emitted=len(result.signals),
-            )
-            self.run_manifest_service.save(manifest)
-
-            final_result = EvaluateStrategyJobResult(
-                evaluated=True,
-                reason=None,
-                signals_emitted=len(result.signals),
-                target_bar_timestamp=readiness.target_bar_timestamp,
-                signals=result.signals,
-                run_id=evaluation_run_id,
-            )
+                job_span.set_attribute("ratp.evaluated", final_result.evaluated)
+                job_span.set_attribute("ratp.signals_emitted", final_result.signals_emitted)
+                job_span.set_attribute("ratp.evaluation_run_id", str(evaluation_run_id))
 
             duration = perf_counter() - job_start
             record_job_completed(

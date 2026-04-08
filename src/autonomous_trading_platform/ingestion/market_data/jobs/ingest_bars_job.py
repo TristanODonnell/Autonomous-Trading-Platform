@@ -12,6 +12,7 @@ from autonomous_trading_platform.ingestion.market_data.clients import (
 from autonomous_trading_platform.ingestion.market_data.services.bar_ingestion_service import (
     BarIngestionService,
 )
+from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     JobMetricSet,
     record_job_completed,
@@ -26,6 +27,7 @@ from autonomous_trading_platform.observability.metrics import (
     ingestion_job_runs,
     missing_bars,
 )
+from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 
 logger = get_logger(__name__)
@@ -144,29 +146,40 @@ class IngestBarsJob:
         )
 
         try:
-            response = client.fetch_minute_bars(
-                symbols=sorted(self.expected_symbols),
-                start=start,
-                end=end,
-            )
+            with start_span(
+                "ingest_bars_job.run",
+                timespan=SpanTimespan.JOB,
+            ) as job_span:
+                job_span.set_attribute("ratp.run_id", self.run_id)
+                job_span.set_attribute("ratp.component", component)
+                job_span.set_attribute("ratp.job", job)
+                job_span.set_attribute("ratp.symbol_count", len(self.expected_symbols))
+                job_span.set_attribute("ratp.start", start.isoformat())
+                job_span.set_attribute("ratp.end", end.isoformat())
 
-            ingestion_batch_size.record(
-                sum(len(response.data.get(symbol, [])) for symbol in self.expected_symbols),
-                {
-                    "component": component,
-                    "job": job,
-                },
-            )
+                response = client.fetch_minute_bars(
+                    symbols=sorted(self.expected_symbols),
+                    start=start,
+                    end=end,
+                )
 
-            async def _run() -> None:
-                for symbol in sorted(self.expected_symbols):
-                    symbol_bars = response.data.get(symbol, [])
-                    await self._process_symbol_bars(symbol_bars)
+                ingestion_batch_size.record(
+                    sum(len(response.data.get(symbol, [])) for symbol in self.expected_symbols),
+                    {
+                        "component": component,
+                        "job": job,
+                    },
+                )
 
-            asyncio.run(_run())
+                async def _run() -> None:
+                    for symbol in sorted(self.expected_symbols):
+                        symbol_bars = response.data.get(symbol, [])
+                        await self._process_symbol_bars(symbol_bars)
 
-            if self.current_cycle_timestamp is not None:
-                self.finalize_cycle(self.current_cycle_timestamp)
+                asyncio.run(_run())
+
+                if self.current_cycle_timestamp is not None:
+                    self.finalize_cycle(self.current_cycle_timestamp)
 
             duration = perf_counter() - job_start
             record_job_completed(

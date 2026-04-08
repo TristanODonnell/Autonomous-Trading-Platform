@@ -10,6 +10,7 @@ from autonomous_trading_platform.execution.services.risk_snapshot_service import
     RiskLimitConfig,
     RiskSnapshotService,
 )
+from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     JobMetricSet,
     record_job_completed,
@@ -22,6 +23,7 @@ from autonomous_trading_platform.observability.metrics import (
     risk_snapshot_job_failures,
     risk_snapshot_job_runs,
 )
+from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 logger = get_logger(__name__)
@@ -54,41 +56,50 @@ def run_risk_snapshot_job(
         run_id=str(run_id),
     )
     try:
-        with SorUnitOfWork(session) as uow:
-            latest_position_snapshot = (
-                uow.position_snapshots.get_latest()
-                if hasattr(uow.position_snapshots, "get_latest")
-                else None
-            )
-            latest_cash_snapshot = (
-                uow.cash_snapshots.get_latest()
-                if hasattr(uow.cash_snapshots, "get_latest")
-                else None
-            )
+        with start_span(
+            "risk_snapshot_job.run",
+            timespan=SpanTimespan.JOB,
+        ) as job_span:
+            job_span.set_attribute("ratp.run_id", run_id)
+            job_span.set_attribute("ratp.component", component)
+            job_span.set_attribute("ratp.job", job)
+            job_span.set_attribute("ratp.now_utc", now_utc.isoformat())
 
-            risk_snapshot = risk_snapshot_service.compute_snapshot(
-                run_id=run_id,
-                timestamp=now_utc,
-                position_snapshot=latest_position_snapshot,
-                cash_snapshot=latest_cash_snapshot,
-                limits_config=RiskLimitConfig(
-                    max_gross_exposure=Decimal(str(settings.max_gross_exposure)),
-                    max_net_exposure=Decimal(str(settings.max_net_exposure)),
-                    max_leverage=Decimal(str(settings.max_leverage)),
-                ),
-                drawdown_pct=None,
-            )
-            uow.risk_snapshots.upsert(risk_snapshot)
+            with SorUnitOfWork(session) as uow:
+                latest_position_snapshot = (
+                    uow.position_snapshots.get_latest()
+                    if hasattr(uow.position_snapshots, "get_latest")
+                    else None
+                )
+                latest_cash_snapshot = (
+                    uow.cash_snapshots.get_latest()
+                    if hasattr(uow.cash_snapshots, "get_latest")
+                    else None
+                )
 
-            duration = perf_counter() - job_start
-            record_job_completed(
-                logger=logger,
-                metrics=RISK_SNAPSHOT_JOB_METRICS,
-                job=job,
-                component=component,
-                run_id=str(run_id),
-                duration_seconds=duration,
-            )
+                risk_snapshot = risk_snapshot_service.compute_snapshot(
+                    run_id=run_id,
+                    timestamp=now_utc,
+                    position_snapshot=latest_position_snapshot,
+                    cash_snapshot=latest_cash_snapshot,
+                    limits_config=RiskLimitConfig(
+                        max_gross_exposure=Decimal(str(settings.max_gross_exposure)),
+                        max_net_exposure=Decimal(str(settings.max_net_exposure)),
+                        max_leverage=Decimal(str(settings.max_leverage)),
+                    ),
+                    drawdown_pct=None,
+                )
+                uow.risk_snapshots.upsert(risk_snapshot)
+
+        duration = perf_counter() - job_start
+        record_job_completed(
+            logger=logger,
+            metrics=RISK_SNAPSHOT_JOB_METRICS,
+            job=job,
+            component=component,
+            run_id=str(run_id),
+            duration_seconds=duration,
+        )
 
     except Exception as exc:
         duration = perf_counter() - job_start
