@@ -128,6 +128,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
       - ratp_lgtm_data:/data
+      - ./infra/observability/tempo-config.yaml:/otel-lgtm/tempo-config.yaml:ro
 
   # ----------------------------
   # OpenTelemetry Collector

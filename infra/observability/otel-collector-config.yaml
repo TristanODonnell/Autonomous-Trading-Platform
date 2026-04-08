@@ -11,6 +11,9 @@ processors:
     check_interval: 1s
     limit_mib: 256
 
+  probabilistic_sampler:
+    sampling_percentage: 25
+
   batch:
     timeout: 5s
     send_batch_size: 512
@@ -28,7 +31,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
+      processors: [memory_limiter, probabilistic_sampler, batch]
       exporters: [debug, otlp_grpc/lgtm]
 
     metrics:
