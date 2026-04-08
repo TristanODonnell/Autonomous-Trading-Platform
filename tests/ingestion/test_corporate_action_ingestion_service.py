@@ -56,7 +56,7 @@ class FakeCorporateAction:
     action_id: str
     symbol: str
     effective_date: date
-    action_type: str
+    action_type: CorporateActionType
 
 
 @dataclass(frozen=True)
@@ -371,19 +371,19 @@ def test_ingest_corporate_actions_normalizes_validates_stores_and_adjusts_affect
         action_id="ca-001",
         symbol="AAPL",
         effective_date=date(2025, 1, 10),
-        action_type="forward_split",
+        action_type=CorporateActionType.SPLIT_FORWARD,
     )
     action_invalid = FakeCorporateAction(
         action_id="ca-invalid",
         symbol="TSLA",
         effective_date=date(2025, 1, 12),
-        action_type="cash_dividend",
+        action_type=CorporateActionType.CASH_DIVIDEND,
     )
     action_2 = FakeCorporateAction(
         action_id="ca-002",
         symbol="NVDA",
         effective_date=date(2025, 1, 14),
-        action_type="cash_dividend",
+        action_type=CorporateActionType.CASH_DIVIDEND,
     )
 
     raw_bar_aapl_1 = make_minute_bar(
@@ -504,7 +504,7 @@ def test_ingest_corporate_actions_commits_transaction_on_success(
         action_id="ca-001",
         symbol="AAPL",
         effective_date=date(2025, 1, 10),
-        action_type="cash_dividend",
+        action_type=CorporateActionType.CASH_DIVIDEND,
     )
 
     service.normalization_service = FakeNormalizationService(parsed_actions=[action])
@@ -554,7 +554,7 @@ def test_ingest_corporate_actions_rolls_back_transaction_on_persistence_failure(
         action_id="ca-001",
         symbol="AAPL",
         effective_date=date(2025, 1, 10),
-        action_type="cash_dividend",
+        action_type=CorporateActionType.CASH_DIVIDEND,
     )
 
     service.normalization_service = FakeNormalizationService(parsed_actions=[action])
@@ -617,7 +617,7 @@ def test_reprocessing_same_payload_does_not_duplicate_entries_when_repositories_
         action_id="ca-001",
         symbol="AAPL",
         effective_date=date(2025, 1, 10),
-        action_type="forward_split",
+        action_type=CorporateActionType.SPLIT_FORWARD,
     )
 
     raw_bar = make_minute_bar(

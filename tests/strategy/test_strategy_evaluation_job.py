@@ -114,7 +114,10 @@ def test_run_returns_not_evaluated_when_no_bar_is_ready() -> None:
         run_manifest_service=cast(RunManifestService, run_manifest_service),
     )
 
-    result = job.run(now)
+    result = job.run(
+        now=now,
+        parent_run_id="test-run-id",
+    )
 
     assert result.evaluated is False
     assert result.reason == "No newer completed bar is available for evaluation."
@@ -158,7 +161,10 @@ def test_run_writes_signals_marks_checkpoint_and_saves_manifest() -> None:
         run_manifest_service=cast(RunManifestService, run_manifest_service),
     )
 
-    result = job.run(now)
+    result = job.run(
+        now=now,
+        parent_run_id="test-run-id",
+    )
 
     assert result.evaluated is True
     assert result.reason is None
@@ -205,7 +211,10 @@ def test_run_does_not_write_signals_when_no_signals_are_emitted() -> None:
         run_manifest_service=cast(RunManifestService, run_manifest_service),
     )
 
-    result = job.run(now)
+    result = job.run(
+        now=now,
+        parent_run_id="test-run-id",
+    )
 
     assert result.evaluated is True
     assert result.reason is None
