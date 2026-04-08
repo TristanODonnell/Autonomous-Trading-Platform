@@ -114,6 +114,24 @@ services:
       - ./orchestration/plugins:/opt/airflow/plugins
     command: scheduler
 
+  # ----------------------------
+  # Observability (Grafana LGTM)
+  # ----------------------------
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    container_name: ratp_lgtm
+    restart: unless-stopped
+    ports:
+      - "3000:3000"   # Grafana UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ratp_lgtm_data:/data
+
 volumes:
   ratp_pgdata:
   airflow_pgdata:
+  ratp_lgtm_data:

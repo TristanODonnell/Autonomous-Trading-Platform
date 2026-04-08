@@ -2,14 +2,30 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from time import perf_counter
 from typing import Protocol
 from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.common.errors import (
+    TransientInfrastructureError,
+)
 from autonomous_trading_platform.contracts.common.enums import BarInterval, RunType
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.contracts.trading.signal import Signal
+from autonomous_trading_platform.observability.lifecycle import (
+    JobMetricSet,
+    record_job_completed,
+    record_job_failed,
+    record_job_started,
+)
+from autonomous_trading_platform.observability.logging import get_logger
+from autonomous_trading_platform.observability.metrics import (
+    evaluate_strategy_job_duration,
+    evaluate_strategy_job_failures,
+    evaluate_strategy_job_runs,
+)
 from autonomous_trading_platform.runtime.services.run_manifest_service import (
     RunManifestService,
 )
@@ -19,6 +35,14 @@ from autonomous_trading_platform.strategy.services.strategy_bar_readiness_servic
 )
 from autonomous_trading_platform.strategy.services.strategy_evaluation_service import (
     StrategyEvaluationService,
+)
+
+logger = get_logger(__name__)
+
+EVALUATE_STRATEGY_JOB_METRICS = JobMetricSet(
+    runs=evaluate_strategy_job_runs,
+    failures=evaluate_strategy_job_failures,
+    duration=evaluate_strategy_job_duration,
 )
 
 
@@ -59,49 +83,105 @@ class EvaluateStrategyJob:
         self.checkpoint_writer = checkpoint_writer
         self.run_manifest_service = run_manifest_service
 
-    def run(self, now: datetime) -> EvaluateStrategyJobResult:
-        readiness = self.readiness_service.get_next_ready_bar(now)
+    def run(
+        self,
+        *,
+        now: datetime,
+        parent_run_id: str,
+    ) -> EvaluateStrategyJobResult:
+        component = "strategy.jobs.evaluate_strategy_job"
+        job = "evaluate_strategy_job"
+        job_start = perf_counter()
 
-        if readiness.target_bar_timestamp is None:
-            return EvaluateStrategyJobResult(
-                evaluated=False,
-                reason=readiness.reason,
-                signals_emitted=0,
-                target_bar_timestamp=None,
-                signals=[],
-                run_id=None,
+        record_job_started(
+            logger=logger,
+            metrics=EVALUATE_STRATEGY_JOB_METRICS,
+            job=job,
+            component=component,
+            run_id=parent_run_id,
+        )
+
+        try:
+            readiness = self.readiness_service.get_next_ready_bar(now)
+
+            if readiness.target_bar_timestamp is None:
+                result = EvaluateStrategyJobResult(
+                    evaluated=False,
+                    reason=readiness.reason,
+                    signals_emitted=0,
+                    target_bar_timestamp=None,
+                    signals=[],
+                    run_id=None,
+                )
+
+                duration = perf_counter() - job_start
+                record_job_completed(
+                    logger=logger,
+                    metrics=EVALUATE_STRATEGY_JOB_METRICS,
+                    job=job,
+                    component=component,
+                    run_id=parent_run_id,
+                    duration_seconds=duration,
+                )
+                return result
+
+            evaluation_run_id = uuid4()
+
+            result = self.evaluation_service.evaluate(
+                bar_timestamp=readiness.target_bar_timestamp,
+                run_id=evaluation_run_id,
+                evaluation_timestamp=now,
             )
 
-        run_id = uuid4()
+            if result.signals:
+                self.signal_writer.save_many(result.signals)
 
-        result = self.evaluation_service.evaluate(
-            bar_timestamp=readiness.target_bar_timestamp,
-            run_id=run_id,
-            evaluation_timestamp=now,
-        )
+            self.checkpoint_writer.mark_evaluated(readiness.target_bar_timestamp)
 
-        if result.signals:
-            self.signal_writer.save_many(result.signals)
+            manifest = self._build_run_manifest(
+                run_id=evaluation_run_id,
+                bar_timestamp=readiness.target_bar_timestamp,
+                evaluation_timestamp=now,
+                strategy_id=result.strategy_id,
+                signals_emitted=len(result.signals),
+            )
+            self.run_manifest_service.save(manifest)
 
-        self.checkpoint_writer.mark_evaluated(readiness.target_bar_timestamp)
+            final_result = EvaluateStrategyJobResult(
+                evaluated=True,
+                reason=None,
+                signals_emitted=len(result.signals),
+                target_bar_timestamp=readiness.target_bar_timestamp,
+                signals=result.signals,
+                run_id=evaluation_run_id,
+            )
 
-        manifest = self._build_run_manifest(
-            run_id=run_id,
-            bar_timestamp=readiness.target_bar_timestamp,
-            evaluation_timestamp=now,
-            strategy_id=result.strategy_id,
-            signals_emitted=len(result.signals),
-        )
-        self.run_manifest_service.save(manifest)
+            duration = perf_counter() - job_start
+            record_job_completed(
+                logger=logger,
+                metrics=EVALUATE_STRATEGY_JOB_METRICS,
+                job=job,
+                component=component,
+                run_id=parent_run_id,
+                duration_seconds=duration,
+            )
+            return final_result
 
-        return EvaluateStrategyJobResult(
-            evaluated=True,
-            reason=None,
-            signals_emitted=len(result.signals),
-            target_bar_timestamp=readiness.target_bar_timestamp,
-            signals=result.signals,
-            run_id=run_id,
-        )
+        except Exception as exc:
+            duration = perf_counter() - job_start
+            record_job_failed(
+                logger=logger,
+                metrics=EVALUATE_STRATEGY_JOB_METRICS,
+                job=job,
+                component=component,
+                run_id=parent_run_id,
+                exc=exc,
+                duration_seconds=duration,
+                failure_class=(
+                    "transient" if isinstance(exc, TransientInfrastructureError) else "unknown"
+                ),
+            )
+            raise
 
     def _build_run_manifest(
         self,

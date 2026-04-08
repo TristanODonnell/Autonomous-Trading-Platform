@@ -39,8 +39,12 @@ dependencies = [
   "httpx",
   "python-dateutil>=2.9",
 
-  #external APIs
-  "alpaca-py"
+  # external APIs
+  "alpaca-py",
+
+    # opentelemetry
+    "opentelemetry-api",
+    "opentelemetry-sdk"
 ]
 
 [project.optional-dependencies]

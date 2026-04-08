@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from time import perf_counter
 
 from sqlalchemy.orm import Session
 
@@ -11,7 +12,29 @@ from autonomous_trading_platform.ingestion.market_data.clients import (
 from autonomous_trading_platform.ingestion.market_data.services.bar_ingestion_service import (
     BarIngestionService,
 )
+from autonomous_trading_platform.observability.lifecycle import (
+    JobMetricSet,
+    record_job_completed,
+    record_job_failed,
+    record_job_started,
+)
+from autonomous_trading_platform.observability.logging import get_logger
+from autonomous_trading_platform.observability.metrics import (
+    ingestion_batch_size,
+    ingestion_job_duration,
+    ingestion_job_failures,
+    ingestion_job_runs,
+    missing_bars,
+)
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
+
+logger = get_logger(__name__)
+
+INGEST_BARS_JOB_METRICS = JobMetricSet(
+    runs=ingestion_job_runs,
+    failures=ingestion_job_failures,
+    duration=ingestion_job_duration,
+)
 
 
 class IngestBarsJob:
@@ -55,10 +78,19 @@ class IngestBarsJob:
         print(five_min_bar)
 
     def finalize_cycle(self, cycle_timestamp: datetime) -> None:
+        component = "ingestion.ingest_bars_job"
 
         missing_symbols = self.expected_symbols - self.received_symbols
         symbols_to_evaluate = sorted(self.expected_symbols & self.received_symbols)
+
         for symbol in missing_symbols:
+            missing_bars.add(
+                1,
+                {
+                    "component": component,
+                    "symbol": symbol,
+                },
+            )
             self.audit_logger.record_bar_missing(
                 run_id=self.run_id,
                 symbol=symbol,
@@ -99,18 +131,62 @@ class IngestBarsJob:
             await self.on_provider_bar(provider_bar)
 
     def run_once(self, start: datetime, end: datetime) -> None:
-        response = client.fetch_minute_bars(
-            symbols=sorted(self.expected_symbols),
-            start=start,
-            end=end,
+        component = "ingestion.ingest_bars_job"
+        job = "ingest_bars"
+        job_start = perf_counter()
+
+        record_job_started(
+            logger=logger,
+            metrics=INGEST_BARS_JOB_METRICS,
+            job=job,
+            component=component,
+            run_id=self.run_id,
         )
 
-        async def _run() -> None:
-            for symbol in sorted(self.expected_symbols):
-                symbol_bars = response.data.get(symbol, [])
-                await self._process_symbol_bars(symbol_bars)
+        try:
+            response = client.fetch_minute_bars(
+                symbols=sorted(self.expected_symbols),
+                start=start,
+                end=end,
+            )
 
-        asyncio.run(_run())
+            ingestion_batch_size.record(
+                sum(len(response.data.get(symbol, [])) for symbol in self.expected_symbols),
+                {
+                    "component": component,
+                    "job": job,
+                },
+            )
 
-        if self.current_cycle_timestamp is not None:
-            self.finalize_cycle(self.current_cycle_timestamp)
+            async def _run() -> None:
+                for symbol in sorted(self.expected_symbols):
+                    symbol_bars = response.data.get(symbol, [])
+                    await self._process_symbol_bars(symbol_bars)
+
+            asyncio.run(_run())
+
+            if self.current_cycle_timestamp is not None:
+                self.finalize_cycle(self.current_cycle_timestamp)
+
+            duration = perf_counter() - job_start
+            record_job_completed(
+                logger=logger,
+                metrics=INGEST_BARS_JOB_METRICS,
+                job=job,
+                component=component,
+                run_id=self.run_id,
+                duration_seconds=duration,
+            )
+
+        except Exception as exc:
+            duration = perf_counter() - job_start
+            record_job_failed(
+                logger=logger,
+                metrics=INGEST_BARS_JOB_METRICS,
+                job=job,
+                component=component,
+                run_id=self.run_id,
+                exc=exc,
+                duration_seconds=duration,
+            )
+            raise

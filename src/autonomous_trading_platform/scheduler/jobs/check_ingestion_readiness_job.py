@@ -2,9 +2,30 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from time import perf_counter
 
+from autonomous_trading_platform.observability.lifecycle import (
+    JobMetricSet,
+    record_job_completed,
+    record_job_failed,
+    record_job_started,
+)
+from autonomous_trading_platform.observability.logging import get_logger
+from autonomous_trading_platform.observability.metrics import (
+    ingestion_readiness_job_duration,
+    ingestion_readiness_job_failures,
+    ingestion_readiness_job_runs,
+)
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_cycle_window,
+)
+
+logger = get_logger(__name__)
+
+INGESTION_READINESS_JOB_METRICS = JobMetricSet(
+    runs=ingestion_readiness_job_runs,
+    failures=ingestion_readiness_job_failures,
+    duration=ingestion_readiness_job_duration,
 )
 
 
@@ -16,20 +37,59 @@ class IngestionReadinessResult:
 
 
 def check_ingestion_readiness_job(
+    *,
+    run_id: str,
     now_utc: datetime | None = None,
 ) -> IngestionReadinessResult:
     resolved_now = now_utc or datetime.now(UTC)
-    cycle_window = build_trading_cycle_window(now_utc=resolved_now)
+    component = "scheduler.jobs.check_ingestion_readiness_job"
+    job = "check_ingestion_readiness_job"
+    job_start = perf_counter()
 
-    if resolved_now > cycle_window.ingestion_deadline:
-        return IngestionReadinessResult(
-            ready=False,
-            safe_mode=True,
-            reason="ingestion_deadline_missed",
-        )
-
-    return IngestionReadinessResult(
-        ready=True,
-        safe_mode=False,
-        reason=None,
+    record_job_started(
+        logger=logger,
+        metrics=INGESTION_READINESS_JOB_METRICS,
+        job=job,
+        component=component,
+        run_id=run_id,
     )
+
+    try:
+        cycle_window = build_trading_cycle_window(now_utc=resolved_now)
+
+        if resolved_now > cycle_window.ingestion_deadline:
+            result = IngestionReadinessResult(
+                ready=False,
+                safe_mode=True,
+                reason="ingestion_deadline_missed",
+            )
+        else:
+            result = IngestionReadinessResult(
+                ready=True,
+                safe_mode=False,
+                reason=None,
+            )
+
+        duration = perf_counter() - job_start
+        record_job_completed(
+            logger=logger,
+            metrics=INGESTION_READINESS_JOB_METRICS,
+            job=job,
+            component=component,
+            run_id=run_id,
+            duration_seconds=duration,
+        )
+        return result
+
+    except Exception as exc:
+        duration = perf_counter() - job_start
+        record_job_failed(
+            logger=logger,
+            metrics=INGESTION_READINESS_JOB_METRICS,
+            job=job,
+            component=component,
+            run_id=run_id,
+            exc=exc,
+            duration_seconds=duration,
+        )
+        raise
