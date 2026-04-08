@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from autonomous_trading_platform.ingestion.corporate_actions.services.corporate_action_ingestion_service import (
     CorporateActionIngestionService,
 )
+from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     JobMetricSet,
     record_job_completed,
@@ -20,6 +21,7 @@ from autonomous_trading_platform.observability.metrics import (
     corporate_action_ingestion_job_failures,
     corporate_action_ingestion_job_runs,
 )
+from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 
 logger = get_logger(__name__)
@@ -58,13 +60,22 @@ class IngestCorporateActionsJob:
         )
 
         try:
-            service = CorporateActionIngestionService(
-                session=self.session,
-                run_id=self.run_id,
-                audit_logger=self.audit_logger,
-                cycle_timestamp=self.cycle_timestamp,
-            )
-            service.ingest_corporate_actions()
+            with start_span(
+                "ingest_corporate_actions_job.run",
+                timespan=SpanTimespan.JOB,
+            ) as job_span:
+                job_span.set_attribute("ratp.run_id", self.run_id)
+                job_span.set_attribute("ratp.component", component)
+                job_span.set_attribute("ratp.job", job)
+                job_span.set_attribute("ratp.cycle_timestamp", self.cycle_timestamp.isoformat())
+
+                service = CorporateActionIngestionService(
+                    session=self.session,
+                    run_id=self.run_id,
+                    audit_logger=self.audit_logger,
+                    cycle_timestamp=self.cycle_timestamp,
+                )
+                service.ingest_corporate_actions()
 
             duration = perf_counter() - job_start
             record_job_completed(

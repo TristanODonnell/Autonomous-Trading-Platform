@@ -5,6 +5,7 @@ from time import perf_counter
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     JobMetricSet,
     record_job_completed,
@@ -17,6 +18,7 @@ from autonomous_trading_platform.observability.metrics import (
     market_backfill_job_failures,
     market_backfill_job_runs,
 )
+from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 
 from ..clients.alpaca_historical_bars_client import AlpacaHistoricalBarsClient
@@ -70,11 +72,22 @@ class BackfillMarketBarsJob:
         )
 
         try:
-            await self.backfill_service.backfill(
-                symbols=symbols,
-                start=start,
-                end=end,
-            )
+            with start_span(
+                "backfill_market_bars_job.run",
+                timespan=SpanTimespan.JOB,
+            ) as job_span:
+                job_span.set_attribute("ratp.run_id", self.backfill_service.run_id)
+                job_span.set_attribute("ratp.component", component)
+                job_span.set_attribute("ratp.job", job)
+                job_span.set_attribute("ratp.symbol_count", len(symbols))
+                job_span.set_attribute("ratp.backfill_start", start.isoformat())
+                job_span.set_attribute("ratp.backfill_end", end.isoformat())
+
+                await self.backfill_service.backfill(
+                    symbols=symbols,
+                    start=start,
+                    end=end,
+                )
 
             duration = perf_counter() - job_start
             record_job_completed(

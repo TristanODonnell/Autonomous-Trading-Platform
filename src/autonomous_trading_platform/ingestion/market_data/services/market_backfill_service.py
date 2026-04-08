@@ -5,6 +5,7 @@ from time import perf_counter
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
     backfill_api_requests,
@@ -62,7 +63,10 @@ class MarketBackfillService:
             end.isoformat(),
         )
 
-        with start_span("market_backfill_service.backfill") as service_span:
+        with start_span(
+            name="market_backfill_service.backfill",
+            timespan=SpanTimespan.STEP,
+        ) as service_span:
             service_span.set_attribute("ratp.run_id", self.run_id)
             service_span.set_attribute("ratp.component", component)
             service_span.set_attribute("ratp.symbol_count", len(symbols))
@@ -77,11 +81,21 @@ class MarketBackfillService:
             )
 
             try:
-                bars = self.historical_client.fetch_bars(
-                    symbols=symbols,
-                    start=start,
-                    end=end,
-                )
+                with start_span(
+                    "market_backfill_service.fetch_bars",
+                    timespan=SpanTimespan.REQUEST,
+                ) as request_span:
+                    request_span.set_attribute("ratp.run_id", self.run_id)
+                    request_span.set_attribute("ratp.component", component)
+                    request_span.set_attribute("ratp.symbol_count", len(symbols))
+                    request_span.set_attribute("ratp.backfill_start", start.isoformat())
+                    request_span.set_attribute("ratp.backfill_end", end.isoformat())
+
+                    bars = self.historical_client.fetch_bars(
+                        symbols=symbols,
+                        start=start,
+                        end=end,
+                    )
             except Exception:
                 request_duration = perf_counter() - request_start
                 backfill_request_latency_seconds.record(

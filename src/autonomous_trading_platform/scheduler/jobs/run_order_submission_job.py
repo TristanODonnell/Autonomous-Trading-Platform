@@ -13,6 +13,7 @@ from autonomous_trading_platform.contracts.common.enums import (
     StrategyEvent,
 )
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
+from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     JobMetricSet,
     record_job_completed,
@@ -25,6 +26,7 @@ from autonomous_trading_platform.observability.metrics import (
     order_submission_job_failures,
     order_submission_job_runs,
 )
+from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     TradingCycleDependencies,
 )
@@ -64,116 +66,128 @@ def run_order_submission_job(
         run_id=str(run_id),
     )
     try:
-        order_intents_created = False
-        with SorUnitOfWork(session) as uow:
-            current_state = execution_context.strategy_runtime_state_service.get_current_state(
-                uow=uow,
-                strategy_id=manifest.strategy_id,
-            )
-            print(
-                f"[SUBMISSION] strategy_id={manifest.strategy_id} "
-                f"current_state_before_transition={current_state}"
-            )
+        with start_span(
+            "order_submission_job.run",
+            timespan=SpanTimespan.JOB,
+        ) as job_span:
+            job_span.set_attribute("ratp.run_id", run_id)
+            job_span.set_attribute("ratp.component", component)
+            job_span.set_attribute("ratp.job", job)
+            job_span.set_attribute("ratp.now_utc", now_utc.isoformat())
 
-        for intent in generated_intents:
-            if not order_intents_created:
-                with SorUnitOfWork(session) as uow:
-                    execution_context.strategy_runtime_state_service.apply_event(
-                        uow=uow,
-                        strategy_id=manifest.strategy_id,
-                        event=StrategyEvent.ORDER_INTENTS_CREATED,
-                        now_utc=now_utc,
-                    )
-                order_intents_created = True
+            order_intents_created = False
 
-            order_status = OrderStatus.NEW
-
-            idempotency_key = (
-                safety_context.order_idempotency_service.assert_not_duplicate_within_window(
-                    intent,
-                    now_utc,
+            with SorUnitOfWork(session) as uow:
+                current_state = execution_context.strategy_runtime_state_service.get_current_state(
+                    uow=uow,
+                    strategy_id=manifest.strategy_id,
                 )
-            )
-            intent.idempotency_key = idempotency_key
+                print(
+                    f"[SUBMISSION] strategy_id={manifest.strategy_id} "
+                    f"current_state_before_transition={current_state}"
+                )
 
-            safety_context.order_throttle_service.assert_order_allowed_for_submission(
-                order_intent=intent,
-                now=now_utc,
-                bar_timestamp=intent.bar_timestamp,
-            )
+            for intent in generated_intents:
+                if not order_intents_created:
+                    with SorUnitOfWork(session) as uow:
+                        execution_context.strategy_runtime_state_service.apply_event(
+                            uow=uow,
+                            strategy_id=manifest.strategy_id,
+                            event=StrategyEvent.ORDER_INTENTS_CREATED,
+                            now_utc=now_utc,
+                        )
+                    order_intents_created = True
 
-            if shadow_mode_enabled:
-                continue
+                order_status = OrderStatus.NEW
 
-            try:
+                idempotency_key = (
+                    safety_context.order_idempotency_service.assert_not_duplicate_within_window(
+                        intent,
+                        now_utc,
+                    )
+                )
+                intent.idempotency_key = idempotency_key
+
+                safety_context.order_throttle_service.assert_order_allowed_for_submission(
+                    order_intent=intent,
+                    now=now_utc,
+                    bar_timestamp=intent.bar_timestamp,
+                )
+
+                if shadow_mode_enabled:
+                    continue
+
                 try:
-                    response = execution_context.order_execution_service.submit(intent)
-                except TimeoutError as exc:
-                    raise TransientInfrastructureError(f"broker timeout: {exc}") from exc
-                except ConnectionError as exc:
-                    raise TransientInfrastructureError(f"broker connection error: {exc}") from exc
+                    try:
+                        response = execution_context.order_execution_service.submit(intent)
+                    except TimeoutError as exc:
+                        raise TransientInfrastructureError(f"broker timeout: {exc}") from exc
+                    except ConnectionError as exc:
+                        raise TransientInfrastructureError(
+                            f"broker connection error: {exc}"
+                        ) from exc
 
-                broker_order = execution_context.broker_order_mapper.to_broker_order(
-                    payload=response,
-                    intent_id=intent.intent_id,
-                    run_id=run_id,
-                    account_id=manifest.broker_account_id,
-                )
-
-                order_status = execution_context.order_state_machine_service.apply_event(
-                    order_id=intent.order_id,
-                    current_status=order_status,
-                    event=OrderEvent.SUBMIT,
-                    event_timestamp=now_utc,
-                    run_id=str(run_id),
-                    metadata={
-                        "symbol": intent.symbol,
-                        "strategy_id": intent.strategy_id,
-                        "broker_order_id": broker_order.broker_order_id,
-                        "broker_status": broker_order.status.value,
-                    },
-                )
-
-                with SorUnitOfWork(session) as uow:
-                    uow.broker_orders.upsert(broker_order)
-                    execution_context.order_runtime_state_service.record_submitted_order(
-                        uow=uow,
-                        intent=intent,
-                        broker_order=broker_order,
+                    broker_order = execution_context.broker_order_mapper.to_broker_order(
+                        payload=response,
+                        intent_id=intent.intent_id,
                         run_id=run_id,
-                        strategy_id=manifest.strategy_id,
                         account_id=manifest.broker_account_id,
-                        now_utc=now_utc,
                     )
 
-            except TransientInfrastructureError:
-                raise
-
-            except Exception as exc:
-                execution_context.order_state_machine_service.apply_event(
-                    order_id=intent.order_id,
-                    current_status=order_status,
-                    event=OrderEvent.REJECT,
-                    event_timestamp=now_utc,
-                    run_id=str(run_id),
-                    metadata={
-                        "symbol": intent.symbol,
-                        "strategy_id": intent.strategy_id,
-                        "error": str(exc),
-                    },
-                )
-
-                with SorUnitOfWork(session) as uow:
-                    execution_context.order_runtime_state_service.record_rejected_order(
-                        uow=uow,
-                        intent=intent,
-                        run_id=run_id,
-                        strategy_id=manifest.strategy_id,
-                        account_id=manifest.broker_account_id,
-                        now_utc=now_utc,
+                    order_status = execution_context.order_state_machine_service.apply_event(
+                        order_id=intent.order_id,
+                        current_status=order_status,
+                        event=OrderEvent.SUBMIT,
+                        event_timestamp=now_utc,
+                        run_id=str(run_id),
+                        metadata={
+                            "symbol": intent.symbol,
+                            "strategy_id": intent.strategy_id,
+                            "broker_order_id": broker_order.broker_order_id,
+                            "broker_status": broker_order.status.value,
+                        },
                     )
 
-                raise
+                    with SorUnitOfWork(session) as uow:
+                        uow.broker_orders.upsert(broker_order)
+                        execution_context.order_runtime_state_service.record_submitted_order(
+                            uow=uow,
+                            intent=intent,
+                            broker_order=broker_order,
+                            run_id=run_id,
+                            strategy_id=manifest.strategy_id,
+                            account_id=manifest.broker_account_id,
+                            now_utc=now_utc,
+                        )
+
+                except TransientInfrastructureError:
+                    raise
+
+                except Exception as exc:
+                    execution_context.order_state_machine_service.apply_event(
+                        order_id=intent.order_id,
+                        current_status=order_status,
+                        event=OrderEvent.REJECT,
+                        event_timestamp=now_utc,
+                        run_id=str(run_id),
+                        metadata={
+                            "symbol": intent.symbol,
+                            "strategy_id": intent.strategy_id,
+                            "error": str(exc),
+                        },
+                    )
+
+                    with SorUnitOfWork(session) as uow:
+                        execution_context.order_runtime_state_service.record_rejected_order(
+                            uow=uow,
+                            intent=intent,
+                            run_id=run_id,
+                            strategy_id=manifest.strategy_id,
+                            account_id=manifest.broker_account_id,
+                            now_utc=now_utc,
+                        )
+
+                    raise
 
         duration = perf_counter() - job_start
         record_job_completed(

@@ -11,6 +11,7 @@ from autonomous_trading_platform.execution.errors import ExecutionError
 from autonomous_trading_platform.execution.services.trading_freeze_service import (
     TradingFreezeService,
 )
+from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     StepMetricSet,
     record_step_completed,
@@ -130,7 +131,7 @@ def run_trading_cycle(now_utc: datetime | None = None):
         trading_cycle_window.cycle_end.isoformat(),
     )
 
-    with start_span("trading_cycle.run") as cycle_span:
+    with start_span("trading_cycle.run", timespan=SpanTimespan.CYCLE) as cycle_span:
         cycle_span.set_attribute("ratp.run_id", str(run_id))
         cycle_span.set_attribute("ratp.component", component)
         cycle_span.set_attribute("ratp.cycle_start", trading_cycle_window.cycle_start.isoformat())
@@ -163,7 +164,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
 
             step_start = perf_counter()
             try:
-                with start_span("trading_cycle.ingestion_readiness") as step_span:
+                with start_span(
+                    "trading_cycle.ingestion_readiness", timespan=SpanTimespan.STEP
+                ) as step_span:
                     step_span.set_attribute("ratp.run_id", str(run_id))
                     step_span.set_attribute("ratp.step", step)
 
@@ -268,7 +271,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
 
             step_start = perf_counter()
             try:
-                with start_span("trading_cycle.trading_evaluation") as step_span:
+                with start_span(
+                    "trading_cycle.trading_evaluation", timespan=SpanTimespan.STEP
+                ) as step_span:
                     step_span.set_attribute("ratp.run_id", str(run_id))
                     step_span.set_attribute("ratp.step", step)
 
@@ -368,7 +373,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
             step_start = perf_counter()
 
             try:
-                with start_span("trading_cycle.order_submission") as step_span:
+                with start_span(
+                    "trading_cycle.order_submission", timespan=SpanTimespan.STEP
+                ) as step_span:
                     step_span.set_attribute("ratp.run_id", str(run_id))
                     step_span.set_attribute("ratp.step", step)
                     step_span.set_attribute("ratp.generated_intent_count", len(generated_intents))
@@ -420,7 +427,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
             step_start = perf_counter()
 
             try:
-                with start_span("trading_cycle.order_reconciliation") as step_span:
+                with start_span(
+                    "trading_cycle.order_reconciliation", timespan=SpanTimespan.STEP
+                ) as step_span:
                     step_span.set_attribute("ratp.run_id", str(run_id))
                     step_span.set_attribute("ratp.step", step)
 
@@ -474,7 +483,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
             step_start = perf_counter()
 
             try:
-                with start_span("trading_cycle.risk_snapshot") as step_span:
+                with start_span(
+                    "trading_cycle.risk_snapshot", timespan=SpanTimespan.STEP
+                ) as step_span:
                     step_span.set_attribute("ratp.run_id", str(run_id))
                     step_span.set_attribute("ratp.step", step)
 

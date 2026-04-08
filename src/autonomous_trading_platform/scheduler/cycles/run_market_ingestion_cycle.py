@@ -11,6 +11,7 @@ from autonomous_trading_platform.contracts.runtime.run_manifest import RunManife
 from autonomous_trading_platform.ingestion.market_data.jobs.ingest_bars_job import (
     IngestBarsJob,
 )
+from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     StepMetricSet,
     record_step_completed,
@@ -191,7 +192,7 @@ def run_market_ingestion_cycle(
             "manifest_interval": manifest.interval.value,
         }
 
-        with start_span("market_ingestion_cycle.run") as cycle_span:
+        with start_span("market_ingestion_cycle.run", timespan=SpanTimespan.CYCLE) as cycle_span:
             cycle_span.set_attribute("ratp.run_id", str(run_id))
             cycle_span.set_attribute("ratp.component", component)
             cycle_span.set_attribute("ratp.cycle_start", cycle_start.isoformat())
@@ -222,7 +223,9 @@ def run_market_ingestion_cycle(
 
             step_start = perf_counter()
             try:
-                with start_span("market_ingestion_cycle.ingest_bars") as step_span:
+                with start_span(
+                    "market_ingestion_cycle.ingest_bars", timespan=SpanTimespan.STEP
+                ) as step_span:
                     step_span.set_attribute("ratp.run_id", str(run_id))
                     step_span.set_attribute("ratp.step", step)
                     step_span.set_attribute("ratp.expected_symbol_count", len(expected_symbols))

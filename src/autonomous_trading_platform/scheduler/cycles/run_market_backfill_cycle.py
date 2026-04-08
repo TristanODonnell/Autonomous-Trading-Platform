@@ -20,6 +20,7 @@ from autonomous_trading_platform.ingestion.market_data.clients.alpaca_market_dat
 from autonomous_trading_platform.ingestion.market_data.jobs.backfill_market_bars_job import (
     BackfillMarketBarsJob,
 )
+from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     StepMetricSet,
     record_step_completed,
@@ -184,7 +185,7 @@ def run_market_backfill_cycle(
             "manifest_interval": manifest.interval.value,
         }
 
-        with start_span("market_backfill_cycle.run") as cycle_span:
+        with start_span("market_backfill_cycle.run", timespan=SpanTimespan.CYCLE) as cycle_span:
             cycle_span.set_attribute("ratp.run_id", str(run_id))
             cycle_span.set_attribute("ratp.component", component)
             cycle_span.set_attribute("ratp.cycle_start", start.isoformat())
@@ -218,7 +219,9 @@ def run_market_backfill_cycle(
 
             step_start = perf_counter()
             try:
-                with start_span("market_backfill_cycle.backfill_market_bars") as step_span:
+                with start_span(
+                    "market_backfill_cycle.backfill_market_bars", timespan=SpanTimespan.STEP
+                ) as step_span:
                     step_span.set_attribute("ratp.run_id", str(run_id))
                     step_span.set_attribute("ratp.step", step)
                     step_span.set_attribute("ratp.expected_symbol_count", len(symbols))

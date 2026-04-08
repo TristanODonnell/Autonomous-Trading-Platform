@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from time import perf_counter
 
 from autonomous_trading_platform.common.errors import TransientInfrastructureError
+from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     JobMetricSet,
     record_job_completed,
@@ -16,6 +17,7 @@ from autonomous_trading_platform.observability.metrics import (
     order_reconciliation_job_failures,
     order_reconciliation_job_runs,
 )
+from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_cycle_dependencies,
 )
@@ -53,42 +55,51 @@ def run_order_reconciliation_job(
     )
 
     try:
-        with SorUnitOfWork(session) as uow:
-            tracked_orders = (
-                execution_context.order_runtime_state_service.list_reconciliation_inputs(
-                    uow=uow,
-                )
-            )
-
-        for tracked_order in tracked_orders:
-            try:
-                result = execution_context.order_reconciliation_service.reconcile_order(
-                    tracked_order,
-                    now=resolved_now,
-                )
-            except TimeoutError as exc:
-                raise TransientInfrastructureError(f"reconciliation timeout: {exc}") from exc
-            except ConnectionError as exc:
-                raise TransientInfrastructureError(
-                    f"reconciliation connection error: {exc}"
-                ) from exc
+        with start_span(
+            "order_reconciliation_job.run",
+            timespan=SpanTimespan.JOB,
+        ) as job_span:
+            job_span.set_attribute("ratp.run_id", run_id)
+            job_span.set_attribute("ratp.component", component)
+            job_span.set_attribute("ratp.job", job)
+            job_span.set_attribute("ratp.now_utc", resolved_now.isoformat())
 
             with SorUnitOfWork(session) as uow:
-                uow.broker_orders.upsert(result.broker_order)
-
-                if result.fill is not None:
-                    uow.fills.upsert(result.fill)
-                    execution_context.post_fill_accounting_service.apply_fill(
+                tracked_orders = (
+                    execution_context.order_runtime_state_service.list_reconciliation_inputs(
                         uow=uow,
-                        fill=result.fill,
+                    )
+                )
+
+            for tracked_order in tracked_orders:
+                try:
+                    result = execution_context.order_reconciliation_service.reconcile_order(
+                        tracked_order,
+                        now=resolved_now,
+                    )
+                except TimeoutError as exc:
+                    raise TransientInfrastructureError(f"reconciliation timeout: {exc}") from exc
+                except ConnectionError as exc:
+                    raise TransientInfrastructureError(
+                        f"reconciliation connection error: {exc}"
+                    ) from exc
+
+                with SorUnitOfWork(session) as uow:
+                    uow.broker_orders.upsert(result.broker_order)
+
+                    if result.fill is not None:
+                        uow.fills.upsert(result.fill)
+                        execution_context.post_fill_accounting_service.apply_fill(
+                            uow=uow,
+                            fill=result.fill,
+                            now_utc=resolved_now,
+                        )
+
+                    execution_context.order_runtime_state_service.apply_reconciliation_result(
+                        uow=uow,
+                        result=result,
                         now_utc=resolved_now,
                     )
-
-                execution_context.order_runtime_state_service.apply_reconciliation_result(
-                    uow=uow,
-                    result=result,
-                    now_utc=resolved_now,
-                )
 
         duration = perf_counter() - job_start
         record_job_completed(

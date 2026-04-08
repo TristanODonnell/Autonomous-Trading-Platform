@@ -18,6 +18,7 @@ from autonomous_trading_platform.ingestion.corporate_actions.services.corporate_
 from autonomous_trading_platform.ingestion.corporate_actions.services.corporate_action_validation_service import (
     CorporateActionValidationService,
 )
+from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
     actions_per_symbol,
@@ -67,17 +68,35 @@ class CorporateActionIngestionService:
         )
 
         request_start = perf_counter()
-        payload: dict = client.fetch_corporate_actions()
-        request_duration = perf_counter() - request_start
+        try:
+            with start_span(
+                "corporate_action_ingestion_service.fetch_corporate_actions",
+                timespan=SpanTimespan.REQUEST,
+            ) as request_span:
+                request_span.set_attribute("ratp.run_id", self.run_id)
+                request_span.set_attribute("ratp.component", component)
+                request_span.set_attribute("ratp.cycle_timestamp", self.cycle_timestamp.isoformat())
 
-        corporate_action_request_latency_seconds.record(
-            request_duration,
-            {
-                "component": component,
-                "status": "completed",
-            },
-        )
+                payload: dict = client.fetch_corporate_actions()
 
+            request_duration = perf_counter() - request_start
+            corporate_action_request_latency_seconds.record(
+                request_duration,
+                {
+                    "component": component,
+                    "status": "completed",
+                },
+            )
+        except Exception:
+            request_duration = perf_counter() - request_start
+            corporate_action_request_latency_seconds.record(
+                request_duration,
+                {
+                    "component": component,
+                    "status": "failed",
+                },
+            )
+            raise
         actions_block = payload.get("corporate_actions", {})
         raw_actions = actions_block.get("cash_dividends", []) + actions_block.get(
             "reverse_splits", []
@@ -98,7 +117,9 @@ class CorporateActionIngestionService:
             request_duration,
         )
 
-        with start_span("corporate_action_ingestion_service.ingest") as service_span:
+        with start_span(
+            "corporate_action_ingestion_service.ingest", timespan=SpanTimespan.STEP
+        ) as service_span:
             service_span.set_attribute("ratp.run_id", self.run_id)
             service_span.set_attribute("ratp.component", component)
             service_span.set_attribute("ratp.raw_action_count", len(raw_actions))
