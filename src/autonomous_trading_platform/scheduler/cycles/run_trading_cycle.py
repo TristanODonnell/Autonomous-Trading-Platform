@@ -11,6 +11,12 @@ from autonomous_trading_platform.execution.errors import ExecutionError
 from autonomous_trading_platform.execution.services.trading_freeze_service import (
     TradingFreezeService,
 )
+from autonomous_trading_platform.observability.lifecycle import (
+    StepMetricSet,
+    record_step_completed,
+    record_step_failed,
+    record_step_started,
+)
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
     trading_cycle_degraded,
@@ -47,75 +53,10 @@ from autonomous_trading_platform.scheduler.jobs.run_trading_evaluation_job impor
 )
 
 logger = get_logger(__name__)
-
-
-def _record_step_start(*, step: str, component: str, run_id: str) -> None:
-    logger.info("step_started run_id=%s component=%s step=%s", run_id, component, step)
-    trading_cycle_step_runs.add(
-        1,
-        {
-            "component": component,
-            "step": step,
-            "status": "started",
-        },
-    )
-
-
-def _record_step_completed(
-    *, step: str, component: str, run_id: str, duration_seconds: float
-) -> None:
-    logger.info(
-        "step_completed run_id=%s component=%s step=%s duration_seconds=%.6f",
-        run_id,
-        component,
-        step,
-        duration_seconds,
-    )
-    trading_cycle_step_runs.add(
-        1,
-        {
-            "component": component,
-            "step": step,
-            "status": "completed",
-        },
-    )
-    trading_cycle_step_duration.record(
-        duration_seconds,
-        {
-            "component": component,
-            "step": step,
-            "status": "completed",
-        },
-    )
-
-
-def _record_step_failed(
-    *, step: str, component: str, run_id: str, exc: Exception, duration_seconds: float
-) -> None:
-    logger.exception(
-        "step_failed run_id=%s component=%s step=%s duration_seconds=%.6f error=%s",
-        run_id,
-        component,
-        step,
-        duration_seconds,
-        str(exc),
-    )
-    trading_cycle_step_runs.add(
-        1,
-        {
-            "component": component,
-            "step": step,
-            "status": "failed",
-        },
-    )
-    trading_cycle_step_duration.record(
-        duration_seconds,
-        {
-            "component": component,
-            "step": step,
-            "status": "failed",
-        },
-    )
+TRADING_STEP_METRICS = StepMetricSet(
+    runs=trading_cycle_step_runs,
+    duration=trading_cycle_step_duration,
+)
 
 
 def run_trading_cycle(now_utc: datetime | None = None):
@@ -212,7 +153,13 @@ def run_trading_cycle(now_utc: datetime | None = None):
             step = "ingestion_readiness"
             manifest.current_step = "ingestion_readiness"
             manifest_service.save(manifest)
-            _record_step_start(step=step, component=component, run_id=str(run_id))
+            record_step_started(
+                logger=logger,
+                metrics=TRADING_STEP_METRICS,
+                step=step,
+                component=component,
+                run_id=str(run_id),
+            )
 
             step_start = perf_counter()
             try:
@@ -220,7 +167,10 @@ def run_trading_cycle(now_utc: datetime | None = None):
                     step_span.set_attribute("ratp.run_id", str(run_id))
                     step_span.set_attribute("ratp.step", step)
 
-                    ingestion_result = check_ingestion_readiness_job(now_utc=now_utc)
+                    ingestion_result = check_ingestion_readiness_job(
+                        run_id=str(run_id),
+                        now_utc=now_utc,
+                    )
 
                     step_span.set_attribute("ratp.ingestion.ready", ingestion_result.ready)
                     step_span.set_attribute(
@@ -232,7 +182,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
                         )
 
                 duration = perf_counter() - step_start
-                _record_step_completed(
+                record_step_completed(
+                    logger=logger,
+                    metrics=TRADING_STEP_METRICS,
                     step=step,
                     component=component,
                     run_id=str(run_id),
@@ -291,7 +243,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
 
             except Exception as exc:
                 duration = perf_counter() - step_start
-                _record_step_failed(
+                record_step_failed(
+                    logger=logger,
+                    metrics=TRADING_STEP_METRICS,
                     step=step,
                     component=component,
                     run_id=str(run_id),
@@ -304,7 +258,13 @@ def run_trading_cycle(now_utc: datetime | None = None):
             step = "trading_evaluation"
             manifest.current_step = step
             manifest_service.save(manifest)
-            _record_step_start(step=step, component=component, run_id=str(run_id))
+            record_step_started(
+                logger=logger,
+                metrics=TRADING_STEP_METRICS,
+                step=step,
+                component=component,
+                run_id=str(run_id),
+            )
 
             step_start = perf_counter()
             try:
@@ -369,7 +329,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
                     step_span.set_attribute("ratp.generated_intent_count", len(generated_intents))
 
                 duration = perf_counter() - step_start
-                _record_step_completed(
+                record_step_completed(
+                    logger=logger,
+                    metrics=TRADING_STEP_METRICS,
                     step=step,
                     component=component,
                     run_id=str(run_id),
@@ -380,7 +342,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
 
             except Exception as exc:
                 duration = perf_counter() - step_start
-                _record_step_failed(
+                record_step_failed(
+                    logger=logger,
+                    metrics=TRADING_STEP_METRICS,
                     step=step,
                     component=component,
                     run_id=str(run_id),
@@ -393,7 +357,13 @@ def run_trading_cycle(now_utc: datetime | None = None):
             step = "order_submission"
             manifest.current_step = step
             manifest_service.save(manifest)
-            _record_step_start(step=step, component=component, run_id=str(run_id))
+            record_step_started(
+                logger=logger,
+                metrics=TRADING_STEP_METRICS,
+                step=step,
+                component=component,
+                run_id=str(run_id),
+            )
 
             step_start = perf_counter()
 
@@ -411,7 +381,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
                         generated_intents=generated_intents,
                     )
                 duration = perf_counter() - step_start
-                _record_step_completed(
+                record_step_completed(
+                    logger=logger,
+                    metrics=TRADING_STEP_METRICS,
                     step=step,
                     component=component,
                     run_id=str(run_id),
@@ -422,7 +394,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
 
             except Exception as exc:
                 duration = perf_counter() - step_start
-                _record_step_failed(
+                record_step_failed(
+                    logger=logger,
+                    metrics=TRADING_STEP_METRICS,
                     step=step,
                     component=component,
                     run_id=str(run_id),
@@ -435,7 +409,13 @@ def run_trading_cycle(now_utc: datetime | None = None):
             step = "order_reconciliation"
             manifest.current_step = step
             manifest_service.save(manifest)
-            _record_step_start(step=step, component=component, run_id=str(run_id))
+            record_step_started(
+                logger=logger,
+                metrics=TRADING_STEP_METRICS,
+                step=step,
+                component=component,
+                run_id=str(run_id),
+            )
 
             step_start = perf_counter()
 
@@ -444,10 +424,12 @@ def run_trading_cycle(now_utc: datetime | None = None):
                     step_span.set_attribute("ratp.run_id", str(run_id))
                     step_span.set_attribute("ratp.step", step)
 
-                    run_order_reconciliation_job(now_utc=now_utc)
+                    run_order_reconciliation_job(run_id=str(run_id), now_utc=now_utc)
 
                 duration = perf_counter() - step_start
-                _record_step_completed(
+                record_step_completed(
+                    logger=logger,
+                    metrics=TRADING_STEP_METRICS,
                     step=step,
                     component=component,
                     run_id=str(run_id),
@@ -463,7 +445,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
                         source=component,
                     )
                 duration = perf_counter() - step_start
-                _record_step_failed(
+                record_step_failed(
+                    logger=logger,
+                    metrics=TRADING_STEP_METRICS,
                     step=step,
                     component=component,
                     run_id=str(run_id),
@@ -479,7 +463,13 @@ def run_trading_cycle(now_utc: datetime | None = None):
             step = "risk_snapshot"
             manifest.current_step = step
             manifest_service.save(manifest)
-            _record_step_start(step=step, component=component, run_id=str(run_id))
+            record_step_started(
+                logger=logger,
+                metrics=TRADING_STEP_METRICS,
+                step=step,
+                component=component,
+                run_id=str(run_id),
+            )
 
             step_start = perf_counter()
 
@@ -495,7 +485,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
                     )
 
                 duration = perf_counter() - step_start
-                _record_step_completed(
+                record_step_completed(
+                    logger=logger,
+                    metrics=TRADING_STEP_METRICS,
                     step=step,
                     component=component,
                     run_id=str(run_id),
@@ -506,7 +498,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
 
             except Exception as exc:
                 duration = perf_counter() - step_start
-                _record_step_failed(
+                record_step_failed(
+                    logger=logger,
+                    metrics=TRADING_STEP_METRICS,
                     step=step,
                     component=component,
                     run_id=str(run_id),

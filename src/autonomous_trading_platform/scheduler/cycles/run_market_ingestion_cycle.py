@@ -11,6 +11,12 @@ from autonomous_trading_platform.contracts.runtime.run_manifest import RunManife
 from autonomous_trading_platform.ingestion.market_data.jobs.ingest_bars_job import (
     IngestBarsJob,
 )
+from autonomous_trading_platform.observability.lifecycle import (
+    StepMetricSet,
+    record_step_completed,
+    record_step_failed,
+    record_step_started,
+)
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
     ingestion_cycle_duration,
@@ -38,6 +44,10 @@ from autonomous_trading_platform.universe.services.universe_membership_service i
 from src.db import get_session
 
 logger = get_logger(__name__)
+INGESTION_STEP_METRICS = StepMetricSet(
+    runs=ingestion_cycle_step_runs,
+    duration=ingestion_cycle_step_duration,
+)
 
 
 def _record_cycle_started(*, component: str, run_id: str) -> None:
@@ -103,89 +113,6 @@ def _record_cycle_failed(
         duration_seconds,
         {
             "component": component,
-            "status": "failed",
-        },
-    )
-
-
-def _record_step_started(*, step: str, component: str, run_id: str) -> None:
-    logger.info(
-        "ingestion_cycle_step_started run_id=%s component=%s step=%s",
-        run_id,
-        component,
-        step,
-    )
-    ingestion_cycle_step_runs.add(
-        1,
-        {
-            "component": component,
-            "step": step,
-            "status": "started",
-        },
-    )
-
-
-def _record_step_completed(
-    *,
-    step: str,
-    component: str,
-    run_id: str,
-    duration_seconds: float,
-) -> None:
-    logger.info(
-        "ingestion_cycle_step_completed run_id=%s component=%s step=%s duration_seconds=%.6f",
-        run_id,
-        component,
-        step,
-        duration_seconds,
-    )
-    ingestion_cycle_step_runs.add(
-        1,
-        {
-            "component": component,
-            "step": step,
-            "status": "completed",
-        },
-    )
-    ingestion_cycle_step_duration.record(
-        duration_seconds,
-        {
-            "component": component,
-            "step": step,
-            "status": "completed",
-        },
-    )
-
-
-def _record_step_failed(
-    *,
-    step: str,
-    component: str,
-    run_id: str,
-    exc: Exception,
-    duration_seconds: float,
-) -> None:
-    logger.exception(
-        "ingestion_cycle_step_failed run_id=%s component=%s step=%s duration_seconds=%.6f error=%s",
-        run_id,
-        component,
-        step,
-        duration_seconds,
-        str(exc),
-    )
-    ingestion_cycle_step_runs.add(
-        1,
-        {
-            "component": component,
-            "step": step,
-            "status": "failed",
-        },
-    )
-    ingestion_cycle_step_duration.record(
-        duration_seconds,
-        {
-            "component": component,
-            "step": step,
             "status": "failed",
         },
     )
@@ -285,7 +212,13 @@ def run_market_ingestion_cycle(
             )
 
             step = "ingest_bars"
-            _record_step_started(step=step, component=component, run_id=str(run_id))
+            record_step_started(
+                logger=logger,
+                metrics=INGESTION_STEP_METRICS,
+                step=step,
+                component=component,
+                run_id=str(run_id),
+            )
 
             step_start = perf_counter()
             try:
@@ -297,7 +230,9 @@ def run_market_ingestion_cycle(
                     job.run_once(start=cycle_start, end=cycle_end)
 
                 step_duration = perf_counter() - step_start
-                _record_step_completed(
+                record_step_completed(
+                    logger=logger,
+                    metrics=INGESTION_STEP_METRICS,
                     step=step,
                     component=component,
                     run_id=str(run_id),
@@ -305,7 +240,9 @@ def run_market_ingestion_cycle(
                 )
             except Exception as exc:
                 step_duration = perf_counter() - step_start
-                _record_step_failed(
+                record_step_failed(
+                    logger=logger,
+                    metrics=INGESTION_STEP_METRICS,
                     step=step,
                     component=component,
                     run_id=str(run_id),

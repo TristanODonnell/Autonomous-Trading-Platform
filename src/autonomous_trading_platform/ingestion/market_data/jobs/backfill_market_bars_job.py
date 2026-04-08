@@ -1,13 +1,34 @@
 from __future__ import annotations
 
 from datetime import datetime
+from time import perf_counter
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.observability.lifecycle import (
+    JobMetricSet,
+    record_job_completed,
+    record_job_failed,
+    record_job_started,
+)
+from autonomous_trading_platform.observability.logging import get_logger
+from autonomous_trading_platform.observability.metrics import (
+    market_backfill_job_duration,
+    market_backfill_job_failures,
+    market_backfill_job_runs,
+)
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 
 from ..clients.alpaca_historical_bars_client import AlpacaHistoricalBarsClient
 from ..services.market_backfill_service import MarketBackfillService
+
+logger = get_logger(__name__)
+
+BACKFILL_MARKET_BARS_JOB_METRICS = JobMetricSet(
+    runs=market_backfill_job_runs,
+    failures=market_backfill_job_failures,
+    duration=market_backfill_job_duration,
+)
 
 
 class BackfillMarketBarsJob:
@@ -36,8 +57,43 @@ class BackfillMarketBarsJob:
         start: datetime,
         end: datetime,
     ) -> None:
-        await self.backfill_service.backfill(
-            symbols=symbols,
-            start=start,
-            end=end,
+        component = "ingestion.backfill_market_bars_job"
+        job = "backfill_market_bars"
+        job_start = perf_counter()
+
+        record_job_started(
+            logger=logger,
+            metrics=BACKFILL_MARKET_BARS_JOB_METRICS,
+            job=job,
+            component=component,
+            run_id=self.backfill_service.run_id,
         )
+
+        try:
+            await self.backfill_service.backfill(
+                symbols=symbols,
+                start=start,
+                end=end,
+            )
+
+            duration = perf_counter() - job_start
+            record_job_completed(
+                logger=logger,
+                metrics=BACKFILL_MARKET_BARS_JOB_METRICS,
+                job=job,
+                component=component,
+                run_id=self.backfill_service.run_id,
+                duration_seconds=duration,
+            )
+        except Exception as exc:
+            duration = perf_counter() - job_start
+            record_job_failed(
+                logger=logger,
+                metrics=BACKFILL_MARKET_BARS_JOB_METRICS,
+                job=job,
+                component=component,
+                run_id=self.backfill_service.run_id,
+                exc=exc,
+                duration_seconds=duration,
+            )
+            raise

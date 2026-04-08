@@ -13,6 +13,12 @@ from autonomous_trading_platform.contracts.runtime.run_manifest import RunManife
 from autonomous_trading_platform.ingestion.corporate_actions.jobs.ingest_corporate_actions_job import (
     IngestCorporateActionsJob,
 )
+from autonomous_trading_platform.observability.lifecycle import (
+    StepMetricSet,
+    record_step_completed,
+    record_step_failed,
+    record_step_started,
+)
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
     corporate_action_ingestion_cycle_duration,
@@ -27,6 +33,10 @@ from autonomous_trading_platform.runtime.services.run_manifest_service import Ru
 from src.db import get_session
 
 logger = get_logger(__name__)
+CORPORATE_ACTION_INGESTION_STEP_METRICS = StepMetricSet(
+    runs=corporate_action_ingestion_cycle_step_runs,
+    duration=corporate_action_ingestion_cycle_step_duration,
+)
 
 
 def _record_cycle_started(*, component: str, run_id: str) -> None:
@@ -97,89 +107,6 @@ def _record_cycle_failed(
     )
 
 
-def _record_step_started(*, step: str, component: str, run_id: str) -> None:
-    logger.info(
-        "corporate_action_ingestion_cycle_step_started run_id=%s component=%s step=%s",
-        run_id,
-        component,
-        step,
-    )
-    corporate_action_ingestion_cycle_step_runs.add(
-        1,
-        {
-            "component": component,
-            "step": step,
-            "status": "started",
-        },
-    )
-
-
-def _record_step_completed(
-    *,
-    step: str,
-    component: str,
-    run_id: str,
-    duration_seconds: float,
-) -> None:
-    logger.info(
-        "corporate_action_ingestion_cycle_step_completed run_id=%s component=%s step=%s duration_seconds=%.6f",
-        run_id,
-        component,
-        step,
-        duration_seconds,
-    )
-    corporate_action_ingestion_cycle_step_runs.add(
-        1,
-        {
-            "component": component,
-            "step": step,
-            "status": "completed",
-        },
-    )
-    corporate_action_ingestion_cycle_step_duration.record(
-        duration_seconds,
-        {
-            "component": component,
-            "step": step,
-            "status": "completed",
-        },
-    )
-
-
-def _record_step_failed(
-    *,
-    step: str,
-    component: str,
-    run_id: str,
-    exc: Exception,
-    duration_seconds: float,
-) -> None:
-    logger.exception(
-        "corporate_action_ingestion_cycle_step_failed run_id=%s component=%s step=%s duration_seconds=%.6f error=%s",
-        run_id,
-        component,
-        step,
-        duration_seconds,
-        str(exc),
-    )
-    corporate_action_ingestion_cycle_step_runs.add(
-        1,
-        {
-            "component": component,
-            "step": step,
-            "status": "failed",
-        },
-    )
-    corporate_action_ingestion_cycle_step_duration.record(
-        duration_seconds,
-        {
-            "component": component,
-            "step": step,
-            "status": "failed",
-        },
-    )
-
-
 def run_corporate_action_ingestion_cycle() -> None:
     """
     Entry point for the Airflow DAG.
@@ -244,7 +171,13 @@ def run_corporate_action_ingestion_cycle() -> None:
             )
 
             step = "ingest_corporate_actions"
-            _record_step_started(step=step, component=component, run_id=str(run_id))
+            record_step_started(
+                logger=logger,
+                metrics=CORPORATE_ACTION_INGESTION_STEP_METRICS,
+                step=step,
+                component=component,
+                run_id=str(run_id),
+            )
 
             step_start = perf_counter()
             try:
@@ -263,7 +196,9 @@ def run_corporate_action_ingestion_cycle() -> None:
                     job.ingest_corporate_actions_job()
 
                 step_duration = perf_counter() - step_start
-                _record_step_completed(
+                record_step_completed(
+                    logger=logger,
+                    metrics=CORPORATE_ACTION_INGESTION_STEP_METRICS,
                     step=step,
                     component=component,
                     run_id=str(run_id),
@@ -271,7 +206,9 @@ def run_corporate_action_ingestion_cycle() -> None:
                 )
             except Exception as exc:
                 step_duration = perf_counter() - step_start
-                _record_step_failed(
+                record_step_failed(
+                    logger=logger,
+                    metrics=CORPORATE_ACTION_INGESTION_STEP_METRICS,
                     step=step,
                     component=component,
                     run_id=str(run_id),

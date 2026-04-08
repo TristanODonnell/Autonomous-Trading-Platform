@@ -49,6 +49,129 @@ open_orders = meter.create_up_down_counter(
     unit="1",
 )
 
+# --- Job-level metrics ---
+
+# --- Ingestion Readiness ---
+
+ingestion_readiness_job_runs = meter.create_counter(
+    name="ratp_ingestion_readiness_job_runs_total",
+    description="Total number of ingestion readiness job executions",
+    unit="1",
+)
+
+ingestion_readiness_job_failures = meter.create_counter(
+    name="ratp_ingestion_readiness_job_failures_total",
+    description="Total number of ingestion readiness job failures",
+    unit="1",
+)
+
+ingestion_readiness_job_duration = meter.create_histogram(
+    name="ratp_ingestion_readiness_job_duration_seconds",
+    description="Ingestion readiness job execution duration",
+    unit="s",
+)
+
+# --- Strategy Evaluation ---
+
+evaluate_strategy_job_runs = meter.create_counter(
+    name="ratp_evaluate_strategy_job_runs_total",
+    description="Total number of evaluate_strategy job executions",
+    unit="1",
+)
+
+evaluate_strategy_job_failures = meter.create_counter(
+    name="ratp_evaluate_strategy_job_failures_total",
+    description="Total number of evaluate_strategy job failures",
+    unit="1",
+)
+
+evaluate_strategy_job_duration = meter.create_histogram(
+    name="ratp_evaluate_strategy_job_duration_seconds",
+    description="Evaluate_strategy job execution duration",
+    unit="s",
+)
+
+# --- Trading Evaluation ---
+
+trading_evaluation_job_runs = meter.create_counter(
+    name="ratp_trading_evaluation_job_runs_total",
+    description="Total number of trading_evaluation job executions",
+    unit="1",
+)
+
+trading_evaluation_job_failures = meter.create_counter(
+    name="ratp_trading_evaluation_job_failures_total",
+    description="Total number of trading_evaluation job failures",
+    unit="1",
+)
+
+trading_evaluation_job_duration = meter.create_histogram(
+    name="ratp_trading_evaluation_job_duration_seconds",
+    description="Trading_evaluation job execution duration",
+    unit="s",
+)
+
+# --- Order Submission ---
+
+order_submission_job_runs = meter.create_counter(
+    name="ratp_order_submission_job_runs_total",
+    description="Total number of order submission job executions",
+    unit="1",
+)
+
+order_submission_job_failures = meter.create_counter(
+    name="ratp_order_submission_job_failures_total",
+    description="Total number of order submission job failures",
+    unit="1",
+)
+
+order_submission_job_duration = meter.create_histogram(
+    name="ratp_order_submission_job_duration_seconds",
+    description="Order submission job execution duration",
+    unit="s",
+)
+
+# --- Order Reconciliation ---
+
+order_reconciliation_job_runs = meter.create_counter(
+    name="ratp_order_reconciliation_job_runs_total",
+    description="Total number of order reconciliation job executions",
+    unit="1",
+)
+
+order_reconciliation_job_failures = meter.create_counter(
+    name="ratp_order_reconciliation_job_failures_total",
+    description="Total number of order reconciliation job failures",
+    unit="1",
+)
+
+order_reconciliation_job_duration = meter.create_histogram(
+    name="ratp_order_reconciliation_job_duration_seconds",
+    description="Order reconciliation job execution duration",
+    unit="s",
+)
+
+# --- Risk Snapshot ---
+
+risk_snapshot_job_runs = meter.create_counter(
+    name="ratp_risk_snapshot_job_runs_total",
+    description="Total number of risk_snapshot job executions",
+    unit="1",
+)
+
+risk_snapshot_job_failures = meter.create_counter(
+    name="ratp_risk_snapshot_job_failures_total",
+    description="Total number of risk_snapshot job failures",
+    unit="1",
+)
+
+risk_snapshot_job_duration = meter.create_histogram(
+    name="ratp_risk_snapshot_job_duration_seconds",
+    description="Risk_snapshot job execution duration",
+    unit="s",
+)
+
+
 # =========================
 # INGESTION CYCLE METRICS
 # =========================
@@ -82,6 +205,26 @@ ingestion_cycle_step_runs = meter.create_counter(
 ingestion_cycle_step_duration = meter.create_histogram(
     name="ratp_ingestion_cycle_step_duration_seconds",
     description="Ingestion cycle step execution duration",
+    unit="s",
+)
+
+# --- Job-level metrics ---
+
+ingestion_job_runs = meter.create_counter(
+    name="ratp_ingestion_job_runs_total",
+    description="Total number of ingestion job executions",
+    unit="1",
+)
+
+ingestion_job_failures = meter.create_counter(
+    name="ratp_ingestion_job_failures_total",
+    description="Total number of ingestion job failures",
+    unit="1",
+)
+
+ingestion_job_duration = meter.create_histogram(
+    name="ratp_ingestion_job_duration_seconds",
+    description="Ingestion job execution duration",
     unit="s",
 )
 
@@ -202,6 +345,25 @@ market_backfill_cycle_step_duration = meter.create_histogram(
     unit="s",
 )
 
+# --- Job-level metrics ---
+
+market_backfill_job_runs = meter.create_counter(
+    name="ratp_market_backfill_job_runs_total",
+    description="Total number of market backfill job executions",
+    unit="1",
+)
+
+market_backfill_job_failures = meter.create_counter(
+    name="ratp_market_backfill_job_failures_total",
+    description="Total number of market backfill job failures",
+    unit="1",
+)
+
+market_backfill_job_duration = meter.create_histogram(
+    name="ratp_market_backfill_job_duration_seconds",
+    description="Market backfill job execution duration",
+    unit="s",
+)
 
 # --- Data throughput & processing metrics ---
 
@@ -316,6 +478,25 @@ corporate_action_ingestion_cycle_step_duration = meter.create_histogram(
     unit="s",
 )
 
+# --- Job-level metrics ---
+
+corporate_action_ingestion_job_runs = meter.create_counter(
+    name="ratp_corporate_action_ingestion_job_runs_total",
+    description="Total number of corporate action ingestion job executions",
+    unit="1",
+)
+
+corporate_action_ingestion_job_failures = meter.create_counter(
+    name="ratp_corporate_action_ingestion_job_failures_total",
+    description="Total number of corporate action ingestion job failures",
+    unit="1",
+)
+
+corporate_action_ingestion_job_duration = meter.create_histogram(
+    name="ratp_corporate_action_ingestion_job_duration_seconds",
+    description="Corporate action ingestion job execution duration",
+    unit="s",
+)
 
 # --- Data throughput & processing metrics ---
 
