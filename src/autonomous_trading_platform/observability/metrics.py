@@ -4,6 +4,16 @@ from opentelemetry import metrics
 
 meter = metrics.get_meter("autonomous_trading_platform")
 
+# ==========================================
+# INCIDENT METRICS
+# ==========================================
+
+incident_events = meter.create_counter(
+    name="ratp_incident_events_total",
+    description="Total number of incident events",
+    unit="1",
+)
+
 # =========================
 # TRADING CYCLE METRICS
 # =========================
