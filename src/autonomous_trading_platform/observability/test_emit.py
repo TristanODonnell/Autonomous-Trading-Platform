@@ -3,6 +3,8 @@ from __future__ import annotations
 import random
 import time
 
+from opentelemetry import trace
+
 from autonomous_trading_platform.observability.metrics import (
     open_orders,
     trading_cycle_duration,
@@ -14,33 +16,38 @@ from autonomous_trading_platform.observability.telemetry import setup_telemetry
 def emit_test_metrics() -> None:
     setup_telemetry("ratp-local-test")
 
+    tracer = trace.get_tracer(__name__)
+
     for i in range(10):
-        start = time.perf_counter()
+        with tracer.start_as_current_span("test_emit_batch") as span:
+            span.set_attribute("batch.number", i)
+            span.set_attribute("environment", "dev")
 
-        # simulate work
-        time.sleep(0.4 + random.random() * 0.3)
+            start = time.perf_counter()
 
-        duration = time.perf_counter() - start
+            # simulate work
+            time.sleep(0.4 + random.random() * 0.3)
 
-        trading_cycle_runs.add(
-            1,
-            {"cycle_name": "test_cycle", "environment": "dev"},
-        )
+            duration = time.perf_counter() - start
 
-        trading_cycle_duration.record(
-            duration,
-            {"cycle_name": "test_cycle", "environment": "dev"},
-        )
+            trading_cycle_runs.add(
+                1,
+                {"cycle_name": "test_cycle", "environment": "dev"},
+            )
 
-        open_orders.add(
-            random.choice([-1, 1]),
-            {"environment": "dev"},
-        )
+            trading_cycle_duration.record(
+                duration,
+                {"cycle_name": "test_cycle", "environment": "dev"},
+            )
 
-        print(f"emitted batch {i + 1} duration={duration:.3f}s")
+            open_orders.add(
+                random.choice([-1, 1]),
+                {"environment": "dev"},
+            )
 
-    # give exporter time to flush on short-lived process
-    time.sleep(10)
+            print(f"emitted batch {i + 1} duration={duration:.3f}s")
+
+    time.sleep(5)
 
 
 if __name__ == "__main__":
