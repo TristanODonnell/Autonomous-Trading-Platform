@@ -36,7 +36,7 @@ def record_cycle_started(
         extra=LogContext(
             run_id=run_id,
             component=component,
-        ),
+        ).to_extra(),
     )
 
     metrics.runs.add(
@@ -62,7 +62,7 @@ def record_cycle_completed(
             run_id=run_id,
             component=component,
             duration_seconds=duration_seconds,
-        ),
+        ).to_extra(),
     )
 
     metrics.runs.add(
@@ -99,7 +99,7 @@ def record_cycle_failed(
             component=component,
             duration_seconds=duration_seconds,
             exception_type=str(exc),
-        ),
+        ).to_extra(),
     )
 
     metrics.failures.add(
@@ -135,7 +135,9 @@ def record_step_started(
     component: str,
     run_id: str,
 ) -> None:
-    logger.info("step_started", extra=LogContext(run_id=run_id, component=component, step=step))
+    logger.info(
+        "step_started", extra=LogContext(run_id=run_id, component=component, step=step)
+    ).to_extra()
     metrics.runs.add(
         1,
         {
@@ -159,7 +161,7 @@ def record_step_completed(
         "step_completed",
         extra=LogContext(
             run_id=run_id, component=component, step=step, duration_seconds=duration_seconds
-        ),
+        ).to_extra(),
     )
 
     metrics.runs.add(
@@ -198,7 +200,7 @@ def record_step_failed(
             step=step,
             duration_seconds=duration_seconds,
             exception_type=str(exc),
-        ),
+        ).to_extra(),
     )
 
     metrics.runs.add(
@@ -233,7 +235,7 @@ def record_job_started(
             run_id=run_id,
             component=component,
             job=job,
-        ),
+        ).to_extra(),
     )
 
     metrics.runs.add(
@@ -262,7 +264,7 @@ def record_job_completed(
             component=component,
             job=job,
             duration_seconds=duration_seconds,
-        ),
+        ).to_extra(),
     )
     metrics.runs.add(
         1,
@@ -301,7 +303,7 @@ def record_job_failed(
             job=job,
             duration_seconds=duration_seconds,
             exception_type=str(exc),
-        ),
+        ).to_extra(),
     )
     metrics.failures.add(
         1,
@@ -343,7 +345,7 @@ def record_operation_started(
             run_id=run_id,
             component=component,
             **context,
-        ),
+        ).to_extra(),
     )
 
 
@@ -361,7 +363,7 @@ def record_operation_completed(
             run_id=run_id,
             component=component,
             **context,
-        ),
+        ).to_extra(),
     )
 
 
@@ -382,5 +384,5 @@ def record_operation_failed(
             exception_type=type(exc).__name__,
             error_message=str(exc),
             **context,
-        ),
+        ).to_extra(),
     )

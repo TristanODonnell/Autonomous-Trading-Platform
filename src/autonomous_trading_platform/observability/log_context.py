@@ -8,6 +8,7 @@ class LogContext:
     strategy_id: str | None = None
     symbol: str | None = None
     bar_timestamp: datetime | str | None = None
+    cycle_timestamp: datetime | str | None = None
     dataset_version: str | None = None
     universe_version: str | None = None
     order_intent_id: str | None = None
