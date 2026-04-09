@@ -11,6 +11,7 @@ from autonomous_trading_platform.observability.lifecycle import (
     record_operation_failed,
     record_operation_started,
 )
+from autonomous_trading_platform.observability.log_context import LogContext
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
     backfill_api_requests,
@@ -170,12 +171,15 @@ class MarketBackfillService:
                     message = str(exc)
                     if "Incomplete prior bucket detected" in message:
                         logger.warning(
-                            "market_backfill_service_retry_incomplete_bucket run_id=%s component=%s symbol=%s error=%s",
-                            self.run_id,
-                            component,
-                            provider_bar.symbol,
-                            message,
+                            "market_backfill_service_retry_incomplete_bucket",
+                            extra=LogContext(
+                                run_id=self.run_id,
+                                component=component,
+                                symbol=provider_bar.symbol,
+                                error_message=message,
+                            ),
                         )
+
                         self.bar_ingestion_service.aggregator.drop_incomplete_buckets_for_symbol(
                             provider_bar.symbol
                         )
