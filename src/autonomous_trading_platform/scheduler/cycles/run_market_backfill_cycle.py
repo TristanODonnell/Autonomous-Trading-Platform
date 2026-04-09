@@ -33,6 +33,7 @@ from autonomous_trading_platform.observability.lifecycle import (
 )
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
+    market_backfill_cycle_duration,
     market_backfill_cycle_failures,
     market_backfill_cycle_runs,
     market_backfill_cycle_step_duration,
@@ -47,7 +48,7 @@ logger = get_logger(__name__)
 MARKET_BACKFILL_CYCLE_METRICS = CycleMetricSet(
     runs=market_backfill_cycle_runs,
     failures=market_backfill_cycle_failures,
-    duration=market_backfill_cycle_failures,
+    duration=market_backfill_cycle_duration,
 )
 MARKET_BACKFILL_STEP_METRICS = StepMetricSet(
     runs=market_backfill_cycle_step_runs,

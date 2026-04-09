@@ -22,6 +22,7 @@ from autonomous_trading_platform.observability.lifecycle import (
     record_step_failed,
     record_step_started,
 )
+from autonomous_trading_platform.observability.log_context import LogContext
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
     trading_cycle_degraded,
@@ -88,8 +89,11 @@ def run_trading_cycle(now_utc: datetime | None = None):
 
     if freeze_service.is_trading_frozen():
         logger.warning(
-            "trading_cycle_skipped_due_to_freeze component=%s status=skipped_due_to_freeze",
-            component,
+            "trading_cycle_skipped_due_to_freeze: trading is currently frozen",
+            extra=LogContext(
+                component=component,
+                incident_type="trading_frozen",
+            ).to_extra(),
         )
         trading_cycle_runs.add(
             1,
@@ -209,10 +213,13 @@ def run_trading_cycle(now_utc: datetime | None = None):
                 if not ingestion_result.ready:
                     if settings.skip_evaluation_on_ingestion_failure:
                         logger.warning(
-                            "trading_cycle_degraded run_id=%s component=%s mode=skip_evaluation reason=%s",
-                            str(run_id),
-                            component,
-                            ingestion_result.reason,
+                            "trading_cycle_degraded",
+                            extra=LogContext(
+                                run_id=str(run_id),
+                                component=component,
+                                incident_type="degraded_mode",
+                                error_message=str(ingestion_result.reason),
+                            ).to_extra(),
                         )
                         trading_cycle_degraded.add(
                             1,
@@ -299,10 +306,13 @@ def run_trading_cycle(now_utc: datetime | None = None):
                     except Exception as exc:
                         if settings.hold_positions_on_evaluation_failure:
                             logger.warning(
-                                "trading_cycle_degraded run_id=%s component=%s mode=hold_positions reason=%s",
-                                str(run_id),
-                                component,
-                                str(exc),
+                                "trading_cycle_degraded",
+                                extra=LogContext(
+                                    run_id=str(run_id),
+                                    component=component,
+                                    incident_type="degraded_mode",
+                                    error_message=str(exc),
+                                ).to_extra(),
                             )
                             trading_cycle_degraded.add(
                                 1,

@@ -81,6 +81,7 @@ def run_market_ingestion_cycle(
 
     run_id = uuid.uuid4()
     component = "scheduler.run_market_ingestion_cycle"
+    base_metadata: dict[str, object] = {}
 
     record_cycle_started(
         logger=logger, metrics=INGESTION_CYCLE_METRICS, component=component, run_id=str(run_id)

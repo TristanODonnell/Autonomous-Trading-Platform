@@ -98,7 +98,10 @@ def record_cycle_failed(
             run_id=run_id,
             component=component,
             duration_seconds=duration_seconds,
-            exception_type=str(exc),
+            exception_type=type(exc).__name__,
+            error_message=str(exc),
+            failure_class=failure_class,
+            incident_type="cycle_failure",
         ).to_extra(),
     )
 
@@ -136,8 +139,8 @@ def record_step_started(
     run_id: str,
 ) -> None:
     logger.info(
-        "step_started", extra=LogContext(run_id=run_id, component=component, step=step)
-    ).to_extra()
+        "step_started", extra=LogContext(run_id=run_id, component=component, step=step).to_extra()
+    )
     metrics.runs.add(
         1,
         {
@@ -199,7 +202,9 @@ def record_step_failed(
             component=component,
             step=step,
             duration_seconds=duration_seconds,
-            exception_type=str(exc),
+            exception_type=type(exc).__name__,
+            error_message=str(exc),
+            incident_type="step_failure",
         ).to_extra(),
     )
 
@@ -302,7 +307,10 @@ def record_job_failed(
             component=component,
             job=job,
             duration_seconds=duration_seconds,
-            exception_type=str(exc),
+            exception_type=type(exc).__name__,
+            error_message=str(exc),
+            failure_class=failure_class,
+            incident_type="job_failure",
         ).to_extra(),
     )
     metrics.failures.add(
