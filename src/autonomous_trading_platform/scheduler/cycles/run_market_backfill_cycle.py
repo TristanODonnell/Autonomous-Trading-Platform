@@ -22,14 +22,17 @@ from autonomous_trading_platform.ingestion.market_data.jobs.backfill_market_bars
 )
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
+    CycleMetricSet,
     StepMetricSet,
+    record_cycle_completed,
+    record_cycle_failed,
+    record_cycle_started,
     record_step_completed,
     record_step_failed,
     record_step_started,
 )
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
-    market_backfill_cycle_duration,
     market_backfill_cycle_failures,
     market_backfill_cycle_runs,
     market_backfill_cycle_step_duration,
@@ -41,78 +44,15 @@ from autonomous_trading_platform.runtime.services.run_manifest_service import Ru
 from src.db import get_session
 
 logger = get_logger(__name__)
+MARKET_BACKFILL_CYCLE_METRICS = CycleMetricSet(
+    runs=market_backfill_cycle_runs,
+    failures=market_backfill_cycle_failures,
+    duration=market_backfill_cycle_failures,
+)
 MARKET_BACKFILL_STEP_METRICS = StepMetricSet(
     runs=market_backfill_cycle_step_runs,
     duration=market_backfill_cycle_step_duration,
 )
-
-
-def _record_cycle_started(*, component: str, run_id: str) -> None:
-    logger.info(
-        "market_backfill_cycle_started run_id=%s component=%s",
-        run_id,
-        component,
-    )
-
-
-def _record_cycle_completed(*, component: str, run_id: str, duration_seconds: float) -> None:
-    logger.info(
-        "market_backfill_cycle_completed run_id=%s component=%s duration_seconds=%.6f",
-        run_id,
-        component,
-        duration_seconds,
-    )
-    market_backfill_cycle_runs.add(
-        1,
-        {
-            "component": component,
-            "status": "completed",
-        },
-    )
-    market_backfill_cycle_duration.record(
-        duration_seconds,
-        {
-            "component": component,
-            "status": "completed",
-        },
-    )
-
-
-def _record_cycle_failed(
-    *,
-    component: str,
-    run_id: str,
-    exc: Exception,
-    duration_seconds: float,
-) -> None:
-    logger.exception(
-        "market_backfill_cycle_failed run_id=%s component=%s duration_seconds=%.6f error=%s",
-        run_id,
-        component,
-        duration_seconds,
-        str(exc),
-    )
-    market_backfill_cycle_failures.add(
-        1,
-        {
-            "component": component,
-            "failure_class": "unknown",
-        },
-    )
-    market_backfill_cycle_runs.add(
-        1,
-        {
-            "component": component,
-            "status": "failed",
-        },
-    )
-    market_backfill_cycle_duration.record(
-        duration_seconds,
-        {
-            "component": component,
-            "status": "failed",
-        },
-    )
 
 
 def run_market_backfill_cycle(
@@ -134,7 +74,12 @@ def run_market_backfill_cycle(
     component = "scheduler.run_market_backfill_cycle"
     base_metadata: dict[str, object] = {}
 
-    _record_cycle_started(component=component, run_id=str(run_id))
+    record_cycle_started(
+        logger=logger,
+        metrics=MARKET_BACKFILL_CYCLE_METRICS,
+        component=component,
+        run_id=str(run_id),
+    )
 
     try:
         if symbols is None:
@@ -263,7 +208,9 @@ def run_market_backfill_cycle(
             )
 
             total_duration = perf_counter() - cycle_wall_start
-            _record_cycle_completed(
+            record_cycle_completed(
+                logger=logger,
+                metrics=MARKET_BACKFILL_CYCLE_METRICS,
                 component=component,
                 run_id=str(run_id),
                 duration_seconds=total_duration,
@@ -279,7 +226,9 @@ def run_market_backfill_cycle(
                 "error": str(exc),
             },
         )
-        _record_cycle_failed(
+        record_cycle_failed(
+            logger=logger,
+            metrics=MARKET_BACKFILL_CYCLE_METRICS,
             component=component,
             run_id=str(run_id),
             exc=exc,

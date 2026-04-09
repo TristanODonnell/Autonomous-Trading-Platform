@@ -19,6 +19,11 @@ from autonomous_trading_platform.ingestion.corporate_actions.services.corporate_
     CorporateActionValidationService,
 )
 from autonomous_trading_platform.observability.enums import SpanTimespan
+from autonomous_trading_platform.observability.lifecycle import (
+    record_operation_completed,
+    record_operation_failed,
+    record_operation_started,
+)
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
     actions_per_symbol,
@@ -60,11 +65,12 @@ class CorporateActionIngestionService:
     def ingest_corporate_actions(self) -> None:
         component = "ingestion.corporate_action_ingestion_service"
 
-        logger.info(
-            "corporate_action_ingestion_service_started run_id=%s component=%s cycle_timestamp=%s",
-            self.run_id,
-            component,
-            self.cycle_timestamp.isoformat(),
+        record_operation_started(
+            logger=logger,
+            event="corporate_action_ingestion_service_started",
+            run_id=self.run_id,
+            component=component,
+            cycle_timestamp=self.cycle_timestamp.isoformat(),
         )
 
         request_start = perf_counter()
@@ -109,12 +115,13 @@ class CorporateActionIngestionService:
             },
         )
 
-        logger.info(
-            "corporate_action_ingestion_service_fetch_completed run_id=%s component=%s raw_action_count=%s duration_seconds=%.6f",
-            self.run_id,
-            component,
-            len(raw_actions),
-            request_duration,
+        record_operation_completed(
+            logger=logger,
+            event="corporate_action_ingestion_service_fetch_completed",
+            run_id=self.run_id,
+            component=component,
+            raw_action_count=len(raw_actions),
+            request_duration=request_duration,
         )
 
         with start_span(
@@ -275,7 +282,7 @@ class CorporateActionIngestionService:
                             symbol=action.symbol,
                             cycle_timestamp=self.cycle_timestamp,
                         )
-                    except Exception:
+                    except Exception as exc:
                         adjustment_failures.add(
                             1,
                             {
@@ -291,11 +298,14 @@ class CorporateActionIngestionService:
                                 "status": "failed",
                             },
                         )
-                        logger.exception(
-                            "corporate_action_adjustment_failed run_id=%s component=%s symbol=%s",
-                            self.run_id,
-                            component,
-                            action.symbol,
+
+                        record_operation_failed(
+                            logger=logger,
+                            event="corporate_action_adjustment_failed",
+                            run_id=self.run_id,
+                            component=component,
+                            exc=exc,
+                            action_symbol=action.symbol,
                         )
                         raise
                     finally:
@@ -307,8 +317,9 @@ class CorporateActionIngestionService:
                             },
                         )
 
-        logger.info(
-            "corporate_action_ingestion_service_completed run_id=%s component=%s",
-            self.run_id,
-            component,
+        record_operation_completed(
+            logger=logger,
+            event="corporate_action_ingestion_service_completed",
+            run_id=self.run_id,
+            component=component,
         )

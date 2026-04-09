@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from autonomous_trading_platform.observability.log_context import LogContext
+
 
 @dataclass(frozen=True)
 class StepMetricSet:
@@ -22,6 +24,109 @@ class CycleMetricSet:
     duration: Any
 
 
+def record_cycle_started(
+    *,
+    logger,
+    metrics: CycleMetricSet,
+    component: str,
+    run_id: str,
+) -> None:
+    logger.info(
+        "cycle_started",
+        extra=LogContext(
+            run_id=run_id,
+            component=component,
+        ),
+    )
+
+    metrics.runs.add(
+        1,
+        {
+            "component": component,
+            "status": "started",
+        },
+    )
+
+
+def record_cycle_completed(
+    *,
+    logger,
+    metrics: CycleMetricSet,
+    component: str,
+    run_id: str,
+    duration_seconds: float,
+) -> None:
+    logger.info(
+        "cycle_completed",
+        extra=LogContext(
+            run_id=run_id,
+            component=component,
+            duration_seconds=duration_seconds,
+        ),
+    )
+
+    metrics.runs.add(
+        1,
+        {
+            "component": component,
+            "status": "completed",
+        },
+    )
+
+    metrics.duration.record(
+        duration_seconds,
+        {
+            "component": component,
+            "status": "completed",
+        },
+    )
+
+
+def record_cycle_failed(
+    *,
+    logger,
+    metrics: CycleMetricSet,
+    component: str,
+    run_id: str,
+    exc: Exception,
+    duration_seconds: float,
+    failure_class: str = "unknown",
+) -> None:
+    logger.exception(
+        "cycle_failed",
+        extra=LogContext(
+            run_id=run_id,
+            component=component,
+            duration_seconds=duration_seconds,
+            exception_type=str(exc),
+        ),
+    )
+
+    metrics.failures.add(
+        1,
+        {
+            "component": component,
+            "failure_class": failure_class,
+        },
+    )
+
+    metrics.runs.add(
+        1,
+        {
+            "component": component,
+            "status": "failed",
+        },
+    )
+
+    metrics.duration.record(
+        duration_seconds,
+        {
+            "component": component,
+            "status": "failed",
+        },
+    )
+
+
 def record_step_started(
     *,
     logger,
@@ -30,12 +135,7 @@ def record_step_started(
     component: str,
     run_id: str,
 ) -> None:
-    logger.info(
-        "step_started run_id=%s component=%s step=%s",
-        run_id,
-        component,
-        step,
-    )
+    logger.info("step_started", extra=LogContext(run_id=run_id, component=component, step=step))
     metrics.runs.add(
         1,
         {
@@ -56,12 +156,12 @@ def record_step_completed(
     duration_seconds: float,
 ) -> None:
     logger.info(
-        "step_completed run_id=%s component=%s step=%s duration_seconds=%.6f",
-        run_id,
-        component,
-        step,
-        duration_seconds,
+        "step_completed",
+        extra=LogContext(
+            run_id=run_id, component=component, step=step, duration_seconds=duration_seconds
+        ),
     )
+
     metrics.runs.add(
         1,
         {
@@ -91,13 +191,16 @@ def record_step_failed(
     duration_seconds: float,
 ) -> None:
     logger.exception(
-        "step_failed run_id=%s component=%s step=%s duration_seconds=%.6f error=%s",
-        run_id,
-        component,
-        step,
-        duration_seconds,
-        str(exc),
+        "step_failed",
+        extra=LogContext(
+            run_id=run_id,
+            component=component,
+            step=step,
+            duration_seconds=duration_seconds,
+            exception_type=str(exc),
+        ),
     )
+
     metrics.runs.add(
         1,
         {
@@ -125,11 +228,14 @@ def record_job_started(
     run_id: str,
 ) -> None:
     logger.info(
-        "job_started run_id=%s component=%s job=%s",
-        run_id,
-        component,
-        job,
+        "job_started",
+        extra=LogContext(
+            run_id=run_id,
+            component=component,
+            job=job,
+        ),
     )
+
     metrics.runs.add(
         1,
         {
@@ -150,11 +256,13 @@ def record_job_completed(
     duration_seconds: float,
 ) -> None:
     logger.info(
-        "job_completed run_id=%s component=%s job=%s duration_seconds=%.6f",
-        run_id,
-        component,
-        job,
-        duration_seconds,
+        "job_completed",
+        extra=LogContext(
+            run_id=run_id,
+            component=component,
+            job=job,
+            duration_seconds=duration_seconds,
+        ),
     )
     metrics.runs.add(
         1,
@@ -186,12 +294,14 @@ def record_job_failed(
     failure_class: str = "unknown",
 ) -> None:
     logger.exception(
-        "job_failed run_id=%s component=%s job=%s duration_seconds=%.6f error=%s",
-        run_id,
-        component,
-        job,
-        duration_seconds,
-        str(exc),
+        "job_failed",
+        extra=LogContext(
+            run_id=run_id,
+            component=component,
+            job=job,
+            duration_seconds=duration_seconds,
+            exception_type=str(exc),
+        ),
     )
     metrics.failures.add(
         1,
@@ -216,4 +326,61 @@ def record_job_failed(
             "job": job,
             "status": "failed",
         },
+    )
+
+
+def record_operation_started(
+    *,
+    logger,
+    event: str,
+    run_id: str,
+    component: str,
+    **context,
+) -> None:
+    logger.info(
+        event,
+        extra=LogContext(
+            run_id=run_id,
+            component=component,
+            **context,
+        ),
+    )
+
+
+def record_operation_completed(
+    *,
+    logger,
+    event: str,
+    run_id: str,
+    component: str,
+    **context,
+) -> None:
+    logger.info(
+        event,
+        extra=LogContext(
+            run_id=run_id,
+            component=component,
+            **context,
+        ),
+    )
+
+
+def record_operation_failed(
+    *,
+    logger,
+    event: str,
+    run_id: str,
+    component: str,
+    exc: Exception,
+    **context,
+) -> None:
+    logger.exception(
+        event,
+        extra=LogContext(
+            run_id=run_id,
+            component=component,
+            exception_type=type(exc).__name__,
+            error_message=str(exc),
+            **context,
+        ),
     )

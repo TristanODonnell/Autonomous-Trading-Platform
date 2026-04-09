@@ -6,6 +6,11 @@ from time import perf_counter
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.observability.enums import SpanTimespan
+from autonomous_trading_platform.observability.lifecycle import (
+    record_operation_completed,
+    record_operation_failed,
+    record_operation_started,
+)
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
     backfill_api_requests,
@@ -55,15 +60,15 @@ class MarketBackfillService:
         component = "ingestion.market_backfill_service"
         request_start = perf_counter()
         service_start = perf_counter()
-        logger.info(
-            "market_backfill_service_started run_id=%s component=%s symbol_count=%s start=%s end=%s",
-            self.run_id,
-            component,
-            len(symbols),
-            start.isoformat(),
-            end.isoformat(),
+        record_operation_started(
+            logger=logger,
+            event="market_backfill_service_started",
+            run_id=self.run_id,
+            component=component,
+            symbol_count=len(symbols),
+            start=start.isoformat(),
+            end=end.isoformat(),
         )
-
         with start_span(
             name="market_backfill_service.backfill",
             timespan=SpanTimespan.STEP,
@@ -97,7 +102,7 @@ class MarketBackfillService:
                         start=start,
                         end=end,
                     )
-            except Exception:
+            except Exception as exc:
                 request_duration = perf_counter() - request_start
                 backfill_request_latency_seconds.record(
                     request_duration,
@@ -106,11 +111,16 @@ class MarketBackfillService:
                         "status": "failed",
                     },
                 )
-                logger.exception(
-                    "market_backfill_service_fetch_failed run_id=%s component=%s duration_seconds=%.6f",
-                    self.run_id,
-                    component,
-                    request_duration,
+                record_operation_failed(
+                    logger=logger,
+                    event="market_backfill_service_fetch_failed",
+                    run_id=self.run_id,
+                    component=component,
+                    exc=exc,
+                    duration_seconds=request_duration,
+                    symbol_count=len(symbols),
+                    start=start.isoformat(),
+                    end=end.isoformat(),
                 )
                 raise
 
@@ -132,14 +142,17 @@ class MarketBackfillService:
                 },
             )
 
-            logger.info(
-                "market_backfill_service_fetch_completed run_id=%s component=%s bar_count=%s duration_seconds=%.6f",
-                self.run_id,
-                component,
-                len(bars),
-                request_duration,
+            record_operation_completed(
+                logger=logger,
+                event="market_backfill_service_fetch_completed",
+                run_id=self.run_id,
+                component=component,
+                bar_count=len(bars),
+                duration_seconds=request_duration,
+                symbol_count=len(symbols),
+                start=start.isoformat(),
+                end=end.isoformat(),
             )
-
             processed_bars = 0
 
             for provider_bar in bars:
@@ -185,12 +198,14 @@ class MarketBackfillService:
                             "failure_class": "value_error",
                         },
                     )
-                    logger.exception(
-                        "market_backfill_service_bar_failed run_id=%s component=%s symbol=%s error=%s",
-                        self.run_id,
-                        component,
-                        provider_bar.symbol,
-                        message,
+                    record_operation_failed(
+                        logger=logger,
+                        event="market_backfill_service_bar_failed",
+                        run_id=self.run_id,
+                        component=component,
+                        exc=exc,
+                        symbol=provider_bar.symbol,
+                        failure_class="value_error",
                     )
                     raise
                 except Exception as exc:
@@ -202,12 +217,14 @@ class MarketBackfillService:
                             "failure_class": "unknown",
                         },
                     )
-                    logger.exception(
-                        "market_backfill_service_bar_failed run_id=%s component=%s symbol=%s error=%s",
-                        self.run_id,
-                        component,
-                        provider_bar.symbol,
-                        str(exc),
+                    record_operation_failed(
+                        logger=logger,
+                        event="market_backfill_service_bar_failed",
+                        run_id=self.run_id,
+                        component=component,
+                        exc=exc,
+                        symbol=provider_bar.symbol,
+                        failure_class="unknown",
                     )
                     raise
 
@@ -225,9 +242,12 @@ class MarketBackfillService:
             service_span.set_attribute("ratp.backfill.duration_seconds", service_duration)
             service_span.set_attribute("ratp.backfill.throughput_bars_per_second", throughput)
 
-            logger.info(
-                "market_backfill_service_completed run_id=%s component=%s processed_bars=%s",
-                self.run_id,
-                component,
-                processed_bars,
+            record_operation_completed(
+                logger=logger,
+                event="market_backfill_service_completed",
+                run_id=self.run_id,
+                component=component,
+                processed_bars=processed_bars,
+                duration_seconds=service_duration,
+                throughput_bars_per_second=throughput,
             )
