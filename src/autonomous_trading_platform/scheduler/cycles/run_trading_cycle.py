@@ -13,7 +13,11 @@ from autonomous_trading_platform.execution.services.trading_freeze_service impor
 )
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
+    CycleMetricSet,
     StepMetricSet,
+    record_cycle_completed,
+    record_cycle_failed,
+    record_cycle_started,
     record_step_completed,
     record_step_failed,
     record_step_started,
@@ -54,6 +58,11 @@ from autonomous_trading_platform.scheduler.jobs.run_trading_evaluation_job impor
 )
 
 logger = get_logger(__name__)
+TRADING_CYCLE_METRICS = CycleMetricSet(
+    runs=trading_cycle_runs,
+    failures=trading_cycle_failures,
+    duration=trading_cycle_duration,
+)
 TRADING_STEP_METRICS = StepMetricSet(
     runs=trading_cycle_step_runs,
     duration=trading_cycle_step_duration,
@@ -123,12 +132,11 @@ def run_trading_cycle(now_utc: datetime | None = None):
         expected_symbols=expected_symbols,
         manifest=manifest,
     )
-    logger.info(
-        "trading_cycle_started run_id=%s component=%s cycle_start=%s cycle_end=%s",
-        str(run_id),
-        component,
-        trading_cycle_window.cycle_start.isoformat(),
-        trading_cycle_window.cycle_end.isoformat(),
+    record_cycle_started(
+        logger=logger,
+        metrics=TRADING_CYCLE_METRICS,
+        component=component,
+        run_id=str(run_id),
     )
 
     with start_span("trading_cycle.run", timespan=SpanTimespan.CYCLE) as cycle_span:
@@ -536,35 +544,24 @@ def run_trading_cycle(now_utc: datetime | None = None):
             manifest_service.save(manifest)
 
             total_duration = perf_counter() - cycle_wall_start
-            trading_cycle_runs.add(
-                1,
-                {
-                    "component": component,
-                    "status": "completed",
-                },
-            )
-            trading_cycle_duration.record(
-                total_duration,
-                {
-                    "component": component,
-                    "status": "completed",
-                },
-            )
-
-            logger.info(
-                "trading_cycle_completed run_id=%s component=%s duration_seconds=%.6f",
-                str(run_id),
-                component,
-                total_duration,
+            record_cycle_completed(
+                logger=logger,
+                metrics=TRADING_CYCLE_METRICS,
+                component=component,
+                run_id=str(run_id),
+                duration_seconds=total_duration,
             )
 
         except TransientInfrastructureError as exc:
-            trading_cycle_failures.add(
-                1,
-                {
-                    "component": component,
-                    "failure_class": "transient",
-                },
+            total_duration = perf_counter() - cycle_wall_start
+            record_cycle_failed(
+                logger=logger,
+                metrics=TRADING_CYCLE_METRICS,
+                component=component,
+                run_id=str(run_id),
+                exc=exc,
+                duration_seconds=total_duration,
+                failure_class="transient",
             )
             # retry case → let Airflow retry
             audit_logger.record_run_failed(
@@ -580,21 +577,19 @@ def run_trading_cycle(now_utc: datetime | None = None):
             manifest.status = "failed"
             manifest.error_message = str(exc)
             manifest_service.save(manifest)
-            logger.exception(
-                "trading_cycle_failed run_id=%s component=%s failure_class=transient error=%s",
-                str(run_id),
-                component,
-                str(exc),
-            )
             raise
+
         except (SafetyError, ExecutionError, PersistentInfrastructureError) as exc:
             # persistent failure → stop trading, require manual intervention
-            trading_cycle_failures.add(
-                1,
-                {
-                    "component": component,
-                    "failure_class": "persistent",
-                },
+            total_duration = perf_counter() - cycle_wall_start
+            record_cycle_failed(
+                logger=logger,
+                metrics=TRADING_CYCLE_METRICS,
+                component=component,
+                run_id=str(run_id),
+                exc=exc,
+                duration_seconds=total_duration,
+                failure_class="persistent",
             )
             freeze_service.freeze_trading(
                 reason=f"critical_failure: {exc}",
@@ -613,22 +608,19 @@ def run_trading_cycle(now_utc: datetime | None = None):
             manifest.status = "failed"
             manifest.error_message = str(exc)
             manifest_service.save(manifest)
-            logger.exception(
-                "trading_cycle_failed run_id=%s component=%s failure_class=persistent error=%s",
-                str(run_id),
-                component,
-                str(exc),
-            )
             raise
 
         except Exception as exc:
             # unknown → fail closed
-            trading_cycle_failures.add(
-                1,
-                {
-                    "component": component,
-                    "failure_class": "unknown",
-                },
+            total_duration = perf_counter() - cycle_wall_start
+            record_cycle_failed(
+                logger=logger,
+                metrics=TRADING_CYCLE_METRICS,
+                component=component,
+                run_id=str(run_id),
+                exc=exc,
+                duration_seconds=total_duration,
+                failure_class="unknown",
             )
             audit_logger.record_run_failed(
                 run_id=str(run_id),
@@ -642,12 +634,6 @@ def run_trading_cycle(now_utc: datetime | None = None):
             manifest.status = "failed"
             manifest.error_message = str(exc)
             manifest_service.save(manifest)
-            logger.exception(
-                "trading_cycle_failed run_id=%s component=%s failure_class=unknown error=%s",
-                str(run_id),
-                component,
-                str(exc),
-            )
             raise
         finally:
             session.close()
