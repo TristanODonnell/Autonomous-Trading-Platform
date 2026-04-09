@@ -17,6 +17,7 @@ class LogContext:
     job: str | None = None
     step: str | None = None
     duration_seconds: float | None = None
+    raw_action_count: int | None = None
 
     exception_type: str | None = None
     error_message: str | None = None
