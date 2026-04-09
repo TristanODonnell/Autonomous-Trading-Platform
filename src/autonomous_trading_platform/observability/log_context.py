@@ -18,7 +18,7 @@ class LogContext:
     step: str | None = None
     duration_seconds: float | None = None
     raw_action_count: int | None = None
-
+    request_duration: float | None = None
     exception_type: str | None = None
     error_message: str | None = None
     failure_class: str | None = None
