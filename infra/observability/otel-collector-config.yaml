@@ -22,24 +22,22 @@ exporters:
   debug:
     verbosity: basic
 
-  otlp_grpc/lgtm:
-    endpoint: lgtm:4317
-    tls:
-      insecure: true
+  otlp_http/loki:
+    endpoint: http://lgtm:3100/otlp
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, probabilistic_sampler, batch]
-      exporters: [debug, otlp_grpc/lgtm]
+      exporters: [debug]
 
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug, otlp_grpc/lgtm]
+      exporters: [debug]
 
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug, otlp_grpc/lgtm]
+      exporters: [debug, otlp_http/loki]
