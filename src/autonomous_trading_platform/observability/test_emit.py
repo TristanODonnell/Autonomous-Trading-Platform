@@ -3,8 +3,10 @@ from __future__ import annotations
 import random
 import time
 
+from dotenv import load_dotenv
 from opentelemetry import trace
 
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
     open_orders,
     trading_cycle_duration,
@@ -14,8 +16,10 @@ from autonomous_trading_platform.observability.telemetry import setup_telemetry
 
 
 def emit_test_metrics() -> None:
+    load_dotenv()
     setup_telemetry("ratp-local-test")
 
+    logger = get_logger(__name__)
     tracer = trace.get_tracer(__name__)
 
     for i in range(10):
@@ -25,7 +29,6 @@ def emit_test_metrics() -> None:
 
             start = time.perf_counter()
 
-            # simulate work
             time.sleep(0.4 + random.random() * 0.3)
 
             duration = time.perf_counter() - start
@@ -45,7 +48,11 @@ def emit_test_metrics() -> None:
                 {"environment": "dev"},
             )
 
+            logger.info("loki_smoke_test_batch_completed", extra={"batch_number": i})
             print(f"emitted batch {i + 1} duration={duration:.3f}s")
+
+    logger.warning("loki_smoke_test_warning")
+    logger.error("loki_smoke_test_error")
 
     time.sleep(5)
 
