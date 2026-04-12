@@ -11,7 +11,7 @@ from .base import Base
 from .helpers.sa_types import UTCDateTimeType
 
 
-class SymbolDateCoverages(Base):
+class SymbolDateCoverage(Base):
     __tablename__ = "symbol_date_coverages"
     coverage_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     symbol: Mapped[str] = mapped_column(String(64), nullable=False)
