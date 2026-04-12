@@ -12,7 +12,7 @@ processors:
     limit_mib: 256
 
   probabilistic_sampler:
-    sampling_percentage: 25
+    sampling_percentage: 100
 
   batch:
     timeout: 5s
@@ -22,20 +22,26 @@ exporters:
   debug:
     verbosity: basic
 
+  otlphttp/tempo:
+    endpoint: http://lgtm:4318
+
   otlp_http/loki:
     endpoint: http://lgtm:3100/otlp
+
+  prometheus:
+    endpoint: 0.0.0.0:9464
 
 service:
   pipelines:
     traces:
-      receivers: [otlp]
-      processors: [memory_limiter, probabilistic_sampler, batch]
-      exporters: [debug]
+      receivers: [ otlp ]
+      processors: [ memory_limiter, probabilistic_sampler, batch ]
+      exporters: [ debug, otlphttp/tempo ]
 
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug]
+      exporters: [debug, prometheus]
 
     logs:
       receivers: [otlp]
