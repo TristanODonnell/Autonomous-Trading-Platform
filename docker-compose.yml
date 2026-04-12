@@ -129,6 +129,7 @@ services:
     volumes:
       - ratp_lgtm_data:/data
       - ./infra/observability/tempo-config.yaml:/otel-lgtm/tempo-config.yaml:ro
+      - ./infra/observability/prometheus-config.yaml:/otel-lgtm/prometheus.yaml:ro
 
   # ----------------------------
   # OpenTelemetry Collector
@@ -142,6 +143,7 @@ services:
     ports:
       - "4317:4317"
       - "4318:4318"
+      - "9464:9464"
     restart: unless-stopped
 
 volumes:
