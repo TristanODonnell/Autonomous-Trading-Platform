@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+import uuid
+from datetime import UTC, datetime
 from time import perf_counter
 
 from sqlalchemy.orm import Session
@@ -29,6 +30,9 @@ from autonomous_trading_platform.observability.metrics import (
 )
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
+from autonomous_trading_platform.storage.sor.models.missing_bar_incidents import MissingBarIncidents
+from autonomous_trading_platform.storage.sor.models.symbol_date_coverage import SymbolDateCoverage
+from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 logger = get_logger(__name__)
 
@@ -46,8 +50,12 @@ class IngestBarsJob:
         session: Session,
         run_id: str,
         audit_logger: AuditLoggingService,
+        ingestion_run_id: str,
+        dataset_version_id: str,
     ) -> None:
         self.session = session
+        self.ingestion_run_id = ingestion_run_id
+        self.dataset_version_id = dataset_version_id
         self.expected_symbols = expected_symbols
         self.received_symbols: set[str] = set()
         self.current_cycle_timestamp: datetime | None = None
@@ -85,19 +93,61 @@ class IngestBarsJob:
         missing_symbols = self.expected_symbols - self.received_symbols
         symbols_to_evaluate = sorted(self.expected_symbols & self.received_symbols)
 
-        for symbol in missing_symbols:
-            missing_bars.add(
-                1,
-                {
-                    "component": component,
-                    "symbol": symbol,
-                },
+        if missing_symbols:
+            incidents = []
+            for symbol in missing_symbols:
+                incident = MissingBarIncidents(
+                    incident_id=str(uuid.uuid4()),
+                    symbol=symbol,
+                    bar_timestamp=cycle_timestamp,
+                    dataset_version=self.dataset_version_id,
+                    run_id=self.run_id,
+                    ingestion_run_id=self.ingestion_run_id,
+                    incident_type="missing_bar",
+                    severity="warning",
+                    message=f"Missing expected 5-minute bar for {symbol} at {cycle_timestamp.isoformat()}",
+                    created_at=datetime.now(UTC),
+                    resolved_flag=False,
+                )
+                incidents.append(incident)
+                missing_bars.add(
+                    1,
+                    {
+                        "component": component,
+                        "symbol": symbol,
+                    },
+                )
+                self.audit_logger.record_bar_missing(
+                    run_id=self.run_id,
+                    symbol=symbol,
+                    cycle_timestamp=cycle_timestamp,
+                )
+            with SorUnitOfWork(self.session) as uow:
+                uow.missing_bar_incidents.insert_many(incidents)
+
+        coverage_rows = []
+        for symbol in sorted(self.expected_symbols):
+            was_received = symbol in self.received_symbols
+
+            coverage_rows.append(
+                SymbolDateCoverage(
+                    coverage_id=f"{self.dataset_version_id}:{symbol}:{cycle_timestamp.date().isoformat()}",
+                    symbol=symbol,
+                    date=cycle_timestamp.date(),
+                    dataset_version=self.dataset_version_id,
+                    expected_bar_count=1,
+                    actual_bar_count=1 if was_received else 0,
+                    completeness_status="complete" if was_received else "missing",
+                    gap_summary=None
+                    if was_received
+                    else (f"Missing expected 5-minute bar at {cycle_timestamp.isoformat()}"),
+                    updated_at=datetime.now(UTC),
+                )
             )
-            self.audit_logger.record_bar_missing(
-                run_id=self.run_id,
-                symbol=symbol,
-                cycle_timestamp=cycle_timestamp,
-            )
+
+        with SorUnitOfWork(self.session) as uow:
+            for row in coverage_rows:
+                uow.symbol_date_coverage.upsert(row)
 
         if self.expected_symbols:
             missing_ratio = len(missing_symbols) / len(self.expected_symbols)

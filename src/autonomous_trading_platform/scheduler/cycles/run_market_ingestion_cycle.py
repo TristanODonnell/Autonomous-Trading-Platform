@@ -6,7 +6,7 @@ from time import perf_counter
 
 from sqlalchemy.orm import Session
 
-from autonomous_trading_platform.contracts.common.enums import BarInterval, RunType
+from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.ingestion.market_data.jobs.ingest_bars_job import (
     IngestBarsJob,
@@ -34,12 +34,15 @@ from autonomous_trading_platform.observability.telemetry import setup_telemetry
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
+from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from autonomous_trading_platform.storage.sor.models.ingestion_runs import IngestionRuns
 from autonomous_trading_platform.storage.sor.repositories.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
     UniverseSnapshotRepository,
 )
+from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 from autonomous_trading_platform.universe.services.ticker_lifecycle_service import (
     TickerLifecycleService,
 )
@@ -80,6 +83,9 @@ def run_market_ingestion_cycle(
     manifest_service = RunManifestService(session=session)
 
     run_id = uuid.uuid4()
+    ingestion_run_id = uuid.uuid4()
+    ingestion_run: IngestionRuns | None = None
+    dataset_version_id = uuid.uuid4()
     component = "scheduler.run_market_ingestion_cycle"
     base_metadata: dict[str, object] = {}
 
@@ -133,6 +139,37 @@ def run_market_ingestion_cycle(
             "manifest_run_type": manifest.run_type.value,
             "manifest_interval": manifest.interval.value,
         }
+        # TODO may need to change some field defaults later
+        ingestion_run = IngestionRuns(
+            ingestion_run_id=str(ingestion_run_id),
+            created_at=now_utc,
+            run_timestamp=cycle_end,
+            run_type=RunType.INGESTION,
+            source="alpaca",
+            dataset_version=1,
+            status="running",
+            started_at=now_utc,
+            completed_at=None,
+            error_message=None,
+            row_count=None,
+            file_count=None,
+        )
+        with SorUnitOfWork(session) as uow:
+            uow.ingestion_runs.insert(ingestion_run)
+
+        # TODO may need to change some field defaults later
+        dataset_version = DatasetVersions(
+            dataset_version_id=str(dataset_version_id),
+            dataset_name="dataset_one",
+            created_at=now_utc,
+            source="alpaca",
+            price_basis=PriceBasis.RAW,
+            interval=BarInterval.FIVE_MIN,
+            validation_status="unvalidated",
+            metadata_json=base_metadata,
+        )
+        with SorUnitOfWork(session) as uow:
+            uow.dataset_versions.insert(dataset_version)
 
         with start_span("market_ingestion_cycle.run", timespan=SpanTimespan.CYCLE) as cycle_span:
             cycle_span.set_attribute("ratp.run_id", str(run_id))
@@ -152,6 +189,8 @@ def run_market_ingestion_cycle(
                 session=session,
                 run_id=str(run_id),
                 audit_logger=audit_logger,
+                ingestion_run_id=str(ingestion_run_id),
+                dataset_version_id=str(dataset_version_id),
             )
 
             step = "ingest_bars"
@@ -196,6 +235,12 @@ def run_market_ingestion_cycle(
                 )
                 raise
 
+            ingestion_run.status = "completed"
+            ingestion_run.completed_at = datetime.now(UTC)
+
+            with SorUnitOfWork(session) as uow:
+                uow.ingestion_runs.upsert(ingestion_run)
+
             audit_logger.record_run_completed(
                 run_id=str(run_id),
                 component=component,
@@ -211,6 +256,14 @@ def run_market_ingestion_cycle(
                 duration_seconds=total_duration,
             )
     except Exception as exc:
+        if ingestion_run is not None:
+            ingestion_run.status = "failed"
+            ingestion_run.completed_at = datetime.now(UTC)
+            ingestion_run.error_message = str(exc)
+
+            with SorUnitOfWork(session) as uow:
+                uow.ingestion_runs.upsert(ingestion_run)
+
         total_duration = perf_counter() - cycle_wall_start
         audit_logger.record_run_failed(
             run_id=str(run_id),
