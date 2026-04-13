@@ -3,9 +3,9 @@
   <database-model serializer="dbm" dbms="POSTGRES" family-id="POSTGRES" format-version="4.53">
     <root id="1">
       <DateStyle>mdy</DateStyle>
-      <IntrospectionStateNumber>12452</IntrospectionStateNumber>
+      <IntrospectionStateNumber>41567</IntrospectionStateNumber>
       <ServerVersion>16.11</ServerVersion>
-      <StartupTime>1774659734</StartupTime>
+      <StartupTime>1775852674</StartupTime>
       <TimeZones>true ACDT
 true ACSST
 false ACST
@@ -218,7 +218,7 @@ true America/Resolute
 false America/Rio_Branco
 true America/Santa_Isabel
 false America/Santarem
-true America/Santiago
+false America/Santiago
 false America/Santo_Domingo
 false America/Sao_Paulo
 true America/Scoresbysund
@@ -246,9 +246,9 @@ true America/Yellowknife
 false Antarctica/Casey
 false Antarctica/Davis
 false Antarctica/DumontDUrville
-true Antarctica/Macquarie
+false Antarctica/Macquarie
 false Antarctica/Mawson
-true Antarctica/McMurdo
+false Antarctica/McMurdo
 false Antarctica/Palmer
 false Antarctica/Rothera
 false Antarctica/Syowa
@@ -353,20 +353,20 @@ false Atlantic/Reykjavik
 false Atlantic/South_Georgia
 false Atlantic/St_Helena
 false Atlantic/Stanley
-true Australia/Adelaide
+false Australia/Adelaide
 false Australia/Brisbane
-true Australia/Broken_Hill
-true Australia/Canberra
-true Australia/Currie
+false Australia/Broken_Hill
+false Australia/Canberra
+false Australia/Currie
 false Australia/Darwin
 false Australia/Eucla
-true Australia/Hobart
+false Australia/Hobart
 false Australia/Lindeman
-true Australia/Lord_Howe
-true Australia/Melbourne
+false Australia/Lord_Howe
+false Australia/Melbourne
 false Australia/Perth
-true Australia/Sydney
-true Australia/Yancowinna
+false Australia/Sydney
+false Australia/Yancowinna
 true BDST
 false BDT
 false BNT
@@ -389,14 +389,14 @@ false CHAST
 false CHUT
 false CKT
 true CLST
-true CLT
+false CLT
 false COT
 false CST
 false CXT
 false DAVT
 false DDUT
-true EASST
-true EAST
+false EASST
+false EAST
 false EAT
 true EDT
 true EEST
@@ -546,7 +546,7 @@ false KOST
 false KRAST
 false KRAT
 false KST
-true LHDT
+false LHDT
 false LHST
 false LIGT
 false LINT
@@ -599,11 +599,11 @@ false PWT
 true PYST
 false PYT
 false Pacific/Apia
-true Pacific/Auckland
+false Pacific/Auckland
 false Pacific/Bougainville
-true Pacific/Chatham
+false Pacific/Chatham
 false Pacific/Chuuk
-true Pacific/Easter
+false Pacific/Easter
 false Pacific/Efate
 false Pacific/Fakaofo
 false Pacific/Fiji
@@ -623,7 +623,7 @@ false Pacific/Marquesas
 false Pacific/Midway
 false Pacific/Nauru
 false Pacific/Niue
-true Pacific/Norfolk
+false Pacific/Norfolk
 false Pacific/Noumea
 false Pacific/Pago_Pago
 false Pacific/Palau
@@ -703,8 +703,8 @@ true posixrules
 13276||10|C|G
 13276||-9223372036854775808|U|G
 13276||10|U|G</Grants>
-      <IntrospectionStateNumber>12452</IntrospectionStateNumber>
-      <ObjectId>49153</ObjectId>
+      <IntrospectionStateNumber>41567</IntrospectionStateNumber>
+      <ObjectId>49368</ObjectId>
       <OwnerName>ratp</OwnerName>
     </database>
     <role id="4" parent="1" name="pg_checkpoint">
@@ -4123,11 +4123,11 @@ true posixrules
       <AutoIntrospectionLevel>3</AutoIntrospectionLevel>
       <Comment>standard public schema</Comment>
       <Current>1</Current>
-      <LastIntrospectionL1Xid>12452</LastIntrospectionL1Xid>
-      <LastIntrospectionL2Xid>12452</LastIntrospectionL2Xid>
-      <LastIntrospectionL3Xid>12452</LastIntrospectionL3Xid>
+      <LastIntrospectionL1Xid>41567</LastIntrospectionL1Xid>
+      <LastIntrospectionL2Xid>41567</LastIntrospectionL2Xid>
+      <LastIntrospectionL3Xid>41567</LastIntrospectionL3Xid>
       <LastIntrospectionLevel>3</LastIntrospectionLevel>
-      <LastIntrospectionLocalTimestamp>2026-03-31.01:40:14</LastIntrospectionLocalTimestamp>
+      <LastIntrospectionLocalTimestamp>2026-04-13.00:00:38</LastIntrospectionLocalTimestamp>
       <ObjectId>2200</ObjectId>
       <StateNumber>524</StateNumber>
       <OwnerName>pg_database_owner</OwnerName>
@@ -4139,8 +4139,8 @@ FIVE_MIN
 FIFTEEN_MIN
 ONE_HOUR
 ONE_DAY</Labels>
-      <ObjectId>49257</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49471</ObjectId>
+      <StateNumber>12459</StateNumber>
       <SubCategory>enum</SubCategory>
       <SubKind>enum</SubKind>
       <OwnerName>ratp</OwnerName>
@@ -4155,8 +4155,8 @@ SPINOFF
 MERGER_CASH
 MERGER_STOCK
 NAME_CHANGE</Labels>
-      <ObjectId>49219</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49433</ObjectId>
+      <StateNumber>12459</StateNumber>
       <SubCategory>enum</SubCategory>
       <SubKind>enum</SubKind>
       <OwnerName>ratp</OwnerName>
@@ -4165,8 +4165,8 @@ NAME_CHANGE</Labels>
       <DetailsLevel>2</DetailsLevel>
       <Labels>MAKER
 TAKER</Labels>
-      <ObjectId>49245</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49459</ObjectId>
+      <StateNumber>12459</StateNumber>
       <SubCategory>enum</SubCategory>
       <SubKind>enum</SubKind>
       <OwnerName>ratp</OwnerName>
@@ -4177,8 +4177,8 @@ TAKER</Labels>
 REGULAR
 POSTMARKET
 OVERNIGHT</Labels>
-      <ObjectId>49358</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49572</ObjectId>
+      <StateNumber>12459</StateNumber>
       <SubCategory>enum</SubCategory>
       <SubKind>enum</SubKind>
       <OwnerName>ratp</OwnerName>
@@ -4187,8 +4187,8 @@ OVERNIGHT</Labels>
       <DetailsLevel>2</DetailsLevel>
       <Labels>LEDGER
 BROKER_RECONCILED</Labels>
-      <ObjectId>49207</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49421</ObjectId>
+      <StateNumber>12459</StateNumber>
       <SubCategory>enum</SubCategory>
       <SubKind>enum</SubKind>
       <OwnerName>ratp</OwnerName>
@@ -4201,8 +4201,8 @@ PARTIALLY_FILLED
 FILLED
 CANCELED
 REJECTED</Labels>
-      <ObjectId>49186</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49400</ObjectId>
+      <StateNumber>12459</StateNumber>
       <SubCategory>enum</SubCategory>
       <SubKind>enum</SubKind>
       <OwnerName>ratp</OwnerName>
@@ -4213,8 +4213,8 @@ REJECTED</Labels>
 LIMIT
 STOP
 STOP_LIMIT</Labels>
-      <ObjectId>49166</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49380</ObjectId>
+      <StateNumber>12459</StateNumber>
       <SubCategory>enum</SubCategory>
       <SubKind>enum</SubKind>
       <OwnerName>ratp</OwnerName>
@@ -4223,8 +4223,8 @@ STOP_LIMIT</Labels>
       <DetailsLevel>2</DetailsLevel>
       <Labels>RAW
 ADJUSTED</Labels>
-      <ObjectId>49268</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49482</ObjectId>
+      <StateNumber>12459</StateNumber>
       <SubCategory>enum</SubCategory>
       <SubKind>enum</SubKind>
       <OwnerName>ratp</OwnerName>
@@ -4235,8 +4235,8 @@ ADJUSTED</Labels>
 PAPER
 LIVE
 SHADOW</Labels>
-      <ObjectId>49306</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49520</ObjectId>
+      <StateNumber>12459</StateNumber>
       <SubCategory>enum</SubCategory>
       <SubKind>enum</SubKind>
       <OwnerName>ratp</OwnerName>
@@ -4245,8 +4245,8 @@ SHADOW</Labels>
       <DetailsLevel>2</DetailsLevel>
       <Labels>BUY
 SELL</Labels>
-      <ObjectId>49160</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49375</ObjectId>
+      <StateNumber>12459</StateNumber>
       <SubCategory>enum</SubCategory>
       <SubKind>enum</SubKind>
       <OwnerName>ratp</OwnerName>
@@ -4256,499 +4256,720 @@ SELL</Labels>
       <Labels>BUY
 SELL
 FLAT</Labels>
-      <ObjectId>49323</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49537</ObjectId>
+      <StateNumber>12459</StateNumber>
       <SubCategory>enum</SubCategory>
       <SubKind>enum</SubKind>
       <OwnerName>ratp</OwnerName>
     </object-type>
-    <object-type id="276" parent="264" name="time_in_force_enum">
+    <object-type id="276" parent="264" name="strategy_runtime_state_enum">
+      <DetailsLevel>2</DetailsLevel>
+      <Labels>IDLE
+SIGNALLED
+PENDING
+IN_POSITION
+EXIT_PENDING
+COOLDOWN</Labels>
+      <ObjectId>49596</ObjectId>
+      <StateNumber>41263</StateNumber>
+      <SubCategory>enum</SubCategory>
+      <SubKind>enum</SubKind>
+      <OwnerName>ratp</OwnerName>
+    </object-type>
+    <object-type id="277" parent="264" name="time_in_force_enum">
       <DetailsLevel>2</DetailsLevel>
       <Labels>DAY
 GTC
 IOC
 FOK</Labels>
-      <ObjectId>49176</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49390</ObjectId>
+      <StateNumber>12459</StateNumber>
       <SubCategory>enum</SubCategory>
       <SubKind>enum</SubKind>
       <OwnerName>ratp</OwnerName>
     </object-type>
-    <table id="277" parent="264" name="alembic_version">
+    <object-type id="278" parent="264" name="tracked_order_status_enum">
       <DetailsLevel>2</DetailsLevel>
-      <ObjectId>49154</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <Labels>NEW
+SUBMITTED
+PARTIALLY_FILLED
+FILLED
+CANCELED
+REJECTED</Labels>
+      <ObjectId>49615</ObjectId>
+      <StateNumber>41272</StateNumber>
+      <SubCategory>enum</SubCategory>
+      <SubKind>enum</SubKind>
+      <OwnerName>ratp</OwnerName>
+    </object-type>
+    <table id="279" parent="264" name="alembic_version">
+      <DetailsLevel>2</DetailsLevel>
+      <ObjectId>49369</ObjectId>
+      <StateNumber>12459</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
-    <table id="278" parent="264" name="broker_orders">
+    <table id="280" parent="264" name="audit_logs">
       <DetailsLevel>2</DetailsLevel>
-      <ObjectId>49199</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49582</ObjectId>
+      <StateNumber>41557</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
-    <table id="279" parent="264" name="cash_snapshots">
+    <table id="281" parent="264" name="broker_orders">
       <DetailsLevel>2</DetailsLevel>
-      <ObjectId>49211</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49413</ObjectId>
+      <StateNumber>12459</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
-    <table id="280" parent="264" name="corporate_actions">
+    <table id="282" parent="264" name="cash_snapshots">
       <DetailsLevel>2</DetailsLevel>
-      <ObjectId>49235</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49425</ObjectId>
+      <StateNumber>12459</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
-    <table id="281" parent="264" name="fills">
+    <table id="283" parent="264" name="checksums">
       <DetailsLevel>2</DetailsLevel>
-      <ObjectId>49249</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>66037</ObjectId>
+      <StateNumber>41557</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
-    <table id="282" parent="264" name="market_bars">
+    <table id="284" parent="264" name="corporate_actions">
       <DetailsLevel>2</DetailsLevel>
-      <ObjectId>49273</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49449</ObjectId>
+      <StateNumber>41515</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
-    <table id="283" parent="264" name="order_intents">
+    <table id="285" parent="264" name="dataset_versions">
       <DetailsLevel>2</DetailsLevel>
-      <ObjectId>49282</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>66044</ObjectId>
+      <StateNumber>41557</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
-    <table id="284" parent="264" name="position_snapshot_items">
+    <table id="286" parent="264" name="fills">
       <DetailsLevel>2</DetailsLevel>
-      <ObjectId>49345</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49463</ObjectId>
+      <StateNumber>12459</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
-    <table id="285" parent="264" name="position_snapshots">
+    <table id="287" parent="264" name="ingestion_runs">
       <DetailsLevel>2</DetailsLevel>
-      <ObjectId>49291</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>66051</ObjectId>
+      <StateNumber>41557</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
-    <table id="286" parent="264" name="risk_snapshots">
+    <table id="288" parent="264" name="market_bars">
       <DetailsLevel>2</DetailsLevel>
-      <ObjectId>49298</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49487</ObjectId>
+      <StateNumber>41515</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
-    <table id="287" parent="264" name="run_manifests">
+    <table id="289" parent="264" name="missing_bar_incidents">
       <DetailsLevel>2</DetailsLevel>
-      <ObjectId>49315</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>66058</ObjectId>
+      <StateNumber>41557</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
-    <table id="288" parent="264" name="signals">
+    <table id="290" parent="264" name="order_intents">
       <DetailsLevel>2</DetailsLevel>
-      <ObjectId>49329</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49496</ObjectId>
+      <StateNumber>12459</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
-    <table id="289" parent="264" name="universe_snapshots">
+    <table id="291" parent="264" name="position_snapshot_items">
       <DetailsLevel>2</DetailsLevel>
-      <ObjectId>49338</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49559</ObjectId>
+      <StateNumber>12459</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
-    <column id="290" parent="277" name="version_num">
+    <table id="292" parent="264" name="position_snapshots">
+      <DetailsLevel>2</DetailsLevel>
+      <ObjectId>49505</ObjectId>
+      <StateNumber>12459</StateNumber>
+      <AccessMethodId>2</AccessMethodId>
+      <OwnerName>ratp</OwnerName>
+    </table>
+    <table id="293" parent="264" name="risk_snapshots">
+      <DetailsLevel>2</DetailsLevel>
+      <ObjectId>49512</ObjectId>
+      <StateNumber>12459</StateNumber>
+      <AccessMethodId>2</AccessMethodId>
+      <OwnerName>ratp</OwnerName>
+    </table>
+    <table id="294" parent="264" name="run_manifests">
+      <DetailsLevel>2</DetailsLevel>
+      <ObjectId>49529</ObjectId>
+      <StateNumber>41524</StateNumber>
+      <AccessMethodId>2</AccessMethodId>
+      <OwnerName>ratp</OwnerName>
+    </table>
+    <table id="295" parent="264" name="signals">
+      <DetailsLevel>2</DetailsLevel>
+      <ObjectId>49543</ObjectId>
+      <StateNumber>12459</StateNumber>
+      <AccessMethodId>2</AccessMethodId>
+      <OwnerName>ratp</OwnerName>
+    </table>
+    <table id="296" parent="264" name="strategy_runtime_states">
+      <DetailsLevel>2</DetailsLevel>
+      <ObjectId>49609</ObjectId>
+      <StateNumber>41263</StateNumber>
+      <AccessMethodId>2</AccessMethodId>
+      <OwnerName>ratp</OwnerName>
+    </table>
+    <table id="297" parent="264" name="symbol_date_coverages">
+      <DetailsLevel>2</DetailsLevel>
+      <ObjectId>66065</ObjectId>
+      <StateNumber>41557</StateNumber>
+      <AccessMethodId>2</AccessMethodId>
+      <OwnerName>ratp</OwnerName>
+    </table>
+    <table id="298" parent="264" name="ticker_lifecycle_events">
+      <DetailsLevel>2</DetailsLevel>
+      <ObjectId>49632</ObjectId>
+      <StateNumber>41349</StateNumber>
+      <AccessMethodId>2</AccessMethodId>
+      <OwnerName>ratp</OwnerName>
+    </table>
+    <table id="299" parent="264" name="tracked_orders">
+      <DetailsLevel>2</DetailsLevel>
+      <ObjectId>49627</ObjectId>
+      <StateNumber>41272</StateNumber>
+      <AccessMethodId>2</AccessMethodId>
+      <OwnerName>ratp</OwnerName>
+    </table>
+    <table id="300" parent="264" name="universe_snapshots">
+      <DetailsLevel>2</DetailsLevel>
+      <ObjectId>49552</ObjectId>
+      <StateNumber>12459</StateNumber>
+      <AccessMethodId>2</AccessMethodId>
+      <OwnerName>ratp</OwnerName>
+    </table>
+    <column id="301" parent="279" name="version_num">
       <NotNull>1</NotNull>
       <Position>1</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <index id="291" parent="277" name="alembic_version_pkc">
+    <index id="302" parent="279" name="alembic_version_pkc">
       <ColNames>version_num</ColNames>
-      <ObjectId>49157</ObjectId>
+      <ObjectId>49372</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="292" parent="277" name="alembic_version_pkc">
-      <ObjectId>49158</ObjectId>
+    <key id="303" parent="279" name="alembic_version_pkc">
+      <ObjectId>49373</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49157</UnderlyingIndexId>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49372</UnderlyingIndexId>
     </key>
-    <column id="293" parent="278" name="broker_order_id">
+    <column id="304" parent="280" name="event_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar(64)|0s</StoredType>
+      <StateNumber>12461</StateNumber>
+      <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="294" parent="278" name="client_order_id">
-      <NotNull>1</NotNull>
+    <column id="305" parent="280" name="run_id">
       <Position>2</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar(64)|0s</StoredType>
+      <StateNumber>12461</StateNumber>
+      <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="295" parent="278" name="intent_id">
+    <column id="306" parent="280" name="event_type">
       <NotNull>1</NotNull>
       <Position>3</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>uuid|0s</StoredType>
-      <TypeId>2950</TypeId>
+      <StateNumber>12461</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
     </column>
-    <column id="296" parent="278" name="run_id">
+    <column id="307" parent="280" name="component">
       <NotNull>1</NotNull>
       <Position>4</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12461</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="308" parent="280" name="event_timestamp">
+      <NotNull>1</NotNull>
+      <Position>5</Position>
+      <StateNumber>12461</StateNumber>
+      <StoredType>timestamp|0s</StoredType>
+      <TypeId>1114</TypeId>
+    </column>
+    <column id="309" parent="280" name="message">
+      <NotNull>1</NotNull>
+      <Position>6</Position>
+      <StateNumber>12461</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="310" parent="280" name="event_metadata">
+      <Position>7</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>jsonb|0s</StoredType>
+      <TypeId>3802</TypeId>
+    </column>
+    <index id="311" parent="280" name="pk_audit_logs">
+      <ColNames>event_id</ColNames>
+      <ObjectId>49587</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>41557</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationNames>default</CollationNames>
+      <CollationIds>100</CollationIds>
+      <CollationParentNames>pg_catalog</CollationParentNames>
+    </index>
+    <key id="312" parent="280" name="pk_audit_logs">
+      <ObjectId>49588</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>12461</StateNumber>
+      <UnderlyingIndexId>49587</UnderlyingIndexId>
+    </key>
+    <column id="313" parent="281" name="broker_order_id">
+      <NotNull>1</NotNull>
+      <Position>1</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="314" parent="281" name="client_order_id">
+      <NotNull>1</NotNull>
+      <Position>2</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="315" parent="281" name="intent_id">
+      <NotNull>1</NotNull>
+      <Position>3</Position>
+      <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="297" parent="278" name="broker">
+    <column id="316" parent="281" name="run_id">
+      <NotNull>1</NotNull>
+      <Position>4</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>uuid|0s</StoredType>
+      <TypeId>2950</TypeId>
+    </column>
+    <column id="317" parent="281" name="broker">
       <NotNull>1</NotNull>
       <Position>5</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="298" parent="278" name="account_id">
+    <column id="318" parent="281" name="account_id">
       <NotNull>1</NotNull>
       <Position>6</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="299" parent="278" name="symbol">
+    <column id="319" parent="281" name="symbol">
       <NotNull>1</NotNull>
       <Position>7</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="300" parent="278" name="side">
+    <column id="320" parent="281" name="side">
       <NotNull>1</NotNull>
       <Position>8</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>side_enum|0s</StoredType>
-      <TypeId>49160</TypeId>
+      <TypeId>49375</TypeId>
     </column>
-    <column id="301" parent="278" name="order_type">
+    <column id="321" parent="281" name="order_type">
       <NotNull>1</NotNull>
       <Position>9</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>order_type_enum|0s</StoredType>
-      <TypeId>49166</TypeId>
+      <TypeId>49380</TypeId>
     </column>
-    <column id="302" parent="278" name="time_in_force">
+    <column id="322" parent="281" name="time_in_force">
       <NotNull>1</NotNull>
       <Position>10</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>time_in_force_enum|0s</StoredType>
-      <TypeId>49176</TypeId>
+      <TypeId>49390</TypeId>
     </column>
-    <column id="303" parent="278" name="extended_hours">
+    <column id="323" parent="281" name="extended_hours">
       <NotNull>1</NotNull>
       <Position>11</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>boolean|0s</StoredType>
       <TypeId>16</TypeId>
     </column>
-    <column id="304" parent="278" name="qty">
+    <column id="324" parent="281" name="qty">
       <Position>12</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,9 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="305" parent="278" name="notional">
+    <column id="325" parent="281" name="notional">
       <Position>13</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="306" parent="278" name="limit_price">
+    <column id="326" parent="281" name="limit_price">
       <Position>14</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="307" parent="278" name="stop_price">
+    <column id="327" parent="281" name="stop_price">
       <Position>15</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="308" parent="278" name="status">
+    <column id="328" parent="281" name="status">
       <NotNull>1</NotNull>
       <Position>16</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>order_status_enum|0s</StoredType>
-      <TypeId>49186</TypeId>
+      <TypeId>49400</TypeId>
     </column>
-    <column id="309" parent="278" name="submitted_at">
+    <column id="329" parent="281" name="submitted_at">
       <Position>17</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="310" parent="278" name="updated_at">
+    <column id="330" parent="281" name="updated_at">
       <NotNull>1</NotNull>
       <Position>18</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="311" parent="278" name="filled_qty">
+    <column id="331" parent="281" name="filled_qty">
       <NotNull>1</NotNull>
       <Position>19</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,9 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="312" parent="278" name="avg_fill_price">
+    <column id="332" parent="281" name="avg_fill_price">
       <Position>20</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="313" parent="278" name="last_error">
+    <column id="333" parent="281" name="last_error">
       <Position>21</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="314" parent="278" name="raw_broker_payload">
+    <column id="334" parent="281" name="raw_broker_payload">
       <Position>22</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <column id="315" parent="278" name="requested_qty">
+    <column id="335" parent="281" name="requested_qty">
       <Position>23</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,9 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <index id="316" parent="278" name="pk_broker_orders">
+    <index id="336" parent="281" name="pk_broker_orders">
       <ColNames>broker_order_id</ColNames>
-      <ObjectId>49204</ObjectId>
+      <ObjectId>49418</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="317" parent="278" name="pk_broker_orders">
-      <ObjectId>49205</ObjectId>
+    <key id="337" parent="281" name="pk_broker_orders">
+      <ObjectId>49419</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49204</UnderlyingIndexId>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49418</UnderlyingIndexId>
     </key>
-    <column id="318" parent="279" name="snapshot_id">
+    <column id="338" parent="282" name="snapshot_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="319" parent="279" name="run_id">
+    <column id="339" parent="282" name="run_id">
       <NotNull>1</NotNull>
       <Position>2</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="320" parent="279" name="timestamp">
+    <column id="340" parent="282" name="timestamp">
       <NotNull>1</NotNull>
       <Position>3</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="321" parent="279" name="currency">
+    <column id="341" parent="282" name="currency">
       <NotNull>1</NotNull>
       <Position>4</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="322" parent="279" name="cash">
+    <column id="342" parent="282" name="cash">
       <NotNull>1</NotNull>
       <Position>5</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="323" parent="279" name="buying_power">
+    <column id="343" parent="282" name="buying_power">
       <NotNull>1</NotNull>
       <Position>6</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="324" parent="279" name="reserved_cash">
+    <column id="344" parent="282" name="reserved_cash">
       <NotNull>1</NotNull>
       <Position>7</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="325" parent="279" name="equity">
+    <column id="345" parent="282" name="equity">
       <Position>8</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="326" parent="279" name="source">
+    <column id="346" parent="282" name="source">
       <NotNull>1</NotNull>
       <Position>9</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>order_source_enum|0s</StoredType>
-      <TypeId>49207</TypeId>
+      <TypeId>49421</TypeId>
     </column>
-    <column id="327" parent="279" name="capital_bucket">
+    <column id="347" parent="282" name="capital_bucket">
       <Position>10</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <index id="328" parent="279" name="pk_cash_snapshots">
+    <index id="348" parent="282" name="pk_cash_snapshots">
       <ColNames>snapshot_id</ColNames>
-      <ObjectId>49216</ObjectId>
+      <ObjectId>49430</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
     </index>
-    <key id="329" parent="279" name="pk_cash_snapshots">
-      <ObjectId>49217</ObjectId>
+    <key id="349" parent="282" name="pk_cash_snapshots">
+      <ObjectId>49431</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49216</UnderlyingIndexId>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49430</UnderlyingIndexId>
     </key>
-    <column id="330" parent="280" name="action_id">
+    <column id="350" parent="283" name="checksum_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="331" parent="280" name="symbol">
+    <column id="351" parent="283" name="dataset_version">
       <NotNull>1</NotNull>
       <Position>2</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="332" parent="280" name="action_type">
+    <column id="352" parent="283" name="object_type">
       <NotNull>1</NotNull>
       <Position>3</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>corporate_action_type_enum|0s</StoredType>
-      <TypeId>49219</TypeId>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
     </column>
-    <column id="333" parent="280" name="effective_date">
+    <column id="353" parent="283" name="object_path">
       <NotNull>1</NotNull>
       <Position>4</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>date|0s</StoredType>
-      <TypeId>1082</TypeId>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(255)|0s</StoredType>
+      <TypeId>1043</TypeId>
     </column>
-    <column id="334" parent="280" name="announced_date">
+    <column id="354" parent="283" name="checksum_algorithm">
+      <NotNull>1</NotNull>
       <Position>5</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>date|0s</StoredType>
-      <TypeId>1082</TypeId>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(32)|0s</StoredType>
+      <TypeId>1043</TypeId>
     </column>
-    <column id="335" parent="280" name="record_date">
+    <column id="355" parent="283" name="checksum_value">
+      <NotNull>1</NotNull>
       <Position>6</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>date|0s</StoredType>
-      <TypeId>1082</TypeId>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(128)|0s</StoredType>
+      <TypeId>1043</TypeId>
     </column>
-    <column id="336" parent="280" name="payable_date">
+    <column id="356" parent="283" name="created_at">
+      <NotNull>1</NotNull>
       <Position>7</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41557</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <index id="357" parent="283" name="pk_checksums">
+      <ColNames>checksum_id</ColNames>
+      <ObjectId>66042</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>41557</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationNames>default</CollationNames>
+      <CollationIds>100</CollationIds>
+      <CollationParentNames>pg_catalog</CollationParentNames>
+    </index>
+    <key id="358" parent="283" name="pk_checksums">
+      <ObjectId>66043</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>41557</StateNumber>
+      <UnderlyingIndexId>66042</UnderlyingIndexId>
+    </key>
+    <column id="359" parent="284" name="action_id">
+      <NotNull>1</NotNull>
+      <Position>1</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="360" parent="284" name="symbol">
+      <NotNull>1</NotNull>
+      <Position>2</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="361" parent="284" name="action_type">
+      <NotNull>1</NotNull>
+      <Position>3</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>corporate_action_type_enum|0s</StoredType>
+      <TypeId>49433</TypeId>
+    </column>
+    <column id="362" parent="284" name="effective_date">
+      <NotNull>1</NotNull>
+      <Position>4</Position>
+      <StateNumber>12459</StateNumber>
       <StoredType>date|0s</StoredType>
       <TypeId>1082</TypeId>
     </column>
-    <column id="337" parent="280" name="split_ratio">
+    <column id="363" parent="284" name="announced_date">
+      <Position>5</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>date|0s</StoredType>
+      <TypeId>1082</TypeId>
+    </column>
+    <column id="364" parent="284" name="record_date">
+      <Position>6</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>date|0s</StoredType>
+      <TypeId>1082</TypeId>
+    </column>
+    <column id="365" parent="284" name="payable_date">
+      <Position>7</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>date|0s</StoredType>
+      <TypeId>1082</TypeId>
+    </column>
+    <column id="366" parent="284" name="split_ratio">
       <Position>8</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>double precision|0s</StoredType>
       <TypeId>701</TypeId>
     </column>
-    <column id="338" parent="280" name="cash_amount">
+    <column id="367" parent="284" name="cash_amount">
       <Position>9</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="339" parent="280" name="currency">
+    <column id="368" parent="284" name="currency">
       <NotNull>1</NotNull>
       <Position>10</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="340" parent="280" name="new_symbol">
+    <column id="369" parent="284" name="new_symbol">
       <Position>11</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="341" parent="280" name="source">
+    <column id="370" parent="284" name="source">
       <NotNull>1</NotNull>
       <Position>12</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="342" parent="280" name="ingested_at">
+    <column id="371" parent="284" name="ingested_at">
       <NotNull>1</NotNull>
       <Position>13</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="343" parent="280" name="metadata">
+    <column id="372" parent="284" name="metadata">
       <Position>14</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <index id="344" parent="280" name="pk_corporate_actions">
+    <index id="373" parent="284" name="pk_corporate_actions">
       <ColNames>action_id</ColNames>
-      <ObjectId>49240</ObjectId>
+      <ObjectId>49454</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41515</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <index id="345" parent="280" name="uq_corporate_actions_symbol_type_date_source">
+    <index id="374" parent="284" name="uq_corporate_actions_symbol_type_date_source">
       <ColNames>symbol
 action_type
 effective_date
 source</ColNames>
-      <ObjectId>49242</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49456</ObjectId>
+      <StateNumber>41515</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default
@@ -4764,943 +4985,1202 @@ default</CollationNames>
 
 pg_catalog</CollationParentNames>
     </index>
-    <key id="346" parent="280" name="pk_corporate_actions">
-      <ObjectId>49241</ObjectId>
+    <key id="375" parent="284" name="pk_corporate_actions">
+      <ObjectId>49455</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49240</UnderlyingIndexId>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49454</UnderlyingIndexId>
     </key>
-    <key id="347" parent="280" name="uq_corporate_actions_symbol_type_date_source">
-      <ObjectId>49243</ObjectId>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49242</UnderlyingIndexId>
+    <key id="376" parent="284" name="uq_corporate_actions_symbol_type_date_source">
+      <ObjectId>49457</ObjectId>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49456</UnderlyingIndexId>
     </key>
-    <column id="348" parent="281" name="fill_id">
+    <column id="377" parent="285" name="dataset_version_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="349" parent="281" name="broker_order_id">
+    <column id="378" parent="285" name="dataset_name">
       <NotNull>1</NotNull>
       <Position>2</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="350" parent="281" name="intent_id">
+    <column id="379" parent="285" name="created_at">
       <NotNull>1</NotNull>
       <Position>3</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>uuid|0s</StoredType>
-      <TypeId>2950</TypeId>
-    </column>
-    <column id="351" parent="281" name="run_id">
-      <NotNull>1</NotNull>
-      <Position>4</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>uuid|0s</StoredType>
-      <TypeId>2950</TypeId>
-    </column>
-    <column id="352" parent="281" name="timestamp">
-      <NotNull>1</NotNull>
-      <Position>5</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41557</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="353" parent="281" name="symbol">
+    <column id="380" parent="285" name="source">
       <NotNull>1</NotNull>
-      <Position>6</Position>
-      <StateNumber>12446</StateNumber>
+      <Position>4</Position>
+      <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="354" parent="281" name="side">
+    <column id="381" parent="285" name="price_basis">
+      <Position>5</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>price_basis_enum|0s</StoredType>
+      <TypeId>49482</TypeId>
+    </column>
+    <column id="382" parent="285" name="interval">
+      <Position>6</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>bar_interval_enum|0s</StoredType>
+      <TypeId>49471</TypeId>
+    </column>
+    <column id="383" parent="285" name="validation_status">
       <NotNull>1</NotNull>
       <Position>7</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>side_enum|0s</StoredType>
-      <TypeId>49160</TypeId>
-    </column>
-    <column id="355" parent="281" name="quantity">
-      <NotNull>1</NotNull>
-      <Position>8</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,9 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="356" parent="281" name="price">
-      <NotNull>1</NotNull>
-      <Position>9</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="357" parent="281" name="fees">
-      <Position>10</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="358" parent="281" name="liquidity">
-      <Position>11</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>liquidity_side_enum|0s</StoredType>
-      <TypeId>49245</TypeId>
-    </column>
-    <column id="359" parent="281" name="venue">
-      <Position>12</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="360" parent="281" name="metadata">
-      <Position>13</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>jsonb|0s</StoredType>
-      <TypeId>3802</TypeId>
-    </column>
-    <index id="361" parent="281" name="pk_fills">
-      <ColNames>fill_id</ColNames>
-      <ObjectId>49254</ObjectId>
-      <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <Unique>1</Unique>
-      <AccessMethodId>403</AccessMethodId>
-      <CollationNames>default</CollationNames>
-      <CollationIds>100</CollationIds>
-      <CollationParentNames>pg_catalog</CollationParentNames>
-    </index>
-    <key id="362" parent="281" name="pk_fills">
-      <ObjectId>49255</ObjectId>
-      <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49254</UnderlyingIndexId>
-    </key>
-    <column id="363" parent="282" name="bar_id">
-      <NotNull>1</NotNull>
-      <Position>1</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar(64)|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="364" parent="282" name="timestamp">
-      <NotNull>1</NotNull>
-      <Position>2</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>timestamp with time zone|0s</StoredType>
-      <TypeId>1184</TypeId>
-    </column>
-    <column id="365" parent="282" name="end_timestamp">
-      <NotNull>1</NotNull>
-      <Position>3</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>timestamp with time zone|0s</StoredType>
-      <TypeId>1184</TypeId>
-    </column>
-    <column id="366" parent="282" name="interval">
-      <NotNull>1</NotNull>
-      <Position>4</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>bar_interval_enum|0s</StoredType>
-      <TypeId>49257</TypeId>
-    </column>
-    <column id="367" parent="282" name="symbol">
-      <NotNull>1</NotNull>
-      <Position>5</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41557</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="368" parent="282" name="open">
-      <NotNull>1</NotNull>
-      <Position>6</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="369" parent="282" name="high">
-      <NotNull>1</NotNull>
-      <Position>7</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="370" parent="282" name="low">
-      <NotNull>1</NotNull>
+    <column id="384" parent="285" name="metadata_json">
       <Position>8</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="371" parent="282" name="close">
-      <NotNull>1</NotNull>
-      <Position>9</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="372" parent="282" name="volume">
-      <NotNull>1</NotNull>
-      <Position>10</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>integer|0s</StoredType>
-      <TypeId>23</TypeId>
-    </column>
-    <column id="373" parent="282" name="vwap">
-      <Position>11</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="374" parent="282" name="trade_count">
-      <Position>12</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>integer|0s</StoredType>
-      <TypeId>23</TypeId>
-    </column>
-    <column id="375" parent="282" name="price_basis">
-      <NotNull>1</NotNull>
-      <Position>13</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>price_basis_enum|0s</StoredType>
-      <TypeId>49268</TypeId>
-    </column>
-    <column id="376" parent="282" name="adjustment_factor">
-      <NotNull>1</NotNull>
-      <Position>14</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>double precision|0s</StoredType>
-      <TypeId>701</TypeId>
-    </column>
-    <column id="377" parent="282" name="source">
-      <NotNull>1</NotNull>
-      <Position>15</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar(64)|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="378" parent="282" name="ingested_at">
-      <NotNull>1</NotNull>
-      <Position>16</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>timestamp with time zone|0s</StoredType>
-      <TypeId>1184</TypeId>
-    </column>
-    <column id="379" parent="282" name="quality_flags">
-      <Position>17</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41557</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <column id="380" parent="282" name="market_session">
-      <NotNull>1</NotNull>
-      <Position>18</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>market_session_enum|0s</StoredType>
-      <TypeId>49358</TypeId>
-    </column>
-    <index id="381" parent="282" name="pk_market_bars">
-      <ColNames>bar_id</ColNames>
-      <ObjectId>49278</ObjectId>
+    <index id="385" parent="285" name="pk_dataset_versions">
+      <ColNames>dataset_version_id</ColNames>
+      <ObjectId>66049</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41557</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <index id="382" parent="282" name="uq_market_bars_symbol_interval_ts_price_basis">
+    <key id="386" parent="285" name="pk_dataset_versions">
+      <ObjectId>66050</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>41557</StateNumber>
+      <UnderlyingIndexId>66049</UnderlyingIndexId>
+    </key>
+    <column id="387" parent="286" name="fill_id">
+      <NotNull>1</NotNull>
+      <Position>1</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="388" parent="286" name="broker_order_id">
+      <NotNull>1</NotNull>
+      <Position>2</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="389" parent="286" name="intent_id">
+      <NotNull>1</NotNull>
+      <Position>3</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>uuid|0s</StoredType>
+      <TypeId>2950</TypeId>
+    </column>
+    <column id="390" parent="286" name="run_id">
+      <NotNull>1</NotNull>
+      <Position>4</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>uuid|0s</StoredType>
+      <TypeId>2950</TypeId>
+    </column>
+    <column id="391" parent="286" name="timestamp">
+      <NotNull>1</NotNull>
+      <Position>5</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="392" parent="286" name="symbol">
+      <NotNull>1</NotNull>
+      <Position>6</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="393" parent="286" name="side">
+      <NotNull>1</NotNull>
+      <Position>7</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>side_enum|0s</StoredType>
+      <TypeId>49375</TypeId>
+    </column>
+    <column id="394" parent="286" name="quantity">
+      <NotNull>1</NotNull>
+      <Position>8</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,9 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="395" parent="286" name="price">
+      <NotNull>1</NotNull>
+      <Position>9</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="396" parent="286" name="fees">
+      <Position>10</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="397" parent="286" name="liquidity">
+      <Position>11</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>liquidity_side_enum|0s</StoredType>
+      <TypeId>49459</TypeId>
+    </column>
+    <column id="398" parent="286" name="venue">
+      <Position>12</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="399" parent="286" name="metadata">
+      <Position>13</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>jsonb|0s</StoredType>
+      <TypeId>3802</TypeId>
+    </column>
+    <index id="400" parent="286" name="pk_fills">
+      <ColNames>fill_id</ColNames>
+      <ObjectId>49468</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>12459</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationNames>default</CollationNames>
+      <CollationIds>100</CollationIds>
+      <CollationParentNames>pg_catalog</CollationParentNames>
+    </index>
+    <key id="401" parent="286" name="pk_fills">
+      <ObjectId>49469</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49468</UnderlyingIndexId>
+    </key>
+    <column id="402" parent="287" name="ingestion_run_id">
+      <NotNull>1</NotNull>
+      <Position>1</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="403" parent="287" name="created_at">
+      <NotNull>1</NotNull>
+      <Position>2</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="404" parent="287" name="run_timestamp">
+      <NotNull>1</NotNull>
+      <Position>3</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="405" parent="287" name="run_type">
+      <NotNull>1</NotNull>
+      <Position>4</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>run_type_enum|0s</StoredType>
+      <TypeId>49520</TypeId>
+    </column>
+    <column id="406" parent="287" name="source">
+      <NotNull>1</NotNull>
+      <Position>5</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="407" parent="287" name="dataset_version">
+      <NotNull>1</NotNull>
+      <Position>6</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>integer|0s</StoredType>
+      <TypeId>23</TypeId>
+    </column>
+    <column id="408" parent="287" name="status">
+      <NotNull>1</NotNull>
+      <Position>7</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(32)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="409" parent="287" name="started_at">
+      <NotNull>1</NotNull>
+      <Position>8</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="410" parent="287" name="completed_at">
+      <Position>9</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="411" parent="287" name="error_message">
+      <Position>10</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="412" parent="287" name="row_count">
+      <Position>11</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>integer|0s</StoredType>
+      <TypeId>23</TypeId>
+    </column>
+    <column id="413" parent="287" name="file_count">
+      <Position>12</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>integer|0s</StoredType>
+      <TypeId>23</TypeId>
+    </column>
+    <index id="414" parent="287" name="pk_ingestion_runs">
+      <ColNames>ingestion_run_id</ColNames>
+      <ObjectId>66056</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>41557</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationNames>default</CollationNames>
+      <CollationIds>100</CollationIds>
+      <CollationParentNames>pg_catalog</CollationParentNames>
+    </index>
+    <key id="415" parent="287" name="pk_ingestion_runs">
+      <ObjectId>66057</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>41557</StateNumber>
+      <UnderlyingIndexId>66056</UnderlyingIndexId>
+    </key>
+    <column id="416" parent="288" name="bar_id">
+      <NotNull>1</NotNull>
+      <Position>1</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="417" parent="288" name="timestamp">
+      <NotNull>1</NotNull>
+      <Position>2</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="418" parent="288" name="end_timestamp">
+      <NotNull>1</NotNull>
+      <Position>3</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="419" parent="288" name="interval">
+      <NotNull>1</NotNull>
+      <Position>4</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>bar_interval_enum|0s</StoredType>
+      <TypeId>49471</TypeId>
+    </column>
+    <column id="420" parent="288" name="symbol">
+      <NotNull>1</NotNull>
+      <Position>5</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar(32)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="421" parent="288" name="open">
+      <NotNull>1</NotNull>
+      <Position>6</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="422" parent="288" name="high">
+      <NotNull>1</NotNull>
+      <Position>7</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="423" parent="288" name="low">
+      <NotNull>1</NotNull>
+      <Position>8</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="424" parent="288" name="close">
+      <NotNull>1</NotNull>
+      <Position>9</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="425" parent="288" name="volume">
+      <NotNull>1</NotNull>
+      <Position>10</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>integer|0s</StoredType>
+      <TypeId>23</TypeId>
+    </column>
+    <column id="426" parent="288" name="vwap">
+      <Position>11</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="427" parent="288" name="trade_count">
+      <Position>12</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>integer|0s</StoredType>
+      <TypeId>23</TypeId>
+    </column>
+    <column id="428" parent="288" name="price_basis">
+      <NotNull>1</NotNull>
+      <Position>13</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>price_basis_enum|0s</StoredType>
+      <TypeId>49482</TypeId>
+    </column>
+    <column id="429" parent="288" name="adjustment_factor">
+      <NotNull>1</NotNull>
+      <Position>14</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>double precision|0s</StoredType>
+      <TypeId>701</TypeId>
+    </column>
+    <column id="430" parent="288" name="source">
+      <NotNull>1</NotNull>
+      <Position>15</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="431" parent="288" name="ingested_at">
+      <NotNull>1</NotNull>
+      <Position>16</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="432" parent="288" name="quality_flags">
+      <Position>17</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>jsonb|0s</StoredType>
+      <TypeId>3802</TypeId>
+    </column>
+    <column id="433" parent="288" name="market_session">
+      <NotNull>1</NotNull>
+      <Position>18</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>market_session_enum|0s</StoredType>
+      <TypeId>49572</TypeId>
+    </column>
+    <index id="434" parent="288" name="pk_market_bars">
+      <ColNames>bar_id</ColNames>
+      <ObjectId>49492</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>41515</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationNames>default</CollationNames>
+      <CollationIds>100</CollationIds>
+      <CollationParentNames>pg_catalog</CollationParentNames>
+    </index>
+    <index id="435" parent="288" name="uq_market_bars_symbol_interval_ts_price_basis">
       <ColNames>symbol
 interval
 timestamp
 price_basis</ColNames>
-      <ObjectId>49280</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49494</ObjectId>
+      <StateNumber>41515</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="383" parent="282" name="pk_market_bars">
-      <ObjectId>49279</ObjectId>
+    <key id="436" parent="288" name="pk_market_bars">
+      <ObjectId>49493</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49278</UnderlyingIndexId>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49492</UnderlyingIndexId>
     </key>
-    <key id="384" parent="282" name="uq_market_bars_symbol_interval_ts_price_basis">
-      <ObjectId>49281</ObjectId>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49280</UnderlyingIndexId>
+    <key id="437" parent="288" name="uq_market_bars_symbol_interval_ts_price_basis">
+      <ObjectId>49495</ObjectId>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49494</UnderlyingIndexId>
     </key>
-    <column id="385" parent="283" name="intent_id">
+    <column id="438" parent="289" name="incident_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>uuid|0s</StoredType>
-      <TypeId>2950</TypeId>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
     </column>
-    <column id="386" parent="283" name="idempotency_key">
+    <column id="439" parent="289" name="symbol">
       <NotNull>1</NotNull>
       <Position>2</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="387" parent="283" name="run_id">
-      <NotNull>1</NotNull>
-      <Position>3</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>uuid|0s</StoredType>
-      <TypeId>2950</TypeId>
-    </column>
-    <column id="388" parent="283" name="strategy_id">
-      <NotNull>1</NotNull>
-      <Position>4</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="389" parent="283" name="timestamp">
-      <NotNull>1</NotNull>
-      <Position>5</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>timestamp with time zone|0s</StoredType>
-      <TypeId>1184</TypeId>
-    </column>
-    <column id="390" parent="283" name="bar_timestamp">
-      <NotNull>1</NotNull>
-      <Position>6</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>timestamp with time zone|0s</StoredType>
-      <TypeId>1184</TypeId>
-    </column>
-    <column id="391" parent="283" name="symbol">
-      <NotNull>1</NotNull>
-      <Position>7</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="392" parent="283" name="side">
-      <NotNull>1</NotNull>
-      <Position>8</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>side_enum|0s</StoredType>
-      <TypeId>49160</TypeId>
-    </column>
-    <column id="393" parent="283" name="qty">
-      <Position>9</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,9 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="394" parent="283" name="notional">
-      <Position>10</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="395" parent="283" name="order_type">
-      <NotNull>1</NotNull>
-      <Position>11</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>order_type_enum|0s</StoredType>
-      <TypeId>49166</TypeId>
-    </column>
-    <column id="396" parent="283" name="limit_price">
-      <Position>12</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="397" parent="283" name="stop_price">
-      <Position>13</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="398" parent="283" name="time_in_force">
-      <NotNull>1</NotNull>
-      <Position>14</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>time_in_force_enum|0s</StoredType>
-      <TypeId>49176</TypeId>
-    </column>
-    <column id="399" parent="283" name="extended_hours">
-      <NotNull>1</NotNull>
-      <Position>15</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>boolean|0s</StoredType>
-      <TypeId>16</TypeId>
-    </column>
-    <column id="400" parent="283" name="client_order_id">
-      <NotNull>1</NotNull>
-      <Position>16</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="401" parent="283" name="metadata">
-      <Position>17</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>jsonb|0s</StoredType>
-      <TypeId>3802</TypeId>
-    </column>
-    <index id="402" parent="283" name="pk_order_intents">
-      <ColNames>intent_id</ColNames>
-      <ObjectId>49287</ObjectId>
-      <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <Unique>1</Unique>
-      <AccessMethodId>403</AccessMethodId>
-    </index>
-    <index id="403" parent="283" name="uq_order_intents_run_id_idempotency_key">
-      <ColNames>run_id
-idempotency_key</ColNames>
-      <ObjectId>49289</ObjectId>
-      <StateNumber>12446</StateNumber>
-      <Unique>1</Unique>
-      <AccessMethodId>403</AccessMethodId>
-      <CollationIds>
-100</CollationIds>
-      <CollationParentNames>
-pg_catalog</CollationParentNames>
-      <CollationNames>
-default</CollationNames>
-    </index>
-    <key id="404" parent="283" name="pk_order_intents">
-      <ObjectId>49288</ObjectId>
-      <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49287</UnderlyingIndexId>
-    </key>
-    <key id="405" parent="283" name="uq_order_intents_run_id_idempotency_key">
-      <ObjectId>49290</ObjectId>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49289</UnderlyingIndexId>
-    </key>
-    <column id="406" parent="284" name="snapshot_id">
-      <NotNull>1</NotNull>
-      <Position>1</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>uuid|0s</StoredType>
-      <TypeId>2950</TypeId>
-    </column>
-    <column id="407" parent="284" name="symbol">
-      <NotNull>1</NotNull>
-      <Position>2</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41557</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="408" parent="284" name="quantity">
+    <column id="440" parent="289" name="bar_timestamp">
       <NotNull>1</NotNull>
       <Position>3</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,9 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="409" parent="284" name="avg_cost">
-      <Position>4</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="410" parent="284" name="market_price">
-      <Position>5</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="411" parent="284" name="market_value">
-      <Position>6</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="412" parent="284" name="unrealized_pnl">
-      <Position>7</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <foreign-key id="413" parent="284" name="fk_position_snapshot_items_snapshot_id_position_snapshots">
-      <ColNames>snapshot_id</ColNames>
-      <ObjectId>49350</ObjectId>
-      <OnDelete>cascade</OnDelete>
-      <StateNumber>12446</StateNumber>
-      <RefKeyColPositions>1</RefKeyColPositions>
-      <RefTableId>49291</RefTableId>
-    </foreign-key>
-    <index id="414" parent="284" name="pk_position_snapshot_items">
-      <ColNames>snapshot_id
-symbol</ColNames>
-      <ObjectId>49348</ObjectId>
-      <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <Unique>1</Unique>
-      <AccessMethodId>403</AccessMethodId>
-      <CollationIds>
-100</CollationIds>
-      <CollationParentNames>
-pg_catalog</CollationParentNames>
-      <CollationNames>
-default</CollationNames>
-    </index>
-    <index id="415" parent="284" name="uq_position_snapshot_items_snapshot_symbol">
-      <ColNames>snapshot_id
-symbol</ColNames>
-      <ObjectId>49355</ObjectId>
-      <StateNumber>12446</StateNumber>
-      <Unique>1</Unique>
-      <AccessMethodId>403</AccessMethodId>
-      <CollationIds>
-100</CollationIds>
-      <CollationParentNames>
-pg_catalog</CollationParentNames>
-      <CollationNames>
-default</CollationNames>
-    </index>
-    <key id="416" parent="284" name="pk_position_snapshot_items">
-      <ObjectId>49349</ObjectId>
-      <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49348</UnderlyingIndexId>
-    </key>
-    <key id="417" parent="284" name="uq_position_snapshot_items_snapshot_symbol">
-      <ObjectId>49356</ObjectId>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49355</UnderlyingIndexId>
-    </key>
-    <column id="418" parent="285" name="snapshot_id">
-      <NotNull>1</NotNull>
-      <Position>1</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>uuid|0s</StoredType>
-      <TypeId>2950</TypeId>
-    </column>
-    <column id="419" parent="285" name="run_id">
-      <NotNull>1</NotNull>
-      <Position>2</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>uuid|0s</StoredType>
-      <TypeId>2950</TypeId>
-    </column>
-    <column id="420" parent="285" name="timestamp">
-      <NotNull>1</NotNull>
-      <Position>3</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41557</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="421" parent="285" name="source">
+    <column id="441" parent="289" name="dataset_version">
       <NotNull>1</NotNull>
       <Position>4</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>order_source_enum|0s</StoredType>
-      <TypeId>49207</TypeId>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
     </column>
-    <index id="422" parent="285" name="pk_position_snapshots">
-      <ColNames>snapshot_id</ColNames>
-      <ObjectId>49294</ObjectId>
-      <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <Unique>1</Unique>
-      <AccessMethodId>403</AccessMethodId>
-    </index>
-    <index id="423" parent="285" name="uq_position_snapshots_run_ts_source">
-      <ColNames>run_id
-timestamp
-source</ColNames>
-      <ObjectId>49296</ObjectId>
-      <StateNumber>12446</StateNumber>
-      <Unique>1</Unique>
-      <AccessMethodId>403</AccessMethodId>
-    </index>
-    <key id="424" parent="285" name="pk_position_snapshots">
-      <ObjectId>49295</ObjectId>
-      <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49294</UnderlyingIndexId>
-    </key>
-    <key id="425" parent="285" name="uq_position_snapshots_run_ts_source">
-      <ObjectId>49297</ObjectId>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49296</UnderlyingIndexId>
-    </key>
-    <column id="426" parent="286" name="snapshot_id">
-      <NotNull>1</NotNull>
-      <Position>1</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>uuid|0s</StoredType>
-      <TypeId>2950</TypeId>
-    </column>
-    <column id="427" parent="286" name="run_id">
-      <NotNull>1</NotNull>
-      <Position>2</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>uuid|0s</StoredType>
-      <TypeId>2950</TypeId>
-    </column>
-    <column id="428" parent="286" name="timestamp">
-      <NotNull>1</NotNull>
-      <Position>3</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>timestamp with time zone|0s</StoredType>
-      <TypeId>1184</TypeId>
-    </column>
-    <column id="429" parent="286" name="gross_exposure">
-      <NotNull>1</NotNull>
-      <Position>4</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="430" parent="286" name="net_exposure">
-      <NotNull>1</NotNull>
+    <column id="442" parent="289" name="run_id">
       <Position>5</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
     </column>
-    <column id="431" parent="286" name="leverage">
-      <NotNull>1</NotNull>
+    <column id="443" parent="289" name="ingestion_run_id">
       <Position>6</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>double precision|0s</StoredType>
-      <TypeId>701</TypeId>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
     </column>
-    <column id="432" parent="286" name="drawdown_pct">
+    <column id="444" parent="289" name="incident_type">
+      <NotNull>1</NotNull>
       <Position>7</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>double precision|0s</StoredType>
-      <TypeId>701</TypeId>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
     </column>
-    <column id="433" parent="286" name="limits">
+    <column id="445" parent="289" name="severity">
       <NotNull>1</NotNull>
       <Position>8</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>jsonb|0s</StoredType>
-      <TypeId>3802</TypeId>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(32)|0s</StoredType>
+      <TypeId>1043</TypeId>
     </column>
-    <column id="434" parent="286" name="utilization">
+    <column id="446" parent="289" name="message">
       <NotNull>1</NotNull>
       <Position>9</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>jsonb|0s</StoredType>
-      <TypeId>3802</TypeId>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
     </column>
-    <column id="435" parent="286" name="is_blocked">
+    <column id="447" parent="289" name="created_at">
       <NotNull>1</NotNull>
       <Position>10</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41557</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="448" parent="289" name="resolved_flag">
+      <NotNull>1</NotNull>
+      <Position>11</Position>
+      <StateNumber>41557</StateNumber>
       <StoredType>boolean|0s</StoredType>
       <TypeId>16</TypeId>
     </column>
-    <column id="436" parent="286" name="block_reasons">
-      <Position>11</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar(64) []|0s</StoredType>
-      <TypeId>1015</TypeId>
-    </column>
-    <index id="437" parent="286" name="pk_risk_snapshots">
-      <ColNames>snapshot_id</ColNames>
-      <ObjectId>49303</ObjectId>
+    <index id="449" parent="289" name="pk_missing_bar_incidents">
+      <ColNames>incident_id</ColNames>
+      <ObjectId>66063</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41557</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
+      <CollationNames>default</CollationNames>
+      <CollationIds>100</CollationIds>
+      <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="438" parent="286" name="pk_risk_snapshots">
-      <ObjectId>49304</ObjectId>
+    <key id="450" parent="289" name="pk_missing_bar_incidents">
+      <ObjectId>66064</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49303</UnderlyingIndexId>
+      <StateNumber>41557</StateNumber>
+      <UnderlyingIndexId>66063</UnderlyingIndexId>
     </key>
-    <column id="439" parent="287" name="run_id">
+    <column id="451" parent="290" name="intent_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="440" parent="287" name="run_type">
+    <column id="452" parent="290" name="idempotency_key">
       <NotNull>1</NotNull>
       <Position>2</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>run_type_enum|0s</StoredType>
-      <TypeId>49306</TypeId>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
     </column>
-    <column id="441" parent="287" name="created_at">
+    <column id="453" parent="290" name="run_id">
       <NotNull>1</NotNull>
       <Position>3</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>timestamp with time zone|0s</StoredType>
-      <TypeId>1184</TypeId>
-    </column>
-    <column id="442" parent="287" name="environment">
-      <NotNull>1</NotNull>
-      <Position>4</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="443" parent="287" name="broker">
-      <NotNull>1</NotNull>
-      <Position>5</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="444" parent="287" name="broker_account_id">
-      <NotNull>1</NotNull>
-      <Position>6</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="445" parent="287" name="strategy_id">
-      <NotNull>1</NotNull>
-      <Position>7</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="446" parent="287" name="strategy_version">
-      <NotNull>1</NotNull>
-      <Position>8</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="447" parent="287" name="strategy_config">
-      <NotNull>1</NotNull>
-      <Position>9</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>jsonb|0s</StoredType>
-      <TypeId>3802</TypeId>
-    </column>
-    <column id="448" parent="287" name="capital_bucket">
-      <NotNull>1</NotNull>
-      <Position>10</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>numeric(18,6 digit)|0s</StoredType>
-      <TypeId>1700</TypeId>
-    </column>
-    <column id="449" parent="287" name="interval">
-      <NotNull>1</NotNull>
-      <Position>11</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>bar_interval_enum|0s</StoredType>
-      <TypeId>49257</TypeId>
-    </column>
-    <column id="450" parent="287" name="start_date">
-      <NotNull>1</NotNull>
-      <Position>12</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>date|0s</StoredType>
-      <TypeId>1082</TypeId>
-    </column>
-    <column id="451" parent="287" name="end_date">
-      <Position>13</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>date|0s</StoredType>
-      <TypeId>1082</TypeId>
-    </column>
-    <column id="452" parent="287" name="dataset_version">
-      <NotNull>1</NotNull>
-      <Position>14</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="453" parent="287" name="universe_version">
-      <NotNull>1</NotNull>
-      <Position>15</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="454" parent="287" name="cost_model">
-      <Position>16</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>jsonb|0s</StoredType>
-      <TypeId>3802</TypeId>
-    </column>
-    <column id="455" parent="287" name="fill_model">
-      <Position>17</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>jsonb|0s</StoredType>
-      <TypeId>3802</TypeId>
-    </column>
-    <column id="456" parent="287" name="random_seed">
-      <Position>18</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>integer|0s</StoredType>
-      <TypeId>23</TypeId>
-    </column>
-    <column id="457" parent="287" name="git_commit">
-      <NotNull>1</NotNull>
-      <Position>19</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="458" parent="287" name="docker_image">
-      <Position>20</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="459" parent="287" name="python_version">
-      <Position>21</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="460" parent="287" name="dependency_lock_hash">
-      <Position>22</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="461" parent="287" name="notes">
-      <Position>23</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="462" parent="287" name="bar_timestamp">
-      <Position>24</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>timestamp with time zone|0s</StoredType>
-      <TypeId>1184</TypeId>
-    </column>
-    <column id="463" parent="287" name="status">
-      <Position>25</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="464" parent="287" name="current_step">
-      <Position>26</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="465" parent="287" name="last_successful_step">
-      <Position>27</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="466" parent="287" name="error_message">
-      <Position>28</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <index id="467" parent="287" name="pk_run_manifests">
-      <ColNames>run_id</ColNames>
-      <ObjectId>49320</ObjectId>
-      <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <Unique>1</Unique>
-      <AccessMethodId>403</AccessMethodId>
-    </index>
-    <key id="468" parent="287" name="pk_run_manifests">
-      <ObjectId>49321</ObjectId>
-      <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49320</UnderlyingIndexId>
-    </key>
-    <column id="469" parent="288" name="signal_id">
-      <NotNull>1</NotNull>
-      <Position>1</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="470" parent="288" name="run_id">
-      <NotNull>1</NotNull>
-      <Position>2</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>uuid|0s</StoredType>
-      <TypeId>2950</TypeId>
-    </column>
-    <column id="471" parent="288" name="timestamp">
-      <NotNull>1</NotNull>
-      <Position>3</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>timestamp with time zone|0s</StoredType>
-      <TypeId>1184</TypeId>
-    </column>
-    <column id="472" parent="288" name="bar_timestamp">
+    <column id="454" parent="290" name="strategy_id">
       <NotNull>1</NotNull>
       <Position>4</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="455" parent="290" name="timestamp">
+      <NotNull>1</NotNull>
+      <Position>5</Position>
+      <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="473" parent="288" name="strategy_id">
-      <NotNull>1</NotNull>
-      <Position>5</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="474" parent="288" name="symbol">
+    <column id="456" parent="290" name="bar_timestamp">
       <NotNull>1</NotNull>
       <Position>6</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="457" parent="290" name="symbol">
+      <NotNull>1</NotNull>
+      <Position>7</Position>
+      <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="475" parent="288" name="direction">
+    <column id="458" parent="290" name="side">
       <NotNull>1</NotNull>
-      <Position>7</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>signal_direction_enum|0s</StoredType>
-      <TypeId>49323</TypeId>
-    </column>
-    <column id="476" parent="288" name="confidence">
       <Position>8</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>double precision|0s</StoredType>
-      <TypeId>701</TypeId>
+      <StateNumber>12459</StateNumber>
+      <StoredType>side_enum|0s</StoredType>
+      <TypeId>49375</TypeId>
     </column>
-    <column id="477" parent="288" name="target_position">
+    <column id="459" parent="290" name="qty">
       <Position>9</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,9 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="478" parent="288" name="params">
+    <column id="460" parent="290" name="notional">
       <Position>10</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="461" parent="290" name="order_type">
+      <NotNull>1</NotNull>
+      <Position>11</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>order_type_enum|0s</StoredType>
+      <TypeId>49380</TypeId>
+    </column>
+    <column id="462" parent="290" name="limit_price">
+      <Position>12</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="463" parent="290" name="stop_price">
+      <Position>13</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="464" parent="290" name="time_in_force">
+      <NotNull>1</NotNull>
+      <Position>14</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>time_in_force_enum|0s</StoredType>
+      <TypeId>49390</TypeId>
+    </column>
+    <column id="465" parent="290" name="extended_hours">
+      <NotNull>1</NotNull>
+      <Position>15</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>boolean|0s</StoredType>
+      <TypeId>16</TypeId>
+    </column>
+    <column id="466" parent="290" name="client_order_id">
+      <NotNull>1</NotNull>
+      <Position>16</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="467" parent="290" name="metadata">
+      <Position>17</Position>
+      <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <index id="479" parent="288" name="pk_signals">
-      <ColNames>signal_id</ColNames>
-      <ObjectId>49334</ObjectId>
+    <index id="468" parent="290" name="pk_order_intents">
+      <ColNames>intent_id</ColNames>
+      <ObjectId>49501</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>12459</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
     </index>
-    <index id="480" parent="288" name="uq_signals_run_bar_symbol_strategy">
+    <index id="469" parent="290" name="uq_order_intents_run_id_idempotency_key">
+      <ColNames>run_id
+idempotency_key</ColNames>
+      <ObjectId>49503</ObjectId>
+      <StateNumber>12459</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationIds>
+100</CollationIds>
+      <CollationParentNames>
+pg_catalog</CollationParentNames>
+      <CollationNames>
+default</CollationNames>
+    </index>
+    <key id="470" parent="290" name="pk_order_intents">
+      <ObjectId>49502</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49501</UnderlyingIndexId>
+    </key>
+    <key id="471" parent="290" name="uq_order_intents_run_id_idempotency_key">
+      <ObjectId>49504</ObjectId>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49503</UnderlyingIndexId>
+    </key>
+    <column id="472" parent="291" name="snapshot_id">
+      <NotNull>1</NotNull>
+      <Position>1</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>uuid|0s</StoredType>
+      <TypeId>2950</TypeId>
+    </column>
+    <column id="473" parent="291" name="symbol">
+      <NotNull>1</NotNull>
+      <Position>2</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar(32)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="474" parent="291" name="quantity">
+      <NotNull>1</NotNull>
+      <Position>3</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,9 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="475" parent="291" name="avg_cost">
+      <Position>4</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="476" parent="291" name="market_price">
+      <Position>5</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="477" parent="291" name="market_value">
+      <Position>6</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="478" parent="291" name="unrealized_pnl">
+      <Position>7</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <foreign-key id="479" parent="291" name="fk_position_snapshot_items_snapshot_id_position_snapshots">
+      <ColNames>snapshot_id</ColNames>
+      <ObjectId>49564</ObjectId>
+      <OnDelete>cascade</OnDelete>
+      <StateNumber>12459</StateNumber>
+      <RefKeyColPositions>1</RefKeyColPositions>
+      <RefTableId>49505</RefTableId>
+    </foreign-key>
+    <index id="480" parent="291" name="pk_position_snapshot_items">
+      <ColNames>snapshot_id
+symbol</ColNames>
+      <ObjectId>49562</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>12459</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationIds>
+100</CollationIds>
+      <CollationParentNames>
+pg_catalog</CollationParentNames>
+      <CollationNames>
+default</CollationNames>
+    </index>
+    <index id="481" parent="291" name="uq_position_snapshot_items_snapshot_symbol">
+      <ColNames>snapshot_id
+symbol</ColNames>
+      <ObjectId>49569</ObjectId>
+      <StateNumber>12459</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationIds>
+100</CollationIds>
+      <CollationParentNames>
+pg_catalog</CollationParentNames>
+      <CollationNames>
+default</CollationNames>
+    </index>
+    <key id="482" parent="291" name="pk_position_snapshot_items">
+      <ObjectId>49563</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49562</UnderlyingIndexId>
+    </key>
+    <key id="483" parent="291" name="uq_position_snapshot_items_snapshot_symbol">
+      <ObjectId>49570</ObjectId>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49569</UnderlyingIndexId>
+    </key>
+    <column id="484" parent="292" name="snapshot_id">
+      <NotNull>1</NotNull>
+      <Position>1</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>uuid|0s</StoredType>
+      <TypeId>2950</TypeId>
+    </column>
+    <column id="485" parent="292" name="run_id">
+      <NotNull>1</NotNull>
+      <Position>2</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>uuid|0s</StoredType>
+      <TypeId>2950</TypeId>
+    </column>
+    <column id="486" parent="292" name="timestamp">
+      <NotNull>1</NotNull>
+      <Position>3</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="487" parent="292" name="source">
+      <NotNull>1</NotNull>
+      <Position>4</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>order_source_enum|0s</StoredType>
+      <TypeId>49421</TypeId>
+    </column>
+    <index id="488" parent="292" name="pk_position_snapshots">
+      <ColNames>snapshot_id</ColNames>
+      <ObjectId>49508</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>12459</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+    </index>
+    <index id="489" parent="292" name="uq_position_snapshots_run_ts_source">
+      <ColNames>run_id
+timestamp
+source</ColNames>
+      <ObjectId>49510</ObjectId>
+      <StateNumber>12459</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+    </index>
+    <key id="490" parent="292" name="pk_position_snapshots">
+      <ObjectId>49509</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49508</UnderlyingIndexId>
+    </key>
+    <key id="491" parent="292" name="uq_position_snapshots_run_ts_source">
+      <ObjectId>49511</ObjectId>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49510</UnderlyingIndexId>
+    </key>
+    <column id="492" parent="293" name="snapshot_id">
+      <NotNull>1</NotNull>
+      <Position>1</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>uuid|0s</StoredType>
+      <TypeId>2950</TypeId>
+    </column>
+    <column id="493" parent="293" name="run_id">
+      <NotNull>1</NotNull>
+      <Position>2</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>uuid|0s</StoredType>
+      <TypeId>2950</TypeId>
+    </column>
+    <column id="494" parent="293" name="timestamp">
+      <NotNull>1</NotNull>
+      <Position>3</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="495" parent="293" name="gross_exposure">
+      <NotNull>1</NotNull>
+      <Position>4</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="496" parent="293" name="net_exposure">
+      <NotNull>1</NotNull>
+      <Position>5</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="497" parent="293" name="leverage">
+      <NotNull>1</NotNull>
+      <Position>6</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>double precision|0s</StoredType>
+      <TypeId>701</TypeId>
+    </column>
+    <column id="498" parent="293" name="drawdown_pct">
+      <Position>7</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>double precision|0s</StoredType>
+      <TypeId>701</TypeId>
+    </column>
+    <column id="499" parent="293" name="limits">
+      <NotNull>1</NotNull>
+      <Position>8</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>jsonb|0s</StoredType>
+      <TypeId>3802</TypeId>
+    </column>
+    <column id="500" parent="293" name="utilization">
+      <NotNull>1</NotNull>
+      <Position>9</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>jsonb|0s</StoredType>
+      <TypeId>3802</TypeId>
+    </column>
+    <column id="501" parent="293" name="is_blocked">
+      <NotNull>1</NotNull>
+      <Position>10</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>boolean|0s</StoredType>
+      <TypeId>16</TypeId>
+    </column>
+    <column id="502" parent="293" name="block_reasons">
+      <Position>11</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar(64) []|0s</StoredType>
+      <TypeId>1015</TypeId>
+    </column>
+    <index id="503" parent="293" name="pk_risk_snapshots">
+      <ColNames>snapshot_id</ColNames>
+      <ObjectId>49517</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>12459</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+    </index>
+    <key id="504" parent="293" name="pk_risk_snapshots">
+      <ObjectId>49518</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49517</UnderlyingIndexId>
+    </key>
+    <column id="505" parent="294" name="run_id">
+      <NotNull>1</NotNull>
+      <Position>1</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>uuid|0s</StoredType>
+      <TypeId>2950</TypeId>
+    </column>
+    <column id="506" parent="294" name="run_type">
+      <NotNull>1</NotNull>
+      <Position>2</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>run_type_enum|0s</StoredType>
+      <TypeId>49520</TypeId>
+    </column>
+    <column id="507" parent="294" name="created_at">
+      <NotNull>1</NotNull>
+      <Position>3</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="508" parent="294" name="environment">
+      <NotNull>1</NotNull>
+      <Position>4</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="509" parent="294" name="broker">
+      <NotNull>1</NotNull>
+      <Position>5</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="510" parent="294" name="broker_account_id">
+      <NotNull>1</NotNull>
+      <Position>6</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="511" parent="294" name="strategy_id">
+      <NotNull>1</NotNull>
+      <Position>7</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="512" parent="294" name="strategy_version">
+      <NotNull>1</NotNull>
+      <Position>8</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="513" parent="294" name="strategy_config">
+      <NotNull>1</NotNull>
+      <Position>9</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>jsonb|0s</StoredType>
+      <TypeId>3802</TypeId>
+    </column>
+    <column id="514" parent="294" name="capital_bucket">
+      <NotNull>1</NotNull>
+      <Position>10</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="515" parent="294" name="interval">
+      <NotNull>1</NotNull>
+      <Position>11</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>bar_interval_enum|0s</StoredType>
+      <TypeId>49471</TypeId>
+    </column>
+    <column id="516" parent="294" name="start_date">
+      <NotNull>1</NotNull>
+      <Position>12</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>date|0s</StoredType>
+      <TypeId>1082</TypeId>
+    </column>
+    <column id="517" parent="294" name="end_date">
+      <Position>13</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>date|0s</StoredType>
+      <TypeId>1082</TypeId>
+    </column>
+    <column id="518" parent="294" name="dataset_version">
+      <NotNull>1</NotNull>
+      <Position>14</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="519" parent="294" name="universe_version">
+      <NotNull>1</NotNull>
+      <Position>15</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="520" parent="294" name="cost_model">
+      <Position>16</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>jsonb|0s</StoredType>
+      <TypeId>3802</TypeId>
+    </column>
+    <column id="521" parent="294" name="fill_model">
+      <Position>17</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>jsonb|0s</StoredType>
+      <TypeId>3802</TypeId>
+    </column>
+    <column id="522" parent="294" name="random_seed">
+      <Position>18</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>integer|0s</StoredType>
+      <TypeId>23</TypeId>
+    </column>
+    <column id="523" parent="294" name="git_commit">
+      <NotNull>1</NotNull>
+      <Position>19</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="524" parent="294" name="docker_image">
+      <Position>20</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="525" parent="294" name="python_version">
+      <Position>21</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="526" parent="294" name="dependency_lock_hash">
+      <Position>22</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="527" parent="294" name="notes">
+      <Position>23</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="528" parent="294" name="bar_timestamp">
+      <Position>24</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="529" parent="294" name="status">
+      <Position>25</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="530" parent="294" name="current_step">
+      <Position>26</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="531" parent="294" name="last_successful_step">
+      <Position>27</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="532" parent="294" name="error_message">
+      <Position>28</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <index id="533" parent="294" name="pk_run_manifests">
+      <ColNames>run_id</ColNames>
+      <ObjectId>49534</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>41524</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+    </index>
+    <key id="534" parent="294" name="pk_run_manifests">
+      <ObjectId>49535</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49534</UnderlyingIndexId>
+    </key>
+    <column id="535" parent="295" name="signal_id">
+      <NotNull>1</NotNull>
+      <Position>1</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>uuid|0s</StoredType>
+      <TypeId>2950</TypeId>
+    </column>
+    <column id="536" parent="295" name="run_id">
+      <NotNull>1</NotNull>
+      <Position>2</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>uuid|0s</StoredType>
+      <TypeId>2950</TypeId>
+    </column>
+    <column id="537" parent="295" name="timestamp">
+      <NotNull>1</NotNull>
+      <Position>3</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="538" parent="295" name="bar_timestamp">
+      <NotNull>1</NotNull>
+      <Position>4</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="539" parent="295" name="strategy_id">
+      <NotNull>1</NotNull>
+      <Position>5</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="540" parent="295" name="symbol">
+      <NotNull>1</NotNull>
+      <Position>6</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="541" parent="295" name="direction">
+      <NotNull>1</NotNull>
+      <Position>7</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>signal_direction_enum|0s</StoredType>
+      <TypeId>49537</TypeId>
+    </column>
+    <column id="542" parent="295" name="confidence">
+      <Position>8</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>double precision|0s</StoredType>
+      <TypeId>701</TypeId>
+    </column>
+    <column id="543" parent="295" name="target_position">
+      <Position>9</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>numeric(18,9 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="544" parent="295" name="params">
+      <Position>10</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>jsonb|0s</StoredType>
+      <TypeId>3802</TypeId>
+    </column>
+    <index id="545" parent="295" name="pk_signals">
+      <ColNames>signal_id</ColNames>
+      <ObjectId>49548</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>12459</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+    </index>
+    <index id="546" parent="295" name="uq_signals_run_bar_symbol_strategy">
       <ColNames>run_id
 bar_timestamp
 symbol
 strategy_id</ColNames>
-      <ObjectId>49336</ObjectId>
-      <StateNumber>12446</StateNumber>
+      <ObjectId>49550</ObjectId>
+      <StateNumber>12459</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationParentNames>
@@ -5716,101 +6196,432 @@ pg_catalog</CollationParentNames>
 default
 default</CollationNames>
     </index>
-    <key id="481" parent="288" name="pk_signals">
-      <ObjectId>49335</ObjectId>
+    <key id="547" parent="295" name="pk_signals">
+      <ObjectId>49549</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49334</UnderlyingIndexId>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49548</UnderlyingIndexId>
     </key>
-    <key id="482" parent="288" name="uq_signals_run_bar_symbol_strategy">
-      <ObjectId>49337</ObjectId>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49336</UnderlyingIndexId>
+    <key id="548" parent="295" name="uq_signals_run_bar_symbol_strategy">
+      <ObjectId>49551</ObjectId>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49550</UnderlyingIndexId>
     </key>
-    <column id="483" parent="289" name="universe_id">
+    <column id="549" parent="296" name="strategy_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
+      <StateNumber>41263</StateNumber>
+      <StoredType>varchar(128)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="484" parent="289" name="snapshot_date">
+    <column id="550" parent="296" name="current_state">
       <NotNull>1</NotNull>
       <Position>2</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>date|0s</StoredType>
-      <TypeId>1082</TypeId>
+      <StateNumber>41263</StateNumber>
+      <StoredType>strategy_runtime_state_enum|0s</StoredType>
+      <TypeId>49596</TypeId>
     </column>
-    <column id="485" parent="289" name="effective_start">
-      <NotNull>1</NotNull>
+    <column id="551" parent="296" name="last_signal_at">
       <Position>3</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41263</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="486" parent="289" name="effective_end">
-      <Position>4</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>timestamp with time zone|0s</StoredType>
-      <TypeId>1184</TypeId>
-    </column>
-    <column id="487" parent="289" name="symbols">
+    <column id="552" parent="296" name="last_transition_at">
       <NotNull>1</NotNull>
-      <Position>5</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar(32) []|0s</StoredType>
-      <TypeId>1015</TypeId>
+      <Position>4</Position>
+      <StateNumber>41263</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
     </column>
-    <column id="488" parent="289" name="criteria">
+    <column id="553" parent="296" name="cooldown_until">
+      <Position>5</Position>
+      <StateNumber>41263</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="554" parent="296" name="updated_at">
       <NotNull>1</NotNull>
       <Position>6</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>jsonb|0s</StoredType>
-      <TypeId>3802</TypeId>
-    </column>
-    <column id="489" parent="289" name="version">
-      <NotNull>1</NotNull>
-      <Position>7</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="490" parent="289" name="source">
-      <NotNull>1</NotNull>
-      <Position>8</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
-    </column>
-    <column id="491" parent="289" name="built_at">
-      <NotNull>1</NotNull>
-      <Position>9</Position>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41263</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="492" parent="289" name="notes">
-      <Position>10</Position>
-      <StateNumber>12446</StateNumber>
-      <StoredType>varchar|0s</StoredType>
-      <TypeId>1043</TypeId>
+    <column id="555" parent="296" name="last_evaluated_bar_timestamp">
+      <Position>7</Position>
+      <StateNumber>41263</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
     </column>
-    <index id="493" parent="289" name="pk_universe_snapshots">
-      <ColNames>universe_id</ColNames>
-      <ObjectId>49343</ObjectId>
+    <index id="556" parent="296" name="pk_strategy_runtime_states">
+      <ColNames>strategy_id</ColNames>
+      <ObjectId>49612</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
+      <StateNumber>41263</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="494" parent="289" name="pk_universe_snapshots">
-      <ObjectId>49344</ObjectId>
+    <key id="557" parent="296" name="pk_strategy_runtime_states">
+      <ObjectId>49613</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>12446</StateNumber>
-      <UnderlyingIndexId>49343</UnderlyingIndexId>
+      <StateNumber>41263</StateNumber>
+      <UnderlyingIndexId>49612</UnderlyingIndexId>
+    </key>
+    <column id="558" parent="297" name="coverage_id">
+      <NotNull>1</NotNull>
+      <Position>1</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="559" parent="297" name="symbol">
+      <NotNull>1</NotNull>
+      <Position>2</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="560" parent="297" name="date">
+      <NotNull>1</NotNull>
+      <Position>3</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>date|0s</StoredType>
+      <TypeId>1082</TypeId>
+    </column>
+    <column id="561" parent="297" name="dataset_version">
+      <NotNull>1</NotNull>
+      <Position>4</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="562" parent="297" name="expected_bar_count">
+      <NotNull>1</NotNull>
+      <Position>5</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>integer|0s</StoredType>
+      <TypeId>23</TypeId>
+    </column>
+    <column id="563" parent="297" name="actual_bar_count">
+      <NotNull>1</NotNull>
+      <Position>6</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>integer|0s</StoredType>
+      <TypeId>23</TypeId>
+    </column>
+    <column id="564" parent="297" name="completeness_status">
+      <NotNull>1</NotNull>
+      <Position>7</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar(32)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="565" parent="297" name="gap_summary">
+      <Position>8</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="566" parent="297" name="updated_at">
+      <NotNull>1</NotNull>
+      <Position>9</Position>
+      <StateNumber>41557</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <index id="567" parent="297" name="pk_symbol_date_coverages">
+      <ColNames>coverage_id</ColNames>
+      <ObjectId>66070</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>41557</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationNames>default</CollationNames>
+      <CollationIds>100</CollationIds>
+      <CollationParentNames>pg_catalog</CollationParentNames>
+    </index>
+    <key id="568" parent="297" name="pk_symbol_date_coverages">
+      <ObjectId>66071</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>41557</StateNumber>
+      <UnderlyingIndexId>66070</UnderlyingIndexId>
+    </key>
+    <column id="569" parent="298" name="event_id">
+      <NotNull>1</NotNull>
+      <Position>1</Position>
+      <StateNumber>41349</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="570" parent="298" name="symbol">
+      <NotNull>1</NotNull>
+      <Position>2</Position>
+      <StateNumber>41349</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="571" parent="298" name="event_type">
+      <NotNull>1</NotNull>
+      <Position>3</Position>
+      <StateNumber>41349</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="572" parent="298" name="effective_at">
+      <NotNull>1</NotNull>
+      <Position>4</Position>
+      <StateNumber>41349</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="573" parent="298" name="new_symbol">
+      <Position>5</Position>
+      <StateNumber>41349</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="574" parent="298" name="successor_symbol">
+      <Position>6</Position>
+      <StateNumber>41349</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="575" parent="298" name="source">
+      <NotNull>1</NotNull>
+      <Position>7</Position>
+      <StateNumber>41349</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="576" parent="298" name="notes">
+      <Position>8</Position>
+      <StateNumber>41349</StateNumber>
+      <StoredType>text|0s</StoredType>
+      <TypeId>25</TypeId>
+    </column>
+    <column id="577" parent="298" name="created_at">
+      <NotNull>1</NotNull>
+      <Position>9</Position>
+      <StateNumber>41349</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <index id="578" parent="298" name="pk_ticker_lifecycle_events">
+      <ColNames>event_id</ColNames>
+      <ObjectId>49637</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>41349</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationNames>default</CollationNames>
+      <CollationIds>100</CollationIds>
+      <CollationParentNames>pg_catalog</CollationParentNames>
+    </index>
+    <index id="579" parent="298" name="ix_ticker_lifecycle_events_symbol">
+      <ColNames>symbol</ColNames>
+      <ObjectId>49639</ObjectId>
+      <StateNumber>41349</StateNumber>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationNames>default</CollationNames>
+      <CollationIds>100</CollationIds>
+      <CollationParentNames>pg_catalog</CollationParentNames>
+    </index>
+    <key id="580" parent="298" name="pk_ticker_lifecycle_events">
+      <ObjectId>49638</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>41349</StateNumber>
+      <UnderlyingIndexId>49637</UnderlyingIndexId>
+    </key>
+    <column id="581" parent="299" name="order_id">
+      <NotNull>1</NotNull>
+      <Position>1</Position>
+      <StateNumber>41272</StateNumber>
+      <StoredType>uuid|0s</StoredType>
+      <TypeId>2950</TypeId>
+    </column>
+    <column id="582" parent="299" name="intent_id">
+      <NotNull>1</NotNull>
+      <Position>2</Position>
+      <StateNumber>41272</StateNumber>
+      <StoredType>uuid|0s</StoredType>
+      <TypeId>2950</TypeId>
+    </column>
+    <column id="583" parent="299" name="run_id">
+      <NotNull>1</NotNull>
+      <Position>3</Position>
+      <StateNumber>41272</StateNumber>
+      <StoredType>uuid|0s</StoredType>
+      <TypeId>2950</TypeId>
+    </column>
+    <column id="584" parent="299" name="strategy_id">
+      <NotNull>1</NotNull>
+      <Position>4</Position>
+      <StateNumber>41272</StateNumber>
+      <StoredType>varchar(128)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="585" parent="299" name="account_id">
+      <NotNull>1</NotNull>
+      <Position>5</Position>
+      <StateNumber>41272</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="586" parent="299" name="symbol">
+      <NotNull>1</NotNull>
+      <Position>6</Position>
+      <StateNumber>41272</StateNumber>
+      <StoredType>varchar(32)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="587" parent="299" name="broker_order_id">
+      <Position>7</Position>
+      <StateNumber>41272</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="588" parent="299" name="current_status">
+      <NotNull>1</NotNull>
+      <Position>8</Position>
+      <StateNumber>41272</StateNumber>
+      <StoredType>tracked_order_status_enum|0s</StoredType>
+      <TypeId>49615</TypeId>
+    </column>
+    <column id="589" parent="299" name="previous_filled_qty">
+      <NotNull>1</NotNull>
+      <Position>9</Position>
+      <StateNumber>41272</StateNumber>
+      <StoredType>numeric(18,9 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="590" parent="299" name="previous_avg_fill_price">
+      <Position>10</Position>
+      <StateNumber>41272</StateNumber>
+      <StoredType>numeric(18,6 digit)|0s</StoredType>
+      <TypeId>1700</TypeId>
+    </column>
+    <column id="591" parent="299" name="is_open">
+      <NotNull>1</NotNull>
+      <Position>11</Position>
+      <StateNumber>41272</StateNumber>
+      <StoredType>boolean|0s</StoredType>
+      <TypeId>16</TypeId>
+    </column>
+    <column id="592" parent="299" name="created_at">
+      <NotNull>1</NotNull>
+      <Position>12</Position>
+      <StateNumber>41272</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="593" parent="299" name="updated_at">
+      <NotNull>1</NotNull>
+      <Position>13</Position>
+      <StateNumber>41272</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <index id="594" parent="299" name="pk_tracked_orders">
+      <ColNames>order_id</ColNames>
+      <ObjectId>49630</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>41272</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+    </index>
+    <key id="595" parent="299" name="pk_tracked_orders">
+      <ObjectId>49631</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>41272</StateNumber>
+      <UnderlyingIndexId>49630</UnderlyingIndexId>
+    </key>
+    <column id="596" parent="300" name="universe_id">
+      <NotNull>1</NotNull>
+      <Position>1</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="597" parent="300" name="snapshot_date">
+      <NotNull>1</NotNull>
+      <Position>2</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>date|0s</StoredType>
+      <TypeId>1082</TypeId>
+    </column>
+    <column id="598" parent="300" name="effective_start">
+      <NotNull>1</NotNull>
+      <Position>3</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="599" parent="300" name="effective_end">
+      <Position>4</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="600" parent="300" name="symbols">
+      <NotNull>1</NotNull>
+      <Position>5</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar(32) []|0s</StoredType>
+      <TypeId>1015</TypeId>
+    </column>
+    <column id="601" parent="300" name="criteria">
+      <NotNull>1</NotNull>
+      <Position>6</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>jsonb|0s</StoredType>
+      <TypeId>3802</TypeId>
+    </column>
+    <column id="602" parent="300" name="version">
+      <NotNull>1</NotNull>
+      <Position>7</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="603" parent="300" name="source">
+      <NotNull>1</NotNull>
+      <Position>8</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <column id="604" parent="300" name="built_at">
+      <NotNull>1</NotNull>
+      <Position>9</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>timestamp with time zone|0s</StoredType>
+      <TypeId>1184</TypeId>
+    </column>
+    <column id="605" parent="300" name="notes">
+      <Position>10</Position>
+      <StateNumber>12459</StateNumber>
+      <StoredType>varchar|0s</StoredType>
+      <TypeId>1043</TypeId>
+    </column>
+    <index id="606" parent="300" name="pk_universe_snapshots">
+      <ColNames>universe_id</ColNames>
+      <ObjectId>49557</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>12459</StateNumber>
+      <Unique>1</Unique>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationNames>default</CollationNames>
+      <CollationIds>100</CollationIds>
+      <CollationParentNames>pg_catalog</CollationParentNames>
+    </index>
+    <key id="607" parent="300" name="pk_universe_snapshots">
+      <ObjectId>49558</ObjectId>
+      <Primary>1</Primary>
+      <StateNumber>12459</StateNumber>
+      <UnderlyingIndexId>49557</UnderlyingIndexId>
     </key>
   </database-model>
 </dataSource>

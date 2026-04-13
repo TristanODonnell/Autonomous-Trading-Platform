@@ -31,4 +31,4 @@ class DatasetVersions(Base):
         nullable=True,
     )
     validation_status: Mapped[str] = mapped_column(String(32), nullable=False)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

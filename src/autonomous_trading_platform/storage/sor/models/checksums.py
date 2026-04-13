@@ -10,7 +10,7 @@ from .helpers.sa_types import UTCDateTimeType
 
 
 class Checksums(Base):
-    __tablename__ = "Checksums"
+    __tablename__ = "checksums"
     checksum_id: Mapped[str] = mapped_column(String(64), primary_key=True)
 
     dataset_version: Mapped[str] = mapped_column(String(64), nullable=False)
