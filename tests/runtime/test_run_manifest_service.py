@@ -106,10 +106,16 @@ def make_run_manifest(
 class FakeRunManifestRepository:
     def __init__(self) -> None:
         self.add_calls: list[RunManifest] = []
+        self.upsert_calls: list[RunManifest] = []
         self.by_run_id: dict[UUID, RunManifest] = {}
 
     def add(self, manifest: RunManifest) -> RunManifest:
         self.add_calls.append(manifest)
+        self.by_run_id[manifest.run_id] = manifest
+        return manifest
+
+    def upsert(self, manifest: RunManifest) -> RunManifest:
+        self.upsert_calls.append(manifest)
         self.by_run_id[manifest.run_id] = manifest
         return manifest
 
@@ -187,7 +193,7 @@ class TestRunManifestServiceCurrentBehavior:
 
         assert result == manifest
         assert len(captured_uows) == 1
-        assert captured_uows[0].run_manifests.add_calls == [manifest]
+        assert captured_uows[0].run_manifests.upsert_calls == [manifest]
         assert session.begin_called == 1
         assert session.commit_called == 1
         assert session.rollback_called == 0
@@ -199,7 +205,7 @@ class TestRunManifestServiceCurrentBehavior:
         manifest: RunManifest,
     ) -> None:
         class ExplodingRunManifestRepository(FakeRunManifestRepository):
-            def add(self, manifest: RunManifest) -> RunManifest:
+            def upsert(self, manifest: RunManifest) -> RunManifest:
                 raise RuntimeError("database write failed")
 
         class ExplodingSorUnitOfWork(FakeSorUnitOfWork):
