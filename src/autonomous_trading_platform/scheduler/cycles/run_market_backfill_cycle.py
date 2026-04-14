@@ -9,7 +9,7 @@ from time import perf_counter
 
 from sqlalchemy.orm import Session
 
-from autonomous_trading_platform.contracts.common.enums import BarInterval, RunType
+from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.ingestion.market_data.clients.alpaca_historical_bars_client import (
     AlpacaHistoricalBarsClient,
@@ -42,6 +42,9 @@ from autonomous_trading_platform.observability.metrics import (
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
+from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from autonomous_trading_platform.storage.sor.models.ingestion_runs import IngestionRuns
+from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 from src.db import get_session
 
 logger = get_logger(__name__)
@@ -72,6 +75,10 @@ def run_market_backfill_cycle(
     manifest_service = RunManifestService(session=session)
 
     run_id = uuid.uuid4()
+    ingestion_run_id = uuid.uuid4()
+    dataset_version_id = uuid.uuid4()
+    ingestion_run: IngestionRuns | None = None
+    dataset_version: DatasetVersions | None = None
     component = "scheduler.run_market_backfill_cycle"
     base_metadata: dict[str, object] = {}
 
@@ -144,6 +151,54 @@ def run_market_backfill_cycle(
                 metadata=base_metadata,
             )
 
+            ingestion_run = IngestionRuns(
+                ingestion_run_id=str(ingestion_run_id),
+                created_at=now,
+                run_timestamp=end,
+                run_type=RunType.BACKFILL,
+                source="alpaca",
+                dataset_version=str(dataset_version_id),
+                status="running",
+                started_at=now,
+                completed_at=None,
+                error_message=None,
+                row_count=None,
+                file_count=None,
+            )
+
+            with SorUnitOfWork(session) as uow:
+                uow.ingestion_runs.insert(ingestion_run)
+
+            dataset_version = DatasetVersions(
+                dataset_version_id=str(dataset_version_id),
+                dataset_name="market_bars_backfill",
+                created_at=now,
+                source="alpaca",
+                price_basis=PriceBasis.RAW,
+                interval=BarInterval.ONE_DAY,
+                schema_version="bars_schema_v1",
+                symbol_coverage=len(symbols),
+                date_coverage_start=start.date(),
+                date_coverage_end=end.date(),
+                validation_status="unvalidated",
+                checksum=None,
+                source_manifest={
+                    "pipeline": "market_backfill",
+                    "ingestion_run_id": str(ingestion_run_id),
+                    "backfill_start": start.isoformat(),
+                    "backfill_end": end.isoformat(),
+                    "symbols": symbols,
+                },
+                metadata_json={
+                    **base_metadata,
+                    "ingestion_run_id": str(ingestion_run_id),
+                    "dataset_type": "historical_backfill",
+                },
+            )
+
+            with SorUnitOfWork(session) as uow:
+                uow.dataset_versions.insert(dataset_version)
+
             raw_client = get_stock_historical_client()
             historical_client = AlpacaHistoricalBarsClient(raw_client)
 
@@ -152,6 +207,8 @@ def run_market_backfill_cycle(
                 historical_client=historical_client,
                 run_id=str(run_id),
                 audit_logger=audit_logger,
+                ingestion_run_id=str(ingestion_run_id),
+                dataset_version_id=str(dataset_version_id),
             )
 
             step = "backfill_market_bars"

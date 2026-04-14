@@ -36,10 +36,51 @@ class RunManifestRepository(BaseRepository):
             current_step=manifest.current_step,
             last_successful_step=manifest.last_successful_step,
             error_message=manifest.error_message,
+            artifact_manifest=manifest.artifact_manifest,
+            schema_definition=manifest.schema_definition,
         )
         self.session.add(row)
         self.session.flush()
         return row
+
+    def upsert(self, manifest: RunManifest) -> RunManifestRow:
+        existing = self.get_by_run_id(manifest.run_id)
+
+        if existing is None:
+            return self.add(manifest)
+
+        existing.run_type = manifest.run_type
+        existing.created_at = manifest.created_at
+        existing.environment = manifest.environment
+        existing.broker = manifest.broker
+        existing.broker_account_id = manifest.broker_account_id
+        existing.strategy_id = manifest.strategy_id
+        existing.strategy_version = manifest.strategy_version
+        existing.strategy_config = manifest.strategy_config
+        existing.capital_bucket = manifest.capital_bucket
+        existing.interval = manifest.interval
+        existing.start_date = manifest.start_date
+        existing.end_date = manifest.end_date
+        existing.dataset_version = manifest.dataset_version
+        existing.universe_version = manifest.universe_version
+        existing.cost_model = manifest.cost_model
+        existing.fill_model = manifest.fill_model
+        existing.random_seed = manifest.random_seed
+        existing.git_commit = manifest.git_commit
+        existing.docker_image = manifest.docker_image
+        existing.python_version = manifest.python_version
+        existing.dependency_lock_hash = manifest.dependency_lock_hash
+        existing.notes = manifest.notes
+        existing.bar_timestamp = manifest.bar_timestamp
+        existing.status = manifest.status
+        existing.current_step = manifest.current_step
+        existing.last_successful_step = manifest.last_successful_step
+        existing.error_message = manifest.error_message
+        existing.artifact_manifest = manifest.artifact_manifest
+        existing.schema_definition = manifest.schema_definition
+
+        self.session.flush()
+        return existing
 
     def get_by_run_id(self, run_id: UUID) -> RunManifestRow | None:
         result: RunManifestRow | None = (
@@ -78,4 +119,6 @@ class RunManifestRepository(BaseRepository):
             current_step=row.current_step,
             last_successful_step=row.last_successful_step,
             error_message=row.error_message,
+            artifact_manifest=row.artifact_manifest,
+            schema_definition=row.schema_definition,
         )

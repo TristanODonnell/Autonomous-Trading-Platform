@@ -53,3 +53,5 @@ class RunManifestRow(Base):
     current_step: Mapped[str | None] = mapped_column(String, nullable=True)
     last_successful_step: Mapped[str | None] = mapped_column(String, nullable=True)
     error_message: Mapped[str | None] = mapped_column(String, nullable=True)
+    artifact_manifest: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    schema_definition: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

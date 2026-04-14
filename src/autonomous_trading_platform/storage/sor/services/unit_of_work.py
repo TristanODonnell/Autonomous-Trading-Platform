@@ -11,12 +11,24 @@ from autonomous_trading_platform.storage.sor.repositories.broker_order_repositor
 from autonomous_trading_platform.storage.sor.repositories.cash_snapshot_repository import (
     CashSnapshotRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.checksums_repository import (
+    ChecksumsRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.corporate_action_repository import (
     CorporateActionRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.dataset_versions_repository import (
+    DatasetVersionsRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.fill_repository import FillRepository
+from autonomous_trading_platform.storage.sor.repositories.ingestion_runs_repository import (
+    IngestionRunsRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.market_bar_repository import (
     MarketBarRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.missing_bar_incidents_repository import (
+    MissingBarIncidentsRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.order_intent_repository import (
     OrderIntentRepository,
@@ -33,6 +45,9 @@ from autonomous_trading_platform.storage.sor.repositories.run_manifests_reposito
 from autonomous_trading_platform.storage.sor.repositories.signals_repository import SignalRepository
 from autonomous_trading_platform.storage.sor.repositories.strategy_runtime_state_repository import (
     StrategyRuntimeStateRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.symbol_date_coverage_repository import (
+    SymbolDateCoverageRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
@@ -65,6 +80,11 @@ class SorUnitOfWork:
         self.tracked_orders = TrackedOrderRepository(session)
         self.strategy_runtime_states = StrategyRuntimeStateRepository(session)
         self.ticker_lifecycles = TickerLifecycleRepository(session)
+        self.dataset_versions = DatasetVersionsRepository(session)
+        self.missing_bar_incidents = MissingBarIncidentsRepository(session)
+        self.symbol_date_coverage = SymbolDateCoverageRepository(session)
+        self.ingestion_runs = IngestionRunsRepository(session)
+        self.checksums = ChecksumsRepository(session)
 
     def __enter__(self) -> "SorUnitOfWork":
         self._started_transaction = False

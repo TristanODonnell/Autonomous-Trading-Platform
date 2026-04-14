@@ -41,11 +41,16 @@ class MarketBackfillService:
         historical_client: AlpacaHistoricalBarsClient,
         run_id: str,
         audit_logger: AuditLoggingService,
+        ingestion_run_id: str,
+        dataset_version_id: str,
     ) -> None:
         self.session = session
         self.historical_client = historical_client
         self.run_id = run_id
         self.audit_logger = audit_logger
+        self.ingestion_run_id = ingestion_run_id
+        self.dataset_version_id = dataset_version_id
+
         self.bar_ingestion_service = BarIngestionService(
             session,
             run_id=run_id,
@@ -61,6 +66,7 @@ class MarketBackfillService:
         component = "ingestion.market_backfill_service"
         request_start = perf_counter()
         service_start = perf_counter()
+
         record_operation_started(
             logger=logger,
             event="market_backfill_service_started",
@@ -70,6 +76,7 @@ class MarketBackfillService:
             start=start.isoformat(),
             end=end.isoformat(),
         )
+
         with start_span(
             name="market_backfill_service.backfill",
             timespan=SpanTimespan.STEP,
@@ -79,6 +86,8 @@ class MarketBackfillService:
             service_span.set_attribute("ratp.symbol_count", len(symbols))
             service_span.set_attribute("ratp.backfill_start", start.isoformat())
             service_span.set_attribute("ratp.backfill_end", end.isoformat())
+            service_span.set_attribute("ratp.ingestion_run_id", self.ingestion_run_id)
+            service_span.set_attribute("ratp.dataset_version_id", self.dataset_version_id)
 
             backfill_api_requests.add(
                 1,
@@ -97,6 +106,8 @@ class MarketBackfillService:
                     request_span.set_attribute("ratp.symbol_count", len(symbols))
                     request_span.set_attribute("ratp.backfill_start", start.isoformat())
                     request_span.set_attribute("ratp.backfill_end", end.isoformat())
+                    request_span.set_attribute("ratp.ingestion_run_id", self.ingestion_run_id)
+                    request_span.set_attribute("ratp.dataset_version_id", self.dataset_version_id)
 
                     bars = self.historical_client.fetch_bars(
                         symbols=symbols,
@@ -154,12 +165,14 @@ class MarketBackfillService:
                 start=start.isoformat(),
                 end=end.isoformat(),
             )
+
             processed_bars = 0
 
             for provider_bar in bars:
                 try:
                     await self.bar_ingestion_service.handle_minute_bar(provider_bar)
                     processed_bars += 1
+
                     historical_bars_backfilled.add(
                         1,
                         {
@@ -169,6 +182,7 @@ class MarketBackfillService:
                     )
                 except ValueError as exc:
                     message = str(exc)
+
                     if "Incomplete prior bucket detected" in message:
                         logger.warning(
                             "market_backfill_service_retry_incomplete_bucket",
@@ -177,7 +191,7 @@ class MarketBackfillService:
                                 component=component,
                                 symbol=provider_bar.symbol,
                                 error_message=message,
-                            ),
+                            ).to_extra(),
                         )
 
                         self.bar_ingestion_service.aggregator.drop_incomplete_buckets_for_symbol(
@@ -185,6 +199,7 @@ class MarketBackfillService:
                         )
                         await self.bar_ingestion_service.handle_minute_bar(provider_bar)
                         processed_bars += 1
+
                         historical_bars_backfilled.add(
                             1,
                             {
@@ -212,6 +227,7 @@ class MarketBackfillService:
                         failure_class="value_error",
                     )
                     raise
+
                 except Exception as exc:
                     backfill_symbol_failures.add(
                         1,

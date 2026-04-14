@@ -77,6 +77,7 @@ class RunType(enum.StrEnum):
     LIVE = "live"
     SHADOW = "shadow"
     INGESTION = "ingestion"
+    BACKFILL = "backfill"
 
 
 class SignalDirection(enum.StrEnum):

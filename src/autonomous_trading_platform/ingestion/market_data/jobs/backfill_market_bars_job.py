@@ -44,13 +44,20 @@ class BackfillMarketBarsJob:
         historical_client: AlpacaHistoricalBarsClient,
         run_id: str,
         audit_logger: AuditLoggingService,
+        ingestion_run_id: str,
+        dataset_version_id: str,
     ) -> None:
         self.session = session
+        self.ingestion_run_id = ingestion_run_id
+        self.dataset_version_id = dataset_version_id
+
         self.backfill_service = MarketBackfillService(
             session=session,
             historical_client=historical_client,
             run_id=run_id,
             audit_logger=audit_logger,
+            ingestion_run_id=ingestion_run_id,
+            dataset_version_id=dataset_version_id,
         )
 
     async def run(
@@ -82,6 +89,8 @@ class BackfillMarketBarsJob:
                 job_span.set_attribute("ratp.symbol_count", len(symbols))
                 job_span.set_attribute("ratp.backfill_start", start.isoformat())
                 job_span.set_attribute("ratp.backfill_end", end.isoformat())
+                job_span.set_attribute("ratp.ingestion_run_id", self.ingestion_run_id)
+                job_span.set_attribute("ratp.dataset_version_id", self.dataset_version_id)
 
                 await self.backfill_service.backfill(
                     symbols=symbols,
