@@ -40,6 +40,8 @@ class RunManifest(BaseModel):
     current_step: str | None = None
     last_successful_step: str | None = None
     error_message: str | None = None
+    artifact_manifest: dict[str, Any] | None = None
+    schema_definition: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return manifest as a Python dictionary."""

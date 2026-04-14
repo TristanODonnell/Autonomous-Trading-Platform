@@ -10,9 +10,5 @@ class RunManifestService:
 
     def save(self, manifest: RunManifest) -> RunManifest:
         with SorUnitOfWork(self.session) as uow:
-            existing = uow.run_manifests.get_by_run_id(manifest.run_id)
-            if existing is not None:
-                return uow.run_manifests.to_contract(existing)
-
-            row = uow.run_manifests.add(manifest)
+            row = uow.run_manifests.upsert(manifest)
             return uow.run_manifests.to_contract(row)
