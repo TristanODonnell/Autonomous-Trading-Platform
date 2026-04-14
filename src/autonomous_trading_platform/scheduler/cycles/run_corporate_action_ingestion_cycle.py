@@ -139,7 +139,18 @@ def run_corporate_action_ingestion_cycle() -> None:
             source="alpaca",
             price_basis=PriceBasis.RAW,
             interval=BarInterval.ONE_DAY,
+            schema_version="corporate_actions_schema_v1",
+            symbol_coverage=None,
+            date_coverage_start=cycle_start.date(),
+            date_coverage_end=cycle_end.date(),
             validation_status="unvalidated",
+            checksum=None,
+            source_manifest={
+                "pipeline": "corporate_actions_ingestion",
+                "ingestion_run_id": str(ingestion_run_id),
+                "cycle_start": cycle_start.isoformat(),
+                "cycle_end": cycle_end.isoformat(),
+            },
             metadata_json={
                 **base_metadata,
                 "dataset_type": "corporate_actions_ingestion",

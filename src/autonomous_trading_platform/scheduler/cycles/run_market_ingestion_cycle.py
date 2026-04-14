@@ -160,13 +160,28 @@ def run_market_ingestion_cycle(
         # TODO may need to change some field defaults later
         dataset_version = DatasetVersions(
             dataset_version_id=str(dataset_version_id),
-            dataset_name="dataset_one",
+            dataset_name="market_bars",
             created_at=now_utc,
             source="alpaca",
             price_basis=PriceBasis.RAW,
             interval=BarInterval.FIVE_MIN,
+            schema_version="bars_schema_v1",
+            symbol_coverage=len(expected_symbols),
+            date_coverage_start=cycle_start.date(),
+            date_coverage_end=cycle_end.date(),
             validation_status="unvalidated",
-            metadata_json=base_metadata,
+            checksum=None,
+            source_manifest={
+                "pipeline": "market_ingestion",
+                "ingestion_run_id": str(ingestion_run_id),
+                "cycle_start": cycle_start.isoformat(),
+                "cycle_end": cycle_end.isoformat(),
+                "symbols": sorted(expected_symbols),
+            },
+            metadata_json={
+                **base_metadata,
+                "dataset_type": "incremental_market_bars",
+            },
         )
         with SorUnitOfWork(session) as uow:
             uow.dataset_versions.insert(dataset_version)
