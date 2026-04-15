@@ -7,6 +7,7 @@ from time import perf_counter
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
+from autonomous_trading_platform.contracts.runtime.dataset_version import DatasetVersion
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.ingestion.market_data.jobs.ingest_bars_job import (
@@ -34,8 +35,10 @@ from autonomous_trading_platform.observability.metrics import (
 from autonomous_trading_platform.observability.telemetry import setup_telemetry
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
+from autonomous_trading_platform.runtime.services.dataset_registration_service import (
+    DatasetRegistrationService,
+)
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
-from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
 from autonomous_trading_platform.storage.sor.models.ingestion_runs import IngestionRuns
 from autonomous_trading_platform.storage.sor.repositories.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
@@ -81,10 +84,12 @@ def run_market_ingestion_cycle(
     session: Session = get_session()
     audit_logger = AuditLoggingService(session=session)
     manifest_service = RunManifestService(session=session)
+    dataset_registration_service = DatasetRegistrationService(session=session)
 
     run_id = uuid.uuid4()
     ingestion_run_id = uuid.uuid4()
     ingestion_run: IngestionRuns | None = None
+    dataset_version: DatasetVersion | None = None
     dataset_version_id = uuid.uuid4()
     component = "scheduler.run_market_ingestion_cycle"
     base_metadata: dict[str, object] = {}
@@ -158,7 +163,7 @@ def run_market_ingestion_cycle(
             uow.ingestion_runs.insert(ingestion_run)
 
         # TODO may need to change some field defaults later
-        dataset_version = DatasetVersions(
+        dataset_version_contract = DatasetVersion(
             dataset_version_id=str(dataset_version_id),
             dataset_name="market_bars",
             created_at=now_utc,
@@ -183,8 +188,8 @@ def run_market_ingestion_cycle(
                 "dataset_type": "incremental_market_bars",
             },
         )
-        with SorUnitOfWork(session) as uow:
-            uow.dataset_versions.insert(dataset_version)
+
+        dataset_version = dataset_registration_service.register(dataset_version_contract)
 
         with start_span("market_ingestion_cycle.run", timespan=SpanTimespan.CYCLE) as cycle_span:
             cycle_span.set_attribute("ratp.run_id", str(run_id))
@@ -256,6 +261,9 @@ def run_market_ingestion_cycle(
             with SorUnitOfWork(session) as uow:
                 uow.ingestion_runs.upsert(ingestion_run)
 
+            dataset_version.validation_status = "validated"
+            dataset_version = dataset_registration_service.save(dataset_version)
+
             audit_logger.record_run_completed(
                 run_id=str(run_id),
                 component=component,
@@ -278,6 +286,10 @@ def run_market_ingestion_cycle(
 
             with SorUnitOfWork(session) as uow:
                 uow.ingestion_runs.upsert(ingestion_run)
+
+        if dataset_version is not None:
+            dataset_version.validation_status = "failed"
+            dataset_version = dataset_registration_service.save(dataset_version)
 
         total_duration = perf_counter() - cycle_wall_start
         audit_logger.record_run_failed(

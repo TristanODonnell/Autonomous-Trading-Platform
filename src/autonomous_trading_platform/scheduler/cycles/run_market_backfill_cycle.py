@@ -10,6 +10,7 @@ from time import perf_counter
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
+from autonomous_trading_platform.contracts.runtime.dataset_version import DatasetVersion
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.ingestion.market_data.clients.alpaca_historical_bars_client import (
@@ -42,8 +43,10 @@ from autonomous_trading_platform.observability.metrics import (
 )
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
+from autonomous_trading_platform.runtime.services.dataset_registration_service import (
+    DatasetRegistrationService,
+)
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
-from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
 from autonomous_trading_platform.storage.sor.models.ingestion_runs import IngestionRuns
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
@@ -73,12 +76,13 @@ def run_market_backfill_cycle(
     session: Session = get_session()
     audit_logger = AuditLoggingService(session=session)
     manifest_service = RunManifestService(session=session)
+    dataset_registration_service = DatasetRegistrationService(session=session)
 
     run_id = uuid.uuid4()
     ingestion_run_id = uuid.uuid4()
     dataset_version_id = uuid.uuid4()
     ingestion_run: IngestionRuns | None = None
-    dataset_version: DatasetVersions | None = None
+    dataset_version: DatasetVersion | None = None
     component = "scheduler.run_market_backfill_cycle"
     base_metadata: dict[str, object] = {}
 
@@ -169,7 +173,7 @@ def run_market_backfill_cycle(
             with SorUnitOfWork(session) as uow:
                 uow.ingestion_runs.insert(ingestion_run)
 
-            dataset_version = DatasetVersions(
+            dataset_version_contract = DatasetVersion(
                 dataset_version_id=str(dataset_version_id),
                 dataset_name="market_bars_backfill",
                 created_at=now,
@@ -196,8 +200,7 @@ def run_market_backfill_cycle(
                 },
             )
 
-            with SorUnitOfWork(session) as uow:
-                uow.dataset_versions.insert(dataset_version)
+            dataset_version = dataset_registration_service.register(dataset_version_contract)
 
             raw_client = get_stock_historical_client()
             historical_client = AlpacaHistoricalBarsClient(raw_client)
@@ -259,6 +262,9 @@ def run_market_backfill_cycle(
                 )
                 raise
 
+            dataset_version.validation_status = "validated"
+            dataset_version = dataset_registration_service.save(dataset_version)
+
             audit_logger.record_run_completed(
                 run_id=str(run_id),
                 component=component,
@@ -276,6 +282,11 @@ def run_market_backfill_cycle(
 
     except Exception as exc:
         total_duration = perf_counter() - cycle_wall_start
+
+        if dataset_version is not None:
+            dataset_version.validation_status = "failed"
+            dataset_version = dataset_registration_service.save(dataset_version)
+
         audit_logger.record_run_failed(
             run_id=str(run_id),
             component=component,
