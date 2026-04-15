@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.runtime.dataset_version import DatasetVersion
+from autonomous_trading_platform.contracts.runtime.ingestion_run import IngestionRun
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.ingestion.market_data.jobs.ingest_bars_job import (
@@ -38,15 +39,16 @@ from autonomous_trading_platform.runtime.services.audit_logging_service import A
 from autonomous_trading_platform.runtime.services.dataset_registration_service import (
     DatasetRegistrationService,
 )
+from autonomous_trading_platform.runtime.services.ingestion_run_registration_service import (
+    IngestionRunRegistrationService,
+)
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
-from autonomous_trading_platform.storage.sor.models.ingestion_runs import IngestionRuns
 from autonomous_trading_platform.storage.sor.repositories.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
     UniverseSnapshotRepository,
 )
-from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 from autonomous_trading_platform.universe.services.ticker_lifecycle_service import (
     TickerLifecycleService,
 )
@@ -85,10 +87,11 @@ def run_market_ingestion_cycle(
     audit_logger = AuditLoggingService(session=session)
     manifest_service = RunManifestService(session=session)
     dataset_registration_service = DatasetRegistrationService(session=session)
+    ingestion_run_registration_service = IngestionRunRegistrationService(session=session)
 
     run_id = uuid.uuid4()
     ingestion_run_id = uuid.uuid4()
-    ingestion_run: IngestionRuns | None = None
+    ingestion_run: IngestionRun | None = None
     dataset_version: DatasetVersion | None = None
     dataset_version_id = uuid.uuid4()
     component = "scheduler.run_market_ingestion_cycle"
@@ -145,13 +148,13 @@ def run_market_ingestion_cycle(
             "manifest_interval": manifest.interval.value,
         }
         # TODO may need to change some field defaults later
-        ingestion_run = IngestionRuns(
+        ingestion_run_contract = IngestionRun(
             ingestion_run_id=str(ingestion_run_id),
             created_at=now_utc,
             run_timestamp=cycle_end,
             run_type=RunType.INGESTION,
             source="alpaca",
-            dataset_version=1,
+            dataset_version=str(dataset_version_id),
             status="running",
             started_at=now_utc,
             completed_at=None,
@@ -159,8 +162,7 @@ def run_market_ingestion_cycle(
             row_count=None,
             file_count=None,
         )
-        with SorUnitOfWork(session) as uow:
-            uow.ingestion_runs.insert(ingestion_run)
+        ingestion_run = ingestion_run_registration_service.register(ingestion_run_contract)
 
         # TODO may need to change some field defaults later
         dataset_version_contract = DatasetVersion(
@@ -257,9 +259,7 @@ def run_market_ingestion_cycle(
 
             ingestion_run.status = "completed"
             ingestion_run.completed_at = datetime.now(UTC)
-
-            with SorUnitOfWork(session) as uow:
-                uow.ingestion_runs.upsert(ingestion_run)
+            ingestion_run = ingestion_run_registration_service.save(ingestion_run)
 
             dataset_version.validation_status = "validated"
             dataset_version = dataset_registration_service.save(dataset_version)
@@ -283,9 +283,7 @@ def run_market_ingestion_cycle(
             ingestion_run.status = "failed"
             ingestion_run.completed_at = datetime.now(UTC)
             ingestion_run.error_message = str(exc)
-
-            with SorUnitOfWork(session) as uow:
-                uow.ingestion_runs.upsert(ingestion_run)
+            ingestion_run = ingestion_run_registration_service.save(ingestion_run)
 
         if dataset_version is not None:
             dataset_version.validation_status = "failed"
