@@ -4,6 +4,7 @@ import argparse
 
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.cli.helpers import parse_datetime
+from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.scheduler.cycles.run_corporate_action_ingestion_cycle import (
     run_corporate_action_ingestion_cycle,
 )
@@ -14,7 +15,6 @@ from autonomous_trading_platform.scheduler.cycles.run_market_ingestion_cycle imp
     run_market_ingestion_cycle,
 )
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
-from src.db import get_session
 
 
 def _parse_symbols(raw: str) -> list[str]:

@@ -9,7 +9,10 @@ from time import perf_counter
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
+from autonomous_trading_platform.contracts.runtime.dataset_version import DatasetVersion
+from autonomous_trading_platform.contracts.runtime.ingestion_run import IngestionRun
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
+from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.ingestion.corporate_actions.jobs.ingest_corporate_actions_job import (
     IngestCorporateActionsJob,
 )
@@ -34,11 +37,13 @@ from autonomous_trading_platform.observability.metrics import (
 )
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
+from autonomous_trading_platform.runtime.services.dataset_registration_service import (
+    DatasetRegistrationService,
+)
+from autonomous_trading_platform.runtime.services.ingestion_run_registration_service import (
+    IngestionRunRegistrationService,
+)
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
-from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
-from autonomous_trading_platform.storage.sor.models.ingestion_runs import IngestionRuns
-from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
-from src.db import get_session
 
 logger = get_logger(__name__)
 CORPORATE_ACTION_INGESTION_CYCLE_METRICS = CycleMetricSet(
@@ -62,13 +67,13 @@ def run_corporate_action_ingestion_cycle() -> None:
     session: Session = get_session()
     audit_logger = AuditLoggingService(session=session)
     manifest_service = RunManifestService(session=session)
-
+    dataset_registration_service = DatasetRegistrationService(session=session)
+    ingestion_run_registration_service = IngestionRunRegistrationService(session=session)
     run_id = uuid.uuid4()
     ingestion_run_id = uuid.uuid4()
     dataset_version_id = uuid.uuid4()
-    ingestion_run: IngestionRuns | None = None
-    dataset_version: DatasetVersions | None = None
-
+    ingestion_run: IngestionRun | None = None
+    dataset_version: DatasetVersion | None = None
     component = "scheduler.run_corporate_action_ingestion_cycle"
     base_metadata: dict[str, object] = {}
 
@@ -115,7 +120,7 @@ def run_corporate_action_ingestion_cycle() -> None:
             "manifest_run_type": manifest.run_type.value,
         }
 
-        ingestion_run = IngestionRuns(
+        ingestion_run_contract = IngestionRun(
             ingestion_run_id=str(ingestion_run_id),
             created_at=now_utc,
             run_timestamp=cycle_end,
@@ -129,10 +134,9 @@ def run_corporate_action_ingestion_cycle() -> None:
             row_count=None,
             file_count=None,
         )
-        with SorUnitOfWork(session) as uow:
-            uow.ingestion_runs.insert(ingestion_run)
+        ingestion_run = ingestion_run_registration_service.register(ingestion_run_contract)
 
-        dataset_version = DatasetVersions(
+        dataset_version_contract = DatasetVersion(
             dataset_version_id=str(dataset_version_id),
             dataset_name="corporate_actions",
             created_at=now_utc,
@@ -153,11 +157,10 @@ def run_corporate_action_ingestion_cycle() -> None:
             },
             metadata_json={
                 **base_metadata,
-                "dataset_type": "corporate_actions_ingestion",
+                "dataset_type": "corporate_actions",
             },
         )
-        with SorUnitOfWork(session) as uow:
-            uow.dataset_versions.insert(dataset_version)
+        dataset_version = dataset_registration_service.register(dataset_version_contract)
 
         with start_span(
             "corporate_action_ingestion_cycle.run", timespan=SpanTimespan.CYCLE
@@ -227,12 +230,10 @@ def run_corporate_action_ingestion_cycle() -> None:
 
             ingestion_run.status = "completed"
             ingestion_run.completed_at = datetime.now(UTC)
-            with SorUnitOfWork(session) as uow:
-                uow.ingestion_runs.upsert(ingestion_run)
+            ingestion_run = ingestion_run_registration_service.save(ingestion_run)
 
             dataset_version.validation_status = "validated"
-            with SorUnitOfWork(session) as uow:
-                uow.dataset_versions.upsert(dataset_version)
+            dataset_version = dataset_registration_service.save(dataset_version)
 
             audit_logger.record_run_completed(
                 run_id=str(run_id),
@@ -255,13 +256,11 @@ def run_corporate_action_ingestion_cycle() -> None:
             ingestion_run.completed_at = datetime.now(UTC)
             ingestion_run.error_message = str(exc)
 
-            with SorUnitOfWork(session) as uow:
-                uow.ingestion_runs.upsert(ingestion_run)
+            ingestion_run = ingestion_run_registration_service.save(ingestion_run)
 
         if dataset_version is not None:
             dataset_version.validation_status = "failed"
-            with SorUnitOfWork(session) as uow:
-                uow.dataset_versions.upsert(dataset_version)
+            dataset_version = dataset_registration_service.save(dataset_version)
 
         total_duration = perf_counter() - cycle_wall_start
         audit_logger.record_run_failed(

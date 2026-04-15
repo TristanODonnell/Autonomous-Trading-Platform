@@ -3,7 +3,7 @@
 import pytest
 from sqlalchemy import text
 
-from src.db import get_engine
+from autonomous_trading_platform.db import get_engine
 
 
 @pytest.mark.integration

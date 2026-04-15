@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.contracts.common.enums import BarInterval, RunType
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
+from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.execution.contexts.build_execution_context import (
     ExecutionContext,
     build_execution_context,
@@ -32,7 +33,6 @@ from autonomous_trading_platform.strategy.contexts.build_strategy_context import
     build_strategy_context,
 )
 from autonomous_trading_platform.strategy.implementations.stub_strategy import StubStrategy
-from src.db import get_session
 
 
 @dataclass(slots=True)

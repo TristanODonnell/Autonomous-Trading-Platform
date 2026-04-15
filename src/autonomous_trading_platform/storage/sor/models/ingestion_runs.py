@@ -19,7 +19,7 @@ class IngestionRuns(Base):
     run_timestamp: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
     run_type: Mapped[RunType] = mapped_column(SAEnum(RunType, name="run_type_enum"), nullable=False)
     source: Mapped[str] = mapped_column(String(64), nullable=False)
-    dataset_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    dataset_version: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     started_at: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
     completed_at: Mapped[UTCDateTime | None] = mapped_column(
