@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.contracts.trading.fill import Fill
+from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.execution.contexts.build_execution_context import (
     ExecutionContext,
     build_execution_context,
@@ -28,8 +29,10 @@ from autonomous_trading_platform.scheduler.jobs.run_order_reconciliation_job imp
     run_order_reconciliation_job,
 )
 from autonomous_trading_platform.storage.sor.models.fills import Fill as SorFill
+from autonomous_trading_platform.storage.sor.repositories.audit_logs_repository import (
+    AuditLogRepository,
+)
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
-from src.db import get_session
 
 
 def to_sor_fill(fill: Fill) -> SorFill:
@@ -64,6 +67,7 @@ def build_cli_execution_dependencies(session: Session) -> ExecutionCliDependenci
         environment_policy=environment_policy,
         risk_state_reader=StubRiskStateReader(),
         order_activity_reader=StubOrderActivityReader(),
+        audit_log_repository=AuditLogRepository(session),
     )
 
     execution_context = build_execution_context(
@@ -222,10 +226,13 @@ def handle_reconcile_order(args: argparse.Namespace) -> int:
         session.close()
 
 
-def handle_reconcile_open_orders(_args: argparse.Namespace) -> int:
+def handle_reconcile_open_orders(
+    _args: argparse.Namespace,
+    run_id: str,
+) -> int:
     print_header("Reconcile Open Orders")
     now_utc = datetime.now(UTC)
-    run_order_reconciliation_job(now_utc=now_utc)
+    run_order_reconciliation_job(run_id=run_id, now_utc=now_utc)
     print_json(
         {
             "status": "ok",

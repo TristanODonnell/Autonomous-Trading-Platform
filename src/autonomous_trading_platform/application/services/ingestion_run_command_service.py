@@ -58,3 +58,22 @@ class IngestionRunCommandService:
                 ingestion_run.completed_at = datetime.now(UTC)
         finally:
             session.close()
+
+    def mark_ingestion_run_failed(
+        self,
+        *,
+        ingestion_run_id: str,
+        error_message: str,
+    ) -> None:
+        session = self.session_factory()
+        try:
+            with SorUnitOfWork(session) as uow:
+                ingestion_run = uow.ingestion_runs.get_by_ingestion_run_id(ingestion_run_id)
+                if ingestion_run is None:
+                    raise ValueError(f"Ingestion run not found: {ingestion_run_id}")
+
+                ingestion_run.status = "FAILED"
+                ingestion_run.completed_at = datetime.now(UTC)
+                ingestion_run.error_message = error_message
+        finally:
+            session.close()

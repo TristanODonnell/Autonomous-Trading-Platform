@@ -14,11 +14,11 @@ from autonomous_trading_platform.contracts.common.enums import (
     RunType,
 )
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
+from autonomous_trading_platform.db import get_engine
 from autonomous_trading_platform.runtime.services.run_manifest_service import (
     RunManifestService,
 )
 from autonomous_trading_platform.storage.sor.models.base import Base
-from src.db import get_engine
 
 DEFAULT_RUN_ID = UUID("00000000-0000-0000-0000-000000000402")
 

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.cli.helpers import parse_datetime
+from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.storage.sor.repositories.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
 )
@@ -29,7 +30,6 @@ from autonomous_trading_platform.universe.services.universe_snapshot_service imp
 from autonomous_trading_platform.universe.services.universe_validation_service import (
     UniverseValidationService,
 )
-from src.db import get_session
 
 
 @dataclass

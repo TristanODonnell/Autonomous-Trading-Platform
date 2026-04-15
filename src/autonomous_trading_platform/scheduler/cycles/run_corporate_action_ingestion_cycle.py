@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
+from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.ingestion.corporate_actions.jobs.ingest_corporate_actions_job import (
     IngestCorporateActionsJob,
 )
@@ -38,7 +39,6 @@ from autonomous_trading_platform.runtime.services.run_manifest_service import Ru
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
 from autonomous_trading_platform.storage.sor.models.ingestion_runs import IngestionRuns
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
-from src.db import get_session
 
 logger = get_logger(__name__)
 CORPORATE_ACTION_INGESTION_CYCLE_METRICS = CycleMetricSet(

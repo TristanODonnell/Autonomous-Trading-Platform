@@ -4,6 +4,7 @@ from alpaca.trading.client import TradingClient
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
     UniverseSnapshotRepository,
 )
@@ -17,7 +18,6 @@ from autonomous_trading_platform.universe.services.universe_validation_service i
     UniverseValidationService,
 )
 from autonomous_trading_platform.universe.types import UniverseAsset
-from src.db import get_session
 
 
 class AlpacaUniverseAssetSource:

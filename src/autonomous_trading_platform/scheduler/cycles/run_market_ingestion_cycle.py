@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
+from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.ingestion.market_data.jobs.ingest_bars_job import (
     IngestBarsJob,
 )
@@ -49,7 +50,6 @@ from autonomous_trading_platform.universe.services.ticker_lifecycle_service impo
 from autonomous_trading_platform.universe.services.universe_membership_service import (
     UniverseMembershipService,
 )
-from src.db import get_session
 
 logger = get_logger(__name__)
 INGESTION_CYCLE_METRICS = CycleMetricSet(
