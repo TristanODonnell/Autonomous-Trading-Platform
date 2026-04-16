@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from collections import defaultdict
 from datetime import UTC, date, datetime
 from time import perf_counter
@@ -7,6 +8,9 @@ from time import perf_counter
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
+from autonomous_trading_platform.ingestion.market_data.services.ingestion_quality_recorder_service import (
+    IngestionQualityRecorderService,
+)
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     record_operation_completed,
@@ -28,8 +32,8 @@ from autonomous_trading_platform.runtime.services.audit_logging_service import A
 from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.mappers import bars_to_arrow
 from autonomous_trading_platform.storage.parquet.writer import write_table
+from autonomous_trading_platform.storage.sor.models.missing_bar_incidents import MissingBarIncidents
 from autonomous_trading_platform.storage.sor.models.symbol_date_coverage import SymbolDateCoverage
-from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 from ..clients.alpaca_historical_bars_client import AlpacaHistoricalBarsClient
 from .bar_ingestion_service import BarIngestionService
@@ -63,6 +67,7 @@ class MarketBackfillService:
             run_id=run_id,
             audit_logger=audit_logger,
         )
+        self.ingestion_quality_recorder_service = IngestionQualityRecorderService(session)
 
         self.completed_bars: list[MarketBar] = []
 
@@ -176,7 +181,7 @@ class MarketBackfillService:
             )
 
             processed_bars = 0
-
+            incidents: list[MissingBarIncidents] = []
             for provider_bar in bars:
                 try:
                     completed_bar = await self.bar_ingestion_service.handle_minute_bar(provider_bar)
@@ -206,6 +211,20 @@ class MarketBackfillService:
                                 error_message=message,
                             ).to_extra(),
                         )
+                        incident = MissingBarIncidents(
+                            incident_id=str(uuid.uuid4()),
+                            symbol=provider_bar.symbol,
+                            bar_timestamp=provider_bar.timestamp,
+                            dataset_version=self.dataset_version_id,
+                            run_id=self.run_id,
+                            ingestion_run_id=self.ingestion_run_id,
+                            incident_type="historical_incomplete_bucket",
+                            severity="warning",
+                            message=message,
+                            created_at=datetime.now(UTC),
+                            resolved_flag=False,
+                        )
+                        incidents.append(incident)
 
                         self.bar_ingestion_service.aggregator.drop_incomplete_buckets_for_symbol(
                             provider_bar.symbol
@@ -266,7 +285,11 @@ class MarketBackfillService:
                     )
                     raise
             self._write_completed_bars()
-            self._write_symbol_date_coverage()
+            coverage_rows = self._build_symbol_date_coverage_rows()
+            self.ingestion_quality_recorder_service.record_symbol_date_quality(
+                coverage_rows=coverage_rows,
+                incidents=incidents,
+            )
             self.completed_bars.clear()
             service_duration = perf_counter() - service_start
             throughput = processed_bars / service_duration if service_duration > 0 else 0.0
@@ -313,14 +336,14 @@ class MarketBackfillService:
             dataset_version=self.dataset_version_id,
         )
 
-    def _write_symbol_date_coverage(self) -> None:
+    def _build_symbol_date_coverage_rows(self) -> list[SymbolDateCoverage]:
         grouped = self._group_bars_by_symbol_date(self.completed_bars)
-        if not grouped:
-            return
+        rows: list[SymbolDateCoverage] = []
 
-        with SorUnitOfWork(self.session) as uow:
-            for (symbol, bar_date), bars in grouped.items():
-                row = SymbolDateCoverage(
+        for (symbol, bar_date), bars in grouped.items():
+            # TODO args still placeholders
+            rows.append(
+                SymbolDateCoverage(
                     coverage_id=f"{self.dataset_version_id}:{symbol}:{bar_date.isoformat()}",
                     symbol=symbol,
                     date=bar_date,
@@ -331,4 +354,6 @@ class MarketBackfillService:
                     gap_summary=None,
                     updated_at=datetime.now(UTC),
                 )
-                uow.symbol_date_coverage.upsert(row)
+            )
+
+        return rows
