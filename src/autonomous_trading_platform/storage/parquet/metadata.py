@@ -9,7 +9,7 @@ from .datasets import ParquetDataset
 REQUIRED_METADATA_KEYS = (
     "dataset_name",
     "schema_version",
-    "data_version",
+    "dataset_version",
     "ingestion_timestamp",
     "checksum",
 )
@@ -17,14 +17,14 @@ REQUIRED_METADATA_KEYS = (
 
 def build_metadata(
     dataset: ParquetDataset,
-    data_version: str,
+    dataset_version: str,
     ingestion_timestamp: str,
     checksum: str,
 ) -> dict[str, str]:
     return {
-        "dataset_name": dataset.name,
+        "dataset_name": dataset.dataset_key,
         "schema_version": dataset.schema_version,
-        "data_version": data_version,
+        "dataset_version": dataset_version,
         "ingestion_timestamp": ingestion_timestamp,
         "checksum": checksum,
     }
