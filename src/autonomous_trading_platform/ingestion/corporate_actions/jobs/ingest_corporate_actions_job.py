@@ -46,6 +46,7 @@ class IngestCorporateActionsJob:
         cycle_timestamp: datetime,
         ingestion_run_id: str,
         dataset_version_id: str,
+        source_raw_bars_dataset_version_id: str,
         bar_repository: ParquetBarRepository,
     ) -> None:
         self.session = session
@@ -54,6 +55,7 @@ class IngestCorporateActionsJob:
         self.cycle_timestamp = cycle_timestamp
         self.ingestion_run_id = ingestion_run_id
         self.dataset_version_id = dataset_version_id
+        self.source_raw_bars_dataset_version_id = source_raw_bars_dataset_version_id
         self.bar_repository = bar_repository
 
     def ingest_corporate_actions_job(self) -> None:
@@ -85,7 +87,7 @@ class IngestCorporateActionsJob:
                     audit_logger=self.audit_logger,
                     cycle_timestamp=self.cycle_timestamp,
                     bar_repository=self.bar_repository,
-                    raw_bars_dataset_version_id=self.dataset_version_id,  # or separate raw dataset version if needed
+                    source_raw_bars_dataset_version_id=self.source_raw_bars_dataset_version_id,
                 )
                 result = service.ingest_corporate_actions()
 

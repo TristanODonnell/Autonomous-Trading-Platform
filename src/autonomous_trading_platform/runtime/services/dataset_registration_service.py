@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.contracts.runtime.dataset_version import DatasetVersion
 from autonomous_trading_platform.runtime.services.dataset_validation_service import (
     DatasetValidationService,
@@ -39,3 +40,19 @@ class DatasetRegistrationService:
             row = uow.dataset_versions.to_row(dataset_version)
             saved_row = uow.dataset_versions.upsert(row)
             return uow.dataset_versions.to_contract(saved_row)
+
+    def get_latest_validated_dataset(
+        self,
+        *,
+        dataset_name: str,
+        price_basis: PriceBasis,
+    ) -> DatasetVersion | None:
+        with SorUnitOfWork(self.session) as uow:
+            row = uow.dataset_versions.get_latest_validated(
+                dataset_name=dataset_name,
+                price_basis=price_basis,
+            )
+            if row is None:
+                return None
+
+            return uow.dataset_versions.to_contract(row)

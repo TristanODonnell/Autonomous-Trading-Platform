@@ -43,6 +43,7 @@ from autonomous_trading_platform.runtime.services.ingestion_run_registration_ser
     IngestionRunRegistrationService,
 )
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
+from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
 from autonomous_trading_platform.storage.sor.repositories.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
 )
@@ -93,7 +94,7 @@ def run_market_ingestion_cycle(
     ingestion_run_id = uuid.uuid4()
     ingestion_run: IngestionRun | None = None
     dataset_version: DatasetVersion | None = None
-    dataset_version_id = uuid.uuid4()
+    dataset_version_id = generate_dataset_version("raw_bars")
     component = "scheduler.run_market_ingestion_cycle"
     base_metadata: dict[str, object] = {}
 
@@ -166,7 +167,7 @@ def run_market_ingestion_cycle(
 
         # TODO may need to change some field defaults later
         dataset_version_contract = DatasetVersion(
-            dataset_version_id=str(dataset_version_id),
+            dataset_version_id=dataset_version_id,
             dataset_name="market_bars",
             created_at=now_utc,
             source="alpaca",

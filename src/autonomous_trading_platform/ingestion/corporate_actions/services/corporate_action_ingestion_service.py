@@ -66,7 +66,7 @@ class CorporateActionIngestionService:
         audit_logger: Any,
         cycle_timestamp: datetime,
         bar_repository: ParquetBarRepository,
-        raw_bars_dataset_version_id: str,
+        source_raw_bars_dataset_version_id: str,
     ) -> None:
         self.session = session
         self.normalization_service = CorporateActionNormalizationService()
@@ -76,7 +76,7 @@ class CorporateActionIngestionService:
         self.cycle_timestamp = cycle_timestamp
         self.audit_logger = audit_logger
         self.bar_repository = bar_repository
-        self.raw_bars_dataset_version_id = raw_bars_dataset_version_id
+        self.source_raw_bars_dataset_version_id = source_raw_bars_dataset_version_id
 
     def ingest_corporate_actions(self) -> CorporateActionProcessingResult:
         component = "ingestion.corporate_action_ingestion_service"
@@ -258,7 +258,7 @@ class CorporateActionIngestionService:
                     try:
                         raw_bar_contracts = self.bar_repository.get_raw_bars_before_date(
                             symbol=action.symbol,
-                            dataset_version=self.raw_bars_dataset_version_id,
+                            dataset_version=self.source_raw_bars_dataset_version_id,
                             effective_date=action.effective_date,
                         )
 
