@@ -19,7 +19,6 @@ from autonomous_trading_platform.ingestion.helpers.session import classify_marke
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
-from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 from .bar_aggregation_service import BarAggregationService
 from .bar_validation_service import BarValidationService
@@ -46,16 +45,14 @@ class BarIngestionService:
         *,
         aggregator: BarAggregationService | None = None,
         validation_service: BarValidationService | None = None,
-        uow_factory: Callable[[Session], SorUnitOfWork] | None = None,
         now_provider: Callable[[], datetime] | None = None,
     ) -> None:
+        self.last_bar_by_symbol: dict[str, MarketBar] = {}
         self.aggregator = aggregator or BarAggregationService()
         self.validation_service = validation_service or BarValidationService()
-        self.last_bar_by_symbol: dict[str, MarketBar] = {}
         self.session = session
         self.run_id = run_id
         self.audit_logger = audit_logger
-        self.uow_factory = uow_factory or SorUnitOfWork
         self.now_provider = now_provider or (lambda: datetime.now(UTC))
 
         self.next_bar_decision: NextBarDecision = NextBarDecision(
@@ -130,14 +127,14 @@ class BarIngestionService:
                     )
 
         with start_span(
-            "bar_ingestion_service.persist_bar",
+            "bar_ingestion_service.complete_bar",
             timespan=SpanTimespan.STEP,
-        ) as persistence_span:
-            persistence_span.set_attribute("ratp.run_id", self.run_id)
-            persistence_span.set_attribute("ratp.symbol", five_min_bar.symbol)
-            persistence_span.set_attribute("ratp.bar_timestamp", five_min_bar.timestamp.isoformat())
-            with self.uow_factory(self.session) as uow:
-                uow.market_bars.upsert(five_min_bar)
+        ) as complete_bar_span:
+            complete_bar_span.set_attribute("ratp.run_id", self.run_id)
+            complete_bar_span.set_attribute("ratp.symbol", five_min_bar.symbol)
+            complete_bar_span.set_attribute(
+                "ratp.bar_timestamp", five_min_bar.timestamp.isoformat()
+            )
 
             if is_late:
                 self.next_bar_decision = NextBarDecision(

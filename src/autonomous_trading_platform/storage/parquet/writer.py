@@ -88,13 +88,9 @@ def write_table(
     base_path: str | Path,
     dataset_version: str,
 ) -> None:
-    """
-    Write a PyArrow table to a Parquet dataset with partitioning and metadata.
-    """
     ingestion_timestamp = datetime.now(UTC).isoformat()
 
     table = prepare_partition_columns(table, dataset)
-    table = table.cast(dataset.schema)
 
     checksum = compute_table_checksum(table)
 

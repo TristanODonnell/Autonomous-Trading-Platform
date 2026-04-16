@@ -7,6 +7,7 @@ from time import perf_counter
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 from autonomous_trading_platform.ingestion.market_data.clients import (
     alpaca_market_data_client as client,
 )
@@ -30,6 +31,9 @@ from autonomous_trading_platform.observability.metrics import (
 )
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
+from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
+from autonomous_trading_platform.storage.parquet.mappers import bars_to_arrow
+from autonomous_trading_platform.storage.parquet.writer import write_table
 from autonomous_trading_platform.storage.sor.models.missing_bar_incidents import MissingBarIncidents
 from autonomous_trading_platform.storage.sor.models.symbol_date_coverage import SymbolDateCoverage
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
@@ -58,6 +62,7 @@ class IngestBarsJob:
         self.dataset_version_id = dataset_version_id
         self.expected_symbols = expected_symbols
         self.received_symbols: set[str] = set()
+        self.completed_cycle_bars: list[MarketBar] = []
         self.current_cycle_timestamp: datetime | None = None
         self.ingestion_service = BarIngestionService(
             session=session,
@@ -83,6 +88,7 @@ class IngestBarsJob:
             self.received_symbols.clear()
             self.current_cycle_timestamp = cycle_timestamp
 
+        self.completed_cycle_bars.append(five_min_bar)
         self.received_symbols.add(five_min_bar.symbol)
 
         print(five_min_bar)
@@ -140,11 +146,22 @@ class IngestBarsJob:
                     completeness_status="complete" if was_received else "missing",
                     gap_summary=None
                     if was_received
-                    else (f"Missing expected 5-minute bar at {cycle_timestamp.isoformat()}"),
+                    else f"Missing expected 5-minute bar at {cycle_timestamp.isoformat()}",
                     updated_at=datetime.now(UTC),
                 )
             )
 
+        bars = list(self.completed_cycle_bars)
+        if bars:
+            table = bars_to_arrow(bars)
+
+            write_table(
+                table=table,
+                dataset=RAW_BARS_DATASET,
+                base_path="data",
+                dataset_version=self.dataset_version_id,
+            )
+        self.completed_cycle_bars.clear()
         with SorUnitOfWork(self.session) as uow:
             for row in coverage_rows:
                 uow.symbol_date_coverage.upsert(row)

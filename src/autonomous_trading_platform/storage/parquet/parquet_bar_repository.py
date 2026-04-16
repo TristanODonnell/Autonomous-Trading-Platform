@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+from datetime import UTC, date, datetime
+from decimal import Decimal
+from pathlib import Path
+
+import pyarrow.dataset as ds
+
+from autonomous_trading_platform.contracts.common.enums import (
+    BarInterval,
+    BarQualityFlag,
+    MarketSession,
+    PriceBasis,
+)
+from autonomous_trading_platform.contracts.market.market_bar import MarketBar
+
+
+class ParquetBarRepository:
+    def __init__(self, *, base_path: str = "data") -> None:
+        self.base_path = Path(base_path)
+
+    def get_raw_bars_before_date(
+        self,
+        *,
+        symbol: str,
+        dataset_version: str,
+        effective_date: date | datetime,
+    ) -> list[MarketBar]:
+        cutoff = self._normalize_effective_date(effective_date)
+        dataset_path = self.base_path / "bars" / "raw"
+
+        if not dataset_path.exists():
+            return []
+
+        dataset = ds.dataset(dataset_path, format="parquet", partitioning="hive")
+
+        filter_expr = (
+            (ds.field("dataset_version") == dataset_version)
+            & (ds.field("symbol") == symbol)
+            & (ds.field("timestamp") < cutoff)
+        )
+
+        table = dataset.to_table(filter=filter_expr)
+
+        if table.num_rows == 0:
+            return []
+
+        rows = table.to_pylist()
+        rows.sort(key=lambda row: row["timestamp"])
+
+        return [self._row_to_market_bar(row) for row in rows]
+
+    @staticmethod
+    def _normalize_effective_date(value: date | datetime) -> datetime:
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                return value.replace(tzinfo=UTC)
+            return value.astimezone(UTC)
+
+        return datetime(value.year, value.month, value.day, tzinfo=UTC)
+
+    @staticmethod
+    def _row_to_market_bar(row: dict) -> MarketBar:
+        timestamp = ParquetBarRepository._as_utc_datetime(row["timestamp"])
+        end_timestamp = ParquetBarRepository._as_utc_datetime(row["end_timestamp"])
+        ingested_at = ParquetBarRepository._as_utc_datetime(row["ingested_at"])
+
+        quality_flags_raw = row.get("quality_flags") or []
+        quality_flags = [
+            flag if isinstance(flag, BarQualityFlag) else BarQualityFlag(flag)
+            for flag in quality_flags_raw
+        ]
+
+        return MarketBar(
+            bar_id=str(row["bar_id"]),
+            timestamp=timestamp,
+            end_timestamp=end_timestamp,
+            interval=row["interval"]
+            if isinstance(row["interval"], BarInterval)
+            else BarInterval(row["interval"]),
+            symbol=str(row["symbol"]),
+            open=Decimal(str(row["open"])),
+            high=Decimal(str(row["high"])),
+            low=Decimal(str(row["low"])),
+            close=Decimal(str(row["close"])),
+            volume=int(row["volume"]),
+            vwap=Decimal(str(row["vwap"])) if row.get("vwap") is not None else None,
+            trade_count=int(row["trade_count"]) if row.get("trade_count") is not None else None,
+            price_basis=row["price_basis"]
+            if isinstance(row["price_basis"], PriceBasis)
+            else PriceBasis(row["price_basis"]),
+            adjustment_factor=Decimal(str(row["adjustment_factor"])),
+            source=str(row["source"]),
+            ingested_at=ingested_at,
+            quality_flags=quality_flags,
+            session=(
+                row["session"]
+                if isinstance(row["session"], MarketSession)
+                else MarketSession(row["session"])
+            ),
+        )
+
+    @staticmethod
+    def _as_utc_datetime(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
