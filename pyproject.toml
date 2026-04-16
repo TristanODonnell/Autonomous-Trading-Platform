@@ -98,7 +98,6 @@ markers = [
 [tool.mypy]
 python_version = "3.11"
 mypy_path = ["src"]
-explicity_package_bases = true
 namespace_packages = false
 warn_return_any = true
 warn_unused_configs = true

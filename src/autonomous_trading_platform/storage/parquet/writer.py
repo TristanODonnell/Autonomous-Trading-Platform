@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pyarrow as pa
@@ -30,22 +30,37 @@ def _has_column(table: pa.Table, column_name: str) -> bool:
 
 def add_bar_partition_columns(table: pa.Table) -> pa.Table:
     result = table
-    timestamps = result["timestamp"]
 
-    if not _has_column(result, "date"):
-        date_strings = pc.strftime(timestamps, format="%Y-%m-%d")
-        result = result.append_column(
-            "date",
-            pc.strptime(date_strings, format="%Y-%m-%d", unit="s").cast(pa.date32()),
-        )
+    date_values: list[date | None]
+
+    if _has_column(result, "date"):
+        date_values = result["date"].to_pylist()
+    else:
+        timestamp_values = result["timestamp"].to_pylist()
+        date_values = []
+
+        for value in timestamp_values:
+            if value is None:
+                date_values.append(None)
+                continue
+
+            if isinstance(value, datetime):
+                if value.tzinfo is not None:
+                    value = value.astimezone(UTC).replace(tzinfo=None)
+                date_values.append(value.date())
+                continue
+
+            raise TypeError(f"Unsupported timestamp value type for partitioning: {type(value)!r}")
+
+        result = result.append_column("date", pa.array(date_values, type=pa.date32()))
 
     if not _has_column(result, "year"):
-        years = pc.strftime(timestamps, format="%Y")
-        result = result.append_column("year", years)
+        years = [str(value.year) if value is not None else None for value in date_values]
+        result = result.append_column("year", pa.array(years, type=pa.string()))
 
     if not _has_column(result, "month"):
-        months = pc.strftime(timestamps, format="%m")
-        result = result.append_column("month", months)
+        months = [f"{value.month:02d}" if value is not None else None for value in date_values]
+        result = result.append_column("month", pa.array(months, type=pa.string()))
 
     return result
 
