@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from time import perf_counter
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.contracts.market.corporate_action import CorporateAction
+from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 from autonomous_trading_platform.ingestion.corporate_actions.clients import (
     alpaca_corporate_action_client as client,
 )
@@ -40,9 +43,18 @@ from autonomous_trading_platform.observability.metrics import (
     corporate_actions_ingested,
 )
 from autonomous_trading_platform.observability.tracing import start_span
+from autonomous_trading_platform.storage.parquet.parquet_bar_repository import (
+    ParquetBarRepository,
+)
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class CorporateActionProcessingResult:
+    created_actions: list[CorporateAction]
+    adjusted_bars: list[MarketBar]
 
 
 class CorporateActionIngestionService:
@@ -53,16 +65,20 @@ class CorporateActionIngestionService:
         run_id: str,
         audit_logger: Any,
         cycle_timestamp: datetime,
+        bar_repository: ParquetBarRepository,
+        source_raw_bars_dataset_version_id: str,
     ) -> None:
         self.session = session
-        self.normalization_service: Any = CorporateActionNormalizationService()
-        self.validation_service: Any = CorporateActionValidationService()
-        self.adjustment_service: Any = CorporateActionAdjustmentService()
+        self.normalization_service = CorporateActionNormalizationService()
+        self.validation_service = CorporateActionValidationService()
+        self.adjustment_service = CorporateActionAdjustmentService()
         self.run_id = run_id
         self.cycle_timestamp = cycle_timestamp
         self.audit_logger = audit_logger
+        self.bar_repository = bar_repository
+        self.source_raw_bars_dataset_version_id = source_raw_bars_dataset_version_id
 
-    def ingest_corporate_actions(self) -> None:
+    def ingest_corporate_actions(self) -> CorporateActionProcessingResult:
         component = "ingestion.corporate_action_ingestion_service"
 
         record_operation_started(
@@ -130,6 +146,9 @@ class CorporateActionIngestionService:
             service_span.set_attribute("ratp.run_id", self.run_id)
             service_span.set_attribute("ratp.component", component)
             service_span.set_attribute("ratp.raw_action_count", len(raw_actions))
+
+            created_actions: list[CorporateAction] = []
+            all_adjusted_bars: list[MarketBar] = []
 
             with SorUnitOfWork(self.session) as uow:
                 for raw_action in raw_actions:
@@ -221,6 +240,8 @@ class CorporateActionIngestionService:
                     if not result.created:
                         continue
 
+                    created_actions.append(action)
+
                     corporate_actions_ingested.add(
                         1,
                         {
@@ -235,17 +256,17 @@ class CorporateActionIngestionService:
 
                     adjustment_start = perf_counter()
                     try:
-                        raw_bars = uow.market_bars.get_raw_bars_before_date(
+                        raw_bar_contracts = self.bar_repository.get_raw_bars_before_date(
                             symbol=action.symbol,
+                            dataset_version=self.source_raw_bars_dataset_version_id,
                             effective_date=action.effective_date,
                         )
-
-                        raw_bar_contracts = uow.market_bars.to_contracts(raw_bars)
 
                         adjusted_bars = self.adjustment_service.apply_action_to_bars(
                             action,
                             raw_bar_contracts,
                         )
+                        all_adjusted_bars.extend(adjusted_bars)
 
                         affected_bars_per_action.record(
                             len(adjusted_bars),
@@ -255,9 +276,6 @@ class CorporateActionIngestionService:
                                 "action_type": action.action_type.value,
                             },
                         )
-
-                        for bar in adjusted_bars:
-                            uow.market_bars.upsert(bar)
 
                         adjustments_applied.add(
                             1,
@@ -322,4 +340,8 @@ class CorporateActionIngestionService:
             event="corporate_action_ingestion_service_completed",
             run_id=self.run_id,
             component=component,
+        )
+        return CorporateActionProcessingResult(
+            created_actions=created_actions,
+            adjusted_bars=all_adjusted_bars,
         )

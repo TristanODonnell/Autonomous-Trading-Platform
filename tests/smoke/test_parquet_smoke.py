@@ -36,7 +36,7 @@ def test_parquet_write_read(tmp_path):
         table=table,
         dataset=RAW_BARS_DATASET,
         base_path=tmp_path,
-        data_version=data_version,
+        dataset_version=data_version,
     )
 
     result = read_dataset(RAW_BARS_DATASET, tmp_path, data_version)

@@ -44,6 +44,8 @@ from autonomous_trading_platform.runtime.services.ingestion_run_registration_ser
     IngestionRunRegistrationService,
 )
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
+from autonomous_trading_platform.storage.parquet.parquet_bar_repository import ParquetBarRepository
+from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
 
 logger = get_logger(__name__)
 CORPORATE_ACTION_INGESTION_CYCLE_METRICS = CycleMetricSet(
@@ -71,7 +73,7 @@ def run_corporate_action_ingestion_cycle() -> None:
     ingestion_run_registration_service = IngestionRunRegistrationService(session=session)
     run_id = uuid.uuid4()
     ingestion_run_id = uuid.uuid4()
-    dataset_version_id = uuid.uuid4()
+    dataset_version_id = generate_dataset_version("adjusted_bars")
     ingestion_run: IngestionRun | None = None
     dataset_version: DatasetVersion | None = None
     component = "scheduler.run_corporate_action_ingestion_cycle"
@@ -113,7 +115,7 @@ def run_corporate_action_ingestion_cycle() -> None:
         base_metadata = {
             "run_id": str(run_id),
             "ingestion_run_id": str(ingestion_run_id),
-            "dataset_version_id": str(dataset_version_id),
+            "dataset_version_id": dataset_version_id,
             "cycle_start": cycle_start.isoformat(),
             "cycle_end": cycle_end.isoformat(),
             "pipeline": "corporate_actions_ingestion",
@@ -137,7 +139,7 @@ def run_corporate_action_ingestion_cycle() -> None:
         ingestion_run = ingestion_run_registration_service.register(ingestion_run_contract)
 
         dataset_version_contract = DatasetVersion(
-            dataset_version_id=str(dataset_version_id),
+            dataset_version_id=dataset_version_id,
             dataset_name="corporate_actions",
             created_at=now_utc,
             source="alpaca",
@@ -198,11 +200,26 @@ def run_corporate_action_ingestion_cycle() -> None:
                     step_span.set_attribute("ratp.dataset_version_id", str(dataset_version_id))
                     step_span.set_attribute("ratp.step", step)
 
+                    source_raw_dataset = dataset_registration_service.get_latest_validated_dataset(
+                        dataset_name="bars",
+                        price_basis=PriceBasis.RAW,
+                    )
+
+                    if source_raw_dataset is None:
+                        raise ValueError("No validated raw bars dataset version found.")
+
+                    source_raw_bars_dataset_version_id = source_raw_dataset.dataset_version_id
+
+                    bar_repository = ParquetBarRepository()
                     job = IngestCorporateActionsJob(
                         session=session,
                         run_id=str(run_id),
                         audit_logger=audit_logger,
                         cycle_timestamp=cycle_end,
+                        ingestion_run_id=str(ingestion_run_id),
+                        dataset_version_id=str(dataset_version_id),
+                        bar_repository=bar_repository,
+                        source_raw_bars_dataset_version_id=source_raw_bars_dataset_version_id,
                     )
                     job.ingest_corporate_actions_job()
 

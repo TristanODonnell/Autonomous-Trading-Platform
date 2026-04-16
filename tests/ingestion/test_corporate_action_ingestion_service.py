@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import TracebackType
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 import pytest
@@ -63,6 +63,32 @@ class FakeCorporateAction:
 class FakeUpsertResult:
     entity: object
     created: bool
+
+
+class FakeBarRepository:
+    def __init__(
+        self,
+        *,
+        raw_bars_by_key: dict[tuple[str, date, str], list[object]] | None = None,
+    ) -> None:
+        self.raw_bars_by_key = raw_bars_by_key or {}
+        self.calls: list[dict[str, object]] = []
+
+    def get_raw_bars_before_date(
+        self,
+        *,
+        symbol: str,
+        dataset_version: str,
+        effective_date: date,
+    ) -> list[object]:
+        self.calls.append(
+            {
+                "symbol": symbol,
+                "dataset_version": dataset_version,
+                "effective_date": effective_date,
+            }
+        )
+        return list(self.raw_bars_by_key.get((symbol, effective_date, dataset_version), []))
 
 
 class FakeAuditLogger:
@@ -215,66 +241,20 @@ class FakeCorporateActionsRepository:
         return FakeUpsertResult(entity=action, created=True)
 
 
-class FakeMarketBarsRepository:
-    def __init__(
-        self,
-        parent: RecordingUnitOfWork,
-        *,
-        raw_bars_by_key: dict[tuple[str, date], list[object]] | None = None,
-    ) -> None:
-        self.parent = parent
-        self.raw_bars_by_key = raw_bars_by_key or {}
-        self.get_raw_bars_calls: list[dict[str, object]] = []
-
-    def to_contracts(self, rows: list[object]) -> list[object]:
-        return list(rows)
-
-    def get_raw_bars_before_date(
-        self,
-        *,
-        symbol: str,
-        effective_date: date,
-    ) -> list[object]:
-        self.get_raw_bars_calls.append(
-            {
-                "symbol": symbol,
-                "effective_date": effective_date,
-            }
-        )
-        return list(self.raw_bars_by_key.get((symbol, effective_date), []))
-
-    def upsert(self, bar: object) -> None:
-        if self.parent.raise_on_bar_upsert:
-            raise self.parent.raise_on_bar_upsert
-
-        bar_id = getattr(bar, "bar_id", None)
-        if bar_id in self.parent.persisted_bars_by_id:
-            return
-
-        self.parent.persisted_bars.append(bar)
-        if bar_id is not None:
-            self.parent.persisted_bars_by_id[bar_id] = bar
-
-
 class RecordingUnitOfWork:
     instances: list[RecordingUnitOfWork] = []
-    raw_bars_by_key: dict[tuple[str, date], list[object]] = {}
 
     def __init__(
         self,
         session: object,
         *,
         raise_on_action_upsert: Exception | None = None,
-        raise_on_bar_upsert: Exception | None = None,
     ) -> None:
         self.session = session
         self.raise_on_action_upsert = raise_on_action_upsert
-        self.raise_on_bar_upsert = raise_on_bar_upsert
 
         self.persisted_actions: list[object] = []
         self.persisted_actions_by_id: dict[object, object] = {}
-        self.persisted_bars: list[object] = []
-        self.persisted_bars_by_id: dict[object, object] = {}
 
         self.entered = False
         self.exited = False
@@ -282,10 +262,6 @@ class RecordingUnitOfWork:
         self.rolled_back = False
 
         self.corporate_actions = FakeCorporateActionsRepository(self)
-        self.market_bars = FakeMarketBarsRepository(
-            self,
-            raw_bars_by_key=type(self).raw_bars_by_key,
-        )
 
         RecordingUnitOfWork.instances.append(self)
 
@@ -310,7 +286,6 @@ class RecordingUnitOfWork:
 @pytest.fixture(autouse=True)
 def clear_recording_uow_instances() -> None:
     RecordingUnitOfWork.instances.clear()
-    RecordingUnitOfWork.raw_bars_by_key = {}
 
 
 @pytest.fixture
@@ -329,16 +304,24 @@ def cycle_timestamp() -> datetime:
 
 
 @pytest.fixture
+def bar_repository() -> FakeBarRepository:
+    return FakeBarRepository()
+
+
+@pytest.fixture
 def service(
     session: object,
     audit_logger: FakeAuditLogger,
     cycle_timestamp: datetime,
+    bar_repository: FakeBarRepository,
 ) -> CorporateActionIngestionService:
     return CorporateActionIngestionService(
         session=session,
         run_id="run-test-001",
         audit_logger=audit_logger,
         cycle_timestamp=cycle_timestamp,
+        bar_repository=cast(Any, bar_repository),
+        source_raw_bars_dataset_version_id="raw-bars-test-v1",
     )
 
 
@@ -347,6 +330,7 @@ def test_ingest_corporate_actions_normalizes_validates_stores_and_adjusts_affect
     service: CorporateActionIngestionService,
     audit_logger: FakeAuditLogger,
     cycle_timestamp: datetime,
+    bar_repository: FakeBarRepository,
 ) -> None:
     """
     Integration-ish orchestration test:
@@ -411,28 +395,37 @@ def test_ingest_corporate_actions_normalizes_validates_stores_and_adjusts_affect
         volume=480,
     )
 
-    RecordingUnitOfWork.raw_bars_by_key = {
-        ("AAPL", date(2025, 1, 10)): [raw_bar_aapl_1, raw_bar_aapl_2],
+    bar_repository.raw_bars_by_key = {
+        ("AAPL", date(2025, 1, 10), "raw-bars-test-v1"): [raw_bar_aapl_1, raw_bar_aapl_2],
     }
 
-    service.normalization_service = FakeNormalizationService(
-        parsed_actions=[
-            action_1,
-            ValueError("parse failed"),
-            action_invalid,
-            action_2,
-        ]
+    service.normalization_service = cast(
+        Any,
+        FakeNormalizationService(
+            parsed_actions=[
+                action_1,
+                ValueError("parse failed"),
+                action_invalid,
+                action_2,
+            ]
+        ),
     )
-    service.validation_service = FakeValidationService(
-        validation_results=[
-            FakeValidationResult(ok=True, violations=[]),
-            FakeValidationResult(ok=False, violations=["invalid action"]),
-            FakeValidationResult(ok=True, violations=[]),
-        ]
+    service.validation_service = cast(
+        Any,
+        FakeValidationService(
+            validation_results=[
+                FakeValidationResult(ok=True, violations=[]),
+                FakeValidationResult(ok=False, violations=["invalid action"]),
+                FakeValidationResult(ok=True, violations=[]),
+            ]
+        ),
     )
-    service.adjustment_service = FakeAdjustmentService(
-        supported_results=[True, False],
-        adjusted_bars_results=[[adjusted_bar_aapl_1, adjusted_bar_aapl_2]],
+    service.adjustment_service = cast(
+        Any,
+        FakeAdjustmentService(
+            supported_results=[True, False],
+            adjusted_bars_results=[[adjusted_bar_aapl_1, adjusted_bar_aapl_2]],
+        ),
     )
 
     monkeypatch.setattr(
@@ -444,7 +437,7 @@ def test_ingest_corporate_actions_normalizes_validates_stores_and_adjusts_affect
         RecordingUnitOfWork,
     )
 
-    service.ingest_corporate_actions()
+    result = service.ingest_corporate_actions()
 
     assert len(RecordingUnitOfWork.instances) == 1
     uow = RecordingUnitOfWork.instances[0]
@@ -455,11 +448,13 @@ def test_ingest_corporate_actions_normalizes_validates_stores_and_adjusts_affect
     assert uow.rolled_back is False
 
     assert uow.persisted_actions == [action_1, action_2]
-    assert uow.persisted_bars == [adjusted_bar_aapl_1, adjusted_bar_aapl_2]
+    assert result.created_actions == [action_1, action_2]
+    assert result.adjusted_bars == [adjusted_bar_aapl_1, adjusted_bar_aapl_2]
 
-    assert uow.market_bars.get_raw_bars_calls == [
+    assert bar_repository.calls == [
         {
             "symbol": "AAPL",
+            "dataset_version": "raw-bars-test-v1",
             "effective_date": date(2025, 1, 10),
         }
     ]
@@ -507,12 +502,16 @@ def test_ingest_corporate_actions_commits_transaction_on_success(
         action_type=CorporateActionType.CASH_DIVIDEND,
     )
 
-    service.normalization_service = FakeNormalizationService(parsed_actions=[action])
-    service.validation_service = FakeValidationService(
-        validation_results=[FakeValidationResult(ok=True, violations=[])]
+    service.normalization_service = cast(Any, FakeNormalizationService(parsed_actions=[action]))
+    service.validation_service = cast(
+        Any,
+        FakeValidationService(validation_results=[FakeValidationResult(ok=True, violations=[])]),
     )
-    service.adjustment_service = FakeAdjustmentService(
-        supported_results=[False],
+    service.adjustment_service = cast(
+        Any,
+        FakeAdjustmentService(
+            supported_results=[False],
+        ),
     )
 
     monkeypatch.setattr(
@@ -534,7 +533,6 @@ def test_ingest_corporate_actions_commits_transaction_on_success(
     assert uow.committed is True
     assert uow.rolled_back is False
     assert uow.persisted_actions == [action]
-    assert uow.persisted_bars == []
 
 
 def test_ingest_corporate_actions_rolls_back_transaction_on_persistence_failure(
@@ -557,12 +555,16 @@ def test_ingest_corporate_actions_rolls_back_transaction_on_persistence_failure(
         action_type=CorporateActionType.CASH_DIVIDEND,
     )
 
-    service.normalization_service = FakeNormalizationService(parsed_actions=[action])
-    service.validation_service = FakeValidationService(
-        validation_results=[FakeValidationResult(ok=True, violations=[])]
+    service.normalization_service = cast(Any, FakeNormalizationService(parsed_actions=[action]))
+    service.validation_service = cast(
+        Any,
+        FakeValidationService(validation_results=[FakeValidationResult(ok=True, violations=[])]),
     )
-    service.adjustment_service = FakeAdjustmentService(
-        supported_results=[False],
+    service.adjustment_service = cast(
+        Any,
+        FakeAdjustmentService(
+            supported_results=[False],
+        ),
     )
 
     failure = RuntimeError("simulated database failure")
@@ -591,18 +593,19 @@ def test_ingest_corporate_actions_rolls_back_transaction_on_persistence_failure(
     assert uow.committed is False
     assert uow.rolled_back is True
     assert uow.persisted_actions == []
-    assert uow.persisted_bars == []
 
 
 def test_reprocessing_same_payload_does_not_duplicate_entries_when_repositories_are_idempotent(
     monkeypatch: pytest.MonkeyPatch,
     service: CorporateActionIngestionService,
+    bar_repository: FakeBarRepository,
 ) -> None:
     """
     Integration-ish idempotency test:
     - the same payload is ingested twice
     - fake repositories enforce upsert semantics by identity key
-    - stored actions and adjusted bars are not duplicated
+    - stored actions are not duplicated
+    - adjusted bars are recomputed deterministically from the same raw input
     """
     raw_payload = {
         "corporate_actions": {
@@ -633,20 +636,17 @@ def test_reprocessing_same_payload_does_not_duplicate_entries_when_repositories_
         volume=400,
     )
 
-    RecordingUnitOfWork.raw_bars_by_key = {
-        ("AAPL", date(2025, 1, 10)): [raw_bar],
+    bar_repository.raw_bars_by_key = {
+        ("AAPL", date(2025, 1, 10), "raw-bars-test-v1"): [raw_bar],
     }
 
     persisted_actions_by_id: dict[object, object] = {}
-    persisted_bars_by_id: dict[object, object] = {}
 
     class SharedRecordingUnitOfWork(RecordingUnitOfWork):
         def __init__(self, session: object) -> None:
             super().__init__(session)
             self.persisted_actions_by_id = persisted_actions_by_id
-            self.persisted_bars_by_id = persisted_bars_by_id
             self.persisted_actions = list(persisted_actions_by_id.values())
-            self.persisted_bars = list(persisted_bars_by_id.values())
 
     monkeypatch.setattr(
         "autonomous_trading_platform.ingestion.corporate_actions.services.corporate_action_ingestion_service.client.fetch_corporate_actions",
@@ -658,31 +658,38 @@ def test_reprocessing_same_payload_does_not_duplicate_entries_when_repositories_
     )
 
     # first pass
-    service.normalization_service = FakeNormalizationService(parsed_actions=[action])
-    service.validation_service = FakeValidationService(
-        validation_results=[FakeValidationResult(ok=True, violations=[])]
+    service.normalization_service = cast(Any, FakeNormalizationService(parsed_actions=[action]))
+    service.validation_service = cast(
+        Any,
+        FakeValidationService(validation_results=[FakeValidationResult(ok=True, violations=[])]),
     )
-    service.adjustment_service = FakeAdjustmentService(
-        supported_results=[True],
-        adjusted_bars_results=[[adjusted_bar]],
+    service.adjustment_service = cast(
+        Any,
+        FakeAdjustmentService(
+            supported_results=[True],
+            adjusted_bars_results=[[adjusted_bar]],
+        ),
     )
     service.ingest_corporate_actions()
 
     # second pass of same payload
-    service.normalization_service = FakeNormalizationService(parsed_actions=[action])
-    service.validation_service = FakeValidationService(
-        validation_results=[FakeValidationResult(ok=True, violations=[])]
+    service.normalization_service = cast(Any, FakeNormalizationService(parsed_actions=[action]))
+    service.validation_service = cast(
+        Any,
+        FakeValidationService(validation_results=[FakeValidationResult(ok=True, violations=[])]),
     )
-    service.adjustment_service = FakeAdjustmentService(
-        supported_results=[True],
-        adjusted_bars_results=[[adjusted_bar]],
+    service.adjustment_service = cast(
+        Any,
+        FakeAdjustmentService(
+            supported_results=[True],
+            adjusted_bars_results=[[adjusted_bar]],
+        ),
     )
     service.ingest_corporate_actions()
 
     assert len(RecordingUnitOfWork.instances) == 2
 
     assert list(persisted_actions_by_id.values()) == [action]
-    assert list(persisted_bars_by_id.values()) == [adjusted_bar]
 
 
 def test_reprocessing_same_payload_is_idempotent_against_real_storage(
@@ -745,11 +752,22 @@ def test_reprocessing_same_payload_is_idempotent_against_real_storage(
     db_session.add(raw_bar)
     db_session.commit()
 
+    bar_repository = cast(
+        Any,
+        FakeBarRepository(
+            raw_bars_by_key={
+                ("AAPL", date(2025, 1, 10), "raw-bars-test-v1"): [raw_bar],
+            }
+        ),
+    )
+
     service = CorporateActionIngestionService(
         session=db_session,
         run_id="run-test-001",
         audit_logger=FakeAuditLogger(),
         cycle_timestamp=datetime(2025, 1, 10, 14, 35, tzinfo=UTC),
+        bar_repository=bar_repository,
+        source_raw_bars_dataset_version_id="raw-bars-test-v1",
     )
 
     monkeypatch.setattr(
@@ -757,13 +775,17 @@ def test_reprocessing_same_payload_is_idempotent_against_real_storage(
         lambda: raw_payload,
     )
 
-    service.normalization_service = FakeNormalizationService(parsed_actions=[action])
-    service.validation_service = FakeValidationService(
-        validation_results=[FakeValidationResult(ok=True, violations=[])]
+    service.normalization_service = cast(Any, FakeNormalizationService(parsed_actions=[action]))
+    service.validation_service = cast(
+        Any,
+        FakeValidationService(validation_results=[FakeValidationResult(ok=True, violations=[])]),
     )
-    service.adjustment_service = FakeAdjustmentService(
-        supported_results=[True],
-        adjusted_bars_results=[[adjusted_bar]],
+    service.adjustment_service = cast(
+        Any,
+        FakeAdjustmentService(
+            supported_results=[True],
+            adjusted_bars_results=[[adjusted_bar]],
+        ),
     )
 
     service.ingest_corporate_actions()
@@ -773,22 +795,18 @@ def test_reprocessing_same_payload_is_idempotent_against_real_storage(
         .filter(CorporateAction.action_id == f"ca-{test_id}")
         .count()
     )
-    bar_count_1 = (
-        db_session.query(MarketBar)
-        .filter(
-            MarketBar.symbol == "AAPL",
-            MarketBar.timestamp == raw_bar.timestamp,
-        )
-        .count()
-    )
 
-    service.normalization_service = FakeNormalizationService(parsed_actions=[action])
-    service.validation_service = FakeValidationService(
-        validation_results=[FakeValidationResult(ok=True, violations=[])]
+    service.normalization_service = cast(Any, FakeNormalizationService(parsed_actions=[action]))
+    service.validation_service = cast(
+        Any,
+        FakeValidationService(validation_results=[FakeValidationResult(ok=True, violations=[])]),
     )
-    service.adjustment_service = FakeAdjustmentService(
-        supported_results=[True],
-        adjusted_bars_results=[[adjusted_bar]],
+    service.adjustment_service = cast(
+        Any,
+        FakeAdjustmentService(
+            supported_results=[True],
+            adjusted_bars_results=[[adjusted_bar]],
+        ),
     )
 
     service.ingest_corporate_actions()
@@ -798,14 +816,5 @@ def test_reprocessing_same_payload_is_idempotent_against_real_storage(
         .filter(CorporateAction.action_id == f"ca-{test_id}")
         .count()
     )
-    bar_count_2 = (
-        db_session.query(MarketBar)
-        .filter(
-            MarketBar.symbol == "AAPL",
-            MarketBar.timestamp == raw_bar.timestamp,
-        )
-        .count()
-    )
 
     assert action_count_2 == action_count_1
-    assert bar_count_2 == bar_count_1

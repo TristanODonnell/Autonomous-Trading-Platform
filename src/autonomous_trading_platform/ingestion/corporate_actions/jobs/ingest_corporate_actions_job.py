@@ -23,6 +23,10 @@ from autonomous_trading_platform.observability.metrics import (
 )
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
+from autonomous_trading_platform.storage.parquet.datasets import ADJUSTED_BARS_DATASET
+from autonomous_trading_platform.storage.parquet.mappers import bars_to_arrow
+from autonomous_trading_platform.storage.parquet.parquet_bar_repository import ParquetBarRepository
+from autonomous_trading_platform.storage.parquet.writer import write_table
 
 logger = get_logger(__name__)
 
@@ -40,11 +44,19 @@ class IngestCorporateActionsJob:
         run_id: str,
         audit_logger: AuditLoggingService,
         cycle_timestamp: datetime,
+        ingestion_run_id: str,
+        dataset_version_id: str,
+        source_raw_bars_dataset_version_id: str,
+        bar_repository: ParquetBarRepository,
     ) -> None:
         self.session = session
         self.run_id = run_id
         self.audit_logger = audit_logger
         self.cycle_timestamp = cycle_timestamp
+        self.ingestion_run_id = ingestion_run_id
+        self.dataset_version_id = dataset_version_id
+        self.source_raw_bars_dataset_version_id = source_raw_bars_dataset_version_id
+        self.bar_repository = bar_repository
 
     def ingest_corporate_actions_job(self) -> None:
         component = "ingestion.ingest_corporate_actions_job"
@@ -74,8 +86,19 @@ class IngestCorporateActionsJob:
                     run_id=self.run_id,
                     audit_logger=self.audit_logger,
                     cycle_timestamp=self.cycle_timestamp,
+                    bar_repository=self.bar_repository,
+                    source_raw_bars_dataset_version_id=self.source_raw_bars_dataset_version_id,
                 )
-                service.ingest_corporate_actions()
+                result = service.ingest_corporate_actions()
+
+                if result.adjusted_bars:
+                    table = bars_to_arrow(result.adjusted_bars)
+                    write_table(
+                        table=table,
+                        dataset=ADJUSTED_BARS_DATASET,
+                        base_path="data",
+                        dataset_version=self.dataset_version_id,
+                    )
 
             duration = perf_counter() - job_start
             record_job_completed(

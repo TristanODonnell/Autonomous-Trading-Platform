@@ -2,6 +2,7 @@ from typing import cast
 
 from sqlalchemy import select
 
+from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.contracts.runtime.dataset_version import DatasetVersion
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
@@ -72,3 +73,20 @@ class DatasetVersionsRepository(BaseRepository):
             source_manifest=row.source_manifest,
             metadata_json=row.metadata_json,
         )
+
+    def get_latest_validated(
+        self,
+        *,
+        dataset_name: str,
+        price_basis: PriceBasis,
+    ) -> DatasetVersions | None:
+        stmt = (
+            select(DatasetVersions)
+            .where(
+                DatasetVersions.dataset_name == dataset_name,
+                DatasetVersions.price_basis == price_basis,
+                DatasetVersions.validation_status == "validated",
+            )
+            .order_by(DatasetVersions.created_at.desc())
+        )
+        return cast(DatasetVersions | None, self.session.scalars(stmt).first())

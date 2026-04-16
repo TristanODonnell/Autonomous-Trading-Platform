@@ -24,6 +24,8 @@ BAR_SCHEMA = pa.schema(
         pa.field("ingested_at", UTC_TIMESTAMP, nullable=False),
         pa.field("quality_flags", pa.list_(pa.string()), nullable=True),
         pa.field("date", pa.date32(), nullable=False),
+        pa.field("year", pa.string(), nullable=False),
+        pa.field("month", pa.string(), nullable=False),
     ]
 )
 
@@ -39,10 +41,14 @@ CORPORATE_ACTION_SCHEMA = pa.schema(
         pa.field("split_ratio", pa.float64(), nullable=True),
         pa.field("cash_amount", pa.float64(), nullable=True),
         pa.field("currency", pa.string(), nullable=False),
-        pa.field("new_symbol", pa.string(), nullable=False),
+        pa.field("new_symbol", pa.string(), nullable=True),
         pa.field("source", pa.string(), nullable=False),
         pa.field("ingested_at", UTC_TIMESTAMP, nullable=False),
-        pa.field("metadata", pa.string(), nullable=True),  # JSON string for v1
-        pa.field("date", pa.date32(), nullable=False),
+        pa.field("metadata", pa.string(), nullable=True),
+        pa.field(
+            "date", pa.date32(), nullable=False
+        ),  # normalized partition/filter date; equals effective_date
+        pa.field("year", pa.string(), nullable=False),
+        pa.field("month", pa.string(), nullable=False),
     ]
 )

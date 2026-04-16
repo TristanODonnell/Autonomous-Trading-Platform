@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 import pytest
 
@@ -127,43 +127,6 @@ class FakeValidationService:
         return self.outlier_results.pop(0)
 
 
-class FakeMarketBarsRepository:
-    def __init__(self, parent: RecordingUnitOfWork) -> None:
-        self.parent = parent
-
-    def upsert(self, bar: object) -> None:
-        if self.parent.raise_on_upsert:
-            raise self.parent.raise_on_upsert
-        self.parent.persisted_bars.append(bar)
-
-
-class RecordingUnitOfWork:
-    instances: list[RecordingUnitOfWork] = []
-
-    def __init__(self, session: object, *, raise_on_upsert: Exception | None = None) -> None:
-        self.session = session
-        self.raise_on_upsert = raise_on_upsert
-        self.persisted_bars: list[object] = []
-        self.entered = False
-        self.exited = False
-        self.committed = False
-        self.rolled_back = False
-        self.market_bars = FakeMarketBarsRepository(self)
-        RecordingUnitOfWork.instances.append(self)
-
-    def __enter__(self) -> RecordingUnitOfWork:
-        self.entered = True
-        return self
-
-    def __exit__(self, exc_type: object, exc: object, tb: object) -> Literal[False]:
-        self.exited = True
-        if exc_type is None:
-            self.committed = True
-        else:
-            self.rolled_back = True
-        return False
-
-
 def make_provider_bar(
     *,
     symbol: str = "AAPL",
@@ -190,11 +153,6 @@ def make_provider_bar(
     )
 
 
-@pytest.fixture(autouse=True)
-def clear_recording_uow_instances() -> None:
-    RecordingUnitOfWork.instances.clear()
-
-
 @pytest.fixture
 def audit_logger() -> FakeAuditLogger:
     return FakeAuditLogger()
@@ -212,13 +170,6 @@ def service(session: object, audit_logger: FakeAuditLogger) -> BarIngestionServi
         run_id="run-test-001",
         audit_logger=cast(Any, audit_logger),
     )
-
-
-def make_uow_factory(*, raise_on_upsert: Exception | None = None):
-    def factory(session: object) -> RecordingUnitOfWork:
-        return RecordingUnitOfWork(session, raise_on_upsert=raise_on_upsert)
-
-    return factory
 
 
 @pytest.mark.asyncio
@@ -270,8 +221,6 @@ async def test_handle_minute_bar_stream_writes_completed_bars_and_logs_late_and_
         outlier_results=[False, True],
     )
 
-    svc.uow_factory = make_uow_factory()
-
     provider_stream = [
         make_provider_bar(timestamp=datetime(2025, 1, 1, 15, 30, tzinfo=UTC) + timedelta(minutes=i))
         for i in range(10)
@@ -280,16 +229,6 @@ async def test_handle_minute_bar_stream_writes_completed_bars_and_logs_late_and_
     returned: list[object | None] = []
     for provider_bar in provider_stream:
         returned.append(await service.handle_minute_bar(provider_bar))
-
-    assert len(RecordingUnitOfWork.instances) == 2
-
-    first_uow = RecordingUnitOfWork.instances[0]
-    second_uow = RecordingUnitOfWork.instances[1]
-
-    assert first_uow.committed is True
-    assert second_uow.committed is True
-    assert first_uow.persisted_bars == [bar_1]
-    assert second_uow.persisted_bars == [bar_2]
 
     # first complete bar returns the bar
     assert returned[4] == bar_1
@@ -323,7 +262,7 @@ async def test_handle_minute_bar_stream_writes_completed_bars_and_logs_late_and_
 
 
 @pytest.mark.asyncio
-async def test_handle_minute_bar_commits_transaction_on_success(
+async def test_handle_minute_bar_returns_completed_bar_on_success(
     monkeypatch: pytest.MonkeyPatch,
     service: BarIngestionService,
 ) -> None:
@@ -339,28 +278,22 @@ async def test_handle_minute_bar_commits_transaction_on_success(
         late_results=[False],
         outlier_results=[False],
     )
-
-    svc.uow_factory = make_uow_factory()
 
     result = await service.handle_minute_bar(
         make_provider_bar(timestamp=datetime(2025, 1, 1, 15, 30, tzinfo=UTC))
     )
 
     assert result == completed_bar
-    assert len(RecordingUnitOfWork.instances) == 1
-
-    uow = RecordingUnitOfWork.instances[0]
-    assert uow.entered is True
-    assert uow.exited is True
-    assert uow.committed is True
-    assert uow.rolled_back is False
-    assert uow.persisted_bars == [completed_bar]
+    assert service.next_bar_decision.should_schedule_evaluation is True
+    assert service.next_bar_decision.reason == "complete_valid_bar"
+    assert service.next_bar_decision.bar == completed_bar
+    assert service.last_bar_by_symbol[completed_bar.symbol] == completed_bar
 
 
 @pytest.mark.asyncio
-async def test_handle_minute_bar_rolls_back_transaction_on_persistence_failure(
-    monkeypatch: pytest.MonkeyPatch,
+async def test_handle_minute_bar_returns_none_for_late_bar(
     service: BarIngestionService,
+    audit_logger: FakeAuditLogger,
 ) -> None:
     completed_bar = make_five_minute_bar(
         timestamp=datetime(2025, 1, 1, 15, 30, tzinfo=UTC),
@@ -371,27 +304,28 @@ async def test_handle_minute_bar_rolls_back_transaction_on_persistence_failure(
     svc.aggregator = FakeAggregator(outputs=[completed_bar])
     svc.validation_service = FakeValidationService(
         validation_results=[FakeValidationResult(ok=True, violations=[])],
-        late_results=[False],
+        late_results=[True],
         outlier_results=[False],
     )
 
-    failure = RuntimeError("simulated database failure")
+    result = await service.handle_minute_bar(
+        make_provider_bar(timestamp=datetime(2025, 1, 1, 15, 30, tzinfo=UTC))
+    )
 
-    svc.uow_factory = make_uow_factory(raise_on_upsert=failure)
+    assert result is None
+    assert service.next_bar_decision.should_schedule_evaluation is False
+    assert service.next_bar_decision.reason == "late_bar"
+    assert service.next_bar_decision.bar == completed_bar
+    assert BarQualityFlag.LATE in completed_bar.quality_flags
+    assert completed_bar.symbol not in service.last_bar_by_symbol
 
-    with pytest.raises(RuntimeError, match="simulated database failure"):
-        await service.handle_minute_bar(
-            make_provider_bar(timestamp=datetime(2025, 1, 1, 15, 30, tzinfo=UTC))
-        )
-
-    assert len(RecordingUnitOfWork.instances) == 1
-
-    uow = RecordingUnitOfWork.instances[0]
-    assert uow.entered is True
-    assert uow.exited is True
-    assert uow.committed is False
-    assert uow.rolled_back is True
-    assert uow.persisted_bars == []
+    assert audit_logger.late_calls == [
+        {
+            "run_id": "run-test-001",
+            "symbol": completed_bar.symbol,
+            "bar_end_timestamp": completed_bar.end_timestamp,
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -411,7 +345,6 @@ async def test_next_bar_decision_triggers_evaluation_only_on_complete_bars(
         outlier_results=[False],
     )
 
-    svc.uow_factory = make_uow_factory()
     # 1. First call → incomplete
     result_1 = await service.handle_minute_bar(
         make_provider_bar(timestamp=datetime(2025, 1, 1, 15, 30, tzinfo=UTC))
