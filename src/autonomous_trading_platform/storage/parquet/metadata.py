@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 import pyarrow as pa
 
@@ -13,6 +14,30 @@ REQUIRED_METADATA_KEYS = (
     "ingestion_timestamp",
     "checksum",
 )
+
+
+def build_dataset_artifact_metadata(
+    *,
+    dataset: ParquetDataset,
+    dataset_version: str,
+    ingestion_timestamp: str,
+    checksum: str,
+    row_count: int,
+    file_count: int,
+    total_file_size_bytes: int,
+    partition_columns: Sequence[str],
+) -> dict[str, Any]:
+    return {
+        "dataset_name": dataset.dataset_key,
+        "schema_version": dataset.schema_version,
+        "dataset_version": dataset_version,
+        "ingestion_timestamp": ingestion_timestamp,
+        "checksum": checksum,
+        "row_count": row_count,
+        "file_count": file_count,
+        "total_file_size_bytes": total_file_size_bytes,
+        "partition_columns": list(partition_columns),
+    }
 
 
 def build_metadata(

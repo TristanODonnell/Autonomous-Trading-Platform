@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -15,7 +16,11 @@ from .datasets import (
     RAW_BARS_DATASET,
     ParquetDataset,
 )
-from .metadata import attach_metadata, build_metadata
+from .metadata import (
+    attach_metadata,
+    build_dataset_artifact_metadata,
+    build_metadata,
+)
 from .paths import dataset_version_root
 
 
@@ -24,17 +29,14 @@ def _has_column(table: pa.Table, column_name: str) -> bool:
 
 
 def add_bar_partition_columns(table: pa.Table) -> pa.Table:
-    """
-    Add date/year/month partition columns for bar datasets using timestamp.
-    """
     result = table
-
     timestamps = result["timestamp"]
 
     if not _has_column(result, "date"):
         date_strings = pc.strftime(timestamps, format="%Y-%m-%d")
         result = result.append_column(
-            "date", pc.strptime(date_strings, format="%Y-%m-%d", unit="s").cast(pa.date32())
+            "date",
+            pc.strptime(date_strings, format="%Y-%m-%d", unit="s").cast(pa.date32()),
         )
 
     if not _has_column(result, "year"):
@@ -49,9 +51,6 @@ def add_bar_partition_columns(table: pa.Table) -> pa.Table:
 
 
 def add_corporate_action_partition_columns(table: pa.Table) -> pa.Table:
-    """
-    Add date/year/month partition columns for corporate action datasets using effective_date.
-    """
     result = table
     effective_dates = result["effective_date"]
 
@@ -82,6 +81,28 @@ def prepare_partition_columns(
     return table
 
 
+def _list_parquet_files(root: Path) -> list[Path]:
+    if not root.exists():
+        return []
+    return sorted(path for path in root.rglob("*.parquet") if path.is_file())
+
+
+def _write_artifact_metadata_file(root: Path, metadata: dict) -> None:
+    metadata_path = root / "_metadata.json"
+    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+
+
+def _ensure_dataset_version_is_new(root: Path) -> None:
+    if not root.exists():
+        return
+
+    existing_parquet_files = list(root.rglob("*.parquet"))
+    metadata_file = root / "_metadata.json"
+
+    if existing_parquet_files or metadata_file.exists():
+        raise FileExistsError(f"Dataset version already exists and is immutable: {root}")
+
+
 def write_table(
     table: pa.Table,
     dataset: ParquetDataset,
@@ -91,7 +112,7 @@ def write_table(
     ingestion_timestamp = datetime.now(UTC).isoformat()
 
     table = prepare_partition_columns(table, dataset)
-
+    row_count = table.num_rows
     checksum = compute_table_checksum(table)
 
     metadata = build_metadata(
@@ -106,10 +127,29 @@ def write_table(
 
     root = dataset_version_root(base_path, dataset, dataset_version)
 
+    _ensure_dataset_version_is_new(root)
+
     ds.write_dataset(
         table,
         base_dir=str(root),
         format="parquet",
         partitioning=list(dataset.partition_cols),
-        existing_data_behavior="overwrite_or_ignore",
+        existing_data_behavior="error",
     )
+
+    parquet_files = _list_parquet_files(root)
+    file_count = len(parquet_files)
+    total_file_size_bytes = sum(path.stat().st_size for path in parquet_files)
+
+    artifact_metadata = build_dataset_artifact_metadata(
+        dataset=dataset,
+        dataset_version=dataset_version,
+        ingestion_timestamp=ingestion_timestamp,
+        checksum=checksum,
+        row_count=row_count,
+        file_count=file_count,
+        total_file_size_bytes=total_file_size_bytes,
+        partition_columns=dataset.partition_cols,
+    )
+
+    _write_artifact_metadata_file(root, artifact_metadata)
