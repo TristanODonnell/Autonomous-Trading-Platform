@@ -284,12 +284,13 @@ class MarketBackfillService:
                         failure_class="unknown",
                     )
                     raise
-            self._write_completed_bars()
-            coverage_rows = self._build_symbol_date_coverage_rows()
-            self.ingestion_quality_recorder_service.record_symbol_date_quality(
-                coverage_rows=coverage_rows,
-                incidents=incidents,
-            )
+            if self.completed_bars or incidents:
+                self._write_completed_bars()
+                coverage_rows = self._build_symbol_date_coverage_rows()
+                self.ingestion_quality_recorder_service.record_symbol_date_quality(
+                    coverage_rows=coverage_rows,
+                    incidents=incidents,
+                )
             self.completed_bars.clear()
             service_duration = perf_counter() - service_start
             throughput = processed_bars / service_duration if service_duration > 0 else 0.0
