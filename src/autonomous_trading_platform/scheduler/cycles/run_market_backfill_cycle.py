@@ -51,6 +51,7 @@ from autonomous_trading_platform.runtime.services.ingestion_run_registration_ser
     IngestionRunRegistrationService,
 )
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
+from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
 
 logger = get_logger(__name__)
 MARKET_BACKFILL_CYCLE_METRICS = CycleMetricSet(
@@ -83,7 +84,8 @@ def run_market_backfill_cycle(
 
     run_id = uuid.uuid4()
     ingestion_run_id = uuid.uuid4()
-    dataset_version_id = uuid.uuid4()
+
+    dataset_version_id = generate_dataset_version("raw_bars")
     ingestion_run: IngestionRun | None = None
     dataset_version: DatasetVersion | None = None
     component = "scheduler.run_market_backfill_cycle"
@@ -125,7 +127,7 @@ def run_market_backfill_cycle(
             strategy_version="v1",
             strategy_config={},
             capital_bucket=Decimal("10000.00"),
-            interval=BarInterval.ONE_DAY,
+            interval=BarInterval.FIVE_MIN,
             start_date=start.date(),
             end_date=end.date(),
             dataset_version="v1",
@@ -164,7 +166,7 @@ def run_market_backfill_cycle(
                 run_timestamp=end,
                 run_type=RunType.BACKFILL,
                 source="alpaca",
-                dataset_version=str(dataset_version_id),
+                dataset_version=dataset_version_id,
                 status="running",
                 started_at=now,
                 completed_at=None,
@@ -175,12 +177,12 @@ def run_market_backfill_cycle(
             ingestion_run = ingestion_run_registration_service.register(ingestion_run_contract)
 
             dataset_version_contract = DatasetVersion(
-                dataset_version_id=str(dataset_version_id),
+                dataset_version_id=dataset_version_id,
                 dataset_name="market_bars_backfill",
                 created_at=now,
                 source="alpaca",
                 price_basis=PriceBasis.RAW,
-                interval=BarInterval.ONE_DAY,
+                interval=BarInterval.FIVE_MIN,
                 schema_version="bars_schema_v1",
                 symbol_coverage=len(symbols),
                 date_coverage_start=start.date(),

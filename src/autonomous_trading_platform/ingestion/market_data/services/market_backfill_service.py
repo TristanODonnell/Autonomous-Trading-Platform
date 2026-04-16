@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
+from collections import defaultdict
+from datetime import UTC, date, datetime
 from time import perf_counter
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     record_operation_completed,
@@ -23,6 +25,11 @@ from autonomous_trading_platform.observability.metrics import (
 )
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
+from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
+from autonomous_trading_platform.storage.parquet.mappers import bars_to_arrow
+from autonomous_trading_platform.storage.parquet.writer import write_table
+from autonomous_trading_platform.storage.sor.models.symbol_date_coverage import SymbolDateCoverage
+from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 from ..clients.alpaca_historical_bars_client import AlpacaHistoricalBarsClient
 from .bar_ingestion_service import BarIngestionService
@@ -56,6 +63,8 @@ class MarketBackfillService:
             run_id=run_id,
             audit_logger=audit_logger,
         )
+
+        self.completed_bars: list[MarketBar] = []
 
     async def backfill(
         self,
@@ -170,16 +179,20 @@ class MarketBackfillService:
 
             for provider_bar in bars:
                 try:
-                    await self.bar_ingestion_service.handle_minute_bar(provider_bar)
-                    processed_bars += 1
+                    completed_bar = await self.bar_ingestion_service.handle_minute_bar(provider_bar)
 
-                    historical_bars_backfilled.add(
-                        1,
-                        {
-                            "component": component,
-                            "symbol": provider_bar.symbol,
-                        },
-                    )
+                    if completed_bar is not None:
+                        self.completed_bars.append(completed_bar)
+                        processed_bars += 1
+
+                        historical_bars_backfilled.add(
+                            1,
+                            {
+                                "component": component,
+                                "symbol": provider_bar.symbol,
+                            },
+                        )
+
                 except ValueError as exc:
                     message = str(exc)
 
@@ -197,16 +210,21 @@ class MarketBackfillService:
                         self.bar_ingestion_service.aggregator.drop_incomplete_buckets_for_symbol(
                             provider_bar.symbol
                         )
-                        await self.bar_ingestion_service.handle_minute_bar(provider_bar)
-                        processed_bars += 1
-
-                        historical_bars_backfilled.add(
-                            1,
-                            {
-                                "component": component,
-                                "symbol": provider_bar.symbol,
-                            },
+                        completed_bar = await self.bar_ingestion_service.handle_minute_bar(
+                            provider_bar
                         )
+
+                        if completed_bar is not None:
+                            self.completed_bars.append(completed_bar)
+                            processed_bars += 1
+
+                            historical_bars_backfilled.add(
+                                1,
+                                {
+                                    "component": component,
+                                    "symbol": provider_bar.symbol,
+                                },
+                            )
                         continue
 
                     backfill_symbol_failures.add(
@@ -247,7 +265,9 @@ class MarketBackfillService:
                         failure_class="unknown",
                     )
                     raise
-
+            self._write_completed_bars()
+            self._write_symbol_date_coverage()
+            self.completed_bars.clear()
             service_duration = perf_counter() - service_start
             throughput = processed_bars / service_duration if service_duration > 0 else 0.0
 
@@ -271,3 +291,44 @@ class MarketBackfillService:
                 duration_seconds=service_duration,
                 throughput_bars_per_second=throughput,
             )
+
+    def _group_bars_by_symbol_date(
+        self,
+        bars: list[MarketBar],
+    ) -> dict[tuple[str, date], list[MarketBar]]:
+        grouped: dict[tuple[str, date], list[MarketBar]] = defaultdict(list)
+        for bar in bars:
+            grouped[(bar.symbol, bar.timestamp.date())].append(bar)
+        return grouped
+
+    def _write_completed_bars(self) -> None:
+        if not self.completed_bars:
+            return
+
+        table = bars_to_arrow(self.completed_bars)
+        write_table(
+            table=table,
+            dataset=RAW_BARS_DATASET,
+            base_path="data",
+            dataset_version=self.dataset_version_id,
+        )
+
+    def _write_symbol_date_coverage(self) -> None:
+        grouped = self._group_bars_by_symbol_date(self.completed_bars)
+        if not grouped:
+            return
+
+        with SorUnitOfWork(self.session) as uow:
+            for (symbol, bar_date), bars in grouped.items():
+                row = SymbolDateCoverage(
+                    coverage_id=f"{self.dataset_version_id}:{symbol}:{bar_date.isoformat()}",
+                    symbol=symbol,
+                    date=bar_date,
+                    dataset_version=self.dataset_version_id,
+                    expected_bar_count=len(bars),
+                    actual_bar_count=len(bars),
+                    completeness_status="complete",
+                    gap_summary=None,
+                    updated_at=datetime.now(UTC),
+                )
+                uow.symbol_date_coverage.upsert(row)
