@@ -121,3 +121,15 @@ class StrategyState(enum.StrEnum):
     IN_POSITION = "in_position"
     EXIT_PENDING = "exit_pending"
     COOLDOWN = "cooldown"
+
+
+class CheckpointScope(enum.StrEnum):
+    BACKFILL = "backfill"
+    CYCLE = "cycle"
+
+
+class CheckpointStatus(enum.StrEnum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"

@@ -5,6 +5,7 @@ from . import checksums as checksums
 from . import corporate_actions as corporate_actions
 from . import dataset_versions as dataset_versions
 from . import fills as fills
+from . import ingestion_checkpoint as ingestion_checkpoint
 from . import ingestion_runs as ingestion_runs
 from . import market_bars as market_bars
 from . import missing_bar_incidents as missing_bar_incidents
@@ -44,4 +45,5 @@ __all__ = [
     "missing_bar_incidents",
     "symbol_date_coverage",
     "dataset_versions",
+    "ingestion_checkpoint",
 ]
