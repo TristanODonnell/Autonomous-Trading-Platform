@@ -1,3 +1,5 @@
+from datetime import date
+
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
@@ -30,3 +32,47 @@ class DatasetVersionQueryService:
             if row is None:
                 return None
             return uow.dataset_versions.to_contract(row)
+
+    def get_datasets_for_experiment(
+        self,
+        *,
+        dataset_name: str,
+        price_basis: PriceBasis,
+        start_date,
+        end_date,
+    ) -> list[DatasetVersion]:
+        with SorUnitOfWork(self.session) as uow:
+            rows = uow.dataset_versions.list_validated_by_coverage_and_price_basis(
+                dataset_name=dataset_name,
+                price_basis=price_basis,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+            return [uow.dataset_versions.to_contract(row) for row in rows]
+
+    def get_datasets_for_symbol_range(
+        self,
+        *,
+        dataset_name: str,
+        symbol: str,
+        start_date: date,
+        end_date: date,
+        price_basis: PriceBasis,
+    ) -> list[DatasetVersion]:
+        with SorUnitOfWork(self.session) as uow:
+            dataset_version_ids = (
+                uow.symbol_date_coverage.list_dataset_versions_covering_symbol_date_range(
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+            )
+
+            rows = uow.dataset_versions.list_validated_by_ids_and_price_basis(
+                dataset_version_ids=dataset_version_ids,
+                dataset_name=dataset_name,
+                price_basis=price_basis,
+            )
+
+            return [uow.dataset_versions.to_contract(row) for row in rows]

@@ -90,3 +90,47 @@ class DatasetVersionsRepository(BaseRepository):
             .order_by(DatasetVersions.created_at.desc())
         )
         return cast(DatasetVersions | None, self.session.scalars(stmt).first())
+
+    def list_validated_by_coverage_and_price_basis(
+        self,
+        *,
+        dataset_name: str,
+        price_basis: PriceBasis,
+        start_date,
+        end_date,
+    ) -> list[DatasetVersions]:
+        stmt = (
+            select(DatasetVersions)
+            .where(
+                DatasetVersions.dataset_name == dataset_name,
+                DatasetVersions.price_basis == price_basis,
+                DatasetVersions.validation_status == "validated",
+                DatasetVersions.date_coverage_start <= start_date,
+                DatasetVersions.date_coverage_end >= end_date,
+            )
+            .order_by(DatasetVersions.created_at.desc())
+        )
+
+        return list(self.session.scalars(stmt).all())
+
+    def list_validated_by_ids_and_price_basis(
+        self,
+        *,
+        dataset_version_ids: list[str],
+        dataset_name: str,
+        price_basis: PriceBasis,
+    ) -> list[DatasetVersions]:
+        if not dataset_version_ids:
+            return []
+
+        stmt = (
+            select(DatasetVersions)
+            .where(
+                DatasetVersions.dataset_version_id.in_(dataset_version_ids),
+                DatasetVersions.dataset_name == dataset_name,
+                DatasetVersions.price_basis == price_basis,
+                DatasetVersions.validation_status == "validated",
+            )
+            .order_by(DatasetVersions.created_at.desc())
+        )
+        return list(self.session.scalars(stmt).all())

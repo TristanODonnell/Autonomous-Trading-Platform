@@ -1,3 +1,4 @@
+from datetime import date
 from typing import cast
 
 from sqlalchemy import select
@@ -35,3 +36,22 @@ class SymbolDateCoverageRepository(BaseRepository):
         obj = self.get_by_coverage_id(coverage_id)
         if obj is not None:
             self.session.delete(obj)
+
+    def list_dataset_versions_covering_symbol_date_range(
+        self,
+        *,
+        symbol: str,
+        start_date: date,
+        end_date: date,
+    ) -> list[str]:
+        stmt = (
+            select(SymbolDateCoverage.dataset_version)
+            .where(
+                SymbolDateCoverage.symbol == symbol,
+                SymbolDateCoverage.date >= start_date,
+                SymbolDateCoverage.date <= end_date,
+                SymbolDateCoverage.completeness_status == "complete",
+            )
+            .distinct()
+        )
+        return list(self.session.scalars(stmt).all())
