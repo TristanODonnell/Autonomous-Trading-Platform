@@ -29,6 +29,7 @@ dependencies = [
   # Data + storage
   "pandas>=2.2",
   "pyarrow>=15.0",
+  "duckdb>=1.0.0",
 
   # DB (choose ONE of psycopg3 or sqlalchemy; keeping both is fine early)
   "psycopg[binary]>=3.1",
@@ -38,6 +39,8 @@ dependencies = [
   "requests>=2.31",
   "httpx",
   "python-dateutil>=2.9",
+
+
 
   # external APIs
   "alpaca-py",

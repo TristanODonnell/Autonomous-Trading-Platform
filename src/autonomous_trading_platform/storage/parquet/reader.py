@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
+import duckdb
 import pyarrow as pa
 import pyarrow.dataset as ds
 
@@ -97,3 +98,126 @@ def list_partition_files(
             files.extend(sorted(partition_dir.glob("*.parquet")))
 
     return files
+
+
+class HistoricalBarDatasetReader:
+    def __init__(self, *, base_path: str | Path = "data") -> None:
+        self.base_path = Path(base_path)
+
+    def read_with_pyarrow(
+        self,
+        *,
+        dataset: ParquetDataset,
+        dataset_version: str,
+        symbol: str,
+        start_date: date,
+        end_date: date,
+    ) -> pa.Table:
+        symbol = symbol.upper()
+        files = list_partition_files(
+            dataset=dataset,
+            base_path=self.base_path,
+            dataset_version=dataset_version,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        if not files:
+            return pa.table([], schema=dataset.schema)
+
+        start_ts, end_ts = self._date_range_to_timestamps(start_date, end_date)
+
+        dataset_obj = ds.dataset([str(f) for f in files], format="parquet")
+
+        filter_expr = (
+            (ds.field("symbol") == symbol)
+            & (ds.field("timestamp") >= pa.scalar(start_ts))
+            & (ds.field("timestamp") < pa.scalar(end_ts))
+        )
+
+        table = dataset_obj.to_table(filter=filter_expr)
+
+        return table.sort_by([("timestamp", "ascending")]) if table.num_rows > 0 else table
+
+    def read_with_duckdb(
+        self,
+        *,
+        dataset: ParquetDataset,
+        dataset_version: str,
+        symbol: str,
+        start_date: date,
+        end_date: date,
+    ) -> pa.Table:
+        symbol = symbol.upper()
+        files = list_partition_files(
+            dataset=dataset,
+            base_path=self.base_path,
+            dataset_version=dataset_version,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        if not files:
+            return pa.table([], schema=dataset.schema)
+
+        start_ts, end_ts = self._date_range_to_timestamps(start_date, end_date)
+
+        con = duckdb.connect(database=":memory:")
+
+        try:
+            file_list = [str(f) for f in files]
+
+            result = con.execute(
+                f"""
+                SELECT *
+                FROM parquet_scan({file_list})
+                WHERE symbol = ?
+                  AND timestamp >= ?
+                  AND timestamp < ?
+                ORDER BY timestamp ASC
+                """,
+                [symbol, start_ts, end_ts],
+            )
+
+            return result.arrow()
+        finally:
+            con.close()
+
+    def read(
+        self,
+        *,
+        dataset: ParquetDataset,
+        dataset_version: str,
+        symbol: str,
+        start_date: date,
+        end_date: date,
+        engine: str = "duckdb",
+    ) -> pa.Table:
+        symbol = symbol.upper()
+        if engine == "duckdb":
+            return self.read_with_duckdb(
+                dataset=dataset,
+                dataset_version=dataset_version,
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+        if engine == "pyarrow":
+            return self.read_with_pyarrow(
+                dataset=dataset,
+                dataset_version=dataset_version,
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+        raise ValueError(f"Unsupported engine: {engine}")
+
+    @staticmethod
+    def _date_range_to_timestamps(start_date: date, end_date: date) -> tuple[datetime, datetime]:
+        start_ts = datetime.combine(start_date, time.min, tzinfo=UTC)
+        end_ts = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=UTC)
+        return start_ts, end_ts

@@ -4,8 +4,6 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
-import pyarrow.dataset as ds
-
 from autonomous_trading_platform.contracts.common.enums import (
     BarInterval,
     BarQualityFlag,
@@ -13,11 +11,14 @@ from autonomous_trading_platform.contracts.common.enums import (
     PriceBasis,
 )
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
+from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
+from autonomous_trading_platform.storage.parquet.reader import HistoricalBarDatasetReader
 
 
 class ParquetBarRepository:
     def __init__(self, *, base_path: str = "data") -> None:
         self.base_path = Path(base_path)
+        self.reader = HistoricalBarDatasetReader(base_path=self.base_path)
 
     def get_raw_bars_before_date(
         self,
@@ -27,27 +28,32 @@ class ParquetBarRepository:
         effective_date: date | datetime,
     ) -> list[MarketBar]:
         cutoff = self._normalize_effective_date(effective_date)
-        dataset_path = self.base_path / "bars" / "raw"
+        symbol = symbol.upper()
 
-        if not dataset_path.exists():
+        dataset_root = self.base_path / "bars" / "raw" / f"dataset_version={dataset_version}"
+        if not dataset_root.exists():
             return []
 
-        dataset = ds.dataset(dataset_path, format="parquet", partitioning="hive")
-
-        filter_expr = (
-            (ds.field("dataset_version") == dataset_version)
-            & (ds.field("symbol") == symbol)
-            & (ds.field("timestamp") < cutoff)
+        table = self.reader.read(
+            dataset=RAW_BARS_DATASET,
+            dataset_version=dataset_version,
+            symbol=symbol,
+            start_date=date(1970, 1, 1),
+            end_date=cutoff.date(),
+            engine="duckdb",
         )
-
-        table = dataset.to_table(filter=filter_expr)
 
         if table.num_rows == 0:
             return []
 
-        rows = table.to_pylist()
-        rows.sort(key=lambda row: row["timestamp"])
+        rows = [
+            row for row in table.to_pylist() if self._as_utc_datetime(row["timestamp"]) < cutoff
+        ]
 
+        if not rows:
+            return []
+
+        rows.sort(key=lambda row: row["timestamp"])
         return [self._row_to_market_bar(row) for row in rows]
 
     @staticmethod
