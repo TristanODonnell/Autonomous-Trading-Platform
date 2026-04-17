@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import uuid
 from collections import defaultdict
 from datetime import UTC, date, datetime
 from time import perf_counter
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.contracts.common.enums import CheckpointScope, CheckpointStatus
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 from autonomous_trading_platform.ingestion.market_data.services.ingestion_quality_recorder_service import (
     IngestionQualityRecorderService,
@@ -17,23 +17,22 @@ from autonomous_trading_platform.observability.lifecycle import (
     record_operation_failed,
     record_operation_started,
 )
-from autonomous_trading_platform.observability.log_context import LogContext
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
     backfill_api_requests,
     backfill_batch_size,
     backfill_request_latency_seconds,
-    backfill_symbol_failures,
     backfill_throughput,
-    historical_bars_backfilled,
 )
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.mappers import bars_to_arrow
 from autonomous_trading_platform.storage.parquet.writer import write_table
+from autonomous_trading_platform.storage.sor.models.ingestion_checkpoint import IngestionCheckpoint
 from autonomous_trading_platform.storage.sor.models.missing_bar_incidents import MissingBarIncidents
 from autonomous_trading_platform.storage.sor.models.symbol_date_coverage import SymbolDateCoverage
+from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 from ..clients.alpaca_historical_bars_client import AlpacaHistoricalBarsClient
 from .bar_ingestion_service import BarIngestionService
@@ -68,8 +67,6 @@ class MarketBackfillService:
             audit_logger=audit_logger,
         )
         self.ingestion_quality_recorder_service = IngestionQualityRecorderService(session)
-
-        self.completed_bars: list[MarketBar] = []
 
     async def backfill(
         self,
@@ -180,118 +177,17 @@ class MarketBackfillService:
                 end=end.isoformat(),
             )
 
+            grouped = self._group_bars_by_symbol_date(bars)
             processed_bars = 0
-            incidents: list[MissingBarIncidents] = []
-            for provider_bar in bars:
-                try:
-                    completed_bar = await self.bar_ingestion_service.handle_minute_bar(provider_bar)
 
-                    if completed_bar is not None:
-                        self.completed_bars.append(completed_bar)
-                        processed_bars += 1
-
-                        historical_bars_backfilled.add(
-                            1,
-                            {
-                                "component": component,
-                                "symbol": provider_bar.symbol,
-                            },
-                        )
-
-                except ValueError as exc:
-                    message = str(exc)
-
-                    if "Incomplete prior bucket detected" in message:
-                        logger.warning(
-                            "market_backfill_service_retry_incomplete_bucket",
-                            extra=LogContext(
-                                run_id=self.run_id,
-                                component=component,
-                                symbol=provider_bar.symbol,
-                                error_message=message,
-                            ).to_extra(),
-                        )
-                        incident = MissingBarIncidents(
-                            incident_id=str(uuid.uuid4()),
-                            symbol=provider_bar.symbol,
-                            bar_timestamp=provider_bar.timestamp,
-                            dataset_version=self.dataset_version_id,
-                            run_id=self.run_id,
-                            ingestion_run_id=self.ingestion_run_id,
-                            incident_type="historical_incomplete_bucket",
-                            severity="warning",
-                            message=message,
-                            created_at=datetime.now(UTC),
-                            resolved_flag=False,
-                        )
-                        incidents.append(incident)
-
-                        self.bar_ingestion_service.aggregator.drop_incomplete_buckets_for_symbol(
-                            provider_bar.symbol
-                        )
-                        completed_bar = await self.bar_ingestion_service.handle_minute_bar(
-                            provider_bar
-                        )
-
-                        if completed_bar is not None:
-                            self.completed_bars.append(completed_bar)
-                            processed_bars += 1
-
-                            historical_bars_backfilled.add(
-                                1,
-                                {
-                                    "component": component,
-                                    "symbol": provider_bar.symbol,
-                                },
-                            )
-                        continue
-
-                    backfill_symbol_failures.add(
-                        1,
-                        {
-                            "component": component,
-                            "symbol": provider_bar.symbol,
-                            "failure_class": "value_error",
-                        },
-                    )
-                    record_operation_failed(
-                        logger=logger,
-                        event="market_backfill_service_bar_failed",
-                        run_id=self.run_id,
-                        component=component,
-                        exc=exc,
-                        symbol=provider_bar.symbol,
-                        failure_class="value_error",
-                    )
-                    raise
-
-                except Exception as exc:
-                    backfill_symbol_failures.add(
-                        1,
-                        {
-                            "component": component,
-                            "symbol": provider_bar.symbol,
-                            "failure_class": "unknown",
-                        },
-                    )
-                    record_operation_failed(
-                        logger=logger,
-                        event="market_backfill_service_bar_failed",
-                        run_id=self.run_id,
-                        component=component,
-                        exc=exc,
-                        symbol=provider_bar.symbol,
-                        failure_class="unknown",
-                    )
-                    raise
-            if self.completed_bars or incidents:
-                self._write_completed_bars()
-                coverage_rows = self._build_symbol_date_coverage_rows()
-                self.ingestion_quality_recorder_service.record_symbol_date_quality(
-                    coverage_rows=coverage_rows,
-                    incidents=incidents,
+            for (symbol, bar_date), chunk_bars in grouped.items():
+                processed_bars += await self._process_chunk(
+                    symbol=symbol,
+                    bar_date=bar_date,
+                    provider_bars=chunk_bars,
+                    component=component,
                 )
-            self.completed_bars.clear()
+
             service_duration = perf_counter() - service_start
             throughput = processed_bars / service_duration if service_duration > 0 else 0.0
 
@@ -316,45 +212,114 @@ class MarketBackfillService:
                 throughput_bars_per_second=throughput,
             )
 
-    def _group_bars_by_symbol_date(
+    async def _process_chunk(
         self,
-        bars: list[MarketBar],
-    ) -> dict[tuple[str, date], list[MarketBar]]:
+        symbol: str,
+        bar_date: date,
+        provider_bars: list,
+        component: str,
+    ) -> int:
+        checkpoint_id = f"{self.ingestion_run_id}:{symbol}:{bar_date.isoformat()}"
+
+        checkpoint = IngestionCheckpoint(
+            checkpoint_id=checkpoint_id,
+            ingestion_run_id=self.ingestion_run_id,
+            dataset_version=self.dataset_version_id,
+            checkpoint_scope=CheckpointScope.BACKFILL,
+            checkpoint_status=CheckpointStatus.PENDING,
+            symbol=symbol,
+            checkpoint_date=bar_date,
+            cycle_timestamp=None,
+            last_successful_bar_timestamp=None,
+            retry_count=0,
+            error_message=None,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+
+        # insert or upsert via UoW
+        checkpoint.checkpoint_status = CheckpointStatus.IN_PROGRESS
+        checkpoint.updated_at = datetime.now(UTC)
+        with SorUnitOfWork(self.session) as uow:
+            checkpoint = uow.ingestion_checkpoints.upsert(checkpoint)
+
+        processed_bars = 0
+        chunk_completed_bars: list[MarketBar] = []
+        incidents: list[MissingBarIncidents] = []
+
+        try:
+            for provider_bar in provider_bars:
+                completed_bar = await self.bar_ingestion_service.handle_minute_bar(provider_bar)
+
+                if completed_bar is not None:
+                    chunk_completed_bars.append(completed_bar)
+                    processed_bars += 1
+
+                    checkpoint.last_successful_bar_timestamp = completed_bar.timestamp
+
+            # write outputs for THIS chunk only
+            if chunk_completed_bars:
+                table = bars_to_arrow(chunk_completed_bars)
+
+                write_table(
+                    table=table,
+                    dataset=RAW_BARS_DATASET,
+                    base_path="data",
+                    dataset_version=self.dataset_version_id,
+                )
+
+            coverage_rows = self._build_symbol_date_coverage_rows_for_chunk(
+                symbol,
+                bar_date,
+                chunk_completed_bars,
+            )
+
+            self.ingestion_quality_recorder_service.record_symbol_date_quality(
+                coverage_rows=coverage_rows,
+                incidents=incidents,
+            )
+
+            checkpoint.checkpoint_status = CheckpointStatus.COMPLETED
+            checkpoint.updated_at = datetime.now(UTC)
+
+            with SorUnitOfWork(self.session) as uow:
+                uow.ingestion_checkpoints.upsert(checkpoint)
+
+            return processed_bars
+
+        except Exception as exc:
+            checkpoint.checkpoint_status = CheckpointStatus.FAILED
+            checkpoint.error_message = str(exc)
+            checkpoint.retry_count += 1
+            checkpoint.updated_at = datetime.now(UTC)
+
+            with SorUnitOfWork(self.session) as uow:
+                uow.ingestion_checkpoints.upsert(checkpoint)
+
+            raise
+
+    def _group_bars_by_symbol_date(self, bars) -> dict[tuple[str, date], list]:
         grouped: dict[tuple[str, date], list[MarketBar]] = defaultdict(list)
         for bar in bars:
             grouped[(bar.symbol, bar.timestamp.date())].append(bar)
         return grouped
 
-    def _write_completed_bars(self) -> None:
-        if not self.completed_bars:
-            return
-
-        table = bars_to_arrow(self.completed_bars)
-        write_table(
-            table=table,
-            dataset=RAW_BARS_DATASET,
-            base_path="data",
-            dataset_version=self.dataset_version_id,
-        )
-
-    def _build_symbol_date_coverage_rows(self) -> list[SymbolDateCoverage]:
-        grouped = self._group_bars_by_symbol_date(self.completed_bars)
-        rows: list[SymbolDateCoverage] = []
-
-        for (symbol, bar_date), bars in grouped.items():
-            # TODO args still placeholders
-            rows.append(
-                SymbolDateCoverage(
-                    coverage_id=f"{self.dataset_version_id}:{symbol}:{bar_date.isoformat()}",
-                    symbol=symbol,
-                    date=bar_date,
-                    dataset_version=self.dataset_version_id,
-                    expected_bar_count=len(bars),
-                    actual_bar_count=len(bars),
-                    completeness_status="complete",
-                    gap_summary=None,
-                    updated_at=datetime.now(UTC),
-                )
+    def _build_symbol_date_coverage_rows_for_chunk(
+        self,
+        symbol: str,
+        bar_date: date,
+        bars: list[MarketBar],
+    ) -> list[SymbolDateCoverage]:
+        return [
+            SymbolDateCoverage(
+                coverage_id=f"{self.dataset_version_id}:{symbol}:{bar_date.isoformat()}",
+                symbol=symbol,
+                date=bar_date,
+                dataset_version=self.dataset_version_id,
+                expected_bar_count=len(bars),
+                actual_bar_count=len(bars),
+                completeness_status="complete",
+                gap_summary=None,
+                updated_at=datetime.now(UTC),
             )
-
-        return rows
+        ]
