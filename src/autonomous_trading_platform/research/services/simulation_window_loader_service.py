@@ -26,6 +26,11 @@ class SimulationWindowData:
 
 
 class SimulationWindowLoader:
+    """
+    Loads simulation data using bounded partition reads only.
+    This loader must not read entire dataset versions for windowed simulation access.
+    """
+
     def __init__(
         self,
         *,
@@ -44,6 +49,7 @@ class SimulationWindowLoader:
         end_date: date,
         feature_dataset: ParquetDataset | None = None,
         engine: str = "duckdb",
+        strict: bool = False,
     ) -> SimulationWindowData:
         if end_date < start_date:
             raise ValueError("end_date must be greater than or equal to start_date")
@@ -61,14 +67,29 @@ class SimulationWindowLoader:
         feature_tables_by_symbol: dict[str, pa.Table] | None = {} if feature_dataset else None
 
         for symbol in normalized_symbols:
-            bar_table = self.bar_reader.read(
-                dataset=RAW_BARS_DATASET,
-                dataset_version=dataset_version,
-                symbol=symbol,
-                start_date=start_date,
-                end_date=end_date,
-                engine=engine,
-            )
+            try:
+                bar_table = self.bar_reader.read(
+                    dataset=RAW_BARS_DATASET,
+                    dataset_version=dataset_version,
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                    engine=engine,
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to load bar data for symbol={symbol}, "
+                    f"dataset_version={dataset_version}, "
+                    f"window={start_date}..{end_date}"
+                ) from exc
+
+            if strict and bar_table.num_rows == 0:
+                raise ValueError(
+                    f"No bar data found for symbol={symbol}, "
+                    f"dataset_version={dataset_version}, "
+                    f"window={start_date}..{end_date}"
+                )
+
             bars_by_symbol[symbol] = [self._row_to_market_bar(row) for row in bar_table.to_pylist()]
 
             if feature_dataset is not None:
@@ -77,14 +98,31 @@ class SimulationWindowLoader:
 
                 assert feature_tables_by_symbol is not None
 
-                feature_table = self.feature_reader.read(
-                    dataset=feature_dataset,
-                    dataset_version=dataset_version,
-                    symbol=symbol,
-                    start_date=start_date,
-                    end_date=end_date,
-                    engine=engine,
-                )
+                try:
+                    feature_table = self.feature_reader.read(
+                        dataset=feature_dataset,
+                        dataset_version=dataset_version,
+                        symbol=symbol,
+                        start_date=start_date,
+                        end_date=end_date,
+                        engine=engine,
+                    )
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"Failed to load feature data for symbol={symbol}, "
+                        f"dataset_version={dataset_version}, "
+                        f"window={start_date}..{end_date}, "
+                        f"feature_dataset={feature_dataset.dataset_key}"
+                    ) from exc
+
+                if strict and feature_table.num_rows == 0:
+                    raise ValueError(
+                        f"No feature data found for symbol={symbol}, "
+                        f"dataset_version={dataset_version}, "
+                        f"window={start_date}..{end_date}, "
+                        f"feature_dataset={feature_dataset.dataset_key}"
+                    )
+
                 feature_tables_by_symbol[symbol] = feature_table
 
         return SimulationWindowData(
