@@ -44,7 +44,9 @@ from autonomous_trading_platform.runtime.services.ingestion_run_registration_ser
     IngestionRunRegistrationService,
 )
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
-from autonomous_trading_platform.storage.parquet.parquet_bar_repository import ParquetBarRepository
+from autonomous_trading_platform.storage.parquet.repositories.parquet_bar_repository import (
+    ParquetBarRepository,
+)
 from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
 
 logger = get_logger(__name__)
