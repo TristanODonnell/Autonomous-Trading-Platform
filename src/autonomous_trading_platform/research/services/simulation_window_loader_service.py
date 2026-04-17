@@ -9,7 +9,6 @@ import pyarrow as pa
 
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 from autonomous_trading_platform.storage.parquet.datasets import (
-    RAW_BARS_DATASET,
     ParquetDataset,
 )
 from autonomous_trading_platform.storage.parquet.reader import HistoricalBarDatasetReader
@@ -44,6 +43,7 @@ class SimulationWindowLoader:
         self,
         *,
         dataset_version: str,
+        bars_dataset: ParquetDataset,
         symbols: Iterable[str],
         start_date: date,
         end_date: date,
@@ -69,7 +69,7 @@ class SimulationWindowLoader:
         for symbol in normalized_symbols:
             try:
                 bar_table = self.bar_reader.read(
-                    dataset=RAW_BARS_DATASET,
+                    dataset=bars_dataset,
                     dataset_version=dataset_version,
                     symbol=symbol,
                     start_date=start_date,
