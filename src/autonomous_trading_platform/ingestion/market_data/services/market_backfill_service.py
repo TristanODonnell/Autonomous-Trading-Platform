@@ -185,7 +185,6 @@ class MarketBackfillService:
                     symbol=symbol,
                     bar_date=bar_date,
                     provider_bars=chunk_bars,
-                    component=component,
                 )
 
             service_duration = perf_counter() - service_start
@@ -217,31 +216,45 @@ class MarketBackfillService:
         symbol: str,
         bar_date: date,
         provider_bars: list,
-        component: str,
     ) -> int:
         checkpoint_id = f"{self.ingestion_run_id}:{symbol}:{bar_date.isoformat()}"
 
-        checkpoint = IngestionCheckpoint(
-            checkpoint_id=checkpoint_id,
-            ingestion_run_id=self.ingestion_run_id,
-            dataset_version=self.dataset_version_id,
-            checkpoint_scope=CheckpointScope.BACKFILL,
-            checkpoint_status=CheckpointStatus.PENDING,
-            symbol=symbol,
-            checkpoint_date=bar_date,
-            cycle_timestamp=None,
-            last_successful_bar_timestamp=None,
-            retry_count=0,
-            error_message=None,
-            created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
-        )
-
-        # insert or upsert via UoW
-        checkpoint.checkpoint_status = CheckpointStatus.IN_PROGRESS
-        checkpoint.updated_at = datetime.now(UTC)
         with SorUnitOfWork(self.session) as uow:
-            checkpoint = uow.ingestion_checkpoints.upsert(checkpoint)
+            checkpoint = uow.ingestion_checkpoints.get_backfill_checkpoint(
+                ingestion_run_id=self.ingestion_run_id,
+                dataset_version=self.dataset_version_id,
+                symbol=symbol,
+                checkpoint_date=bar_date,
+            )
+
+            if (
+                checkpoint is not None
+                and checkpoint.checkpoint_status == CheckpointStatus.COMPLETED
+            ):
+                return 0
+
+            if checkpoint is None:
+                checkpoint = IngestionCheckpoint(
+                    checkpoint_id=checkpoint_id,
+                    ingestion_run_id=self.ingestion_run_id,
+                    dataset_version=self.dataset_version_id,
+                    checkpoint_scope=CheckpointScope.BACKFILL,
+                    checkpoint_status=CheckpointStatus.PENDING,
+                    symbol=symbol,
+                    checkpoint_date=bar_date,
+                    cycle_timestamp=None,
+                    last_successful_bar_timestamp=None,
+                    retry_count=0,
+                    error_message=None,
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
+                )
+                uow.ingestion_checkpoints.insert(checkpoint)
+
+            checkpoint.checkpoint_status = CheckpointStatus.IN_PROGRESS
+            checkpoint.updated_at = datetime.now(UTC)
+
+            uow.ingestion_checkpoints.upsert(checkpoint)
 
         processed_bars = 0
         chunk_completed_bars: list[MarketBar] = []
