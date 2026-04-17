@@ -22,6 +22,7 @@ from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 
 from ..clients.alpaca_historical_bars_client import AlpacaHistoricalBarsClient
+from ..services.dataset_version_finalization_service import DatasetVersionFinalizationService
 from ..services.market_backfill_service import MarketBackfillService
 
 logger = get_logger(__name__)
@@ -59,6 +60,7 @@ class BackfillMarketBarsJob:
             ingestion_run_id=ingestion_run_id,
             dataset_version_id=dataset_version_id,
         )
+        self.dataset_version_finalization_service = DatasetVersionFinalizationService(session)
 
     async def run(
         self,
@@ -97,6 +99,20 @@ class BackfillMarketBarsJob:
                     start=start,
                     end=end,
                 )
+
+                validation_status = (
+                    self.dataset_version_finalization_service.finalize_backfill_dataset_version(
+                        ingestion_run_id=self.ingestion_run_id,
+                        dataset_version_id=self.dataset_version_id,
+                    )
+                )
+
+                job_span.set_attribute("ratp.dataset_validation_status", validation_status)
+                if validation_status != "validated":
+                    raise RuntimeError(
+                        f"Backfill dataset version {self.dataset_version_id} finalized as "
+                        f"{validation_status}, not validated."
+                    )
 
             duration = perf_counter() - job_start
             record_job_completed(

@@ -268,9 +268,6 @@ def run_market_backfill_cycle(
             ingestion_run.completed_at = datetime.now(UTC)
             ingestion_run = ingestion_run_registration_service.save(ingestion_run)
 
-            dataset_version.validation_status = "validated"
-            dataset_version = dataset_registration_service.save(dataset_version)
-
             audit_logger.record_run_completed(
                 run_id=str(run_id),
                 component=component,
@@ -294,7 +291,7 @@ def run_market_backfill_cycle(
 
             ingestion_run = ingestion_run_registration_service.save(ingestion_run)
 
-        if dataset_version is not None:
+        if dataset_version is not None and dataset_version.validation_status == "unvalidated":
             dataset_version.validation_status = "failed"
             dataset_version = dataset_registration_service.save(dataset_version)
 

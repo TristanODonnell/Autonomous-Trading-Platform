@@ -43,7 +43,7 @@ from autonomous_trading_platform.observability.metrics import (
     corporate_actions_ingested,
 )
 from autonomous_trading_platform.observability.tracing import start_span
-from autonomous_trading_platform.storage.parquet.parquet_bar_repository import (
+from autonomous_trading_platform.storage.parquet.repositories.parquet_bar_repository import (
     ParquetBarRepository,
 )
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork

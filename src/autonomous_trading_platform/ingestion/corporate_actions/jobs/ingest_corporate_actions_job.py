@@ -25,7 +25,9 @@ from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.storage.parquet.datasets import ADJUSTED_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.mappers import bars_to_arrow
-from autonomous_trading_platform.storage.parquet.parquet_bar_repository import ParquetBarRepository
+from autonomous_trading_platform.storage.parquet.repositories.parquet_bar_repository import (
+    ParquetBarRepository,
+)
 from autonomous_trading_platform.storage.parquet.writer import write_table
 
 logger = get_logger(__name__)

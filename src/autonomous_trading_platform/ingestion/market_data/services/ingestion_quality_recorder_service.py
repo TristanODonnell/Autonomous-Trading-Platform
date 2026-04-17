@@ -18,5 +18,5 @@ class IngestionQualityRecorderService:
             for row in coverage_rows:
                 uow.symbol_date_coverage.upsert(row)
 
-            if incidents:
-                uow.missing_bar_incidents.insert_many(incidents)
+            for incident in incidents:
+                uow.missing_bar_incidents.upsert(incident)

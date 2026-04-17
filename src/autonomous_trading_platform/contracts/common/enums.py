@@ -126,6 +126,7 @@ class StrategyState(enum.StrEnum):
 class CheckpointScope(enum.StrEnum):
     BACKFILL = "backfill"
     CYCLE = "cycle"
+    INCREMENTAL = "incremental"
 
 
 class CheckpointStatus(enum.StrEnum):

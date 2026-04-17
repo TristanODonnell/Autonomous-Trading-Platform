@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from time import perf_counter
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
@@ -26,9 +27,9 @@ from autonomous_trading_platform.observability.metrics import (
 )
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
-from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
-from autonomous_trading_platform.storage.parquet.mappers import bars_to_arrow
-from autonomous_trading_platform.storage.parquet.writer import write_table
+from autonomous_trading_platform.storage.parquet.services.bar_chunk_writer_service import (
+    BarChunkWriterService,
+)
 from autonomous_trading_platform.storage.sor.models.ingestion_checkpoint import IngestionCheckpoint
 from autonomous_trading_platform.storage.sor.models.missing_bar_incidents import MissingBarIncidents
 from autonomous_trading_platform.storage.sor.models.symbol_date_coverage import SymbolDateCoverage
@@ -67,6 +68,7 @@ class MarketBackfillService:
             audit_logger=audit_logger,
         )
         self.ingestion_quality_recorder_service = IngestionQualityRecorderService(session)
+        self.bar_chunk_writer = BarChunkWriterService(base_path="data")
 
     async def backfill(
         self,
@@ -258,7 +260,6 @@ class MarketBackfillService:
 
         processed_bars = 0
         chunk_completed_bars: list[MarketBar] = []
-        incidents: list[MissingBarIncidents] = []
 
         try:
             for provider_bar in provider_bars:
@@ -270,26 +271,10 @@ class MarketBackfillService:
 
                     checkpoint.last_successful_bar_timestamp = completed_bar.timestamp
 
-            # write outputs for THIS chunk only
-            if chunk_completed_bars:
-                table = bars_to_arrow(chunk_completed_bars)
-
-                write_table(
-                    table=table,
-                    dataset=RAW_BARS_DATASET,
-                    base_path="data",
-                    dataset_version=self.dataset_version_id,
-                )
-
-            coverage_rows = self._build_symbol_date_coverage_rows_for_chunk(
-                symbol,
-                bar_date,
-                chunk_completed_bars,
-            )
-
-            self.ingestion_quality_recorder_service.record_symbol_date_quality(
-                coverage_rows=coverage_rows,
-                incidents=incidents,
+            self._finalize_chunk_outputs(
+                symbol=symbol,
+                bar_date=bar_date,
+                chunk_completed_bars=chunk_completed_bars,
             )
 
             checkpoint.checkpoint_status = CheckpointStatus.COMPLETED
@@ -311,6 +296,36 @@ class MarketBackfillService:
 
             raise
 
+    def _finalize_chunk_outputs(
+        self,
+        symbol: str,
+        bar_date: date,
+        chunk_completed_bars: list[MarketBar],
+    ) -> None:
+        self.bar_chunk_writer.write_backfill_chunk(
+            bars=chunk_completed_bars,
+            dataset_version=self.dataset_version_id,
+            symbol=symbol,
+            bar_date=bar_date,
+        )
+
+        coverage_rows = self._build_symbol_date_coverage_rows_for_chunk(
+            symbol,
+            bar_date,
+            chunk_completed_bars,
+        )
+
+        incidents = self._build_missing_bar_incidents_for_chunk(
+            symbol=symbol,
+            bar_date=bar_date,
+            bars=chunk_completed_bars,
+        )
+
+        self.ingestion_quality_recorder_service.record_symbol_date_quality(
+            coverage_rows=coverage_rows,
+            incidents=incidents,
+        )
+
     def _group_bars_by_symbol_date(self, bars) -> dict[tuple[str, date], list]:
         grouped: dict[tuple[str, date], list[MarketBar]] = defaultdict(list)
         for bar in bars:
@@ -323,16 +338,98 @@ class MarketBackfillService:
         bar_date: date,
         bars: list[MarketBar],
     ) -> list[SymbolDateCoverage]:
+        expected_timestamps = self._expected_minute_timestamps_for_date(bar_date)
+        actual_timestamps = {bar.timestamp for bar in bars}
+
+        expected_bar_count = len(expected_timestamps)
+        actual_bar_count = len(actual_timestamps)
+
+        missing_count = max(expected_bar_count - actual_bar_count, 0)
+
+        if expected_bar_count == 0:
+            completeness_status = "missing"
+            gap_summary = "No expected market session for date."
+        elif missing_count == 0:
+            completeness_status = "complete"
+            gap_summary = None
+        elif actual_bar_count == 0:
+            completeness_status = "missing"
+            gap_summary = f"Missing all expected bars ({expected_bar_count})."
+        else:
+            completeness_status = "partial"
+            gap_summary = f"Missing {missing_count} of {expected_bar_count} expected bars."
+
         return [
             SymbolDateCoverage(
                 coverage_id=f"{self.dataset_version_id}:{symbol}:{bar_date.isoformat()}",
                 symbol=symbol,
                 date=bar_date,
                 dataset_version=self.dataset_version_id,
-                expected_bar_count=len(bars),
-                actual_bar_count=len(bars),
-                completeness_status="complete",
-                gap_summary=None,
+                expected_bar_count=expected_bar_count,
+                actual_bar_count=actual_bar_count,
+                completeness_status=completeness_status,
+                gap_summary=gap_summary,
                 updated_at=datetime.now(UTC),
             )
         ]
+
+    def _build_missing_bar_incidents_for_chunk(
+        self,
+        symbol: str,
+        bar_date: date,
+        bars: list[MarketBar],
+    ) -> list[MissingBarIncidents]:
+        expected_timestamps = self._expected_minute_timestamps_for_date(bar_date)
+        actual_timestamps = {bar.timestamp for bar in bars}
+
+        missing_timestamps = sorted(expected_timestamps - actual_timestamps)
+
+        incidents: list[MissingBarIncidents] = []
+        now = datetime.now(UTC)
+
+        for ts in missing_timestamps:
+            incidents.append(
+                MissingBarIncidents(
+                    incident_id=(
+                        f"{self.dataset_version_id}:{symbol}:{ts.isoformat()}:missing_bar"
+                    ),
+                    symbol=symbol,
+                    bar_timestamp=ts,
+                    dataset_version=self.dataset_version_id,
+                    ingestion_run_id=self.ingestion_run_id,
+                    incident_type="missing_bar",
+                    severity="warning",
+                    message=f"Missing historical bar for {symbol} at {ts.isoformat()}",
+                    created_at=now,
+                    resolved_flag=False,
+                )
+            )
+
+        return incidents
+
+    def _expected_minute_timestamps_for_date(self, bar_date: date) -> set[datetime]:
+        eastern = ZoneInfo("America/New_York")
+
+        # Skip weekends
+        if bar_date.weekday() >= 5:
+            return set()
+
+        session_start = datetime.combine(
+            bar_date,
+            time(hour=9, minute=30),
+            tzinfo=eastern,
+        )
+        session_end = datetime.combine(
+            bar_date,
+            time(hour=16, minute=0),
+            tzinfo=eastern,
+        )
+
+        timestamps: set[datetime] = set()
+        current = session_start
+
+        while current < session_end:
+            timestamps.add(current.astimezone(UTC))
+            current += timedelta(minutes=1)
+
+        return timestamps
