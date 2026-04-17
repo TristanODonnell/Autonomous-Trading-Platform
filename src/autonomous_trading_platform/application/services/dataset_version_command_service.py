@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,11 @@ class DatasetVersionCommandService:
         validation_status: str,
         source_manifest: dict | None = None,
         metadata_json: dict | None = None,
+        symbol_coverage: int | None = None,
+        date_coverage_start: date | None = None,
+        date_coverage_end: date | None = None,
+        checksum: str | None = None,
+        created_at: datetime | None = None,
     ) -> str:
         session = self.session_factory()
         try:
@@ -31,7 +36,7 @@ class DatasetVersionCommandService:
                 dataset_version = DatasetVersions(
                     dataset_version_id=dataset_version_id,
                     dataset_name=dataset_name,
-                    created_at=datetime.now(UTC),
+                    created_at=created_at or datetime.now(UTC),
                     source=source,
                     price_basis=price_basis,
                     interval=interval,
@@ -39,6 +44,10 @@ class DatasetVersionCommandService:
                     validation_status=validation_status,
                     source_manifest=source_manifest,
                     metadata_json=metadata_json,
+                    symbol_coverage=symbol_coverage,
+                    date_coverage_start=date_coverage_start,
+                    date_coverage_end=date_coverage_end,
+                    checksum=checksum,
                 )
 
                 uow.dataset_versions.insert(dataset_version)

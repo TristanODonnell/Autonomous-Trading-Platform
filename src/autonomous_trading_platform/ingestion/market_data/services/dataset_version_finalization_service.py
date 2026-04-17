@@ -29,8 +29,38 @@ class DatasetVersionFinalizationService:
 
             if not checkpoints or not all_completed:
                 dataset_version.validation_status = "incomplete"
+
+                failed_checkpoints = [
+                    checkpoint
+                    for checkpoint in checkpoints
+                    if checkpoint.checkpoint_status != CheckpointStatus.COMPLETED
+                ]
+                failure_reasons = [
+                    {
+                        "symbol": cp.symbol,
+                        "date": cp.checkpoint_date.isoformat(),
+                        "status": cp.checkpoint_status.value,
+                        "error": cp.error_message,
+                    }
+                    for cp in failed_checkpoints
+                ]
+                dataset_version.metadata_json = {
+                    **(dataset_version.metadata_json or {}),
+                    "validation": {
+                        "status": dataset_version.validation_status,
+                        "failed_checkpoints": failure_reasons,
+                    },
+                }
             else:
                 dataset_version.validation_status = "validated"
+
+                dataset_version.metadata_json = {
+                    **(dataset_version.metadata_json or {}),
+                    "validation": {
+                        "status": dataset_version.validation_status,
+                        "failed_checkpoints": [],
+                    },
+                }
 
             uow.dataset_versions.upsert(dataset_version)
             return str(dataset_version.validation_status)

@@ -32,6 +32,11 @@ def create_dataset_version(payload: CreateDatasetVersionRequest) -> MetadataActi
         validation_status=payload.validation_status,
         source_manifest=payload.source_manifest,
         metadata_json=payload.metadata_json,
+        symbol_coverage=payload.symbol_coverage,
+        date_coverage_start=payload.date_coverage_start,
+        date_coverage_end=payload.date_coverage_end,
+        checksum=payload.checksum,
+        created_at=payload.created_at,
     )
     return MetadataActionResponse(message=f"Dataset version created: {dataset_version_id}")
 
