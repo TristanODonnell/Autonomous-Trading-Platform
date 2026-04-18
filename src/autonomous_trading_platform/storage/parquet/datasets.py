@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pyarrow as pa
 
-from .schemas import BAR_SCHEMA, CORPORATE_ACTION_SCHEMA
+from .schemas import BAR_SCHEMA, CORPORATE_ACTION_SCHEMA, FEATURE_RETURNS_SCHEMA
 
 
 @dataclass(frozen=True)
@@ -40,10 +40,9 @@ CORPORATE_ACTIONS_DATASET = ParquetDataset(
     partition_cols=("symbol", "year", "month"),
 )
 
-# placeholders for later stories
 FEATURE_RETURNS_DATASET = ParquetDataset(
     dataset_key="feature_returns",
-    schema=pa.schema([]),  # placeholder for now
+    schema=FEATURE_RETURNS_SCHEMA,
     schema_version="1.0.0",
     root_parts=("features", "returns"),
     partition_cols=("symbol", "year", "month"),

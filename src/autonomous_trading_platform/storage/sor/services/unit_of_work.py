@@ -20,6 +20,9 @@ from autonomous_trading_platform.storage.sor.repositories.corporate_action_repos
 from autonomous_trading_platform.storage.sor.repositories.dataset_versions_repository import (
     DatasetVersionsRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.feature_dataset_versions_repository import (
+    FeatureDatasetVersionsRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.fill_repository import FillRepository
 from autonomous_trading_platform.storage.sor.repositories.ingestion_checkpoints_repository import (
     IngestionCheckpointsRepository,
@@ -89,6 +92,7 @@ class SorUnitOfWork:
         self.ingestion_runs = IngestionRunsRepository(session)
         self.checksums = ChecksumsRepository(session)
         self.ingestion_checkpoints = IngestionCheckpointsRepository(session)
+        self.feature_dataset_versions = FeatureDatasetVersionsRepository(session)
 
     def __enter__(self) -> "SorUnitOfWork":
         self._started_transaction = False

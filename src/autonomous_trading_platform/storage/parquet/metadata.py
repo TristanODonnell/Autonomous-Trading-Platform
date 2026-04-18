@@ -16,6 +16,34 @@ REQUIRED_METADATA_KEYS = (
 )
 
 
+def build_feature_metadata(
+    *,
+    dataset: ParquetDataset,
+    dataset_version: str,
+    creation_timestamp: str,
+    checksum: str,
+    feature_name: str,
+    underlying_dataset_version: str,
+    underlying_price_basis: str,
+) -> dict[str, str]:
+    metadata = build_metadata(
+        dataset=dataset,
+        dataset_version=dataset_version,
+        ingestion_timestamp=creation_timestamp,
+        checksum=checksum,
+    )
+
+    metadata.update(
+        {
+            "feature_name": feature_name,
+            "underlying_dataset_version": underlying_dataset_version,
+            "underlying_price_basis": underlying_price_basis,
+        }
+    )
+
+    return metadata
+
+
 def build_dataset_artifact_metadata(
     *,
     dataset: ParquetDataset,

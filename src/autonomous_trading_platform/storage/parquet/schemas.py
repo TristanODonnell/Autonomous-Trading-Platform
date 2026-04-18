@@ -52,3 +52,18 @@ CORPORATE_ACTION_SCHEMA = pa.schema(
         pa.field("month", pa.string(), nullable=False),
     ]
 )
+
+FEATURE_RETURNS_SCHEMA = pa.schema(
+    [
+        pa.field("symbol", pa.string(), nullable=False),
+        pa.field("timestamp", UTC_TIMESTAMP, nullable=False),
+        pa.field("date", pa.date32(), nullable=False),
+        pa.field("ret_1d", pa.float64(), nullable=True),
+        pa.field("ret_5d", pa.float64(), nullable=True),
+        pa.field("ret_20d", pa.float64(), nullable=True),
+        pa.field("underlying_dataset_version", pa.string(), nullable=False),
+        pa.field("price_basis", pa.string(), nullable=False),
+        pa.field("year", pa.string(), nullable=False),
+        pa.field("month", pa.string(), nullable=False),
+    ]
+)
