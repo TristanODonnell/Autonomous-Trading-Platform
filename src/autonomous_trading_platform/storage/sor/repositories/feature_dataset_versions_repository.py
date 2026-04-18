@@ -1,0 +1,145 @@
+from typing import cast
+
+from sqlalchemy import select
+
+from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.contracts.runtime.feature_dataset_version import (
+    FeatureDatasetVersion,
+)
+from autonomous_trading_platform.storage.sor.models.feature_dataset_versions import (
+    FeatureDatasetVersions,
+)
+from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
+
+
+class FeatureDatasetVersionsRepository(BaseRepository):
+    def get_by_dataset_version_id(
+        self,
+        dataset_version_id: str,
+    ) -> FeatureDatasetVersions | None:
+        stmt = select(FeatureDatasetVersions).where(
+            FeatureDatasetVersions.dataset_version_id == dataset_version_id
+        )
+        return cast(
+            FeatureDatasetVersions | None,
+            self.session.scalars(stmt).one_or_none(),
+        )
+
+    def insert(self, row: FeatureDatasetVersions) -> None:
+        self.session.add(row)
+
+    def insert_many(self, rows: list[FeatureDatasetVersions]) -> None:
+        self.session.add_all(rows)
+
+    def upsert(self, row: FeatureDatasetVersions) -> FeatureDatasetVersions:
+        existing = self.get_by_dataset_version_id(row.dataset_version_id)
+
+        if existing is None:
+            self.session.add(row)
+            return row
+
+        for column in FeatureDatasetVersions.__table__.columns:
+            setattr(existing, column.name, getattr(row, column.name))
+
+        return existing
+
+    def delete_by_dataset_version_id(self, dataset_version_id: str) -> None:
+        obj = self.get_by_dataset_version_id(dataset_version_id)
+        if obj is not None:
+            self.session.delete(obj)
+
+    def to_row(self, contract: FeatureDatasetVersion) -> FeatureDatasetVersions:
+        return FeatureDatasetVersions(
+            dataset_version_id=contract.dataset_version_id,
+            feature_name=contract.feature_name,
+            dataset_name=contract.dataset_name,
+            created_at=contract.created_at,
+            schema_version=contract.schema_version,
+            underlying_dataset_version=contract.underlying_dataset_version,
+            underlying_price_basis=contract.underlying_price_basis,
+            computation_parameters=contract.computation_parameters,
+            storage_path=contract.storage_path,
+            symbol_coverage=contract.symbol_coverage,
+            date_coverage_start=contract.date_coverage_start,
+            date_coverage_end=contract.date_coverage_end,
+            validation_status=contract.validation_status,
+            checksum=contract.checksum,
+            source_manifest=contract.source_manifest,
+            metadata_json=contract.metadata_json,
+        )
+
+    def to_contract(self, row: FeatureDatasetVersions) -> FeatureDatasetVersion:
+        return FeatureDatasetVersion(
+            dataset_version_id=row.dataset_version_id,
+            feature_name=row.feature_name,
+            dataset_name=row.dataset_name,
+            created_at=row.created_at,
+            schema_version=row.schema_version,
+            underlying_dataset_version=row.underlying_dataset_version,
+            underlying_price_basis=row.underlying_price_basis,
+            computation_parameters=row.computation_parameters,
+            storage_path=row.storage_path,
+            symbol_coverage=row.symbol_coverage,
+            date_coverage_start=row.date_coverage_start,
+            date_coverage_end=row.date_coverage_end,
+            validation_status=row.validation_status,
+            checksum=row.checksum,
+            source_manifest=row.source_manifest,
+            metadata_json=row.metadata_json,
+        )
+
+    def get_latest_validated(
+        self,
+        *,
+        feature_name: str,
+        underlying_price_basis: PriceBasis,
+    ) -> FeatureDatasetVersions | None:
+        stmt = (
+            select(FeatureDatasetVersions)
+            .where(
+                FeatureDatasetVersions.feature_name == feature_name,
+                FeatureDatasetVersions.underlying_price_basis == underlying_price_basis,
+                FeatureDatasetVersions.validation_status == "validated",
+            )
+            .order_by(FeatureDatasetVersions.created_at.desc())
+        )
+        return cast(
+            FeatureDatasetVersions | None,
+            self.session.scalars(stmt).first(),
+        )
+
+    def list_validated_by_feature_name(
+        self,
+        *,
+        feature_name: str,
+    ) -> list[FeatureDatasetVersions]:
+        stmt = (
+            select(FeatureDatasetVersions)
+            .where(
+                FeatureDatasetVersions.feature_name == feature_name,
+                FeatureDatasetVersions.validation_status == "validated",
+            )
+            .order_by(FeatureDatasetVersions.created_at.desc())
+        )
+        return list(self.session.scalars(stmt).all())
+
+    def list_validated_by_coverage_and_price_basis(
+        self,
+        *,
+        feature_name: str,
+        underlying_price_basis: PriceBasis,
+        start_date,
+        end_date,
+    ) -> list[FeatureDatasetVersions]:
+        stmt = (
+            select(FeatureDatasetVersions)
+            .where(
+                FeatureDatasetVersions.feature_name == feature_name,
+                FeatureDatasetVersions.underlying_price_basis == underlying_price_basis,
+                FeatureDatasetVersions.validation_status == "validated",
+                FeatureDatasetVersions.date_coverage_start <= start_date,
+                FeatureDatasetVersions.date_coverage_end >= end_date,
+            )
+            .order_by(FeatureDatasetVersions.created_at.desc())
+        )
+        return list(self.session.scalars(stmt).all())
