@@ -5,8 +5,12 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.dataset as ds
 
+from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.storage.parquet.datasets import FEATURE_RETURNS_DATASET
-from autonomous_trading_platform.storage.parquet.metadata import attach_metadata, build_metadata
+from autonomous_trading_platform.storage.parquet.metadata import (
+    attach_metadata,
+    build_feature_metadata,
+)
 
 
 class ParquetFeatureRepository:
@@ -20,19 +24,25 @@ class ParquetFeatureRepository:
         table: pa.Table,
         creation_timestamp: str,
         checksum: str,
+        feature_name: str,
+        underlying_dataset_version: str,
+        underlying_price_basis: PriceBasis,
     ) -> None:
         self._validate_table(table)
 
-        metadata = build_metadata(
+        feature_metadata = build_feature_metadata(
             dataset=FEATURE_RETURNS_DATASET,
             dataset_version=dataset_version,
-            ingestion_timestamp=creation_timestamp,
+            creation_timestamp=creation_timestamp,
             checksum=checksum,
+            feature_name=feature_name,
+            underlying_dataset_version=underlying_dataset_version,
+            underlying_price_basis=underlying_price_basis.value,
         )
 
         schema_with_metadata = attach_metadata(
             FEATURE_RETURNS_DATASET.schema,
-            metadata,
+            feature_metadata,
         )
 
         table = table.cast(FEATURE_RETURNS_DATASET.schema)
