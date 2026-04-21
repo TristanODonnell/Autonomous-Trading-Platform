@@ -628,3 +628,33 @@ actions_per_symbol = meter.create_histogram(
     description="Number of corporate actions processed per symbol",
     unit="1",
 )
+
+# =========================
+# FEATURE PIPELINE CYCLE METRICS
+# =========================
+
+feature_pipeline_cycle_duration = meter.create_histogram(
+    name="ratp_feature_pipeline_cycle_duration_seconds",
+    description="Feature pipeline cycle execution duration",
+    unit="s",
+)
+feature_pipeline_cycle_failures = meter.create_counter(
+    name="ratp_feature_pipeline_cycle_failures_total",
+    description="Total number of Feature pipeline cycle failures",
+    unit="1",
+)
+feature_pipeline_cycle_runs = meter.create_counter(
+    name="ratp_feature_pipeline_cycle_runs_total",
+    description="Total number of Feature pipeline cycle executions",
+    unit="1",
+)
+feature_pipeline_cycle_step_duration = meter.create_histogram(
+    name="ratp_feature_pipeline_cycle_step_duration_seconds",
+    description="Feature pipeline cycle step execution duration",
+    unit="s",
+)
+feature_pipeline_cycle_step_runs = meter.create_counter(
+    name="ratp_feature_pipeline_cycle_step_runs_total",
+    description="Total number of Feature pipeline step executions",
+    unit="1",
+)
