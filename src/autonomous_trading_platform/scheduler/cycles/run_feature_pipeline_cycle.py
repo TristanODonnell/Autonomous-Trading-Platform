@@ -1,0 +1,408 @@
+from __future__ import annotations
+
+import platform
+import uuid
+from collections.abc import Callable
+from datetime import UTC, date, datetime
+from decimal import Decimal
+from time import perf_counter
+
+from sqlalchemy.orm import Session
+
+from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
+from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
+from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.feature_engineering.jobs.liquidity_feature_job import (
+    LiquidityFeatureJob,
+)
+from autonomous_trading_platform.feature_engineering.jobs.moving_average_feature_job import (
+    MovingAverageFeatureJob,
+)
+from autonomous_trading_platform.feature_engineering.jobs.regime_feature_job import (
+    RegimeFeatureJob,
+)
+from autonomous_trading_platform.feature_engineering.jobs.returns_feature_job import (
+    ReturnsFeatureJob,
+)
+from autonomous_trading_platform.feature_engineering.jobs.volatility_feature_job import (
+    VolatilityFeatureJob,
+)
+from autonomous_trading_platform.feature_engineering.services.feature_dataset_resolver_service import (
+    FeatureDatasetResolverService,
+)
+from autonomous_trading_platform.feature_engineering.services.feature_dataset_writer_service import (
+    FeatureDatasetWriterService,
+)
+from autonomous_trading_platform.feature_engineering.services.feature_pipeline_guard_service import (
+    FeaturePipelineGuardService,
+)
+from autonomous_trading_platform.feature_engineering.services.feature_validation_service import (
+    FeatureValidationService,
+)
+from autonomous_trading_platform.feature_engineering.services.liquidity_feature_service import (
+    LiquidityFeatureService,
+)
+from autonomous_trading_platform.feature_engineering.services.moving_average_feature_service import (
+    MovingAverageFeatureService,
+)
+from autonomous_trading_platform.feature_engineering.services.regime_feature_service import (
+    RegimeFeatureService,
+)
+from autonomous_trading_platform.feature_engineering.services.returns_feature_service import (
+    ReturnsFeatureService,
+)
+from autonomous_trading_platform.feature_engineering.services.volatility_feature_service import (
+    VolatilityFeatureService,
+)
+from autonomous_trading_platform.observability.enums import SpanTimespan
+from autonomous_trading_platform.observability.lifecycle import (
+    CycleMetricSet,
+    StepMetricSet,
+    record_cycle_completed,
+    record_cycle_failed,
+    record_cycle_started,
+    record_step_completed,
+    record_step_failed,
+    record_step_started,
+)
+from autonomous_trading_platform.observability.logging import get_logger
+from autonomous_trading_platform.observability.metrics import (
+    feature_pipeline_cycle_duration,
+    feature_pipeline_cycle_failures,
+    feature_pipeline_cycle_runs,
+    feature_pipeline_cycle_step_duration,
+    feature_pipeline_cycle_step_runs,
+)
+from autonomous_trading_platform.observability.telemetry import setup_telemetry
+from autonomous_trading_platform.observability.tracing import start_span
+from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
+from autonomous_trading_platform.runtime.services.dataset_registration_service import (
+    DatasetRegistrationService,
+)
+from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
+from autonomous_trading_platform.storage.parquet.repositories.parquet_bar_repository import (
+    ParquetBarRepository,
+)
+from autonomous_trading_platform.storage.parquet.repositories.parquet_feature_repository import (
+    ParquetFeatureRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.feature_dataset_versions_repository import (
+    FeatureDatasetVersionsRepository,
+)
+
+logger = get_logger(__name__)
+
+FEATURE_PIPELINE_CYCLE_METRICS = CycleMetricSet(
+    runs=feature_pipeline_cycle_runs,
+    failures=feature_pipeline_cycle_failures,
+    duration=feature_pipeline_cycle_duration,
+)
+
+FEATURE_PIPELINE_STEP_METRICS = StepMetricSet(
+    runs=feature_pipeline_cycle_step_runs,
+    duration=feature_pipeline_cycle_step_duration,
+)
+
+
+def run_feature_pipeline_cycle(
+    *,
+    price_basis: PriceBasis = PriceBasis.RAW,
+    dataset_version_id: str | None = None,
+    symbols: list[str] | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    include_returns: bool = True,
+    include_volatility: bool = True,
+    include_moving_average: bool = True,
+    include_liquidity: bool = True,
+    include_regime: bool = True,
+) -> None:
+    now_utc = datetime.now(UTC)
+    cycle_wall_start = perf_counter()
+
+    session: Session = get_session()
+    audit_logger = AuditLoggingService(session=session)
+    manifest_service = RunManifestService(session=session)
+    dataset_registration_service = DatasetRegistrationService(session=session)
+
+    run_id = uuid.uuid4()
+    component = "scheduler.run_feature_pipeline_cycle"
+    base_metadata: dict[str, object] = {}
+
+    record_cycle_started(
+        logger=logger,
+        metrics=FEATURE_PIPELINE_CYCLE_METRICS,
+        component=component,
+        run_id=str(run_id),
+    )
+
+    try:
+        manifest = RunManifest(
+            run_id=run_id,
+            run_type=RunType.BACKTEST,
+            created_at=now_utc,
+            environment="local",
+            broker="alpaca",
+            broker_account_id="paper",
+            strategy_id="feature_pipeline",
+            strategy_version="v1",
+            strategy_config={},
+            capital_bucket=Decimal("10000.00"),
+            interval=BarInterval.ONE_DAY,
+            start_date=start_date or now_utc.date(),
+            end_date=end_date or now_utc.date(),
+            dataset_version=dataset_version_id or "latest_validated",
+            universe_version="v1",
+            git_commit="dev",
+            python_version=platform.python_version(),
+            notes="Feature engineering pipeline cycle",
+        )
+        manifest_service.save(manifest)
+
+        base_metadata = {
+            "price_basis": price_basis.value,
+            "dataset_version_id": dataset_version_id,
+            "symbols": symbols,
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+            "include_returns": include_returns,
+            "include_volatility": include_volatility,
+            "include_moving_average": include_moving_average,
+            "include_liquidity": include_liquidity,
+            "include_regime": include_regime,
+        }
+
+        # Shared infrastructure
+        parquet_bar_repository = ParquetBarRepository()
+        feature_parquet_repository = ParquetFeatureRepository()
+        feature_dataset_repository = FeatureDatasetVersionsRepository(session=session)
+
+        resolver_service = FeatureDatasetResolverService(
+            dataset_registration_service=dataset_registration_service,
+            parquet_reader=parquet_bar_repository,
+        )
+        writer_service = FeatureDatasetWriterService(
+            feature_dataset_repository=feature_dataset_repository,
+            parquet_writer=feature_parquet_repository,
+        )
+        guard_service = FeaturePipelineGuardService(
+            feature_dataset_repository=feature_dataset_repository,
+        )
+        validation_service = FeatureValidationService()
+
+        # Compute services
+        returns_service = ReturnsFeatureService()
+        volatility_service = VolatilityFeatureService()
+        moving_average_service = MovingAverageFeatureService()
+        liquidity_service = LiquidityFeatureService()
+        regime_service = RegimeFeatureService()
+
+        # Jobs
+        returns_job = ReturnsFeatureJob(
+            resolver_service=resolver_service,
+            writer_service=writer_service,
+            guard_service=guard_service,
+            validation_service=validation_service,
+            returns_service=returns_service,
+        )
+        volatility_job = VolatilityFeatureJob(
+            resolver_service=resolver_service,
+            writer_service=writer_service,
+            guard_service=guard_service,
+            validation_service=validation_service,
+            returns_service=returns_service,
+            volatility_service=volatility_service,
+        )
+        moving_average_job = MovingAverageFeatureJob(
+            resolver_service=resolver_service,
+            writer_service=writer_service,
+            guard_service=guard_service,
+            validation_service=validation_service,
+            moving_average_service=moving_average_service,
+        )
+        liquidity_job = LiquidityFeatureJob(
+            resolver_service=resolver_service,
+            writer_service=writer_service,
+            guard_service=guard_service,
+            validation_service=validation_service,
+            liquidity_service=liquidity_service,
+        )
+        regime_job = RegimeFeatureJob(
+            resolver_service=resolver_service,
+            writer_service=writer_service,
+            guard_service=guard_service,
+            validation_service=validation_service,
+            regime_service=regime_service,
+        )
+
+        with start_span("feature_pipeline_cycle.run", timespan=SpanTimespan.CYCLE) as cycle_span:
+            cycle_span.set_attribute("ratp.run_id", str(run_id))
+            cycle_span.set_attribute("ratp.component", component)
+            cycle_span.set_attribute("ratp.price_basis", price_basis.value)
+
+            audit_logger.record_run_started(
+                run_id=str(run_id),
+                component=component,
+                metadata=base_metadata,
+            )
+
+            def run_step(step: str, fn: Callable[[], object]) -> object:
+                record_step_started(
+                    logger=logger,
+                    metrics=FEATURE_PIPELINE_STEP_METRICS,
+                    step=step,
+                    component=component,
+                    run_id=str(run_id),
+                )
+
+                step_start = perf_counter()
+                try:
+                    with start_span(
+                        f"feature_pipeline_cycle.{step}",
+                        timespan=SpanTimespan.STEP,
+                    ) as step_span:
+                        step_span.set_attribute("ratp.run_id", str(run_id))
+                        step_span.set_attribute("ratp.step", step)
+                        result = fn()
+
+                    step_duration = perf_counter() - step_start
+                    record_step_completed(
+                        logger=logger,
+                        metrics=FEATURE_PIPELINE_STEP_METRICS,
+                        step=step,
+                        component=component,
+                        run_id=str(run_id),
+                        duration_seconds=step_duration,
+                    )
+                    return result
+                except Exception as exc:
+                    step_duration = perf_counter() - step_start
+                    record_step_failed(
+                        logger=logger,
+                        metrics=FEATURE_PIPELINE_STEP_METRICS,
+                        step=step,
+                        component=component,
+                        run_id=str(run_id),
+                        exc=exc,
+                        duration_seconds=step_duration,
+                    )
+                    raise
+
+            if include_returns:
+                run_step(
+                    "returns_feature",
+                    lambda: returns_job.run(
+                        price_basis=price_basis,
+                        dataset_version_id=dataset_version_id,
+                        symbols=symbols,
+                        start_date=start_date,
+                        end_date=end_date,
+                    ),
+                )
+
+            if include_volatility:
+                run_step(
+                    "volatility_feature",
+                    lambda: volatility_job.run(
+                        price_basis=price_basis,
+                        dataset_version_id=dataset_version_id,
+                        symbols=symbols,
+                        start_date=start_date,
+                        end_date=end_date,
+                        window=20,
+                    ),
+                )
+
+            if include_moving_average:
+                run_step(
+                    "moving_average_feature_short",
+                    lambda: moving_average_job.run(
+                        price_basis=price_basis,
+                        dataset_version_id=dataset_version_id,
+                        symbols=symbols,
+                        start_date=start_date,
+                        end_date=end_date,
+                        window=20,
+                    ),
+                )
+
+                run_step(
+                    "moving_average_feature_long",
+                    lambda: moving_average_job.run(
+                        price_basis=price_basis,
+                        dataset_version_id=dataset_version_id,
+                        symbols=symbols,
+                        start_date=start_date,
+                        end_date=end_date,
+                        window=50,
+                    ),
+                )
+
+            if include_liquidity:
+                run_step(
+                    "liquidity_feature",
+                    lambda: liquidity_job.run(
+                        price_basis=price_basis,
+                        dataset_version_id=dataset_version_id,
+                        symbols=symbols,
+                        start_date=start_date,
+                        end_date=end_date,
+                        avg_volume_window=20,
+                    ),
+                )
+
+            if include_regime:
+                run_step(
+                    "regime_feature",
+                    lambda: regime_job.run(
+                        price_basis=price_basis,
+                        dataset_version_id=dataset_version_id,
+                        symbols=symbols,
+                        start_date=start_date,
+                        end_date=end_date,
+                        short_window=50,
+                        long_window=200,
+                    ),
+                )
+
+            audit_logger.record_run_completed(
+                run_id=str(run_id),
+                component=component,
+                metadata=base_metadata,
+            )
+
+            total_duration = perf_counter() - cycle_wall_start
+            record_cycle_completed(
+                logger=logger,
+                metrics=FEATURE_PIPELINE_CYCLE_METRICS,
+                component=component,
+                run_id=str(run_id),
+                duration_seconds=total_duration,
+            )
+
+    except Exception as exc:
+        total_duration = perf_counter() - cycle_wall_start
+        audit_logger.record_run_failed(
+            run_id=str(run_id),
+            component=component,
+            metadata={
+                **base_metadata,
+                "error": str(exc),
+            },
+        )
+        record_cycle_failed(
+            logger=logger,
+            metrics=FEATURE_PIPELINE_CYCLE_METRICS,
+            component=component,
+            run_id=str(run_id),
+            exc=exc,
+            duration_seconds=total_duration,
+        )
+        raise
+    finally:
+        session.close()
+
+
+if __name__ == "__main__":
+    setup_telemetry("scheduler-feature-pipeline-cycle")
+    run_feature_pipeline_cycle()
