@@ -26,7 +26,7 @@ class FeatureDatasetVersions(Base):
     created_at: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
     schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
 
-    underlying_dataset_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_dataset_version: Mapped[str] = mapped_column(String(64), nullable=False)
     underlying_price_basis: Mapped[PriceBasis] = mapped_column(
         SAEnum(PriceBasis, name="price_basis_enum"),
         nullable=False,
@@ -45,3 +45,5 @@ class FeatureDatasetVersions(Base):
 
     source_manifest: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+
+    computation_code_version: Mapped[str] = mapped_column(String(512), nullable=False)

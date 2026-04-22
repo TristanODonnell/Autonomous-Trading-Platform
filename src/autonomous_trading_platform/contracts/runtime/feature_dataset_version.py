@@ -15,7 +15,7 @@ class FeatureDatasetVersion:
     dataset_name: str
     created_at: UTCDateTime
     schema_version: str
-    underlying_dataset_version: str
+    source_dataset_version: str
     underlying_price_basis: PriceBasis
     computation_parameters: dict[str, Any] | None
     storage_path: str
@@ -26,3 +26,4 @@ class FeatureDatasetVersion:
     checksum: str | None
     source_manifest: dict[str, Any] | None
     metadata_json: dict[str, Any] | None
+    computation_code_version: str
