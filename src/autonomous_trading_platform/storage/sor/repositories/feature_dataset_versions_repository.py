@@ -55,9 +55,10 @@ class FeatureDatasetVersionsRepository(BaseRepository):
             dataset_name=contract.dataset_name,
             created_at=contract.created_at,
             schema_version=contract.schema_version,
-            underlying_dataset_version=contract.underlying_dataset_version,
+            source_dataset_version=contract.source_dataset_version,
             underlying_price_basis=contract.underlying_price_basis,
             computation_parameters=contract.computation_parameters,
+            computation_code_version=contract.computation_code_version,
             storage_path=contract.storage_path,
             symbol_coverage=contract.symbol_coverage,
             date_coverage_start=contract.date_coverage_start,
@@ -75,9 +76,10 @@ class FeatureDatasetVersionsRepository(BaseRepository):
             dataset_name=row.dataset_name,
             created_at=row.created_at,
             schema_version=row.schema_version,
-            underlying_dataset_version=row.underlying_dataset_version,
+            source_dataset_version=cast(str, row.source_dataset_version),
             underlying_price_basis=row.underlying_price_basis,
             computation_parameters=row.computation_parameters,
+            computation_code_version=row.computation_code_version,
             storage_path=row.storage_path,
             symbol_coverage=row.symbol_coverage,
             date_coverage_start=row.date_coverage_start,
@@ -139,6 +141,43 @@ class FeatureDatasetVersionsRepository(BaseRepository):
                 FeatureDatasetVersions.validation_status == "validated",
                 FeatureDatasetVersions.date_coverage_start <= start_date,
                 FeatureDatasetVersions.date_coverage_end >= end_date,
+            )
+            .order_by(FeatureDatasetVersions.created_at.desc())
+        )
+        return list(self.session.scalars(stmt).all())
+
+    def get_source_dataset_version_by_feature_dataset_version_id(
+        self,
+        *,
+        feature_dataset_version_id: str,
+    ) -> str | None:
+        row = self.get_by_dataset_version_id(feature_dataset_version_id)
+        if row is None:
+            return None
+        return cast(str, row.source_dataset_version)
+
+    def list_by_source_dataset_version(
+        self,
+        *,
+        source_dataset_version: str,
+    ) -> list[FeatureDatasetVersions]:
+        stmt = (
+            select(FeatureDatasetVersions)
+            .where(FeatureDatasetVersions.source_dataset_version == source_dataset_version)
+            .order_by(FeatureDatasetVersions.created_at.desc())
+        )
+        return list(self.session.scalars(stmt).all())
+
+    def list_validated_by_source_dataset_version(
+        self,
+        *,
+        source_dataset_version: str,
+    ) -> list[FeatureDatasetVersions]:
+        stmt = (
+            select(FeatureDatasetVersions)
+            .where(
+                FeatureDatasetVersions.source_dataset_version == source_dataset_version,
+                FeatureDatasetVersions.validation_status == "validated",
             )
             .order_by(FeatureDatasetVersions.created_at.desc())
         )
