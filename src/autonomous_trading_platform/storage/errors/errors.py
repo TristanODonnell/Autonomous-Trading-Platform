@@ -1,0 +1,2 @@
+class DatasetCorruptionError(RuntimeError):
+    pass

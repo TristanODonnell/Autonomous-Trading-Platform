@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from autonomous_trading_platform.contracts.common.enums import CheckpointStatus
+from autonomous_trading_platform.storage.parquet.compute_checksum import compute_file_checksum
 from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.paths import dataset_version_root
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
@@ -69,8 +70,18 @@ class DatasetVersionFinalizationService:
 
             artifact_metadata = self._read_artifact_metadata(dataset_version_id)
 
+            files = self._list_dataset_files(dataset_version_id)
+
+            self._persist_file_checksums(
+                uow,
+                dataset_version_id=dataset_version_id,
+                files=files,
+            )
+
+            aggregate_checksum = self._compute_aggregate_checksum(files)
+
             dataset_version.validation_status = "validated"
-            dataset_version.checksum = str(artifact_metadata["checksum"])
+            dataset_version.checksum = aggregate_checksum
 
             dataset_version.metadata_json = {
                 **(dataset_version.metadata_json or {}),
@@ -102,3 +113,59 @@ class DatasetVersionFinalizationService:
 
         raw_data = json.loads(metadata_path.read_text(encoding="utf-8"))
         return cast(dict[str, Any], raw_data)
+
+    def _list_dataset_files(
+        self,
+        dataset_version_id: str,
+    ) -> list[Path]:
+        root = dataset_version_root(
+            self.base_path,
+            RAW_BARS_DATASET,
+            dataset_version_id,
+        )
+
+        if not root.exists():
+            raise FileNotFoundError(f"Dataset root not found: {root}")
+
+        files = sorted(path for path in root.rglob("*.parquet") if path.is_file())
+
+        if not files:
+            raise FileNotFoundError(f"No parquet files found under dataset root: {root}")
+
+        return files
+
+    def _compute_aggregate_checksum(
+        self,
+        files: list[Path],
+    ) -> str:
+        import hashlib
+
+        hasher = hashlib.sha256()
+
+        for path in files:
+            file_checksum = compute_file_checksum(path)
+            hasher.update(str(path).encode("utf-8"))
+            hasher.update(b"|")
+            hasher.update(file_checksum.encode("utf-8"))
+            hasher.update(b"\n")
+
+        return hasher.hexdigest()
+
+    def _persist_file_checksums(
+        self,
+        uow,
+        *,
+        dataset_version_id: str,
+        files: list[Path],
+    ) -> None:
+        for path in files:
+            checksum_value = compute_file_checksum(path)
+
+            checksum_row = uow.checksums.build_row(
+                dataset_version=dataset_version_id,
+                object_type="parquet_file",
+                object_path=str(path),
+                checksum_algorithm="sha256",
+                checksum_value=checksum_value,
+            )
+            uow.checksums.upsert(checksum_row)
