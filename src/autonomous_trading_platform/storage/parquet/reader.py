@@ -6,6 +6,11 @@ from pathlib import Path
 import duckdb
 import pyarrow as pa
 import pyarrow.dataset as ds
+from sqlalchemy.orm import Session
+
+from autonomous_trading_platform.storage.errors.errors import DatasetCorruptionError
+from autonomous_trading_platform.storage.parquet.compute_checksum import compute_file_checksum
+from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 from .datasets import ParquetDataset
 from .metadata import extract_metadata, validate_required_metadata
@@ -101,7 +106,8 @@ def list_partition_files(
 
 
 class HistoricalBarDatasetReader:
-    def __init__(self, *, base_path: str | Path = "data") -> None:
+    def __init__(self, session: Session, *, base_path: str | Path = "data") -> None:
+        self.session = session
         self.base_path = Path(base_path)
 
     def read_with_pyarrow(
@@ -221,3 +227,21 @@ class HistoricalBarDatasetReader:
         start_ts = datetime.combine(start_date, time.min, tzinfo=UTC)
         end_ts = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=UTC)
         return start_ts, end_ts
+
+    def _verify_file_checksums(self, *, dataset_version: str, files: list[Path]) -> None:
+        with SorUnitOfWork(self.session) as uow:
+            for path in files:
+                checksum_row = uow.checksums.get_by_dataset_version_and_object_path(
+                    dataset_version=dataset_version,
+                    object_path=str(path),
+                )
+                if checksum_row is None:
+                    raise DatasetCorruptionError(
+                        f"Missing checksum record for dataset_version={dataset_version}, file={path}"
+                    )
+
+                actual = compute_file_checksum(path)
+                if actual != checksum_row.checksum_value:
+                    raise DatasetCorruptionError(
+                        f"Checksum mismatch for {path}: expected {checksum_row.checksum_value}, got {actual}"
+                    )

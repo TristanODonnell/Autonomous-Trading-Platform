@@ -3,14 +3,16 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+import pyarrow.parquet as pq
+
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.mappers import bars_to_arrow
-from autonomous_trading_platform.storage.parquet.writer import write_table
+from autonomous_trading_platform.storage.parquet.paths import partition_file_path
 
 
 class BarChunkWriterService:
-    def __init__(self, base_path: str = "data"):
+    def __init__(self, base_path: str = "data") -> None:
         self.base_path = Path(base_path)
 
     def write_backfill_chunk(
@@ -26,32 +28,23 @@ class BarChunkWriterService:
 
         table = bars_to_arrow(bars)
 
-        # determine partition path
-        year = bar_date.year
-        month = bar_date.month
-
-        partition_path = (
-            self.base_path
-            / "bars"
-            / "raw"
-            / f"dataset_version={dataset_version}"
-            / f"symbol={symbol}"
-            / f"year={year}"
-            / f"month={month}"
-        )
-
-        self._replace_partition(partition_path)
-
-        write_table(
-            table=table,
+        output_path = partition_file_path(
+            base_path=self.base_path,
             dataset=RAW_BARS_DATASET,
-            base_path=str(self.base_path),
             dataset_version=dataset_version,
+            partitions={
+                "symbol": symbol,
+                "year": f"{bar_date.year:04d}",
+                "month": f"{bar_date.month:02d}",
+            },
         )
 
-    def _replace_partition(self, partition_path: Path) -> None:
-        if not partition_path.exists():
-            return
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        for file in partition_path.glob("*.parquet"):
-            file.unlink()
+        if output_path.exists():
+            output_path.unlink()
+
+        pq.write_table(
+            table,
+            output_path,
+        )

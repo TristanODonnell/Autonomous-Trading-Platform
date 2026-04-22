@@ -33,3 +33,15 @@ class ChecksumsRepository(BaseRepository):
         obj = self.get_by_checksum_id(checksum_id)
         if obj is not None:
             self.session.delete(obj)
+
+    def get_by_dataset_version_and_object_path(
+        self,
+        *,
+        dataset_version: str,
+        object_path: str,
+    ) -> Checksums | None:
+        stmt = select(Checksums).where(
+            Checksums.dataset_version == dataset_version,
+            Checksums.object_path == object_path,
+        )
+        return cast(Checksums | None, self.session.scalars(stmt).one_or_none())
