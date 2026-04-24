@@ -4,6 +4,8 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
+from sqlalchemy.orm import Session
+
 from autonomous_trading_platform.contracts.common.enums import (
     BarInterval,
     BarQualityFlag,
@@ -11,14 +13,16 @@ from autonomous_trading_platform.contracts.common.enums import (
     PriceBasis,
 )
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
+from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.reader import HistoricalBarDatasetReader
 
 
 class ParquetBarRepository:
     def __init__(self, *, base_path: str = "data") -> None:
+        session: Session = get_session()
         self.base_path = Path(base_path)
-        self.reader = HistoricalBarDatasetReader(base_path=self.base_path)
+        self.reader = HistoricalBarDatasetReader(base_path=self.base_path, session=session)
 
     def get_raw_bars_before_date(
         self,

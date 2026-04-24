@@ -287,11 +287,25 @@ class MarketBackfillService:
                 chunk_completed_bars=chunk_completed_bars,
             )
 
-            checkpoint.checkpoint_status = CheckpointStatus.COMPLETED
-            checkpoint.updated_at = datetime.now(UTC)
-
             with SorUnitOfWork(self.session) as uow:
-                uow.ingestion_checkpoints.upsert(checkpoint)
+                completed_checkpoint = uow.ingestion_checkpoints.get_backfill_checkpoint(
+                    ingestion_run_id=self.ingestion_run_id,
+                    dataset_version=self.dataset_version_id,
+                    symbol=symbol,
+                    checkpoint_date=bar_date,
+                )
+
+                if completed_checkpoint is None:
+                    raise RuntimeError(f"Checkpoint missing before completion: {checkpoint_id}")
+
+                completed_checkpoint.checkpoint_status = CheckpointStatus.COMPLETED
+                completed_checkpoint.last_successful_bar_timestamp = (
+                    chunk_completed_bars[-1].timestamp if chunk_completed_bars else None
+                )
+                completed_checkpoint.error_message = None
+                completed_checkpoint.updated_at = datetime.now(UTC)
+
+                uow.ingestion_checkpoints.upsert(completed_checkpoint)
 
             return processed_bars
 
@@ -455,6 +469,6 @@ class MarketBackfillService:
 
         while current < session_end:
             timestamps.add(current.astimezone(UTC))
-            current += timedelta(minutes=1)
+            current += timedelta(minutes=5)
 
         return timestamps
