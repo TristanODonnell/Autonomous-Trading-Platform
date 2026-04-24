@@ -52,13 +52,20 @@ class LiquidityFeatureJob:
         ask_column: str = "ask",
     ) -> FeatureDatasetVersion:
         source = self._resolver_service.resolve_source_bars(
+            dataset_version_id=dataset_version_id,
             price_basis=price_basis,
             symbols=symbols,
             start_date=start_date,
             end_date=end_date,
         )
 
-        output_columns = [f"avg_volume_{avg_volume_window}"]
+        avg_volume_output_column = "avg_volume_value"
+
+        output_columns = [
+            avg_volume_output_column,
+            "bid_ask_spread",
+        ]
+
         if "bid" in source.frame.columns and "ask" in source.frame.columns:
             output_columns.append("bid_ask_spread")
 
@@ -87,6 +94,7 @@ class LiquidityFeatureJob:
             bid_column=bid_column,
             ask_column=ask_column,
             avg_volume_window=avg_volume_window,
+            avg_volume_output_column=avg_volume_output_column,
         )
 
         self._validation_service.validate_liquidity(

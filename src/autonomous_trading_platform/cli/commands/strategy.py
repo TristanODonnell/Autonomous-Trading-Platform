@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from uuid import uuid4
 
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.cli.helpers import parse_datetime
@@ -60,6 +61,7 @@ def handle_evaluate_bar(args: argparse.Namespace) -> int:
 def handle_inspect_readiness(args: argparse.Namespace) -> int:
     timestamp = parse_datetime(args.timestamp) if args.timestamp else None
     result = check_ingestion_readiness_job(
+        run_id=str(uuid4()),
         now_utc=timestamp,
     )
     print_header("Inspect Readiness")

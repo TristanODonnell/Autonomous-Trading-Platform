@@ -182,3 +182,51 @@ class FeatureDatasetVersionsRepository(BaseRepository):
             .order_by(FeatureDatasetVersions.created_at.desc())
         )
         return list(self.session.scalars(stmt).all())
+
+    def find_matching_dataset(
+        self,
+        *,
+        feature_name: str,
+        source_dataset_version_id: str,
+        symbols: list[str] | None,
+        start_date,
+        end_date,
+        computation_parameters: dict[str, object],
+    ) -> FeatureDatasetVersion | None:
+        stmt = (
+            select(FeatureDatasetVersions)
+            .where(
+                FeatureDatasetVersions.feature_name == feature_name,
+                FeatureDatasetVersions.source_dataset_version == source_dataset_version_id,
+                FeatureDatasetVersions.computation_parameters == computation_parameters,
+                FeatureDatasetVersions.validation_status == "validated",
+            )
+            .order_by(FeatureDatasetVersions.created_at.desc())
+        )
+
+        rows = list(self.session.scalars(stmt).all())
+
+        for row in rows:
+            if start_date is not None and row.date_coverage_start > start_date:
+                continue
+
+            if end_date is not None and row.date_coverage_end < end_date:
+                continue
+
+            if symbols:
+                requested_symbol_count = len({symbol.upper() for symbol in symbols})
+                existing_symbol_count = row.symbol_coverage or 0
+
+                if existing_symbol_count < requested_symbol_count:
+                    continue
+
+            return self.to_contract(row)
+
+        return None
+
+    def save(self, contract: FeatureDatasetVersion) -> FeatureDatasetVersion:
+        row = self.to_row(contract)
+        saved = self.upsert(row)
+        self.session.flush()
+
+        return self.to_contract(saved)

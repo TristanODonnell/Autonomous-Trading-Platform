@@ -122,3 +122,13 @@ class RunManifestRepository(BaseRepository):
             artifact_manifest=row.artifact_manifest,
             schema_definition=row.schema_definition,
         )
+
+    def list_failed_runs(self, *, limit: int = 25) -> list[RunManifestRow]:
+        result: list[RunManifestRow] = (
+            self.session.query(RunManifestRow)
+            .filter(RunManifestRow.status == "failed")
+            .order_by(RunManifestRow.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return result

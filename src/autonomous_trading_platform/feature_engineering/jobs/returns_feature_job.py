@@ -50,6 +50,7 @@ class ReturnsFeatureJob:
         output_column: str = "returns",
     ) -> FeatureDatasetVersion:
         source = self._resolver_service.resolve_source_bars(
+            dataset_version_id=dataset_version_id,
             price_basis=price_basis,
             symbols=symbols,
             start_date=start_date,
@@ -58,7 +59,7 @@ class ReturnsFeatureJob:
 
         computation_parameters: dict[str, object] = {
             "price_column": price_column,
-            "output_column": output_column,
+            "horizons": [1, 5, 20],
         }
 
         existing = self._guard_service.get_existing_feature_dataset(
@@ -75,13 +76,14 @@ class ReturnsFeatureJob:
         feature_frame = self._returns_service.compute(
             source.frame,
             price_column=price_column,
-            output_column=output_column,
+            source_dataset_version_id=source.dataset_version.dataset_version_id,
+            price_basis=price_basis,
         )
 
         self._validation_service.validate_returns(feature_frame)
         self._validation_service.validate_no_nans(
             feature_frame,
-            columns=[output_column],
+            columns=["ret_1d", "ret_5d", "ret_20d"],
             allow_warmup_nans=True,
         )
 

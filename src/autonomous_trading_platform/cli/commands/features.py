@@ -20,7 +20,7 @@ def run_features(args) -> int:
     setup_telemetry("cli-feature-pipeline")
 
     run_feature_pipeline_cycle(
-        price_basis=PriceBasis(args.price_basis.upper()),
+        price_basis=PriceBasis(args.price_basis.lower()),
         dataset_version_id=args.dataset_version_id,
         symbols=_parse_symbols(args.symbols),
         start_date=args.start_date,

@@ -47,6 +47,8 @@ class FeatureDatasetWriterService:
             frame=frame,
             feature_name=feature_name,
             dataset_version_id=feature_dataset_version_id,
+            source_dataset_version_id=source_dataset_version_id,
+            source_price_basis=source_price_basis,
         )
 
         contract = FeatureDatasetVersion(

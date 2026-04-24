@@ -4,7 +4,15 @@ from dataclasses import dataclass
 
 import pyarrow as pa
 
-from .schemas import BAR_SCHEMA, CORPORATE_ACTION_SCHEMA, FEATURE_RETURNS_SCHEMA
+from .schemas import (
+    BAR_SCHEMA,
+    CORPORATE_ACTION_SCHEMA,
+    FEATURE_LIQUIDITY_SCHEMA,
+    FEATURE_MOVING_AVERAGE_SCHEMA,
+    FEATURE_REGIME_SCHEMA,
+    FEATURE_RETURNS_SCHEMA,
+    FEATURE_VOLATILITY_SCHEMA,
+)
 
 
 @dataclass(frozen=True)
@@ -54,4 +62,36 @@ SIMULATION_INPUTS_DATASET = ParquetDataset(
     schema_version="1.0.0",
     root_parts=("simulation_inputs", "default"),
     partition_cols=("universe_version", "date"),
+)
+
+FEATURE_VOLATILITY_DATASET = ParquetDataset(
+    dataset_key="feature_volatility",
+    schema=FEATURE_VOLATILITY_SCHEMA,
+    schema_version="1.0.0",
+    root_parts=("features", "volatility"),
+    partition_cols=("symbol", "year", "month"),
+)
+
+FEATURE_MOVING_AVERAGE_DATASET = ParquetDataset(
+    dataset_key="feature_moving_average",
+    schema=FEATURE_MOVING_AVERAGE_SCHEMA,
+    schema_version="1.0.0",
+    root_parts=("features", "moving_average"),
+    partition_cols=("symbol", "year", "month"),
+)
+
+FEATURE_LIQUIDITY_DATASET = ParquetDataset(
+    dataset_key="feature_liquidity",
+    schema=FEATURE_LIQUIDITY_SCHEMA,
+    schema_version="1.0.0",
+    root_parts=("features", "liquidity"),
+    partition_cols=("symbol", "year", "month"),
+)
+
+FEATURE_REGIME_DATASET = ParquetDataset(
+    dataset_key="feature_regime",
+    schema=FEATURE_REGIME_SCHEMA,
+    schema_version="1.0.0",
+    root_parts=("features", "regime"),
+    partition_cols=("symbol", "year", "month"),
 )

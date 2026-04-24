@@ -115,3 +115,22 @@ class ParquetBarRepository:
         if value.tzinfo is None:
             return value.replace(tzinfo=UTC)
         return value.astimezone(UTC)
+
+    def read(
+        self,
+        *,
+        dataset,
+        dataset_version: str,
+        symbol: str,
+        start_date: date,
+        end_date: date,
+        engine: str = "duckdb",
+    ):
+        return self.reader.read(
+            dataset=dataset,
+            dataset_version=dataset_version,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            engine=engine,
+        )

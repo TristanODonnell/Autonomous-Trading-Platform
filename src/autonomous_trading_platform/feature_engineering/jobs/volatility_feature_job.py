@@ -51,18 +51,19 @@ class VolatilityFeatureJob:
         symbols: list[str] | None = None,
         start_date: date | None = None,
         end_date: date | None = None,
-        returns_column: str = "returns",
+        returns_column: str = "ret_1d",
         price_column: str = "close",
         window: int = 20,
     ) -> FeatureDatasetVersion:
         source = self._resolver_service.resolve_source_bars(
+            dataset_version_id=dataset_version_id,
             price_basis=price_basis,
             symbols=symbols,
             start_date=start_date,
             end_date=end_date,
         )
 
-        output_column = f"volatility_{window}"
+        output_column = "volatility_value"
         computation_parameters: dict[str, object] = {
             "price_column": price_column,
             "returns_column": returns_column,
@@ -84,7 +85,8 @@ class VolatilityFeatureJob:
         returns_frame = self._returns_service.compute(
             source.frame,
             price_column=price_column,
-            output_column=returns_column,
+            source_dataset_version_id=source.dataset_version.dataset_version_id,
+            price_basis=price_basis,
         )
 
         volatility_frame = self._volatility_service.compute(

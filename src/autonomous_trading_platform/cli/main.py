@@ -4,6 +4,7 @@ from autonomous_trading_platform.cli.commands import (
     admin,
     backtesting,
     execution,
+    features,
     ingestion,
     runtime,
     safety,
@@ -25,6 +26,7 @@ def build_parser():
     backtesting.register(subparsers)
     admin.register(subparsers)
     universe.register(subparsers)
+    features.register(subparsers)
     return parser
 
 

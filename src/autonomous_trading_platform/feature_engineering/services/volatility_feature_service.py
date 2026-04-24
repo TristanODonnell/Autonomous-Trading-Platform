@@ -12,12 +12,22 @@ class VolatilityFeatureService:
         self,
         returns_frame: pd.DataFrame,
         *,
-        returns_column: str = "returns",
+        returns_column: str = "ret_1d",
         window: int = 20,
         output_column: str | None = None,
     ) -> pd.DataFrame:
-        required_columns = ["symbol", "timestamp", returns_column]
-        missing = [column for column in required_columns if column not in returns_frame.columns]
+        required_columns = [
+            "symbol",
+            "timestamp",
+            "date",
+            "underlying_dataset_version",
+            "price_basis",
+            "year",
+            "month",
+            returns_column,
+        ]
+
+        missing = [c for c in required_columns if c not in returns_frame.columns]
         if missing:
             raise ValueError(f"Missing required columns for volatility computation: {missing}")
 
@@ -33,4 +43,15 @@ class VolatilityFeatureService:
             .reset_index(level=0, drop=True)
         )
 
-        return frame[["symbol", "timestamp", output_column]]
+        return frame[
+            [
+                "symbol",
+                "timestamp",
+                "date",
+                output_column,
+                "underlying_dataset_version",
+                "price_basis",
+                "year",
+                "month",
+            ]
+        ]
