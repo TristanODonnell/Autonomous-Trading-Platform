@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from autonomous_trading_platform.contracts.common.enums import (
     BarInterval,
     BarQualityFlag,
+    MarketSession,
     PriceBasis,
 )
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
@@ -46,7 +47,9 @@ class BarIngestionService:
         aggregator: BarAggregationService | None = None,
         validation_service: BarValidationService | None = None,
         now_provider: Callable[[], datetime] | None = None,
+        enforce_lateness: bool = True,
     ) -> None:
+        self.enforce_lateness = enforce_lateness
         self.last_bar_by_symbol: dict[str, MarketBar] = {}
         self.aggregator = aggregator or BarAggregationService()
         self.validation_service = validation_service or BarValidationService()
@@ -69,6 +72,13 @@ class BarIngestionService:
             ingest_span.set_attribute("ratp.run_id", self.run_id)
             ingest_span.set_attribute("ratp.symbol", provider_bar.symbol)
             minute_bar = self._convert_provider_bar(provider_bar)
+            if minute_bar.session != MarketSession.REGULAR:
+                self.next_bar_decision = NextBarDecision(
+                    should_schedule_evaluation=False,
+                    reason="outside_regular_session",
+                    bar=minute_bar,
+                )
+                return None
             five_min_bar = self.aggregator.add_minute_bar(minute_bar)
             if five_min_bar is None:
                 self.next_bar_decision = NextBarDecision(
@@ -94,11 +104,14 @@ class BarIngestionService:
                 )
                 return None
 
-            is_late = self.validation_service.is_late_bar(
-                five_min_bar,
-                now_utc=self.now_provider(),
-                allowed_delay=timedelta(seconds=30),
-            )
+            if self.enforce_lateness:
+                is_late = self.validation_service.is_late_bar(
+                    five_min_bar,
+                    now_utc=self.now_provider(),
+                    allowed_delay=timedelta(seconds=30),
+                )
+            else:
+                is_late = False
             if is_late:
                 five_min_bar.quality_flags.append(BarQualityFlag.LATE)
                 self.audit_logger.record_bar_late(

@@ -1,4 +1,6 @@
+from datetime import UTC, datetime
 from typing import cast
+from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import select
 
@@ -45,3 +47,29 @@ class ChecksumsRepository(BaseRepository):
             Checksums.object_path == object_path,
         )
         return cast(Checksums | None, self.session.scalars(stmt).one_or_none())
+
+    def build_row(
+        self,
+        *,
+        dataset_version: str,
+        object_type: str,
+        object_path: str,
+        checksum_algorithm: str,
+        checksum_value: str,
+    ) -> Checksums:
+        checksum_id = str(
+            uuid5(
+                NAMESPACE_URL,
+                f"{dataset_version}:{object_type}:{object_path}:{checksum_algorithm}",
+            )
+        )
+
+        return Checksums(
+            checksum_id=checksum_id,
+            dataset_version=dataset_version,
+            object_type=object_type,
+            object_path=object_path,
+            checksum_algorithm=checksum_algorithm,
+            checksum_value=checksum_value,
+            created_at=datetime.now(UTC),
+        )

@@ -349,11 +349,13 @@ def record_operation_started(
 ) -> None:
     logger.info(
         event,
-        extra=LogContext(
-            run_id=run_id,
-            component=component,
+        extra={
+            **LogContext(
+                run_id=run_id,
+                component=component,
+            ).to_extra(),
             **context,
-        ).to_extra(),
+        },
     )
 
 
@@ -367,11 +369,13 @@ def record_operation_completed(
 ) -> None:
     logger.info(
         event,
-        extra=LogContext(
-            run_id=run_id,
-            component=component,
+        extra={
+            **LogContext(
+                run_id=run_id,
+                component=component,
+            ).to_extra(),
             **context,
-        ).to_extra(),
+        },
     )
 
 
@@ -386,11 +390,13 @@ def record_operation_failed(
 ) -> None:
     logger.exception(
         event,
-        extra=LogContext(
-            run_id=run_id,
-            component=component,
-            exception_type=type(exc).__name__,
-            error_message=str(exc),
+        extra={
+            **LogContext(
+                run_id=run_id,
+                component=component,
+                exception_type=type(exc).__name__,
+                error_message=str(exc),
+            ).to_extra(),
             **context,
-        ).to_extra(),
+        },
     )
