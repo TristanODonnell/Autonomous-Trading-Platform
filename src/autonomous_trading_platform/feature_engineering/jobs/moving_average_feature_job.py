@@ -50,13 +50,14 @@ class MovingAverageFeatureJob:
         window: int = 20,
     ) -> FeatureDatasetVersion:
         source = self._resolver_service.resolve_source_bars(
+            dataset_version_id=dataset_version_id,
             price_basis=price_basis,
             symbols=symbols,
             start_date=start_date,
             end_date=end_date,
         )
 
-        output_column = f"sma_{window}"
+        output_column = "moving_average_value"
         computation_parameters: dict[str, object] = {
             "price_column": price_column,
             "window": window,

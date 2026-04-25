@@ -47,6 +47,8 @@ class FeatureDatasetWriterService:
             frame=frame,
             feature_name=feature_name,
             dataset_version_id=feature_dataset_version_id,
+            source_dataset_version_id=source_dataset_version_id,
+            source_price_basis=source_price_basis,
         )
 
         contract = FeatureDatasetVersion(
@@ -55,7 +57,7 @@ class FeatureDatasetWriterService:
             dataset_name=f"{feature_name}_features",
             created_at=datetime.now(UTC),
             schema_version="feature_schema_v1",
-            underlying_dataset_version=source_dataset_version_id,
+            source_dataset_version=source_dataset_version_id,
             underlying_price_basis=source_price_basis,
             computation_parameters=computation_parameters,
             storage_path=f"feature_datasets/{feature_name}/dataset_version={feature_dataset_version_id}/",
@@ -75,6 +77,7 @@ class FeatureDatasetWriterService:
                 "source_dataset_version_id": source_dataset_version_id,
                 "computation_parameters": computation_parameters,
             },
+            computation_code_version="v1",
         )
 
         saved = self._feature_dataset_repository.save(contract)

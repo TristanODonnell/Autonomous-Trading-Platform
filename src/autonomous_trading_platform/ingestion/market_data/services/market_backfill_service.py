@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
 from time import perf_counter
+from uuid import NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
@@ -66,6 +67,7 @@ class MarketBackfillService:
             session,
             run_id=run_id,
             audit_logger=audit_logger,
+            enforce_lateness=False,
         )
         self.ingestion_quality_recorder_service = IngestionQualityRecorderService(session)
         self.bar_chunk_writer = BarChunkWriterService(base_path="data")
@@ -264,7 +266,15 @@ class MarketBackfillService:
         try:
             for provider_bar in provider_bars:
                 completed_bar = await self.bar_ingestion_service.handle_minute_bar(provider_bar)
-
+                # print(
+                #    "PROVIDER BAR:",
+                #    provider_bar.symbol,
+                #    provider_bar.timestamp,
+                #    "COMPLETED:",
+                #    completed_bar is not None,
+                #    "REASON:",
+                #    self.bar_ingestion_service.next_bar_decision.reason,
+                # )
                 if completed_bar is not None:
                     chunk_completed_bars.append(completed_bar)
                     processed_bars += 1
@@ -277,11 +287,25 @@ class MarketBackfillService:
                 chunk_completed_bars=chunk_completed_bars,
             )
 
-            checkpoint.checkpoint_status = CheckpointStatus.COMPLETED
-            checkpoint.updated_at = datetime.now(UTC)
-
             with SorUnitOfWork(self.session) as uow:
-                uow.ingestion_checkpoints.upsert(checkpoint)
+                completed_checkpoint = uow.ingestion_checkpoints.get_backfill_checkpoint(
+                    ingestion_run_id=self.ingestion_run_id,
+                    dataset_version=self.dataset_version_id,
+                    symbol=symbol,
+                    checkpoint_date=bar_date,
+                )
+
+                if completed_checkpoint is None:
+                    raise RuntimeError(f"Checkpoint missing before completion: {checkpoint_id}")
+
+                completed_checkpoint.checkpoint_status = CheckpointStatus.COMPLETED
+                completed_checkpoint.last_successful_bar_timestamp = (
+                    chunk_completed_bars[-1].timestamp if chunk_completed_bars else None
+                )
+                completed_checkpoint.error_message = None
+                completed_checkpoint.updated_at = datetime.now(UTC)
+
+                uow.ingestion_checkpoints.upsert(completed_checkpoint)
 
             return processed_bars
 
@@ -390,8 +414,11 @@ class MarketBackfillService:
         for ts in missing_timestamps:
             incidents.append(
                 MissingBarIncidents(
-                    incident_id=(
-                        f"{self.dataset_version_id}:{symbol}:{ts.isoformat()}:missing_bar"
+                    incident_id=str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"{self.dataset_version_id}:{symbol}:{ts.isoformat()}:missing_bar",
+                        )
                     ),
                     symbol=symbol,
                     bar_timestamp=ts,
@@ -410,8 +437,20 @@ class MarketBackfillService:
     def _expected_minute_timestamps_for_date(self, bar_date: date) -> set[datetime]:
         eastern = ZoneInfo("America/New_York")
 
-        # Skip weekends
-        if bar_date.weekday() >= 5:
+        US_MARKET_HOLIDAYS_2025 = {
+            date(2025, 1, 1),  # New Year's Day
+            date(2025, 1, 20),  # MLK
+            date(2025, 2, 17),  # Presidents Day
+            date(2025, 4, 18),  # Good Friday
+            date(2025, 5, 26),  # Memorial Day
+            date(2025, 6, 19),  # Juneteenth
+            date(2025, 7, 4),  # Independence Day
+            date(2025, 9, 1),  # Labor Day
+            date(2025, 11, 27),  # Thanksgiving
+            date(2025, 12, 25),  # Christmas
+        }
+
+        if bar_date.weekday() >= 5 or bar_date in US_MARKET_HOLIDAYS_2025:
             return set()
 
         session_start = datetime.combine(
@@ -430,6 +469,6 @@ class MarketBackfillService:
 
         while current < session_end:
             timestamps.add(current.astimezone(UTC))
-            current += timedelta(minutes=1)
+            current += timedelta(minutes=5)
 
         return timestamps

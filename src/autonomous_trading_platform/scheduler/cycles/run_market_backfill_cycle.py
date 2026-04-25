@@ -160,30 +160,14 @@ def run_market_backfill_cycle(
                 metadata=base_metadata,
             )
 
-            ingestion_run_contract = IngestionRun(
-                ingestion_run_id=str(ingestion_run_id),
-                created_at=now,
-                run_timestamp=end,
-                run_type=RunType.BACKFILL,
-                source="alpaca",
-                dataset_version=dataset_version_id,
-                status="running",
-                started_at=now,
-                completed_at=None,
-                error_message=None,
-                row_count=None,
-                file_count=None,
-            )
-            ingestion_run = ingestion_run_registration_service.register(ingestion_run_contract)
-
             dataset_version_contract = DatasetVersion(
                 dataset_version_id=dataset_version_id,
-                dataset_name="market_bars_backfill",
+                dataset_name="bars",
                 created_at=now,
                 source="alpaca",
                 price_basis=PriceBasis.RAW,
                 interval=BarInterval.FIVE_MIN,
-                schema_version="bars_schema_v1",
+                schema_version="1.1",
                 symbol_coverage=len(symbols),
                 date_coverage_start=start.date(),
                 date_coverage_end=end.date(),
@@ -203,6 +187,22 @@ def run_market_backfill_cycle(
                 },
             )
             dataset_version = dataset_registration_service.register(dataset_version_contract)
+
+            ingestion_run_contract = IngestionRun(
+                ingestion_run_id=str(ingestion_run_id),
+                created_at=now,
+                run_timestamp=end,
+                run_type=RunType.BACKFILL,
+                source="alpaca",
+                dataset_version=dataset_version_id,
+                status="running",
+                started_at=now,
+                completed_at=None,
+                error_message=None,
+                row_count=None,
+                file_count=None,
+            )
+            ingestion_run = ingestion_run_registration_service.register(ingestion_run_contract)
 
             raw_client = get_stock_historical_client()
             historical_client = AlpacaHistoricalBarsClient(raw_client)

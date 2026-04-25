@@ -56,3 +56,15 @@ class DatasetRegistrationService:
                 return None
 
             return uow.dataset_versions.to_contract(row)
+
+    def get_by_dataset_version_id(
+        self,
+        dataset_version_id: str,
+    ) -> DatasetVersion | None:
+        with SorUnitOfWork(self.session) as uow:
+            row = uow.dataset_versions.get_by_dataset_version_id(dataset_version_id)
+
+            if row is None:
+                return None
+
+            return uow.dataset_versions.to_contract(row)

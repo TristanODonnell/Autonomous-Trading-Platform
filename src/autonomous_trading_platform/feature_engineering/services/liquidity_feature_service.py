@@ -17,6 +17,7 @@ class LiquidityFeatureService:
         bid_column: str = "bid",
         ask_column: str = "ask",
         avg_volume_window: int = 20,
+        avg_volume_output_column: str = "avg_volume_value",
     ) -> pd.DataFrame:
         required_columns = ["symbol", "timestamp", volume_column]
         missing = [column for column in required_columns if column not in bars_frame.columns]
@@ -26,18 +27,27 @@ class LiquidityFeatureService:
         frame = bars_frame.copy()
         frame = frame.sort_values(["symbol", "timestamp"])
 
-        frame[f"avg_volume_{avg_volume_window}"] = (
+        frame[avg_volume_output_column] = (
             frame.groupby("symbol")[volume_column]
             .rolling(window=avg_volume_window, min_periods=avg_volume_window)
             .mean()
             .reset_index(level=0, drop=True)
         )
 
-        output_columns = ["symbol", "timestamp", f"avg_volume_{avg_volume_window}"]
+        output_columns = ["symbol", "timestamp", avg_volume_output_column]
 
         has_bid_ask = bid_column in frame.columns and ask_column in frame.columns
+
         if has_bid_ask:
             frame["bid_ask_spread"] = frame[ask_column] - frame[bid_column]
-            output_columns.append("bid_ask_spread")
+        else:
+            frame["bid_ask_spread"] = pd.NA
+
+        output_columns = [
+            "symbol",
+            "timestamp",
+            avg_volume_output_column,
+            "bid_ask_spread",
+        ]
 
         return frame[output_columns]

@@ -3,9 +3,8 @@
   <database-model serializer="dbm" dbms="POSTGRES" family-id="POSTGRES" format-version="4.53">
     <root id="1">
       <DateStyle>mdy</DateStyle>
-      <IntrospectionStateNumber>41567</IntrospectionStateNumber>
       <ServerVersion>16.11</ServerVersion>
-      <StartupTime>1775852674</StartupTime>
+      <StartupTime>1776980516</StartupTime>
       <TimeZones>true ACDT
 true ACSST
 false ACST
@@ -688,12 +687,7 @@ false localtime
 true posixrules
 </TimeZones>
     </root>
-    <database id="2" parent="1" name="postgres">
-      <Comment>default administrative connection database</Comment>
-      <ObjectId>5</ObjectId>
-      <OwnerName>ratp</OwnerName>
-    </database>
-    <database id="3" parent="1" name="ratp">
+    <database id="2" parent="1" name="ratp">
       <Grants>11||10|C|G
 11||-9223372036854775808|U|G
 11||10|U|G
@@ -703,54 +697,58 @@ true posixrules
 13276||10|C|G
 13276||-9223372036854775808|U|G
 13276||10|U|G</Grants>
-      <IntrospectionStateNumber>41567</IntrospectionStateNumber>
       <ObjectId>49368</ObjectId>
       <OwnerName>ratp</OwnerName>
     </database>
-    <role id="4" parent="1" name="pg_checkpoint">
-      <ObjectId>4544</ObjectId>
-    </role>
-    <role id="5" parent="1" name="pg_create_subscription">
-      <ObjectId>6304</ObjectId>
-    </role>
-    <role id="6" parent="1" name="pg_database_owner">
+    <database id="3" parent="1" name="postgres">
+      <Comment>default administrative connection database</Comment>
+      <ObjectId>5</ObjectId>
+      <OwnerName>ratp</OwnerName>
+    </database>
+    <role id="4" parent="1" name="pg_database_owner">
       <ObjectId>6171</ObjectId>
     </role>
-    <role id="7" parent="1" name="pg_execute_server_program">
-      <ObjectId>4571</ObjectId>
+    <role id="5" parent="1" name="pg_read_all_data">
+      <ObjectId>6181</ObjectId>
     </role>
-    <role id="8" parent="1" name="pg_monitor">
+    <role id="6" parent="1" name="pg_write_all_data">
+      <ObjectId>6182</ObjectId>
+    </role>
+    <role id="7" parent="1" name="pg_monitor">
       <ObjectId>3373</ObjectId>
       <RoleGrants>3374
 3375
 3377</RoleGrants>
     </role>
-    <role id="9" parent="1" name="pg_read_all_data">
-      <ObjectId>6181</ObjectId>
-    </role>
-    <role id="10" parent="1" name="pg_read_all_settings">
+    <role id="8" parent="1" name="pg_read_all_settings">
       <ObjectId>3374</ObjectId>
     </role>
-    <role id="11" parent="1" name="pg_read_all_stats">
+    <role id="9" parent="1" name="pg_read_all_stats">
       <ObjectId>3375</ObjectId>
     </role>
-    <role id="12" parent="1" name="pg_read_server_files">
-      <ObjectId>4569</ObjectId>
-    </role>
-    <role id="13" parent="1" name="pg_signal_backend">
-      <ObjectId>4200</ObjectId>
-    </role>
-    <role id="14" parent="1" name="pg_stat_scan_tables">
+    <role id="10" parent="1" name="pg_stat_scan_tables">
       <ObjectId>3377</ObjectId>
     </role>
-    <role id="15" parent="1" name="pg_use_reserved_connections">
+    <role id="11" parent="1" name="pg_read_server_files">
+      <ObjectId>4569</ObjectId>
+    </role>
+    <role id="12" parent="1" name="pg_write_server_files">
+      <ObjectId>4570</ObjectId>
+    </role>
+    <role id="13" parent="1" name="pg_execute_server_program">
+      <ObjectId>4571</ObjectId>
+    </role>
+    <role id="14" parent="1" name="pg_signal_backend">
+      <ObjectId>4200</ObjectId>
+    </role>
+    <role id="15" parent="1" name="pg_checkpoint">
+      <ObjectId>4544</ObjectId>
+    </role>
+    <role id="16" parent="1" name="pg_use_reserved_connections">
       <ObjectId>4550</ObjectId>
     </role>
-    <role id="16" parent="1" name="pg_write_all_data">
-      <ObjectId>6182</ObjectId>
-    </role>
-    <role id="17" parent="1" name="pg_write_server_files">
-      <ObjectId>4570</ObjectId>
+    <role id="17" parent="1" name="pg_create_subscription">
+      <ObjectId>6304</ObjectId>
     </role>
     <role id="18" parent="1" name="ratp">
       <BypassRls>1</BypassRls>
@@ -771,7 +769,7 @@ true posixrules
       <StateNumber>1</StateNumber>
       <OwnerName>ratp</OwnerName>
     </tablespace>
-    <access-method id="21" parent="3" name="brin">
+    <access-method id="21" parent="2" name="brin">
       <Comment>block range index (BRIN) access method</Comment>
       <ObjectId>3580</ObjectId>
       <StateNumber>1</StateNumber>
@@ -780,7 +778,7 @@ true posixrules
       <HandlerName>brinhandler</HandlerName>
       <HandlerParentName>pg_catalog</HandlerParentName>
     </access-method>
-    <access-method id="22" parent="3" name="btree">
+    <access-method id="22" parent="2" name="btree">
       <Comment>b-tree index access method</Comment>
       <ObjectId>403</ObjectId>
       <StateNumber>1</StateNumber>
@@ -789,7 +787,7 @@ true posixrules
       <HandlerName>bthandler</HandlerName>
       <HandlerParentName>pg_catalog</HandlerParentName>
     </access-method>
-    <access-method id="23" parent="3" name="gin">
+    <access-method id="23" parent="2" name="gin">
       <Comment>GIN index access method</Comment>
       <ObjectId>2742</ObjectId>
       <StateNumber>1</StateNumber>
@@ -798,7 +796,7 @@ true posixrules
       <HandlerName>ginhandler</HandlerName>
       <HandlerParentName>pg_catalog</HandlerParentName>
     </access-method>
-    <access-method id="24" parent="3" name="gist">
+    <access-method id="24" parent="2" name="gist">
       <Comment>GiST index access method</Comment>
       <ObjectId>783</ObjectId>
       <StateNumber>1</StateNumber>
@@ -807,7 +805,7 @@ true posixrules
       <HandlerName>gisthandler</HandlerName>
       <HandlerParentName>pg_catalog</HandlerParentName>
     </access-method>
-    <access-method id="25" parent="3" name="hash">
+    <access-method id="25" parent="2" name="hash">
       <Comment>hash index access method</Comment>
       <ObjectId>405</ObjectId>
       <StateNumber>1</StateNumber>
@@ -816,7 +814,7 @@ true posixrules
       <HandlerName>hashhandler</HandlerName>
       <HandlerParentName>pg_catalog</HandlerParentName>
     </access-method>
-    <access-method id="26" parent="3" name="heap">
+    <access-method id="26" parent="2" name="heap">
       <Comment>heap table access method</Comment>
       <ObjectId>2</ObjectId>
       <StateNumber>1</StateNumber>
@@ -825,7 +823,7 @@ true posixrules
       <HandlerName>heap_tableam_handler</HandlerName>
       <HandlerParentName>pg_catalog</HandlerParentName>
     </access-method>
-    <access-method id="27" parent="3" name="spgist">
+    <access-method id="27" parent="2" name="spgist">
       <Comment>SP-GiST index access method</Comment>
       <ObjectId>4000</ObjectId>
       <StateNumber>1</StateNumber>
@@ -834,7 +832,7 @@ true posixrules
       <HandlerName>spghandler</HandlerName>
       <HandlerParentName>pg_catalog</HandlerParentName>
     </access-method>
-    <cast id="28" parent="3">
+    <cast id="28" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10035</ObjectId>
@@ -849,7 +847,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="29" parent="3">
+    <cast id="29" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10201</ObjectId>
@@ -864,7 +862,7 @@ true posixrules
       <TargetTypeName>bpchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="30" parent="3">
+    <cast id="30" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10191</ObjectId>
@@ -879,7 +877,7 @@ true posixrules
       <TargetTypeName>text</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="31" parent="3">
+    <cast id="31" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10196</ObjectId>
@@ -894,7 +892,7 @@ true posixrules
       <TargetTypeName>varchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="32" parent="3">
+    <cast id="32" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10143</ObjectId>
@@ -909,7 +907,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="33" parent="3">
+    <cast id="33" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10133</ObjectId>
@@ -924,7 +922,7 @@ true posixrules
       <TargetTypeName>varchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="34" parent="3">
+    <cast id="34" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10131</ObjectId>
@@ -939,7 +937,7 @@ true posixrules
       <TargetTypeName>text</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="35" parent="3">
+    <cast id="35" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10132</ObjectId>
@@ -954,7 +952,7 @@ true posixrules
       <TargetTypeName>bpchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="36" parent="3">
+    <cast id="36" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10135</ObjectId>
@@ -969,7 +967,7 @@ true posixrules
       <TargetTypeName>bpchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="37" parent="3">
+    <cast id="37" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10134</ObjectId>
@@ -984,7 +982,7 @@ true posixrules
       <TargetTypeName>text</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="38" parent="3">
+    <cast id="38" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10136</ObjectId>
@@ -999,7 +997,7 @@ true posixrules
       <TargetTypeName>varchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="39" parent="3">
+    <cast id="39" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10090</ObjectId>
@@ -1014,7 +1012,7 @@ true posixrules
       <TargetTypeName>regtype</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="40" parent="3">
+    <cast id="40" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10060</ObjectId>
@@ -1029,7 +1027,7 @@ true posixrules
       <TargetTypeName>regoper</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="41" parent="3">
+    <cast id="41" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10003</ObjectId>
@@ -1044,7 +1042,7 @@ true posixrules
       <TargetTypeName>float8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="42" parent="3">
+    <cast id="42" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10069</ObjectId>
@@ -1059,7 +1057,7 @@ true posixrules
       <TargetTypeName>regoperator</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="43" parent="3">
+    <cast id="43" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10001</ObjectId>
@@ -1074,7 +1072,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="44" parent="3">
+    <cast id="44" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10044</ObjectId>
@@ -1089,7 +1087,7 @@ true posixrules
       <TargetTypeName>regproc</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="45" parent="3">
+    <cast id="45" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10113</ObjectId>
@@ -1104,7 +1102,7 @@ true posixrules
       <TargetTypeName>regrole</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="46" parent="3">
+    <cast id="46" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10120</ObjectId>
@@ -1119,7 +1117,7 @@ true posixrules
       <TargetTypeName>regnamespace</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="47" parent="3">
+    <cast id="47" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10002</ObjectId>
@@ -1134,7 +1132,7 @@ true posixrules
       <TargetTypeName>float4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="48" parent="3">
+    <cast id="48" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10104</ObjectId>
@@ -1149,7 +1147,7 @@ true posixrules
       <TargetTypeName>regdictionary</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="49" parent="3">
+    <cast id="49" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10083</ObjectId>
@@ -1164,7 +1162,7 @@ true posixrules
       <TargetTypeName>regcollation</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="50" parent="3">
+    <cast id="50" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10033</ObjectId>
@@ -1179,7 +1177,7 @@ true posixrules
       <TargetTypeName>money</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="51" parent="3">
+    <cast id="51" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10037</ObjectId>
@@ -1194,7 +1192,7 @@ true posixrules
       <TargetTypeName>oid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="52" parent="3">
+    <cast id="52" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10097</ObjectId>
@@ -1209,7 +1207,7 @@ true posixrules
       <TargetTypeName>regconfig</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="53" parent="3">
+    <cast id="53" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10000</ObjectId>
@@ -1224,7 +1222,7 @@ true posixrules
       <TargetTypeName>int2</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="54" parent="3">
+    <cast id="54" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10185</ObjectId>
@@ -1239,7 +1237,7 @@ true posixrules
       <TargetTypeName>bit</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="55" parent="3">
+    <cast id="55" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10004</ObjectId>
@@ -1254,7 +1252,7 @@ true posixrules
       <TargetTypeName>numeric</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="56" parent="3">
+    <cast id="56" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10053</ObjectId>
@@ -1269,7 +1267,7 @@ true posixrules
       <TargetTypeName>regprocedure</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="57" parent="3">
+    <cast id="57" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10076</ObjectId>
@@ -1284,7 +1282,7 @@ true posixrules
       <TargetTypeName>regclass</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="58" parent="3">
+    <cast id="58" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10045</ObjectId>
@@ -1299,7 +1297,7 @@ true posixrules
       <TargetTypeName>regproc</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="59" parent="3">
+    <cast id="59" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10091</ObjectId>
@@ -1314,7 +1312,7 @@ true posixrules
       <TargetTypeName>regtype</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="60" parent="3">
+    <cast id="60" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10084</ObjectId>
@@ -1329,7 +1327,7 @@ true posixrules
       <TargetTypeName>regcollation</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="61" parent="3">
+    <cast id="61" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10070</ObjectId>
@@ -1344,7 +1342,7 @@ true posixrules
       <TargetTypeName>regoperator</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="62" parent="3">
+    <cast id="62" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10038</ObjectId>
@@ -1359,7 +1357,7 @@ true posixrules
       <TargetTypeName>oid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="63" parent="3">
+    <cast id="63" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10009</ObjectId>
@@ -1374,7 +1372,7 @@ true posixrules
       <TargetTypeName>numeric</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="64" parent="3">
+    <cast id="64" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10077</ObjectId>
@@ -1389,7 +1387,7 @@ true posixrules
       <TargetTypeName>regclass</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="65" parent="3">
+    <cast id="65" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10006</ObjectId>
@@ -1404,7 +1402,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="66" parent="3">
+    <cast id="66" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10054</ObjectId>
@@ -1419,7 +1417,7 @@ true posixrules
       <TargetTypeName>regprocedure</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="67" parent="3">
+    <cast id="67" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10007</ObjectId>
@@ -1434,7 +1432,7 @@ true posixrules
       <TargetTypeName>float4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="68" parent="3">
+    <cast id="68" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10005</ObjectId>
@@ -1449,7 +1447,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="69" parent="3">
+    <cast id="69" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10114</ObjectId>
@@ -1464,7 +1462,7 @@ true posixrules
       <TargetTypeName>regrole</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="70" parent="3">
+    <cast id="70" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10008</ObjectId>
@@ -1479,7 +1477,7 @@ true posixrules
       <TargetTypeName>float8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="71" parent="3">
+    <cast id="71" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10105</ObjectId>
@@ -1494,7 +1492,7 @@ true posixrules
       <TargetTypeName>regdictionary</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="72" parent="3">
+    <cast id="72" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10121</ObjectId>
@@ -1509,7 +1507,7 @@ true posixrules
       <TargetTypeName>regnamespace</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="73" parent="3">
+    <cast id="73" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10061</ObjectId>
@@ -1524,7 +1522,7 @@ true posixrules
       <TargetTypeName>regoper</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="74" parent="3">
+    <cast id="74" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10098</ObjectId>
@@ -1539,7 +1537,7 @@ true posixrules
       <TargetTypeName>regconfig</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="75" parent="3">
+    <cast id="75" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10078</ObjectId>
@@ -1551,7 +1549,7 @@ true posixrules
       <TargetTypeName>regclass</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="76" parent="3">
+    <cast id="76" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10085</ObjectId>
@@ -1563,7 +1561,7 @@ true posixrules
       <TargetTypeName>regcollation</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="77" parent="3">
+    <cast id="77" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10115</ObjectId>
@@ -1575,7 +1573,7 @@ true posixrules
       <TargetTypeName>regrole</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="78" parent="3">
+    <cast id="78" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10144</ObjectId>
@@ -1590,7 +1588,7 @@ true posixrules
       <TargetTypeName>char</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="79" parent="3">
+    <cast id="79" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10122</ObjectId>
@@ -1602,7 +1600,7 @@ true posixrules
       <TargetTypeName>regnamespace</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="80" parent="3">
+    <cast id="80" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10010</ObjectId>
@@ -1617,7 +1615,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="81" parent="3">
+    <cast id="81" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10106</ObjectId>
@@ -1629,7 +1627,7 @@ true posixrules
       <TargetTypeName>regdictionary</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="82" parent="3">
+    <cast id="82" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10099</ObjectId>
@@ -1641,7 +1639,7 @@ true posixrules
       <TargetTypeName>regconfig</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="83" parent="3">
+    <cast id="83" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10011</ObjectId>
@@ -1656,7 +1654,7 @@ true posixrules
       <TargetTypeName>int2</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="84" parent="3">
+    <cast id="84" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10092</ObjectId>
@@ -1668,7 +1666,7 @@ true posixrules
       <TargetTypeName>regtype</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="85" parent="3">
+    <cast id="85" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10071</ObjectId>
@@ -1680,7 +1678,7 @@ true posixrules
       <TargetTypeName>regoperator</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="86" parent="3">
+    <cast id="86" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10062</ObjectId>
@@ -1692,7 +1690,7 @@ true posixrules
       <TargetTypeName>regoper</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="87" parent="3">
+    <cast id="87" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10046</ObjectId>
@@ -1704,7 +1702,7 @@ true posixrules
       <TargetTypeName>regproc</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="88" parent="3">
+    <cast id="88" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10055</ObjectId>
@@ -1716,7 +1714,7 @@ true posixrules
       <TargetTypeName>regprocedure</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="89" parent="3">
+    <cast id="89" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10034</ObjectId>
@@ -1731,7 +1729,7 @@ true posixrules
       <TargetTypeName>bool</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="90" parent="3">
+    <cast id="90" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10014</ObjectId>
@@ -1746,7 +1744,7 @@ true posixrules
       <TargetTypeName>numeric</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="91" parent="3">
+    <cast id="91" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10039</ObjectId>
@@ -1758,7 +1756,7 @@ true posixrules
       <TargetTypeName>oid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="92" parent="3">
+    <cast id="92" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10186</ObjectId>
@@ -1773,7 +1771,7 @@ true posixrules
       <TargetTypeName>bit</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="93" parent="3">
+    <cast id="93" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10012</ObjectId>
@@ -1788,7 +1786,7 @@ true posixrules
       <TargetTypeName>float4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="94" parent="3">
+    <cast id="94" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10013</ObjectId>
@@ -1803,7 +1801,7 @@ true posixrules
       <TargetTypeName>float8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="95" parent="3">
+    <cast id="95" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10032</ObjectId>
@@ -1818,7 +1816,7 @@ true posixrules
       <TargetTypeName>money</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="96" parent="3">
+    <cast id="96" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10048</ObjectId>
@@ -1830,7 +1828,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="97" parent="3">
+    <cast id="97" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10047</ObjectId>
@@ -1845,7 +1843,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="98" parent="3">
+    <cast id="98" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10043</ObjectId>
@@ -1857,7 +1855,7 @@ true posixrules
       <TargetTypeName>oid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="99" parent="3">
+    <cast id="99" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10049</ObjectId>
@@ -1869,7 +1867,7 @@ true posixrules
       <TargetTypeName>regprocedure</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="100" parent="3">
+    <cast id="100" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10125</ObjectId>
@@ -1881,7 +1879,7 @@ true posixrules
       <TargetTypeName>bpchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="101" parent="3">
+    <cast id="101" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10140</ObjectId>
@@ -1896,7 +1894,7 @@ true posixrules
       <TargetTypeName>name</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="102" parent="3">
+    <cast id="102" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10137</ObjectId>
@@ -1911,7 +1909,7 @@ true posixrules
       <TargetTypeName>char</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="103" parent="3">
+    <cast id="103" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10126</ObjectId>
@@ -1923,7 +1921,7 @@ true posixrules
       <TargetTypeName>varchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="104" parent="3">
+    <cast id="104" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10193</ObjectId>
@@ -1938,7 +1936,7 @@ true posixrules
       <TargetTypeName>xml</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="105" parent="3">
+    <cast id="105" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10109</ObjectId>
@@ -1953,7 +1951,7 @@ true posixrules
       <TargetTypeName>regclass</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="106" parent="3">
+    <cast id="106" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10074</ObjectId>
@@ -1965,7 +1963,7 @@ true posixrules
       <TargetTypeName>regclass</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="107" parent="3">
+    <cast id="107" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10051</ObjectId>
@@ -1977,7 +1975,7 @@ true posixrules
       <TargetTypeName>regprocedure</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="108" parent="3">
+    <cast id="108" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10095</ObjectId>
@@ -1989,7 +1987,7 @@ true posixrules
       <TargetTypeName>regconfig</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="109" parent="3">
+    <cast id="109" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10058</ObjectId>
@@ -2001,7 +1999,7 @@ true posixrules
       <TargetTypeName>regoper</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="110" parent="3">
+    <cast id="110" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10081</ObjectId>
@@ -2013,7 +2011,7 @@ true posixrules
       <TargetTypeName>regcollation</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="111" parent="3">
+    <cast id="111" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10067</ObjectId>
@@ -2025,7 +2023,7 @@ true posixrules
       <TargetTypeName>regoperator</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="112" parent="3">
+    <cast id="112" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10042</ObjectId>
@@ -2037,7 +2035,7 @@ true posixrules
       <TargetTypeName>regproc</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="113" parent="3">
+    <cast id="113" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10040</ObjectId>
@@ -2052,7 +2050,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="114" parent="3">
+    <cast id="114" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10111</ObjectId>
@@ -2064,7 +2062,7 @@ true posixrules
       <TargetTypeName>regrole</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="115" parent="3">
+    <cast id="115" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10102</ObjectId>
@@ -2076,7 +2074,7 @@ true posixrules
       <TargetTypeName>regdictionary</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="116" parent="3">
+    <cast id="116" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10088</ObjectId>
@@ -2088,7 +2086,7 @@ true posixrules
       <TargetTypeName>regtype</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="117" parent="3">
+    <cast id="117" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10041</ObjectId>
@@ -2100,7 +2098,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="118" parent="3">
+    <cast id="118" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10118</ObjectId>
@@ -2112,7 +2110,7 @@ true posixrules
       <TargetTypeName>regnamespace</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="119" parent="3">
+    <cast id="119" parent="2">
       <Context>assignment</Context>
       <Method>io</Method>
       <ObjectId>10214</ObjectId>
@@ -2124,7 +2122,7 @@ true posixrules
       <TargetTypeName>jsonb</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="120" parent="3">
+    <cast id="120" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10202</ObjectId>
@@ -2136,7 +2134,7 @@ true posixrules
       <TargetTypeName>bpchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="121" parent="3">
+    <cast id="121" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10197</ObjectId>
@@ -2148,7 +2146,7 @@ true posixrules
       <TargetTypeName>varchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="122" parent="3">
+    <cast id="122" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10192</ObjectId>
@@ -2160,7 +2158,7 @@ true posixrules
       <TargetTypeName>text</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="123" parent="3">
+    <cast id="123" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10145</ObjectId>
@@ -2172,7 +2170,7 @@ true posixrules
       <TargetTypeName>text</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="124" parent="3">
+    <cast id="124" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10165</ObjectId>
@@ -2187,7 +2185,7 @@ true posixrules
       <TargetTypeName>box</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="125" parent="3">
+    <cast id="125" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10166</ObjectId>
@@ -2202,7 +2200,7 @@ true posixrules
       <TargetTypeName>point</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="126" parent="3">
+    <cast id="126" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10167</ObjectId>
@@ -2217,7 +2215,7 @@ true posixrules
       <TargetTypeName>polygon</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="127" parent="3">
+    <cast id="127" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10168</ObjectId>
@@ -2232,7 +2230,7 @@ true posixrules
       <TargetTypeName>point</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="128" parent="3">
+    <cast id="128" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10171</ObjectId>
@@ -2247,7 +2245,7 @@ true posixrules
       <TargetTypeName>circle</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="129" parent="3">
+    <cast id="129" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10169</ObjectId>
@@ -2262,7 +2260,7 @@ true posixrules
       <TargetTypeName>lseg</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="130" parent="3">
+    <cast id="130" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10170</ObjectId>
@@ -2277,7 +2275,7 @@ true posixrules
       <TargetTypeName>polygon</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="131" parent="3">
+    <cast id="131" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10172</ObjectId>
@@ -2292,7 +2290,7 @@ true posixrules
       <TargetTypeName>point</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="132" parent="3">
+    <cast id="132" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10175</ObjectId>
@@ -2307,7 +2305,7 @@ true posixrules
       <TargetTypeName>circle</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="133" parent="3">
+    <cast id="133" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10174</ObjectId>
@@ -2322,7 +2320,7 @@ true posixrules
       <TargetTypeName>box</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="134" parent="3">
+    <cast id="134" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10173</ObjectId>
@@ -2337,7 +2335,7 @@ true posixrules
       <TargetTypeName>path</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="135" parent="3">
+    <cast id="135" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10194</ObjectId>
@@ -2352,7 +2350,7 @@ true posixrules
       <TargetTypeName>varchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="136" parent="3">
+    <cast id="136" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10199</ObjectId>
@@ -2367,7 +2365,7 @@ true posixrules
       <TargetTypeName>bpchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="137" parent="3">
+    <cast id="137" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10189</ObjectId>
@@ -2382,7 +2380,7 @@ true posixrules
       <TargetTypeName>text</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="138" parent="3">
+    <cast id="138" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10181</ObjectId>
@@ -2394,7 +2392,7 @@ true posixrules
       <TargetTypeName>inet</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="139" parent="3">
+    <cast id="139" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10016</ObjectId>
@@ -2409,7 +2407,7 @@ true posixrules
       <TargetTypeName>int2</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="140" parent="3">
+    <cast id="140" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10015</ObjectId>
@@ -2424,7 +2422,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="141" parent="3">
+    <cast id="141" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10018</ObjectId>
@@ -2439,7 +2437,7 @@ true posixrules
       <TargetTypeName>float8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="142" parent="3">
+    <cast id="142" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10019</ObjectId>
@@ -2454,7 +2452,7 @@ true posixrules
       <TargetTypeName>numeric</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="143" parent="3">
+    <cast id="143" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10017</ObjectId>
@@ -2469,7 +2467,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="144" parent="3">
+    <cast id="144" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10024</ObjectId>
@@ -2484,7 +2482,7 @@ true posixrules
       <TargetTypeName>numeric</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="145" parent="3">
+    <cast id="145" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10020</ObjectId>
@@ -2499,7 +2497,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="146" parent="3">
+    <cast id="146" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10021</ObjectId>
@@ -2514,7 +2512,7 @@ true posixrules
       <TargetTypeName>int2</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="147" parent="3">
+    <cast id="147" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10022</ObjectId>
@@ -2529,7 +2527,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="148" parent="3">
+    <cast id="148" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10023</ObjectId>
@@ -2544,7 +2542,7 @@ true posixrules
       <TargetTypeName>float4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="149" parent="3">
+    <cast id="149" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10178</ObjectId>
@@ -2559,7 +2557,7 @@ true posixrules
       <TargetTypeName>polygon</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="150" parent="3">
+    <cast id="150" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10176</ObjectId>
@@ -2574,7 +2572,7 @@ true posixrules
       <TargetTypeName>point</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="151" parent="3">
+    <cast id="151" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10177</ObjectId>
@@ -2589,7 +2587,7 @@ true posixrules
       <TargetTypeName>box</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="152" parent="3">
+    <cast id="152" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10180</ObjectId>
@@ -2604,7 +2602,7 @@ true posixrules
       <TargetTypeName>macaddr</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="153" parent="3">
+    <cast id="153" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10030</ObjectId>
@@ -2619,7 +2617,7 @@ true posixrules
       <TargetTypeName>numeric</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="154" parent="3">
+    <cast id="154" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10179</ObjectId>
@@ -2634,7 +2632,7 @@ true posixrules
       <TargetTypeName>macaddr8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="155" parent="3">
+    <cast id="155" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10195</ObjectId>
@@ -2649,7 +2647,7 @@ true posixrules
       <TargetTypeName>varchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="156" parent="3">
+    <cast id="156" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10190</ObjectId>
@@ -2664,7 +2662,7 @@ true posixrules
       <TargetTypeName>text</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="157" parent="3">
+    <cast id="157" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10182</ObjectId>
@@ -2679,7 +2677,7 @@ true posixrules
       <TargetTypeName>cidr</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="158" parent="3">
+    <cast id="158" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10200</ObjectId>
@@ -2694,7 +2692,7 @@ true posixrules
       <TargetTypeName>bpchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="159" parent="3">
+    <cast id="159" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10204</ObjectId>
@@ -2709,7 +2707,7 @@ true posixrules
       <TargetTypeName>bpchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="160" parent="3">
+    <cast id="160" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10128</ObjectId>
@@ -2724,7 +2722,7 @@ true posixrules
       <TargetTypeName>varchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="161" parent="3">
+    <cast id="161" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10203</ObjectId>
@@ -2739,7 +2737,7 @@ true posixrules
       <TargetTypeName>xml</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="162" parent="3">
+    <cast id="162" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10127</ObjectId>
@@ -2754,7 +2752,7 @@ true posixrules
       <TargetTypeName>text</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="163" parent="3">
+    <cast id="163" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10138</ObjectId>
@@ -2769,7 +2767,7 @@ true posixrules
       <TargetTypeName>char</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="164" parent="3">
+    <cast id="164" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10141</ObjectId>
@@ -2784,7 +2782,7 @@ true posixrules
       <TargetTypeName>name</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="165" parent="3">
+    <cast id="165" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10129</ObjectId>
@@ -2796,7 +2794,7 @@ true posixrules
       <TargetTypeName>text</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="166" parent="3">
+    <cast id="166" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10142</ObjectId>
@@ -2811,7 +2809,7 @@ true posixrules
       <TargetTypeName>name</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="167" parent="3">
+    <cast id="167" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10130</ObjectId>
@@ -2823,7 +2821,7 @@ true posixrules
       <TargetTypeName>bpchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="168" parent="3">
+    <cast id="168" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10198</ObjectId>
@@ -2838,7 +2836,7 @@ true posixrules
       <TargetTypeName>xml</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="169" parent="3">
+    <cast id="169" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10110</ObjectId>
@@ -2853,7 +2851,7 @@ true posixrules
       <TargetTypeName>regclass</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="170" parent="3">
+    <cast id="170" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10205</ObjectId>
@@ -2868,7 +2866,7 @@ true posixrules
       <TargetTypeName>varchar</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="171" parent="3">
+    <cast id="171" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10139</ObjectId>
@@ -2883,7 +2881,7 @@ true posixrules
       <TargetTypeName>char</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="172" parent="3">
+    <cast id="172" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10152</ObjectId>
@@ -2898,7 +2896,7 @@ true posixrules
       <TargetTypeName>timestamp</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="173" parent="3">
+    <cast id="173" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10153</ObjectId>
@@ -2913,7 +2911,7 @@ true posixrules
       <TargetTypeName>timestamptz</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="174" parent="3">
+    <cast id="174" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10206</ObjectId>
@@ -2928,7 +2926,7 @@ true posixrules
       <TargetTypeName>time</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="175" parent="3">
+    <cast id="175" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10155</ObjectId>
@@ -2943,7 +2941,7 @@ true posixrules
       <TargetTypeName>timetz</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="176" parent="3">
+    <cast id="176" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10154</ObjectId>
@@ -2958,7 +2956,7 @@ true posixrules
       <TargetTypeName>interval</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="177" parent="3">
+    <cast id="177" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10158</ObjectId>
@@ -2973,7 +2971,7 @@ true posixrules
       <TargetTypeName>timestamptz</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="178" parent="3">
+    <cast id="178" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10156</ObjectId>
@@ -2988,7 +2986,7 @@ true posixrules
       <TargetTypeName>date</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="179" parent="3">
+    <cast id="179" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10157</ObjectId>
@@ -3003,7 +3001,7 @@ true posixrules
       <TargetTypeName>time</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="180" parent="3">
+    <cast id="180" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10207</ObjectId>
@@ -3018,7 +3016,7 @@ true posixrules
       <TargetTypeName>timestamp</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="181" parent="3">
+    <cast id="181" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10159</ObjectId>
@@ -3033,7 +3031,7 @@ true posixrules
       <TargetTypeName>date</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="182" parent="3">
+    <cast id="182" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10162</ObjectId>
@@ -3048,7 +3046,7 @@ true posixrules
       <TargetTypeName>timetz</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="183" parent="3">
+    <cast id="183" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10160</ObjectId>
@@ -3063,7 +3061,7 @@ true posixrules
       <TargetTypeName>time</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="184" parent="3">
+    <cast id="184" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10161</ObjectId>
@@ -3078,7 +3076,7 @@ true posixrules
       <TargetTypeName>timestamp</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="185" parent="3">
+    <cast id="185" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10208</ObjectId>
@@ -3093,7 +3091,7 @@ true posixrules
       <TargetTypeName>timestamptz</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="186" parent="3">
+    <cast id="186" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10209</ObjectId>
@@ -3108,7 +3106,7 @@ true posixrules
       <TargetTypeName>interval</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="187" parent="3">
+    <cast id="187" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10163</ObjectId>
@@ -3123,7 +3121,7 @@ true posixrules
       <TargetTypeName>time</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="188" parent="3">
+    <cast id="188" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10164</ObjectId>
@@ -3138,7 +3136,7 @@ true posixrules
       <TargetTypeName>time</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="189" parent="3">
+    <cast id="189" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10210</ObjectId>
@@ -3153,7 +3151,7 @@ true posixrules
       <TargetTypeName>timetz</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="190" parent="3">
+    <cast id="190" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10187</ObjectId>
@@ -3168,7 +3166,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="191" parent="3">
+    <cast id="191" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10211</ObjectId>
@@ -3183,7 +3181,7 @@ true posixrules
       <TargetTypeName>bit</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="192" parent="3">
+    <cast id="192" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10183</ObjectId>
@@ -3195,7 +3193,7 @@ true posixrules
       <TargetTypeName>varbit</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="193" parent="3">
+    <cast id="193" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10188</ObjectId>
@@ -3210,7 +3208,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="194" parent="3">
+    <cast id="194" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10184</ObjectId>
@@ -3222,7 +3220,7 @@ true posixrules
       <TargetTypeName>bit</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="195" parent="3">
+    <cast id="195" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10212</ObjectId>
@@ -3237,7 +3235,7 @@ true posixrules
       <TargetTypeName>varbit</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="196" parent="3">
+    <cast id="196" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10025</ObjectId>
@@ -3252,7 +3250,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="197" parent="3">
+    <cast id="197" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10026</ObjectId>
@@ -3267,7 +3265,7 @@ true posixrules
       <TargetTypeName>int2</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="198" parent="3">
+    <cast id="198" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10027</ObjectId>
@@ -3282,7 +3280,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="199" parent="3">
+    <cast id="199" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10213</ObjectId>
@@ -3297,7 +3295,7 @@ true posixrules
       <TargetTypeName>numeric</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="200" parent="3">
+    <cast id="200" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10029</ObjectId>
@@ -3312,7 +3310,7 @@ true posixrules
       <TargetTypeName>float8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="201" parent="3">
+    <cast id="201" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10031</ObjectId>
@@ -3327,7 +3325,7 @@ true posixrules
       <TargetTypeName>money</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="202" parent="3">
+    <cast id="202" parent="2">
       <Context>implicit</Context>
       <Method>function</Method>
       <ObjectId>10028</ObjectId>
@@ -3342,7 +3340,7 @@ true posixrules
       <TargetTypeName>float4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="203" parent="3">
+    <cast id="203" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10057</ObjectId>
@@ -3354,7 +3352,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="204" parent="3">
+    <cast id="204" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10052</ObjectId>
@@ -3366,7 +3364,7 @@ true posixrules
       <TargetTypeName>oid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="205" parent="3">
+    <cast id="205" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10056</ObjectId>
@@ -3381,7 +3379,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="206" parent="3">
+    <cast id="206" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10050</ObjectId>
@@ -3393,7 +3391,7 @@ true posixrules
       <TargetTypeName>regproc</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="207" parent="3">
+    <cast id="207" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10065</ObjectId>
@@ -3405,7 +3403,7 @@ true posixrules
       <TargetTypeName>regoperator</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="208" parent="3">
+    <cast id="208" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10063</ObjectId>
@@ -3420,7 +3418,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="209" parent="3">
+    <cast id="209" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10059</ObjectId>
@@ -3432,7 +3430,7 @@ true posixrules
       <TargetTypeName>oid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="210" parent="3">
+    <cast id="210" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10064</ObjectId>
@@ -3444,7 +3442,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="211" parent="3">
+    <cast id="211" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10073</ObjectId>
@@ -3456,7 +3454,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="212" parent="3">
+    <cast id="212" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10068</ObjectId>
@@ -3468,7 +3466,7 @@ true posixrules
       <TargetTypeName>oid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="213" parent="3">
+    <cast id="213" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10072</ObjectId>
@@ -3483,7 +3481,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="214" parent="3">
+    <cast id="214" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10066</ObjectId>
@@ -3495,7 +3493,7 @@ true posixrules
       <TargetTypeName>regoper</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="215" parent="3">
+    <cast id="215" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10079</ObjectId>
@@ -3510,7 +3508,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="216" parent="3">
+    <cast id="216" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10075</ObjectId>
@@ -3522,7 +3520,7 @@ true posixrules
       <TargetTypeName>oid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="217" parent="3">
+    <cast id="217" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10080</ObjectId>
@@ -3534,7 +3532,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="218" parent="3">
+    <cast id="218" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10093</ObjectId>
@@ -3549,7 +3547,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="219" parent="3">
+    <cast id="219" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10094</ObjectId>
@@ -3561,7 +3559,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="220" parent="3">
+    <cast id="220" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10089</ObjectId>
@@ -3573,7 +3571,7 @@ true posixrules
       <TargetTypeName>oid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="221" parent="3">
+    <cast id="221" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10146</ObjectId>
@@ -3585,7 +3583,7 @@ true posixrules
       <TargetTypeName>bytea</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="222" parent="3">
+    <cast id="222" parent="2">
       <Context>implicit</Context>
       <Method>io</Method>
       <ObjectId>10147</ObjectId>
@@ -3597,7 +3595,7 @@ true posixrules
       <TargetTypeName>text</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="223" parent="3">
+    <cast id="223" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10148</ObjectId>
@@ -3609,7 +3607,7 @@ true posixrules
       <TargetTypeName>bytea</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="224" parent="3">
+    <cast id="224" parent="2">
       <Context>implicit</Context>
       <Method>io</Method>
       <ObjectId>10149</ObjectId>
@@ -3621,7 +3619,7 @@ true posixrules
       <TargetTypeName>text</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="225" parent="3">
+    <cast id="225" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10096</ObjectId>
@@ -3633,7 +3631,7 @@ true posixrules
       <TargetTypeName>oid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="226" parent="3">
+    <cast id="226" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10100</ObjectId>
@@ -3648,7 +3646,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="227" parent="3">
+    <cast id="227" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10101</ObjectId>
@@ -3660,7 +3658,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="228" parent="3">
+    <cast id="228" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10103</ObjectId>
@@ -3672,7 +3670,7 @@ true posixrules
       <TargetTypeName>oid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="229" parent="3">
+    <cast id="229" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10108</ObjectId>
@@ -3684,7 +3682,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="230" parent="3">
+    <cast id="230" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10107</ObjectId>
@@ -3699,7 +3697,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="231" parent="3">
+    <cast id="231" parent="2">
       <Context>assignment</Context>
       <Method>io</Method>
       <ObjectId>10215</ObjectId>
@@ -3711,7 +3709,7 @@ true posixrules
       <TargetTypeName>json</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="232" parent="3">
+    <cast id="232" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10218</ObjectId>
@@ -3726,7 +3724,7 @@ true posixrules
       <TargetTypeName>int2</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="233" parent="3">
+    <cast id="233" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10220</ObjectId>
@@ -3741,7 +3739,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="234" parent="3">
+    <cast id="234" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10219</ObjectId>
@@ -3756,7 +3754,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="235" parent="3">
+    <cast id="235" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10216</ObjectId>
@@ -3771,7 +3769,7 @@ true posixrules
       <TargetTypeName>bool</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="236" parent="3">
+    <cast id="236" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10221</ObjectId>
@@ -3786,7 +3784,7 @@ true posixrules
       <TargetTypeName>float4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="237" parent="3">
+    <cast id="237" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10217</ObjectId>
@@ -3801,7 +3799,7 @@ true posixrules
       <TargetTypeName>numeric</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="238" parent="3">
+    <cast id="238" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10222</ObjectId>
@@ -3816,7 +3814,7 @@ true posixrules
       <TargetTypeName>float8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="239" parent="3">
+    <cast id="239" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10223</ObjectId>
@@ -3831,7 +3829,7 @@ true posixrules
       <TargetTypeName>int4multirange</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="240" parent="3">
+    <cast id="240" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10225</ObjectId>
@@ -3846,7 +3844,7 @@ true posixrules
       <TargetTypeName>nummultirange</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="241" parent="3">
+    <cast id="241" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10227</ObjectId>
@@ -3861,7 +3859,7 @@ true posixrules
       <TargetTypeName>tsmultirange</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="242" parent="3">
+    <cast id="242" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10228</ObjectId>
@@ -3876,7 +3874,7 @@ true posixrules
       <TargetTypeName>tstzmultirange</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="243" parent="3">
+    <cast id="243" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10226</ObjectId>
@@ -3891,7 +3889,7 @@ true posixrules
       <TargetTypeName>datemultirange</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="244" parent="3">
+    <cast id="244" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10224</ObjectId>
@@ -3906,7 +3904,7 @@ true posixrules
       <TargetTypeName>int8multirange</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="245" parent="3">
+    <cast id="245" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10124</ObjectId>
@@ -3918,7 +3916,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="246" parent="3">
+    <cast id="246" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10123</ObjectId>
@@ -3933,7 +3931,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="247" parent="3">
+    <cast id="247" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10119</ObjectId>
@@ -3945,7 +3943,7 @@ true posixrules
       <TargetTypeName>oid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="248" parent="3">
+    <cast id="248" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10117</ObjectId>
@@ -3957,7 +3955,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="249" parent="3">
+    <cast id="249" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10112</ObjectId>
@@ -3969,7 +3967,7 @@ true posixrules
       <TargetTypeName>oid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="250" parent="3">
+    <cast id="250" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10116</ObjectId>
@@ -3984,7 +3982,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="251" parent="3">
+    <cast id="251" parent="2">
       <Context>assignment</Context>
       <Method>function</Method>
       <ObjectId>10086</ObjectId>
@@ -3999,7 +3997,7 @@ true posixrules
       <TargetTypeName>int8</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="252" parent="3">
+    <cast id="252" parent="2">
       <Context>assignment</Context>
       <Method>binary</Method>
       <ObjectId>10087</ObjectId>
@@ -4011,7 +4009,7 @@ true posixrules
       <TargetTypeName>int4</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="253" parent="3">
+    <cast id="253" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10082</ObjectId>
@@ -4023,7 +4021,7 @@ true posixrules
       <TargetTypeName>oid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="254" parent="3">
+    <cast id="254" parent="2">
       <Context>implicit</Context>
       <Method>binary</Method>
       <ObjectId>10150</ObjectId>
@@ -4035,7 +4033,7 @@ true posixrules
       <TargetTypeName>bytea</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="255" parent="3">
+    <cast id="255" parent="2">
       <Context>implicit</Context>
       <Method>io</Method>
       <ObjectId>10151</ObjectId>
@@ -4047,7 +4045,7 @@ true posixrules
       <TargetTypeName>text</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <cast id="256" parent="3">
+    <cast id="256" parent="2">
       <Context>explicit</Context>
       <Method>function</Method>
       <ObjectId>10036</ObjectId>
@@ -4062,7 +4060,7 @@ true posixrules
       <TargetTypeName>xid</TargetTypeName>
       <TargetTypeParentName>pg_catalog</TargetTypeParentName>
     </cast>
-    <extension id="257" parent="3" name="plpgsql">
+    <extension id="257" parent="2" name="plpgsql">
       <Comment>PL/pgSQL procedural language</Comment>
       <ObjectId>13628</ObjectId>
       <StateNumber>684</StateNumber>
@@ -4074,21 +4072,21 @@ true posixrules
 13631
 13632</MemberIds>
     </extension>
-    <language id="258" parent="3" name="c">
+    <language id="258" parent="2" name="c">
       <Comment>dynamically-loaded C functions</Comment>
       <ObjectId>13</ObjectId>
       <StateNumber>1</StateNumber>
       <ValidatorName>fmgr_c_validator</ValidatorName>
       <ValidatorSchema>pg_catalog</ValidatorSchema>
     </language>
-    <language id="259" parent="3" name="internal">
+    <language id="259" parent="2" name="internal">
       <Comment>built-in functions</Comment>
       <ObjectId>12</ObjectId>
       <StateNumber>1</StateNumber>
       <ValidatorName>fmgr_internal_validator</ValidatorName>
       <ValidatorSchema>pg_catalog</ValidatorSchema>
     </language>
-    <language id="260" parent="3" name="plpgsql">
+    <language id="260" parent="2" name="plpgsql">
       <Comment>PL/pgSQL procedural language</Comment>
       <HandlerName>plpgsql_call_handler</HandlerName>
       <HandlerSchema>pg_catalog</HandlerSchema>
@@ -4100,7 +4098,7 @@ true posixrules
       <ValidatorName>plpgsql_validator</ValidatorName>
       <ValidatorSchema>pg_catalog</ValidatorSchema>
     </language>
-    <language id="261" parent="3" name="sql">
+    <language id="261" parent="2" name="sql">
       <Comment>SQL-language functions</Comment>
       <ObjectId>14</ObjectId>
       <StateNumber>1</StateNumber>
@@ -4108,24 +4106,21 @@ true posixrules
       <ValidatorName>fmgr_sql_validator</ValidatorName>
       <ValidatorSchema>pg_catalog</ValidatorSchema>
     </language>
-    <schema id="262" parent="3" name="information_schema">
+    <schema id="262" parent="2" name="information_schema">
       <ObjectId>13276</ObjectId>
       <StateNumber>530</StateNumber>
       <OwnerName>ratp</OwnerName>
     </schema>
-    <schema id="263" parent="3" name="pg_catalog">
+    <schema id="263" parent="2" name="pg_catalog">
       <Comment>system catalog schema</Comment>
       <ObjectId>11</ObjectId>
       <StateNumber>524</StateNumber>
       <OwnerName>ratp</OwnerName>
     </schema>
-    <schema id="264" parent="3" name="public">
+    <schema id="264" parent="2" name="public">
       <AutoIntrospectionLevel>3</AutoIntrospectionLevel>
       <Comment>standard public schema</Comment>
       <Current>1</Current>
-      <LastIntrospectionL1Xid>41567</LastIntrospectionL1Xid>
-      <LastIntrospectionL2Xid>41567</LastIntrospectionL2Xid>
-      <LastIntrospectionL3Xid>41567</LastIntrospectionL3Xid>
       <LastIntrospectionLevel>3</LastIntrospectionLevel>
       <LastIntrospectionLocalTimestamp>2026-04-13.00:00:38</LastIntrospectionLocalTimestamp>
       <ObjectId>2200</ObjectId>
@@ -4361,7 +4356,7 @@ REJECTED</Labels>
     <table id="287" parent="264" name="ingestion_runs">
       <DetailsLevel>2</DetailsLevel>
       <ObjectId>66051</ObjectId>
-      <StateNumber>41557</StateNumber>
+      <StateNumber>41603</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
@@ -4844,7 +4839,14 @@ REJECTED</Labels>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <index id="357" parent="283" name="pk_checksums">
+    <foreign-key id="357" parent="283" name="fk_checksums_dataset_version">
+      <ColNames>dataset_version</ColNames>
+      <ObjectId>66167</ObjectId>
+      <StateNumber>41603</StateNumber>
+      <RefKeyColPositions>1</RefKeyColPositions>
+      <RefTableId>66044</RefTableId>
+    </foreign-key>
+    <index id="358" parent="283" name="pk_checksums">
       <ColNames>checksum_id</ColNames>
       <ObjectId>66042</ObjectId>
       <Primary>1</Primary>
@@ -4855,104 +4857,109 @@ REJECTED</Labels>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="358" parent="283" name="pk_checksums">
+    <key id="359" parent="283" name="pk_checksums">
       <ObjectId>66043</ObjectId>
       <Primary>1</Primary>
       <StateNumber>41557</StateNumber>
       <UnderlyingIndexId>66042</UnderlyingIndexId>
     </key>
-    <column id="359" parent="284" name="action_id">
+    <key id="360" parent="283" name="uq_checksums_dataset_version_object_path">
+      <ObjectId>66188</ObjectId>
+      <StateNumber>41603</StateNumber>
+      <UnderlyingIndexId>66187</UnderlyingIndexId>
+    </key>
+    <column id="361" parent="284" name="action_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="360" parent="284" name="symbol">
+    <column id="362" parent="284" name="symbol">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="361" parent="284" name="action_type">
+    <column id="363" parent="284" name="action_type">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>corporate_action_type_enum|0s</StoredType>
       <TypeId>49433</TypeId>
     </column>
-    <column id="362" parent="284" name="effective_date">
+    <column id="364" parent="284" name="effective_date">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>date|0s</StoredType>
       <TypeId>1082</TypeId>
     </column>
-    <column id="363" parent="284" name="announced_date">
+    <column id="365" parent="284" name="announced_date">
       <Position>5</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>date|0s</StoredType>
       <TypeId>1082</TypeId>
     </column>
-    <column id="364" parent="284" name="record_date">
+    <column id="366" parent="284" name="record_date">
       <Position>6</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>date|0s</StoredType>
       <TypeId>1082</TypeId>
     </column>
-    <column id="365" parent="284" name="payable_date">
+    <column id="367" parent="284" name="payable_date">
       <Position>7</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>date|0s</StoredType>
       <TypeId>1082</TypeId>
     </column>
-    <column id="366" parent="284" name="split_ratio">
+    <column id="368" parent="284" name="split_ratio">
       <Position>8</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>double precision|0s</StoredType>
       <TypeId>701</TypeId>
     </column>
-    <column id="367" parent="284" name="cash_amount">
+    <column id="369" parent="284" name="cash_amount">
       <Position>9</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="368" parent="284" name="currency">
+    <column id="370" parent="284" name="currency">
       <NotNull>1</NotNull>
       <Position>10</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="369" parent="284" name="new_symbol">
+    <column id="371" parent="284" name="new_symbol">
       <Position>11</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="370" parent="284" name="source">
+    <column id="372" parent="284" name="source">
       <NotNull>1</NotNull>
       <Position>12</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="371" parent="284" name="ingested_at">
+    <column id="373" parent="284" name="ingested_at">
       <NotNull>1</NotNull>
       <Position>13</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="372" parent="284" name="metadata">
+    <column id="374" parent="284" name="metadata">
       <Position>14</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <index id="373" parent="284" name="pk_corporate_actions">
+    <index id="375" parent="284" name="pk_corporate_actions">
       <ColNames>action_id</ColNames>
       <ObjectId>49454</ObjectId>
       <Primary>1</Primary>
@@ -4963,7 +4970,7 @@ REJECTED</Labels>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <index id="374" parent="284" name="uq_corporate_actions_symbol_type_date_source">
+    <index id="376" parent="284" name="uq_corporate_actions_symbol_type_date_source">
       <ColNames>symbol
 action_type
 effective_date
@@ -4985,71 +4992,71 @@ default</CollationNames>
 
 pg_catalog</CollationParentNames>
     </index>
-    <key id="375" parent="284" name="pk_corporate_actions">
+    <key id="377" parent="284" name="pk_corporate_actions">
       <ObjectId>49455</ObjectId>
       <Primary>1</Primary>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49454</UnderlyingIndexId>
     </key>
-    <key id="376" parent="284" name="uq_corporate_actions_symbol_type_date_source">
+    <key id="378" parent="284" name="uq_corporate_actions_symbol_type_date_source">
       <ObjectId>49457</ObjectId>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49456</UnderlyingIndexId>
     </key>
-    <column id="377" parent="285" name="dataset_version_id">
+    <column id="379" parent="285" name="dataset_version_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="378" parent="285" name="dataset_name">
+    <column id="380" parent="285" name="dataset_name">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="379" parent="285" name="created_at">
+    <column id="381" parent="285" name="created_at">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="380" parent="285" name="source">
+    <column id="382" parent="285" name="source">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="381" parent="285" name="price_basis">
+    <column id="383" parent="285" name="price_basis">
       <Position>5</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>price_basis_enum|0s</StoredType>
       <TypeId>49482</TypeId>
     </column>
-    <column id="382" parent="285" name="interval">
+    <column id="384" parent="285" name="interval">
       <Position>6</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>bar_interval_enum|0s</StoredType>
       <TypeId>49471</TypeId>
     </column>
-    <column id="383" parent="285" name="validation_status">
+    <column id="385" parent="285" name="validation_status">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="384" parent="285" name="metadata_json">
+    <column id="386" parent="285" name="metadata_json">
       <Position>8</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <index id="385" parent="285" name="pk_dataset_versions">
+    <index id="387" parent="285" name="pk_dataset_versions">
       <ColNames>dataset_version_id</ColNames>
       <ObjectId>66049</ObjectId>
       <Primary>1</Primary>
@@ -5060,100 +5067,100 @@ pg_catalog</CollationParentNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="386" parent="285" name="pk_dataset_versions">
+    <key id="388" parent="285" name="pk_dataset_versions">
       <ObjectId>66050</ObjectId>
       <Primary>1</Primary>
       <StateNumber>41557</StateNumber>
       <UnderlyingIndexId>66049</UnderlyingIndexId>
     </key>
-    <column id="387" parent="286" name="fill_id">
+    <column id="389" parent="286" name="fill_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="388" parent="286" name="broker_order_id">
+    <column id="390" parent="286" name="broker_order_id">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="389" parent="286" name="intent_id">
+    <column id="391" parent="286" name="intent_id">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="390" parent="286" name="run_id">
+    <column id="392" parent="286" name="run_id">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="391" parent="286" name="timestamp">
+    <column id="393" parent="286" name="timestamp">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="392" parent="286" name="symbol">
+    <column id="394" parent="286" name="symbol">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="393" parent="286" name="side">
+    <column id="395" parent="286" name="side">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>side_enum|0s</StoredType>
       <TypeId>49375</TypeId>
     </column>
-    <column id="394" parent="286" name="quantity">
+    <column id="396" parent="286" name="quantity">
       <NotNull>1</NotNull>
       <Position>8</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,9 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="395" parent="286" name="price">
+    <column id="397" parent="286" name="price">
       <NotNull>1</NotNull>
       <Position>9</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="396" parent="286" name="fees">
+    <column id="398" parent="286" name="fees">
       <Position>10</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="397" parent="286" name="liquidity">
+    <column id="399" parent="286" name="liquidity">
       <Position>11</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>liquidity_side_enum|0s</StoredType>
       <TypeId>49459</TypeId>
     </column>
-    <column id="398" parent="286" name="venue">
+    <column id="400" parent="286" name="venue">
       <Position>12</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="399" parent="286" name="metadata">
+    <column id="401" parent="286" name="metadata">
       <Position>13</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <index id="400" parent="286" name="pk_fills">
+    <index id="402" parent="286" name="pk_fills">
       <ColNames>fill_id</ColNames>
       <ObjectId>49468</ObjectId>
       <Primary>1</Primary>
@@ -5164,233 +5171,274 @@ pg_catalog</CollationParentNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="401" parent="286" name="pk_fills">
+    <key id="403" parent="286" name="pk_fills">
       <ObjectId>49469</ObjectId>
       <Primary>1</Primary>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49468</UnderlyingIndexId>
     </key>
-    <column id="402" parent="287" name="ingestion_run_id">
+    <column id="404" parent="287" name="ingestion_run_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="403" parent="287" name="created_at">
+    <column id="405" parent="287" name="created_at">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="404" parent="287" name="run_timestamp">
+    <column id="406" parent="287" name="run_timestamp">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="405" parent="287" name="run_type">
+    <column id="407" parent="287" name="run_type">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>run_type_enum|0s</StoredType>
       <TypeId>49520</TypeId>
     </column>
-    <column id="406" parent="287" name="source">
+    <column id="408" parent="287" name="source">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="407" parent="287" name="dataset_version">
+    <column id="409" parent="287" name="dataset_version">
       <NotNull>1</NotNull>
       <Position>6</Position>
-      <StateNumber>41557</StateNumber>
-      <StoredType>integer|0s</StoredType>
-      <TypeId>23</TypeId>
+      <StateNumber>41603</StateNumber>
+      <StoredType>varchar(64)|0s</StoredType>
+      <TypeId>1043</TypeId>
     </column>
-    <column id="408" parent="287" name="status">
+    <column id="410" parent="287" name="status">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="409" parent="287" name="started_at">
+    <column id="411" parent="287" name="started_at">
       <NotNull>1</NotNull>
       <Position>8</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="410" parent="287" name="completed_at">
+    <column id="412" parent="287" name="completed_at">
       <Position>9</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="411" parent="287" name="error_message">
+    <column id="413" parent="287" name="error_message">
       <Position>10</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="412" parent="287" name="row_count">
+    <column id="414" parent="287" name="row_count">
       <Position>11</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>integer|0s</StoredType>
       <TypeId>23</TypeId>
     </column>
-    <column id="413" parent="287" name="file_count">
+    <column id="415" parent="287" name="file_count">
       <Position>12</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>integer|0s</StoredType>
       <TypeId>23</TypeId>
     </column>
-    <index id="414" parent="287" name="pk_ingestion_runs">
+    <foreign-key id="416" parent="287" name="fk_ingestion_runs_dataset_version">
+      <ColNames>dataset_version</ColNames>
+      <ObjectId>66162</ObjectId>
+      <StateNumber>41603</StateNumber>
+      <RefKeyColPositions>1</RefKeyColPositions>
+      <RefTableId>66044</RefTableId>
+    </foreign-key>
+    <index id="417" parent="287" name="pk_ingestion_runs">
       <ColNames>ingestion_run_id</ColNames>
       <ObjectId>66056</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>41557</StateNumber>
+      <StateNumber>41603</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="415" parent="287" name="pk_ingestion_runs">
+    <index id="418" parent="287" name="ix_ingestion_runs_dataset_version">
+      <ColNames>dataset_version</ColNames>
+      <ObjectId>66191</ObjectId>
+      <StateNumber>41603</StateNumber>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationNames>default</CollationNames>
+      <CollationIds>100</CollationIds>
+      <CollationParentNames>pg_catalog</CollationParentNames>
+    </index>
+    <index id="419" parent="287" name="ix_ingestion_runs_status_started_at">
+      <ColNames>status
+started_at</ColNames>
+      <ObjectId>66194</ObjectId>
+      <StateNumber>41603</StateNumber>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationNames>default</CollationNames>
+      <CollationIds>100</CollationIds>
+      <CollationParentNames>pg_catalog</CollationParentNames>
+    </index>
+    <index id="420" parent="287" name="ix_ingestion_runs_status">
+      <ColNames>status</ColNames>
+      <ObjectId>66192</ObjectId>
+      <StateNumber>41603</StateNumber>
+      <AccessMethodId>403</AccessMethodId>
+      <CollationNames>default</CollationNames>
+      <CollationIds>100</CollationIds>
+      <CollationParentNames>pg_catalog</CollationParentNames>
+    </index>
+    <index id="421" parent="287" name="ix_ingestion_runs_started_at">
+      <ColNames>started_at</ColNames>
+      <ObjectId>66193</ObjectId>
+      <StateNumber>41603</StateNumber>
+      <AccessMethodId>403</AccessMethodId>
+    </index>
+    <key id="422" parent="287" name="pk_ingestion_runs">
       <ObjectId>66057</ObjectId>
       <Primary>1</Primary>
       <StateNumber>41557</StateNumber>
       <UnderlyingIndexId>66056</UnderlyingIndexId>
     </key>
-    <column id="416" parent="288" name="bar_id">
+    <column id="423" parent="288" name="bar_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="417" parent="288" name="timestamp">
+    <column id="424" parent="288" name="timestamp">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="418" parent="288" name="end_timestamp">
+    <column id="425" parent="288" name="end_timestamp">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="419" parent="288" name="interval">
+    <column id="426" parent="288" name="interval">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>bar_interval_enum|0s</StoredType>
       <TypeId>49471</TypeId>
     </column>
-    <column id="420" parent="288" name="symbol">
+    <column id="427" parent="288" name="symbol">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="421" parent="288" name="open">
+    <column id="428" parent="288" name="open">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="422" parent="288" name="high">
+    <column id="429" parent="288" name="high">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="423" parent="288" name="low">
+    <column id="430" parent="288" name="low">
       <NotNull>1</NotNull>
       <Position>8</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="424" parent="288" name="close">
+    <column id="431" parent="288" name="close">
       <NotNull>1</NotNull>
       <Position>9</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="425" parent="288" name="volume">
+    <column id="432" parent="288" name="volume">
       <NotNull>1</NotNull>
       <Position>10</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>integer|0s</StoredType>
       <TypeId>23</TypeId>
     </column>
-    <column id="426" parent="288" name="vwap">
+    <column id="433" parent="288" name="vwap">
       <Position>11</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="427" parent="288" name="trade_count">
+    <column id="434" parent="288" name="trade_count">
       <Position>12</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>integer|0s</StoredType>
       <TypeId>23</TypeId>
     </column>
-    <column id="428" parent="288" name="price_basis">
+    <column id="435" parent="288" name="price_basis">
       <NotNull>1</NotNull>
       <Position>13</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>price_basis_enum|0s</StoredType>
       <TypeId>49482</TypeId>
     </column>
-    <column id="429" parent="288" name="adjustment_factor">
+    <column id="436" parent="288" name="adjustment_factor">
       <NotNull>1</NotNull>
       <Position>14</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>double precision|0s</StoredType>
       <TypeId>701</TypeId>
     </column>
-    <column id="430" parent="288" name="source">
+    <column id="437" parent="288" name="source">
       <NotNull>1</NotNull>
       <Position>15</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="431" parent="288" name="ingested_at">
+    <column id="438" parent="288" name="ingested_at">
       <NotNull>1</NotNull>
       <Position>16</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="432" parent="288" name="quality_flags">
+    <column id="439" parent="288" name="quality_flags">
       <Position>17</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <column id="433" parent="288" name="market_session">
+    <column id="440" parent="288" name="market_session">
       <NotNull>1</NotNull>
       <Position>18</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>market_session_enum|0s</StoredType>
       <TypeId>49572</TypeId>
     </column>
-    <index id="434" parent="288" name="pk_market_bars">
+    <index id="441" parent="288" name="pk_market_bars">
       <ColNames>bar_id</ColNames>
       <ObjectId>49492</ObjectId>
       <Primary>1</Primary>
@@ -5401,7 +5449,7 @@ pg_catalog</CollationParentNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <index id="435" parent="288" name="uq_market_bars_symbol_interval_ts_price_basis">
+    <index id="442" parent="288" name="uq_market_bars_symbol_interval_ts_price_basis">
       <ColNames>symbol
 interval
 timestamp
@@ -5414,93 +5462,107 @@ price_basis</ColNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="436" parent="288" name="pk_market_bars">
+    <key id="443" parent="288" name="pk_market_bars">
       <ObjectId>49493</ObjectId>
       <Primary>1</Primary>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49492</UnderlyingIndexId>
     </key>
-    <key id="437" parent="288" name="uq_market_bars_symbol_interval_ts_price_basis">
+    <key id="444" parent="288" name="uq_market_bars_symbol_interval_ts_price_basis">
       <ObjectId>49495</ObjectId>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49494</UnderlyingIndexId>
     </key>
-    <column id="438" parent="289" name="incident_id">
+    <column id="445" parent="289" name="incident_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="439" parent="289" name="symbol">
+    <column id="446" parent="289" name="symbol">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="440" parent="289" name="bar_timestamp">
+    <column id="447" parent="289" name="bar_timestamp">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="441" parent="289" name="dataset_version">
+    <column id="448" parent="289" name="dataset_version">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="442" parent="289" name="run_id">
+    <column id="449" parent="289" name="run_id">
       <Position>5</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="443" parent="289" name="ingestion_run_id">
+    <column id="450" parent="289" name="ingestion_run_id">
       <Position>6</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="444" parent="289" name="incident_type">
+    <column id="451" parent="289" name="incident_type">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="445" parent="289" name="severity">
+    <column id="452" parent="289" name="severity">
       <NotNull>1</NotNull>
       <Position>8</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="446" parent="289" name="message">
+    <column id="453" parent="289" name="message">
       <NotNull>1</NotNull>
       <Position>9</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="447" parent="289" name="created_at">
+    <column id="454" parent="289" name="created_at">
       <NotNull>1</NotNull>
       <Position>10</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="448" parent="289" name="resolved_flag">
+    <column id="455" parent="289" name="resolved_flag">
       <NotNull>1</NotNull>
       <Position>11</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>boolean|0s</StoredType>
       <TypeId>16</TypeId>
     </column>
-    <index id="449" parent="289" name="pk_missing_bar_incidents">
+    <foreign-key id="456" parent="289" name="fk_missing_bar_incidents_dataset_version">
+      <ColNames>dataset_version</ColNames>
+      <ObjectId>66172</ObjectId>
+      <StateNumber>41603</StateNumber>
+      <RefKeyColPositions>1</RefKeyColPositions>
+      <RefTableId>66044</RefTableId>
+    </foreign-key>
+    <foreign-key id="457" parent="289" name="fk_missing_bar_incidents_ingestion_run_id">
+      <ColNames>ingestion_run_id</ColNames>
+      <ObjectId>66177</ObjectId>
+      <StateNumber>41603</StateNumber>
+      <RefKeyColPositions>1</RefKeyColPositions>
+      <RefTableId>66051</RefTableId>
+    </foreign-key>
+    <index id="458" parent="289" name="pk_missing_bar_incidents">
       <ColNames>incident_id</ColNames>
       <ObjectId>66063</ObjectId>
       <Primary>1</Primary>
@@ -5511,127 +5573,127 @@ price_basis</ColNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="450" parent="289" name="pk_missing_bar_incidents">
+    <key id="459" parent="289" name="pk_missing_bar_incidents">
       <ObjectId>66064</ObjectId>
       <Primary>1</Primary>
       <StateNumber>41557</StateNumber>
       <UnderlyingIndexId>66063</UnderlyingIndexId>
     </key>
-    <column id="451" parent="290" name="intent_id">
+    <column id="460" parent="290" name="intent_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="452" parent="290" name="idempotency_key">
+    <column id="461" parent="290" name="idempotency_key">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="453" parent="290" name="run_id">
+    <column id="462" parent="290" name="run_id">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="454" parent="290" name="strategy_id">
+    <column id="463" parent="290" name="strategy_id">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="455" parent="290" name="timestamp">
+    <column id="464" parent="290" name="timestamp">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="456" parent="290" name="bar_timestamp">
+    <column id="465" parent="290" name="bar_timestamp">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="457" parent="290" name="symbol">
+    <column id="466" parent="290" name="symbol">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="458" parent="290" name="side">
+    <column id="467" parent="290" name="side">
       <NotNull>1</NotNull>
       <Position>8</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>side_enum|0s</StoredType>
       <TypeId>49375</TypeId>
     </column>
-    <column id="459" parent="290" name="qty">
+    <column id="468" parent="290" name="qty">
       <Position>9</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,9 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="460" parent="290" name="notional">
+    <column id="469" parent="290" name="notional">
       <Position>10</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="461" parent="290" name="order_type">
+    <column id="470" parent="290" name="order_type">
       <NotNull>1</NotNull>
       <Position>11</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>order_type_enum|0s</StoredType>
       <TypeId>49380</TypeId>
     </column>
-    <column id="462" parent="290" name="limit_price">
+    <column id="471" parent="290" name="limit_price">
       <Position>12</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="463" parent="290" name="stop_price">
+    <column id="472" parent="290" name="stop_price">
       <Position>13</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="464" parent="290" name="time_in_force">
+    <column id="473" parent="290" name="time_in_force">
       <NotNull>1</NotNull>
       <Position>14</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>time_in_force_enum|0s</StoredType>
       <TypeId>49390</TypeId>
     </column>
-    <column id="465" parent="290" name="extended_hours">
+    <column id="474" parent="290" name="extended_hours">
       <NotNull>1</NotNull>
       <Position>15</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>boolean|0s</StoredType>
       <TypeId>16</TypeId>
     </column>
-    <column id="466" parent="290" name="client_order_id">
+    <column id="475" parent="290" name="client_order_id">
       <NotNull>1</NotNull>
       <Position>16</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="467" parent="290" name="metadata">
+    <column id="476" parent="290" name="metadata">
       <Position>17</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <index id="468" parent="290" name="pk_order_intents">
+    <index id="477" parent="290" name="pk_order_intents">
       <ColNames>intent_id</ColNames>
       <ObjectId>49501</ObjectId>
       <Primary>1</Primary>
@@ -5639,7 +5701,7 @@ price_basis</ColNames>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
     </index>
-    <index id="469" parent="290" name="uq_order_intents_run_id_idempotency_key">
+    <index id="478" parent="290" name="uq_order_intents_run_id_idempotency_key">
       <ColNames>run_id
 idempotency_key</ColNames>
       <ObjectId>49503</ObjectId>
@@ -5653,63 +5715,63 @@ pg_catalog</CollationParentNames>
       <CollationNames>
 default</CollationNames>
     </index>
-    <key id="470" parent="290" name="pk_order_intents">
+    <key id="479" parent="290" name="pk_order_intents">
       <ObjectId>49502</ObjectId>
       <Primary>1</Primary>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49501</UnderlyingIndexId>
     </key>
-    <key id="471" parent="290" name="uq_order_intents_run_id_idempotency_key">
+    <key id="480" parent="290" name="uq_order_intents_run_id_idempotency_key">
       <ObjectId>49504</ObjectId>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49503</UnderlyingIndexId>
     </key>
-    <column id="472" parent="291" name="snapshot_id">
+    <column id="481" parent="291" name="snapshot_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="473" parent="291" name="symbol">
+    <column id="482" parent="291" name="symbol">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="474" parent="291" name="quantity">
+    <column id="483" parent="291" name="quantity">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,9 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="475" parent="291" name="avg_cost">
+    <column id="484" parent="291" name="avg_cost">
       <Position>4</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="476" parent="291" name="market_price">
+    <column id="485" parent="291" name="market_price">
       <Position>5</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="477" parent="291" name="market_value">
+    <column id="486" parent="291" name="market_value">
       <Position>6</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="478" parent="291" name="unrealized_pnl">
+    <column id="487" parent="291" name="unrealized_pnl">
       <Position>7</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <foreign-key id="479" parent="291" name="fk_position_snapshot_items_snapshot_id_position_snapshots">
+    <foreign-key id="488" parent="291" name="fk_position_snapshot_items_snapshot_id_position_snapshots">
       <ColNames>snapshot_id</ColNames>
       <ObjectId>49564</ObjectId>
       <OnDelete>cascade</OnDelete>
@@ -5717,7 +5779,7 @@ default</CollationNames>
       <RefKeyColPositions>1</RefKeyColPositions>
       <RefTableId>49505</RefTableId>
     </foreign-key>
-    <index id="480" parent="291" name="pk_position_snapshot_items">
+    <index id="489" parent="291" name="pk_position_snapshot_items">
       <ColNames>snapshot_id
 symbol</ColNames>
       <ObjectId>49562</ObjectId>
@@ -5732,7 +5794,7 @@ pg_catalog</CollationParentNames>
       <CollationNames>
 default</CollationNames>
     </index>
-    <index id="481" parent="291" name="uq_position_snapshot_items_snapshot_symbol">
+    <index id="490" parent="291" name="uq_position_snapshot_items_snapshot_symbol">
       <ColNames>snapshot_id
 symbol</ColNames>
       <ObjectId>49569</ObjectId>
@@ -5746,46 +5808,46 @@ pg_catalog</CollationParentNames>
       <CollationNames>
 default</CollationNames>
     </index>
-    <key id="482" parent="291" name="pk_position_snapshot_items">
+    <key id="491" parent="291" name="pk_position_snapshot_items">
       <ObjectId>49563</ObjectId>
       <Primary>1</Primary>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49562</UnderlyingIndexId>
     </key>
-    <key id="483" parent="291" name="uq_position_snapshot_items_snapshot_symbol">
+    <key id="492" parent="291" name="uq_position_snapshot_items_snapshot_symbol">
       <ObjectId>49570</ObjectId>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49569</UnderlyingIndexId>
     </key>
-    <column id="484" parent="292" name="snapshot_id">
+    <column id="493" parent="292" name="snapshot_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="485" parent="292" name="run_id">
+    <column id="494" parent="292" name="run_id">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="486" parent="292" name="timestamp">
+    <column id="495" parent="292" name="timestamp">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="487" parent="292" name="source">
+    <column id="496" parent="292" name="source">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>order_source_enum|0s</StoredType>
       <TypeId>49421</TypeId>
     </column>
-    <index id="488" parent="292" name="pk_position_snapshots">
+    <index id="497" parent="292" name="pk_position_snapshots">
       <ColNames>snapshot_id</ColNames>
       <ObjectId>49508</ObjectId>
       <Primary>1</Primary>
@@ -5793,7 +5855,7 @@ default</CollationNames>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
     </index>
-    <index id="489" parent="292" name="uq_position_snapshots_run_ts_source">
+    <index id="498" parent="292" name="uq_position_snapshots_run_ts_source">
       <ColNames>run_id
 timestamp
 source</ColNames>
@@ -5802,93 +5864,93 @@ source</ColNames>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
     </index>
-    <key id="490" parent="292" name="pk_position_snapshots">
+    <key id="499" parent="292" name="pk_position_snapshots">
       <ObjectId>49509</ObjectId>
       <Primary>1</Primary>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49508</UnderlyingIndexId>
     </key>
-    <key id="491" parent="292" name="uq_position_snapshots_run_ts_source">
+    <key id="500" parent="292" name="uq_position_snapshots_run_ts_source">
       <ObjectId>49511</ObjectId>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49510</UnderlyingIndexId>
     </key>
-    <column id="492" parent="293" name="snapshot_id">
+    <column id="501" parent="293" name="snapshot_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="493" parent="293" name="run_id">
+    <column id="502" parent="293" name="run_id">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="494" parent="293" name="timestamp">
+    <column id="503" parent="293" name="timestamp">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="495" parent="293" name="gross_exposure">
+    <column id="504" parent="293" name="gross_exposure">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="496" parent="293" name="net_exposure">
+    <column id="505" parent="293" name="net_exposure">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="497" parent="293" name="leverage">
+    <column id="506" parent="293" name="leverage">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>double precision|0s</StoredType>
       <TypeId>701</TypeId>
     </column>
-    <column id="498" parent="293" name="drawdown_pct">
+    <column id="507" parent="293" name="drawdown_pct">
       <Position>7</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>double precision|0s</StoredType>
       <TypeId>701</TypeId>
     </column>
-    <column id="499" parent="293" name="limits">
+    <column id="508" parent="293" name="limits">
       <NotNull>1</NotNull>
       <Position>8</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <column id="500" parent="293" name="utilization">
+    <column id="509" parent="293" name="utilization">
       <NotNull>1</NotNull>
       <Position>9</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <column id="501" parent="293" name="is_blocked">
+    <column id="510" parent="293" name="is_blocked">
       <NotNull>1</NotNull>
       <Position>10</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>boolean|0s</StoredType>
       <TypeId>16</TypeId>
     </column>
-    <column id="502" parent="293" name="block_reasons">
+    <column id="511" parent="293" name="block_reasons">
       <Position>11</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(64) []|0s</StoredType>
       <TypeId>1015</TypeId>
     </column>
-    <index id="503" parent="293" name="pk_risk_snapshots">
+    <index id="512" parent="293" name="pk_risk_snapshots">
       <ColNames>snapshot_id</ColNames>
       <ObjectId>49517</ObjectId>
       <Primary>1</Primary>
@@ -5896,196 +5958,196 @@ source</ColNames>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
     </index>
-    <key id="504" parent="293" name="pk_risk_snapshots">
+    <key id="513" parent="293" name="pk_risk_snapshots">
       <ObjectId>49518</ObjectId>
       <Primary>1</Primary>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49517</UnderlyingIndexId>
     </key>
-    <column id="505" parent="294" name="run_id">
+    <column id="514" parent="294" name="run_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="506" parent="294" name="run_type">
+    <column id="515" parent="294" name="run_type">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>run_type_enum|0s</StoredType>
       <TypeId>49520</TypeId>
     </column>
-    <column id="507" parent="294" name="created_at">
+    <column id="516" parent="294" name="created_at">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="508" parent="294" name="environment">
+    <column id="517" parent="294" name="environment">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="509" parent="294" name="broker">
+    <column id="518" parent="294" name="broker">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="510" parent="294" name="broker_account_id">
+    <column id="519" parent="294" name="broker_account_id">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="511" parent="294" name="strategy_id">
+    <column id="520" parent="294" name="strategy_id">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="512" parent="294" name="strategy_version">
+    <column id="521" parent="294" name="strategy_version">
       <NotNull>1</NotNull>
       <Position>8</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="513" parent="294" name="strategy_config">
+    <column id="522" parent="294" name="strategy_config">
       <NotNull>1</NotNull>
       <Position>9</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <column id="514" parent="294" name="capital_bucket">
+    <column id="523" parent="294" name="capital_bucket">
       <NotNull>1</NotNull>
       <Position>10</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="515" parent="294" name="interval">
+    <column id="524" parent="294" name="interval">
       <NotNull>1</NotNull>
       <Position>11</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>bar_interval_enum|0s</StoredType>
       <TypeId>49471</TypeId>
     </column>
-    <column id="516" parent="294" name="start_date">
+    <column id="525" parent="294" name="start_date">
       <NotNull>1</NotNull>
       <Position>12</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>date|0s</StoredType>
       <TypeId>1082</TypeId>
     </column>
-    <column id="517" parent="294" name="end_date">
+    <column id="526" parent="294" name="end_date">
       <Position>13</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>date|0s</StoredType>
       <TypeId>1082</TypeId>
     </column>
-    <column id="518" parent="294" name="dataset_version">
+    <column id="527" parent="294" name="dataset_version">
       <NotNull>1</NotNull>
       <Position>14</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="519" parent="294" name="universe_version">
+    <column id="528" parent="294" name="universe_version">
       <NotNull>1</NotNull>
       <Position>15</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="520" parent="294" name="cost_model">
+    <column id="529" parent="294" name="cost_model">
       <Position>16</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <column id="521" parent="294" name="fill_model">
+    <column id="530" parent="294" name="fill_model">
       <Position>17</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <column id="522" parent="294" name="random_seed">
+    <column id="531" parent="294" name="random_seed">
       <Position>18</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>integer|0s</StoredType>
       <TypeId>23</TypeId>
     </column>
-    <column id="523" parent="294" name="git_commit">
+    <column id="532" parent="294" name="git_commit">
       <NotNull>1</NotNull>
       <Position>19</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="524" parent="294" name="docker_image">
+    <column id="533" parent="294" name="docker_image">
       <Position>20</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="525" parent="294" name="python_version">
+    <column id="534" parent="294" name="python_version">
       <Position>21</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="526" parent="294" name="dependency_lock_hash">
+    <column id="535" parent="294" name="dependency_lock_hash">
       <Position>22</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="527" parent="294" name="notes">
+    <column id="536" parent="294" name="notes">
       <Position>23</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="528" parent="294" name="bar_timestamp">
+    <column id="537" parent="294" name="bar_timestamp">
       <Position>24</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="529" parent="294" name="status">
+    <column id="538" parent="294" name="status">
       <Position>25</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="530" parent="294" name="current_step">
+    <column id="539" parent="294" name="current_step">
       <Position>26</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="531" parent="294" name="last_successful_step">
+    <column id="540" parent="294" name="last_successful_step">
       <Position>27</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="532" parent="294" name="error_message">
+    <column id="541" parent="294" name="error_message">
       <Position>28</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <index id="533" parent="294" name="pk_run_manifests">
+    <index id="542" parent="294" name="pk_run_manifests">
       <ColNames>run_id</ColNames>
       <ObjectId>49534</ObjectId>
       <Primary>1</Primary>
@@ -6093,80 +6155,80 @@ source</ColNames>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
     </index>
-    <key id="534" parent="294" name="pk_run_manifests">
+    <key id="543" parent="294" name="pk_run_manifests">
       <ObjectId>49535</ObjectId>
       <Primary>1</Primary>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49534</UnderlyingIndexId>
     </key>
-    <column id="535" parent="295" name="signal_id">
+    <column id="544" parent="295" name="signal_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="536" parent="295" name="run_id">
+    <column id="545" parent="295" name="run_id">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="537" parent="295" name="timestamp">
+    <column id="546" parent="295" name="timestamp">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="538" parent="295" name="bar_timestamp">
+    <column id="547" parent="295" name="bar_timestamp">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="539" parent="295" name="strategy_id">
+    <column id="548" parent="295" name="strategy_id">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="540" parent="295" name="symbol">
+    <column id="549" parent="295" name="symbol">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="541" parent="295" name="direction">
+    <column id="550" parent="295" name="direction">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>signal_direction_enum|0s</StoredType>
       <TypeId>49537</TypeId>
     </column>
-    <column id="542" parent="295" name="confidence">
+    <column id="551" parent="295" name="confidence">
       <Position>8</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>double precision|0s</StoredType>
       <TypeId>701</TypeId>
     </column>
-    <column id="543" parent="295" name="target_position">
+    <column id="552" parent="295" name="target_position">
       <Position>9</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,9 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="544" parent="295" name="params">
+    <column id="553" parent="295" name="params">
       <Position>10</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <index id="545" parent="295" name="pk_signals">
+    <index id="554" parent="295" name="pk_signals">
       <ColNames>signal_id</ColNames>
       <ObjectId>49548</ObjectId>
       <Primary>1</Primary>
@@ -6174,7 +6236,7 @@ source</ColNames>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
     </index>
-    <index id="546" parent="295" name="uq_signals_run_bar_symbol_strategy">
+    <index id="555" parent="295" name="uq_signals_run_bar_symbol_strategy">
       <ColNames>run_id
 bar_timestamp
 symbol
@@ -6196,64 +6258,64 @@ pg_catalog</CollationParentNames>
 default
 default</CollationNames>
     </index>
-    <key id="547" parent="295" name="pk_signals">
+    <key id="556" parent="295" name="pk_signals">
       <ObjectId>49549</ObjectId>
       <Primary>1</Primary>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49548</UnderlyingIndexId>
     </key>
-    <key id="548" parent="295" name="uq_signals_run_bar_symbol_strategy">
+    <key id="557" parent="295" name="uq_signals_run_bar_symbol_strategy">
       <ObjectId>49551</ObjectId>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49550</UnderlyingIndexId>
     </key>
-    <column id="549" parent="296" name="strategy_id">
+    <column id="558" parent="296" name="strategy_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>41263</StateNumber>
       <StoredType>varchar(128)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="550" parent="296" name="current_state">
+    <column id="559" parent="296" name="current_state">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>41263</StateNumber>
       <StoredType>strategy_runtime_state_enum|0s</StoredType>
       <TypeId>49596</TypeId>
     </column>
-    <column id="551" parent="296" name="last_signal_at">
+    <column id="560" parent="296" name="last_signal_at">
       <Position>3</Position>
       <StateNumber>41263</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="552" parent="296" name="last_transition_at">
+    <column id="561" parent="296" name="last_transition_at">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>41263</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="553" parent="296" name="cooldown_until">
+    <column id="562" parent="296" name="cooldown_until">
       <Position>5</Position>
       <StateNumber>41263</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="554" parent="296" name="updated_at">
+    <column id="563" parent="296" name="updated_at">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>41263</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="555" parent="296" name="last_evaluated_bar_timestamp">
+    <column id="564" parent="296" name="last_evaluated_bar_timestamp">
       <Position>7</Position>
       <StateNumber>41263</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <index id="556" parent="296" name="pk_strategy_runtime_states">
+    <index id="565" parent="296" name="pk_strategy_runtime_states">
       <ColNames>strategy_id</ColNames>
       <ObjectId>49612</ObjectId>
       <Primary>1</Primary>
@@ -6264,75 +6326,82 @@ default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="557" parent="296" name="pk_strategy_runtime_states">
+    <key id="566" parent="296" name="pk_strategy_runtime_states">
       <ObjectId>49613</ObjectId>
       <Primary>1</Primary>
       <StateNumber>41263</StateNumber>
       <UnderlyingIndexId>49612</UnderlyingIndexId>
     </key>
-    <column id="558" parent="297" name="coverage_id">
+    <column id="567" parent="297" name="coverage_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="559" parent="297" name="symbol">
+    <column id="568" parent="297" name="symbol">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="560" parent="297" name="date">
+    <column id="569" parent="297" name="date">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>date|0s</StoredType>
       <TypeId>1082</TypeId>
     </column>
-    <column id="561" parent="297" name="dataset_version">
+    <column id="570" parent="297" name="dataset_version">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="562" parent="297" name="expected_bar_count">
+    <column id="571" parent="297" name="expected_bar_count">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>integer|0s</StoredType>
       <TypeId>23</TypeId>
     </column>
-    <column id="563" parent="297" name="actual_bar_count">
+    <column id="572" parent="297" name="actual_bar_count">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>integer|0s</StoredType>
       <TypeId>23</TypeId>
     </column>
-    <column id="564" parent="297" name="completeness_status">
+    <column id="573" parent="297" name="completeness_status">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="565" parent="297" name="gap_summary">
+    <column id="574" parent="297" name="gap_summary">
       <Position>8</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="566" parent="297" name="updated_at">
+    <column id="575" parent="297" name="updated_at">
       <NotNull>1</NotNull>
       <Position>9</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <index id="567" parent="297" name="pk_symbol_date_coverages">
+    <foreign-key id="576" parent="297" name="fk_symbol_date_coverages_dataset_version">
+      <ColNames>dataset_version</ColNames>
+      <ObjectId>66182</ObjectId>
+      <StateNumber>41603</StateNumber>
+      <RefKeyColPositions>1</RefKeyColPositions>
+      <RefTableId>66044</RefTableId>
+    </foreign-key>
+    <index id="577" parent="297" name="pk_symbol_date_coverages">
       <ColNames>coverage_id</ColNames>
       <ObjectId>66070</ObjectId>
       <Primary>1</Primary>
@@ -6343,73 +6412,78 @@ default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="568" parent="297" name="pk_symbol_date_coverages">
+    <key id="578" parent="297" name="pk_symbol_date_coverages">
       <ObjectId>66071</ObjectId>
       <Primary>1</Primary>
       <StateNumber>41557</StateNumber>
       <UnderlyingIndexId>66070</UnderlyingIndexId>
     </key>
-    <column id="569" parent="298" name="event_id">
+    <key id="579" parent="297" name="uq_symbol_date_coverages_dataset_version_symbol_date">
+      <ObjectId>66190</ObjectId>
+      <StateNumber>41603</StateNumber>
+      <UnderlyingIndexId>66189</UnderlyingIndexId>
+    </key>
+    <column id="580" parent="298" name="event_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="570" parent="298" name="symbol">
+    <column id="581" parent="298" name="symbol">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="571" parent="298" name="event_type">
+    <column id="582" parent="298" name="event_type">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="572" parent="298" name="effective_at">
+    <column id="583" parent="298" name="effective_at">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="573" parent="298" name="new_symbol">
+    <column id="584" parent="298" name="new_symbol">
       <Position>5</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="574" parent="298" name="successor_symbol">
+    <column id="585" parent="298" name="successor_symbol">
       <Position>6</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="575" parent="298" name="source">
+    <column id="586" parent="298" name="source">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="576" parent="298" name="notes">
+    <column id="587" parent="298" name="notes">
       <Position>8</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>text|0s</StoredType>
       <TypeId>25</TypeId>
     </column>
-    <column id="577" parent="298" name="created_at">
+    <column id="588" parent="298" name="created_at">
       <NotNull>1</NotNull>
       <Position>9</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <index id="578" parent="298" name="pk_ticker_lifecycle_events">
+    <index id="589" parent="298" name="pk_ticker_lifecycle_events">
       <ColNames>event_id</ColNames>
       <ObjectId>49637</ObjectId>
       <Primary>1</Primary>
@@ -6420,7 +6494,7 @@ default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <index id="579" parent="298" name="ix_ticker_lifecycle_events_symbol">
+    <index id="590" parent="298" name="ix_ticker_lifecycle_events_symbol">
       <ColNames>symbol</ColNames>
       <ObjectId>49639</ObjectId>
       <StateNumber>41349</StateNumber>
@@ -6429,102 +6503,102 @@ default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="580" parent="298" name="pk_ticker_lifecycle_events">
+    <key id="591" parent="298" name="pk_ticker_lifecycle_events">
       <ObjectId>49638</ObjectId>
       <Primary>1</Primary>
       <StateNumber>41349</StateNumber>
       <UnderlyingIndexId>49637</UnderlyingIndexId>
     </key>
-    <column id="581" parent="299" name="order_id">
+    <column id="592" parent="299" name="order_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="582" parent="299" name="intent_id">
+    <column id="593" parent="299" name="intent_id">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="583" parent="299" name="run_id">
+    <column id="594" parent="299" name="run_id">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="584" parent="299" name="strategy_id">
+    <column id="595" parent="299" name="strategy_id">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>varchar(128)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="585" parent="299" name="account_id">
+    <column id="596" parent="299" name="account_id">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="586" parent="299" name="symbol">
+    <column id="597" parent="299" name="symbol">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="587" parent="299" name="broker_order_id">
+    <column id="598" parent="299" name="broker_order_id">
       <Position>7</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="588" parent="299" name="current_status">
+    <column id="599" parent="299" name="current_status">
       <NotNull>1</NotNull>
       <Position>8</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>tracked_order_status_enum|0s</StoredType>
       <TypeId>49615</TypeId>
     </column>
-    <column id="589" parent="299" name="previous_filled_qty">
+    <column id="600" parent="299" name="previous_filled_qty">
       <NotNull>1</NotNull>
       <Position>9</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>numeric(18,9 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="590" parent="299" name="previous_avg_fill_price">
+    <column id="601" parent="299" name="previous_avg_fill_price">
       <Position>10</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="591" parent="299" name="is_open">
+    <column id="602" parent="299" name="is_open">
       <NotNull>1</NotNull>
       <Position>11</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>boolean|0s</StoredType>
       <TypeId>16</TypeId>
     </column>
-    <column id="592" parent="299" name="created_at">
+    <column id="603" parent="299" name="created_at">
       <NotNull>1</NotNull>
       <Position>12</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="593" parent="299" name="updated_at">
+    <column id="604" parent="299" name="updated_at">
       <NotNull>1</NotNull>
       <Position>13</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <index id="594" parent="299" name="pk_tracked_orders">
+    <index id="605" parent="299" name="pk_tracked_orders">
       <ColNames>order_id</ColNames>
       <ObjectId>49630</ObjectId>
       <Primary>1</Primary>
@@ -6532,81 +6606,81 @@ default</CollationNames>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
     </index>
-    <key id="595" parent="299" name="pk_tracked_orders">
+    <key id="606" parent="299" name="pk_tracked_orders">
       <ObjectId>49631</ObjectId>
       <Primary>1</Primary>
       <StateNumber>41272</StateNumber>
       <UnderlyingIndexId>49630</UnderlyingIndexId>
     </key>
-    <column id="596" parent="300" name="universe_id">
+    <column id="607" parent="300" name="universe_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="597" parent="300" name="snapshot_date">
+    <column id="608" parent="300" name="snapshot_date">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>date|0s</StoredType>
       <TypeId>1082</TypeId>
     </column>
-    <column id="598" parent="300" name="effective_start">
+    <column id="609" parent="300" name="effective_start">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="599" parent="300" name="effective_end">
+    <column id="610" parent="300" name="effective_end">
       <Position>4</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="600" parent="300" name="symbols">
+    <column id="611" parent="300" name="symbols">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(32) []|0s</StoredType>
       <TypeId>1015</TypeId>
     </column>
-    <column id="601" parent="300" name="criteria">
+    <column id="612" parent="300" name="criteria">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <column id="602" parent="300" name="version">
+    <column id="613" parent="300" name="version">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="603" parent="300" name="source">
+    <column id="614" parent="300" name="source">
       <NotNull>1</NotNull>
       <Position>8</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="604" parent="300" name="built_at">
+    <column id="615" parent="300" name="built_at">
       <NotNull>1</NotNull>
       <Position>9</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="605" parent="300" name="notes">
+    <column id="616" parent="300" name="notes">
       <Position>10</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <index id="606" parent="300" name="pk_universe_snapshots">
+    <index id="617" parent="300" name="pk_universe_snapshots">
       <ColNames>universe_id</ColNames>
       <ObjectId>49557</ObjectId>
       <Primary>1</Primary>
@@ -6617,7 +6691,7 @@ default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="607" parent="300" name="pk_universe_snapshots">
+    <key id="618" parent="300" name="pk_universe_snapshots">
       <ObjectId>49558</ObjectId>
       <Primary>1</Primary>
       <StateNumber>12459</StateNumber>

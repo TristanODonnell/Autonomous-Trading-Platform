@@ -187,7 +187,7 @@ class HistoricalBarDatasetReader:
                 [symbol, start_ts, end_ts],
             )
 
-            return result.arrow()
+            return result.arrow().read_all()
         finally:
             con.close()
 

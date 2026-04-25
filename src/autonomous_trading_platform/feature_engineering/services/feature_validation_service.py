@@ -59,7 +59,18 @@ class FeatureValidationService:
         self.validate_not_empty(frame)
         self.validate_required_columns(
             frame,
-            required_columns=["symbol", "timestamp", "returns"],
+            required_columns=[
+                "symbol",
+                "timestamp",
+                "date",
+                "ret_1d",
+                "ret_5d",
+                "ret_20d",
+                "underlying_dataset_version",
+                "price_basis",
+                "year",
+                "month",
+            ],
         )
 
     def validate_volatility(self, frame: pd.DataFrame, *, column_name: str) -> None:

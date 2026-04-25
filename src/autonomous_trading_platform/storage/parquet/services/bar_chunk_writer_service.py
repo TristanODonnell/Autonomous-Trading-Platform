@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import date
+import json
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pyarrow.parquet as pq
@@ -8,7 +9,10 @@ import pyarrow.parquet as pq
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.mappers import bars_to_arrow
-from autonomous_trading_platform.storage.parquet.paths import partition_file_path
+from autonomous_trading_platform.storage.parquet.paths import (
+    dataset_version_root,
+    partition_file_path,
+)
 
 
 class BarChunkWriterService:
@@ -23,6 +27,27 @@ class BarChunkWriterService:
         symbol: str,
         bar_date: date,
     ) -> None:
+        root = dataset_version_root(
+            self.base_path,
+            RAW_BARS_DATASET,
+            dataset_version,
+        )
+
+        root.mkdir(parents=True, exist_ok=True)
+
+        metadata_path = root / "_metadata.json"
+
+        metadata = {
+            "dataset_version": dataset_version,
+            "dataset": "raw_bars",
+            "last_updated_at": datetime.now(UTC).isoformat(),
+        }
+
+        metadata_path.write_text(
+            json.dumps(metadata, indent=2),
+            encoding="utf-8",
+        )
+
         if not bars:
             return
 
@@ -44,7 +69,4 @@ class BarChunkWriterService:
         if output_path.exists():
             output_path.unlink()
 
-        pq.write_table(
-            table,
-            output_path,
-        )
+        pq.write_table(table, output_path)

@@ -67,3 +67,56 @@ FEATURE_RETURNS_SCHEMA = pa.schema(
         pa.field("month", pa.string(), nullable=False),
     ]
 )
+
+FEATURE_VOLATILITY_SCHEMA = pa.schema(
+    [
+        pa.field("symbol", pa.string()),
+        pa.field("timestamp", pa.timestamp("us", tz="UTC")),
+        pa.field("date", pa.date32()),
+        pa.field("volatility_value", pa.float64()),
+        pa.field("underlying_dataset_version", pa.string()),
+        pa.field("price_basis", pa.string()),
+        pa.field("year", pa.string()),
+        pa.field("month", pa.string()),
+    ]
+)
+
+FEATURE_MOVING_AVERAGE_SCHEMA = pa.schema(
+    [
+        pa.field("symbol", pa.string(), nullable=False),
+        pa.field("timestamp", UTC_TIMESTAMP, nullable=False),
+        pa.field("date", pa.date32(), nullable=False),
+        pa.field("moving_average_value", pa.float64(), nullable=True),
+        pa.field("underlying_dataset_version", pa.string(), nullable=False),
+        pa.field("price_basis", pa.string(), nullable=False),
+        pa.field("year", pa.string(), nullable=False),
+        pa.field("month", pa.string(), nullable=False),
+    ]
+)
+
+FEATURE_LIQUIDITY_SCHEMA = pa.schema(
+    [
+        pa.field("symbol", pa.string(), nullable=False),
+        pa.field("timestamp", UTC_TIMESTAMP, nullable=False),
+        pa.field("date", pa.date32(), nullable=False),
+        pa.field("avg_volume_value", pa.float64(), nullable=True),
+        pa.field("bid_ask_spread", pa.float64(), nullable=True),
+        pa.field("underlying_dataset_version", pa.string(), nullable=False),
+        pa.field("price_basis", pa.string(), nullable=False),
+        pa.field("year", pa.string(), nullable=False),
+        pa.field("month", pa.string(), nullable=False),
+    ]
+)
+
+FEATURE_REGIME_SCHEMA = pa.schema(
+    [
+        pa.field("symbol", pa.string(), nullable=False),
+        pa.field("timestamp", UTC_TIMESTAMP, nullable=False),
+        pa.field("date", pa.date32(), nullable=False),
+        pa.field("regime", pa.string(), nullable=False),
+        pa.field("underlying_dataset_version", pa.string(), nullable=False),
+        pa.field("price_basis", pa.string(), nullable=False),
+        pa.field("year", pa.string(), nullable=False),
+        pa.field("month", pa.string(), nullable=False),
+    ]
+)

@@ -104,9 +104,9 @@ class SorUnitOfWork:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> Literal[False]:
-        if self._started_transaction:
-            if exc_type is None:
-                self.session.commit()
-            else:
-                self.session.rollback()
+        if exc_type is None:
+            self.session.commit()
+        else:
+            self.session.rollback()
+
         return False

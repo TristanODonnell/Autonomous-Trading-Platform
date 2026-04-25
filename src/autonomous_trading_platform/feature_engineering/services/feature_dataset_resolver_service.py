@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, cast
+from typing import Any
 
 import pandas as pd
 
@@ -11,6 +11,7 @@ from autonomous_trading_platform.contracts.runtime.dataset_version import Datase
 from autonomous_trading_platform.runtime.services.dataset_registration_service import (
     DatasetRegistrationService,
 )
+from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 
 
 @dataclass(slots=True)
@@ -56,11 +57,34 @@ class FeatureDatasetResolverService:
         self,
         *,
         price_basis: PriceBasis,
+        dataset_version_id: str | None = None,
         symbols: list[str] | None = None,
         start_date: date | None = None,
         end_date: date | None = None,
     ) -> ResolvedSourceDataset:
-        dataset_version = self.get_latest_validated_market_dataset(price_basis=price_basis)
+        if dataset_version_id is not None:
+            dataset_version = self._dataset_registration_service.get_by_dataset_version_id(
+                dataset_version_id
+            )
+
+            if dataset_version is None:
+                raise ValueError(f"Dataset version not found: {dataset_version_id}")
+
+            if dataset_version.price_basis != price_basis:
+                raise ValueError(
+                    f"Dataset price_basis mismatch: expected {price_basis.value}, "
+                    f"got {dataset_version.price_basis.value}"
+                )
+
+            if dataset_version.validation_status != "validated":
+                raise ValueError(
+                    f"Dataset version {dataset_version_id} is not validated: "
+                    f"{dataset_version.validation_status}"
+                )
+        else:
+            dataset_version = self.get_latest_validated_market_dataset(
+                price_basis=price_basis,
+            )
 
         frame = self.load_bars_frame(
             dataset_version_id=dataset_version.dataset_version_id,
@@ -69,11 +93,10 @@ class FeatureDatasetResolverService:
             end_date=end_date,
         )
 
-        resolved = ResolvedSourceDataset(
+        return ResolvedSourceDataset(
             dataset_version=dataset_version,
             frame=frame,
         )
-        return cast(ResolvedSourceDataset, resolved)
 
     def load_bars_frame(
         self,
@@ -83,28 +106,27 @@ class FeatureDatasetResolverService:
         start_date: date | None = None,
         end_date: date | None = None,
     ) -> pd.DataFrame:
-        """
-        Replace this with your actual parquet-reading logic.
+        if not symbols:
+            raise ValueError("symbols must be provided when loading source bars.")
 
-        Expected output columns might look like:
-        - symbol
-        - timestamp
-        - open
-        - high
-        - low
-        - close
-        - volume
-        - bid
-        - ask
-        """
-        frame = self._parquet_reader.read_bars(
-            dataset_version_id=dataset_version_id,
-            symbols=symbols,
-            start_date=start_date,
-            end_date=end_date,
-        )
+        if start_date is None or end_date is None:
+            raise ValueError("start_date and end_date must be provided when loading source bars.")
 
-        if frame.empty:
+        frames: list[pd.DataFrame] = []
+
+        for symbol in symbols:
+            table = self._parquet_reader.read(
+                dataset=RAW_BARS_DATASET,
+                dataset_version=dataset_version_id,
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+            if table.num_rows > 0:
+                frames.append(table.to_pandas())
+
+        if not frames:
             raise ValueError(f"No bar data found for dataset_version_id={dataset_version_id}.")
 
-        return frame
+        return pd.concat(frames, ignore_index=True)
