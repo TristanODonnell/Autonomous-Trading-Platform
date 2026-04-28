@@ -6,6 +6,7 @@ from autonomous_trading_platform.cli.commands import (
     execution,
     features,
     ingestion,
+    research,
     runtime,
     safety,
     strategy,
@@ -27,6 +28,7 @@ def build_parser():
     admin.register(subparsers)
     universe.register(subparsers)
     features.register(subparsers)
+    research.register(subparsers)
     return parser
 
 
