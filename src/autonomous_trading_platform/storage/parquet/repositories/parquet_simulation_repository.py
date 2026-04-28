@@ -179,3 +179,17 @@ class ParquetSimulationRepository:
             experiment_id=experiment_id,
             strategy_id=strategy_id,
         )
+
+    def write_positions(
+        self,
+        *,
+        frame: pd.DataFrame,
+        experiment_id: str,
+        strategy_id: str,
+    ) -> None:
+        self.write_simulation_frame(
+            frame=frame,
+            output_name="positions",
+            experiment_id=experiment_id,
+            strategy_id=strategy_id,
+        )

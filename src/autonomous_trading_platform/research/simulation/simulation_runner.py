@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.contracts.runtime.strategy_config import (
+    StrategyConfig as RuntimeStrategyConfig,
+)
 from autonomous_trading_platform.execution.services.portfolio_construction_service import (
     PortfolioConstructionService,
 )
@@ -132,7 +136,7 @@ class SimulationRunner:
             )
             strategy = self.strategy_factory.build(strategy_config)
 
-            trade_logs, equity_curve, per_bar_metrics = self._execute_simulation(
+            trade_logs, equity_curve, per_bar_metrics, positions = self._execute_simulation(
                 run_id=run_id,
                 request=request,
                 window=window,
@@ -145,6 +149,7 @@ class SimulationRunner:
                 trade_logs=trade_logs,
                 equity_curve=equity_curve,
                 per_bar_metrics=per_bar_metrics,
+                positions=positions,
             )
 
             self._record_run_completed(
@@ -182,7 +187,12 @@ class SimulationRunner:
             simulated_execution_service=self.simulated_execution_service,
             initial_cash=request.initial_cash,
         )
-        return result.trade_logs, result.equity_curve, result.per_bar_metrics
+        return (
+            result.trade_logs,
+            result.equity_curve,
+            result.per_bar_metrics,
+            result.positions,
+        )
 
     def _record_run_started(
         self,
@@ -192,17 +202,46 @@ class SimulationRunner:
         experiment_id: str,
         resolved_dataset_metadata: dict[str, Any],
     ) -> None:
+        now = datetime.now(UTC)
 
         if self.strategy_config_repository is not None:
-            # Later: upsert strategy config/config_hash here.
-            pass
+            strategy_config = RuntimeStrategyConfig(
+                strategy_id=request.strategy_id,
+                config_hash=request.strategy_config.get("config_hash", request.strategy_id),
+                config_json=request.strategy_config,
+                created_at=now,
+                strategy_type=request.strategy_config["type"],
+                metadata_json={
+                    "source": "simulation_runner",
+                },
+            )
 
-        if self.simulation_run_repository is not None:
-            # Later: create simulation_runs row here.
-            pass
+            strategy_config_row = self.strategy_config_repository.to_row(strategy_config)
+            self.strategy_config_repository.upsert(strategy_config_row)
+
+        if self.strategy_config_repository is not None:
+            build_config = StrategyConfig(
+                strategy_id=request.strategy_id,
+                type=request.strategy_config["type"],
+                parameters=request.strategy_config.get("parameters", {}),
+            )
+
+            strategy_config = RuntimeStrategyConfig(
+                strategy_id=build_config.strategy_id,
+                config_hash=build_config.config_hash(),
+                config_json=json.loads(build_config.canonical_json()),
+                created_at=now,
+                strategy_type=build_config.type,
+                metadata_json={
+                    "source": "simulation_runner",
+                },
+            )
+
+            strategy_config_row = self.strategy_config_repository.to_row(strategy_config)
+            self.strategy_config_repository.upsert(strategy_config_row)
 
         if self.manifest_service is not None:
-            # Later: create/save research run_manifest here.
+            # Optional later: build and save RunManifest here.
             pass
 
     def _record_run_completed(
@@ -213,19 +252,41 @@ class SimulationRunner:
         equity_points: int,
         per_bar_metric_points: int,
     ) -> None:
+        now = datetime.now(UTC)
+
         if self.simulation_run_repository is not None:
-            # Later: mark simulation_run completed.
-            pass
+            row = self.simulation_run_repository.get_by_run_id(str(run_id))
+
+            if row is not None:
+                row.status = "COMPLETED"
+                row.end_time = now
+                row.execution_config = {
+                    **row.execution_config,
+                    "result_summary": {
+                        "trade_count": trade_count,
+                        "equity_points": equity_points,
+                        "per_bar_metric_points": per_bar_metric_points,
+                    },
+                }
 
         if self.manifest_service is not None:
-            # Later: mark manifest completed.
+            # Optional later: mark manifest completed.
             pass
 
     def _record_run_failed(self, *, run_id: UUID, error_message: str) -> None:
+        now = datetime.now(UTC)
+
         if self.simulation_run_repository is not None:
-            # Later: mark simulation_run failed.
-            pass
+            row = self.simulation_run_repository.get_by_run_id(str(run_id))
+
+            if row is not None:
+                row.status = "FAILED"
+                row.end_time = now
+                row.execution_config = {
+                    **row.execution_config,
+                    "error": error_message,
+                }
 
         if self.manifest_service is not None:
-            # Later: mark manifest failed.
+            # Optional later: mark manifest failed.
             pass
