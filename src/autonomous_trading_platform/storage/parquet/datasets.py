@@ -14,6 +14,7 @@ from .schemas import (
     FEATURE_VOLATILITY_SCHEMA,
     SIMULATION_EQUITY_CURVE_SCHEMA,
     SIMULATION_PER_BAR_METRICS_SCHEMA,
+    SIMULATION_POSITIONS_SCHEMA,
     SIMULATION_TRADE_LOGS_SCHEMA,
 )
 
@@ -119,6 +120,14 @@ SIMULATION_PER_BAR_METRICS_DATASET = ParquetDataset(
     dataset_key="simulation_per_bar_metrics",
     root_parts=("simulations", "per_bar_metrics"),
     schema=SIMULATION_PER_BAR_METRICS_SCHEMA,
+    schema_version="1.0.0",
+    partition_cols=("experiment_id", "strategy_id", "date"),
+)
+
+SIMULATION_POSITIONS_DATASET = ParquetDataset(
+    dataset_key="simulation_positions",
+    root_parts=("simulations", "positions"),
+    schema=SIMULATION_POSITIONS_SCHEMA,
     schema_version="1.0.0",
     partition_cols=("experiment_id", "strategy_id", "date"),
 )

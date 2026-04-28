@@ -165,3 +165,20 @@ SIMULATION_PER_BAR_METRICS_SCHEMA = pa.schema(
         pa.field("date", pa.date32()),
     ]
 )
+
+SIMULATION_POSITIONS_SCHEMA = pa.schema(
+    [
+        pa.field("run_id", pa.string()),
+        pa.field("experiment_id", pa.string()),
+        pa.field("strategy_id", pa.string()),
+        pa.field("symbol", pa.string()),
+        pa.field("timestamp", UTC_TIMESTAMP),
+        pa.field("quantity", pa.float64()),
+        pa.field("avg_cost", pa.float64()),
+        pa.field("market_price", pa.float64()),
+        pa.field("market_value", pa.float64()),
+        pa.field("unrealized_pnl", pa.float64()),
+        pa.field("realized_pnl", pa.float64()),
+        pa.field("date", pa.date32()),
+    ]
+)

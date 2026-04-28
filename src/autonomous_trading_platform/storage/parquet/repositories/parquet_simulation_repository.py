@@ -9,6 +9,7 @@ import pyarrow.dataset as ds
 from autonomous_trading_platform.storage.parquet.datasets import (
     SIMULATION_EQUITY_CURVE_DATASET,
     SIMULATION_PER_BAR_METRICS_DATASET,
+    SIMULATION_POSITIONS_DATASET,
     SIMULATION_TRADE_LOGS_DATASET,
     ParquetDataset,
 )
@@ -17,6 +18,7 @@ SIMULATION_DATASETS_BY_NAME = {
     "trade_logs": SIMULATION_TRADE_LOGS_DATASET,
     "equity_curve": SIMULATION_EQUITY_CURVE_DATASET,
     "per_bar_metrics": SIMULATION_PER_BAR_METRICS_DATASET,
+    "positions": SIMULATION_POSITIONS_DATASET,
 }
 
 
