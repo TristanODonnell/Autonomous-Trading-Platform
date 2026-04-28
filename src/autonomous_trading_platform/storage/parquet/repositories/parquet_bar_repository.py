@@ -81,6 +81,8 @@ class ParquetBarRepository:
             for flag in quality_flags_raw
         ]
 
+        session_raw = row.get("session", MarketSession.REGULAR.value)
+
         return MarketBar(
             bar_id=str(row["bar_id"]),
             timestamp=timestamp,
@@ -104,9 +106,9 @@ class ParquetBarRepository:
             ingested_at=ingested_at,
             quality_flags=quality_flags,
             session=(
-                row["session"]
-                if isinstance(row["session"], MarketSession)
-                else MarketSession(row["session"])
+                session_raw
+                if isinstance(session_raw, MarketSession)
+                else MarketSession(session_raw)
             ),
         )
 

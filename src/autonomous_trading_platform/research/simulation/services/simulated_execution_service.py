@@ -17,16 +17,19 @@ class SimulatedExecutionService:
             if bar is None:
                 continue
 
+            if intent.qty is None:
+                continue
+
             fills.append(
                 Fill(
                     fill_id=str(uuid.uuid4()),
                     broker_order_id=str(uuid.uuid4()),
-                    intent_id=intent.intent_id,  # assuming OrderIntent has this field
+                    intent_id=intent.intent_id,
                     run_id=intent.run_id,
                     symbol=intent.symbol,
                     timestamp=bar.timestamp,
                     side=intent.side,
-                    quantity=intent.quantity,
+                    quantity=intent.qty,
                     price=bar.close,
                     fees=None,
                     liquidity=None,

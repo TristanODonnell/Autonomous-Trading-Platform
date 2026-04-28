@@ -231,27 +231,21 @@ class SimulationExecutionEngine:
         signals: list[Signal],
         fills: list[Any],
     ) -> list[dict[str, Any]]:
-        equity = self._calculate_equity(
-            cash=cash,
-            positions=positions,
-            prices=prices,
-        )
-
         rows: list[dict[str, Any]] = []
 
-        for symbol, bar in bars_at_timestamp.items():
+        for symbol in bars_at_timestamp:
+            position_qty = positions.get(symbol, 0)
+
             rows.append(
                 {
                     "run_id": str(run_id),
                     "strategy_id": strategy_id,
-                    "timestamp": timestamp,
                     "symbol": symbol,
-                    "close": float(bar.close),
-                    "position_qty": positions.get(symbol, 0),
-                    "cash": float(cash),
-                    "equity": float(equity),
-                    "signals_count": len(signals),
-                    "fills_count": len(fills),
+                    "timestamp": timestamp,
+                    "bar_return": 0.0,
+                    "position_size": float(position_qty),
+                    "unrealized_pnl": 0.0,
+                    "realized_pnl": 0.0,
                 }
             )
 
@@ -267,13 +261,10 @@ class SimulationExecutionEngine:
         positions: dict[str, int],
         prices: dict[str, float],
     ) -> Decimal:
-        position_value = Decimal("0")
-
-        for symbol, qty in positions.items():
-            price = Decimal(str(prices.get(symbol, 0.0)))
-            position_value += Decimal(qty) * price
-
-        return cash + position_value
+        return cash + self._calculate_positions_value(
+            positions=positions,
+            prices=prices,
+        )
 
     def _build_equity_row(
         self,
@@ -285,20 +276,36 @@ class SimulationExecutionEngine:
         positions: dict[str, int],
         prices: dict[str, float],
     ) -> dict[str, Any]:
-        equity = self._calculate_equity(
-            cash=cash,
+        positions_value = self._calculate_positions_value(
             positions=positions,
             prices=prices,
         )
+
+        equity = cash + positions_value
 
         return {
             "run_id": str(run_id),
             "strategy_id": strategy_id,
             "timestamp": timestamp,
-            "cash": float(cash),
             "equity": float(equity),
-            "positions_count": len(positions),
+            "cash": float(cash),
+            "positions_value": float(positions_value),
+            "drawdown": 0.0,
         }
+
+    def _calculate_positions_value(
+        self,
+        *,
+        positions: dict[str, int],
+        prices: dict[str, float],
+    ) -> Decimal:
+        positions_value = Decimal("0")
+
+        for symbol, qty in positions.items():
+            price = Decimal(str(prices.get(symbol, 0.0)))
+            positions_value += Decimal(qty) * price
+
+        return positions_value
 
     def _build_trade_rows(
         self,
