@@ -64,6 +64,7 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
 
     window_loader = SimulationWindowLoader(
         bar_reader=bar_reader,
+        feature_reader=bar_reader,
     )
 
     parquet_simulation_repository = ParquetSimulationRepository()

@@ -15,6 +15,13 @@ from autonomous_trading_platform.storage.parquet.reader import HistoricalBarData
 
 
 @dataclass(slots=True)
+class SimulationFeatureDatasetRequest:
+    feature_name: str
+    dataset: ParquetDataset
+    dataset_version: str
+
+
+@dataclass(slots=True)
 class SimulationWindowData:
     start_date: date
     end_date: date
@@ -23,7 +30,9 @@ class SimulationWindowData:
     timeline: list[datetime]
     bars_by_symbol: dict[str, list[MarketBar]]
     bars_by_timestamp: dict[datetime, dict[str, MarketBar]]
-    feature_tables_by_symbol: dict[str, pa.Table] | None = None
+
+    # Always present. Empty dict means no features loaded.
+    feature_tables_by_symbol: dict[str, dict[str, pa.Table]]
 
 
 class SimulationWindowLoader:
@@ -49,10 +58,11 @@ class SimulationWindowLoader:
         symbols: Iterable[str],
         start_date: date,
         end_date: date,
-        feature_dataset: ParquetDataset | None = None,
+        feature_datasets: Iterable[SimulationFeatureDatasetRequest] | None = None,
         engine: str = "duckdb",
         strict: bool = False,
     ) -> SimulationWindowData:
+
         if end_date < start_date:
             raise ValueError("end_date must be greater than or equal to start_date")
 
@@ -66,7 +76,8 @@ class SimulationWindowLoader:
             raise ValueError("At least one symbol is required")
 
         bars_by_symbol: dict[str, list[MarketBar]] = {}
-        feature_tables_by_symbol: dict[str, pa.Table] | None = {} if feature_dataset else None
+        feature_requests = list(feature_datasets or [])
+        feature_tables_by_symbol: dict[str, dict[str, pa.Table]] = {}
 
         for symbol in normalized_symbols:
             try:
@@ -94,38 +105,42 @@ class SimulationWindowLoader:
 
             bars_by_symbol[symbol] = [self._row_to_market_bar(row) for row in bar_table.to_pylist()]
 
-            if feature_dataset is not None:
+            if feature_requests:
                 if self.feature_reader is None:
-                    raise ValueError("feature_reader is required when feature_dataset is provided")
-
-                assert feature_tables_by_symbol is not None
-
-                try:
-                    feature_table = self.feature_reader.read(
-                        dataset=feature_dataset,
-                        dataset_version=dataset_version,
-                        symbol=symbol,
-                        start_date=start_date,
-                        end_date=end_date,
-                        engine=engine,
-                    )
-                except Exception as exc:
-                    raise RuntimeError(
-                        f"Failed to load feature data for symbol={symbol}, "
-                        f"dataset_version={dataset_version}, "
-                        f"window={start_date}..{end_date}, "
-                        f"feature_dataset={feature_dataset.dataset_key}"
-                    ) from exc
-
-                if strict and feature_table.num_rows == 0:
                     raise ValueError(
-                        f"No feature data found for symbol={symbol}, "
-                        f"dataset_version={dataset_version}, "
-                        f"window={start_date}..{end_date}, "
-                        f"feature_dataset={feature_dataset.dataset_key}"
+                        "feature_reader is required when feature_datasets are provided"
                     )
 
-                feature_tables_by_symbol[symbol] = feature_table
+                feature_tables_by_symbol[symbol] = {}
+
+                for feature_request in feature_requests:
+                    try:
+                        feature_table = self.feature_reader.read(
+                            dataset=feature_request.dataset,
+                            dataset_version=feature_request.dataset_version,
+                            symbol=symbol,
+                            start_date=start_date,
+                            end_date=end_date,
+                            engine=engine,
+                        )
+                    except Exception as exc:
+                        raise RuntimeError(
+                            f"Failed to load feature data for symbol={symbol}, "
+                            f"feature_name={feature_request.feature_name}, "
+                            f"dataset_version={feature_request.dataset_version}, "
+                            f"window={start_date}..{end_date}, "
+                            f"feature_dataset={feature_request.dataset.dataset_key}"
+                        ) from exc
+
+                    if strict and feature_table.num_rows == 0:
+                        raise ValueError(
+                            f"No feature data found for symbol={symbol}, "
+                            f"feature_name={feature_request.feature_name}, "
+                            f"dataset_version={feature_request.dataset_version}, "
+                            f"window={start_date}..{end_date}"
+                        )
+
+                    feature_tables_by_symbol[symbol][feature_request.feature_name] = feature_table
 
         bars_by_timestamp: dict[datetime, dict[str, MarketBar]] = {}
 
