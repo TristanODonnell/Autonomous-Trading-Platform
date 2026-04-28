@@ -6,7 +6,6 @@ from uuid import UUID
 
 from autonomous_trading_platform.contracts.trading.signal import Signal
 
-from ..contexts.strategy_context_builder import StrategyContextBuilder
 from ..contracts.strategy_context import StrategyContext
 from ..contracts.strategy_evaluation_result import StrategyEvaluationResult
 from ..implementations.base_strategy import BaseStrategy
@@ -19,6 +18,18 @@ class MarketBarReaderProtocol(Protocol):
         end_timestamp: datetime,
         lookback_bars: int,
     ) -> list[Any]: ...
+
+
+class StrategyContextBuilderProtocol(Protocol):
+    def build(
+        self,
+        *,
+        run_id: UUID,
+        strategy_id: str,
+        symbol: str,
+        bar_timestamp: datetime,
+        evaluation_timestamp: datetime,
+    ) -> StrategyContext | None: ...
 
 
 class UniverseMembershipReaderProtocol(Protocol):
@@ -35,7 +46,7 @@ class StrategyEvaluationService:
     def __init__(
         self,
         *,
-        context_builder: StrategyContextBuilder,
+        context_builder: StrategyContextBuilderProtocol,
         universe_reader: UniverseMembershipReaderProtocol,
         strategy: BaseStrategy,
     ) -> None:

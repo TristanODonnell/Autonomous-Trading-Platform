@@ -65,17 +65,27 @@ def _bars(count: int, *, end_timestamp: datetime) -> list[FakeBar]:
     return [FakeBar(timestamp=start + timedelta(minutes=i * 5)) for i in range(count)]
 
 
+class StubContextBuilder:
+    def __init__(self, context_by_symbol: dict[str, StrategyContext | None]) -> None:
+        self.context_by_symbol = context_by_symbol
+
+    def build(
+        self,
+        *,
+        run_id: UUID,
+        strategy_id: str,
+        symbol: str,
+        bar_timestamp: datetime,
+        evaluation_timestamp: datetime,
+    ) -> StrategyContext | None:
+        return self.context_by_symbol.get(symbol)
+
+
 class TestStrategyEvaluationService:
     def test_evaluates_only_symbols_with_sufficient_lookback(self) -> None:
         bar_timestamp = datetime(2025, 1, 1, 15, 35, tzinfo=UTC)
         evaluation_timestamp = datetime(2025, 1, 1, 15, 36, tzinfo=UTC)
 
-        market_bar_reader = StubMarketBarReader(
-            bars_by_symbol={
-                "AAPL": _bars(3, end_timestamp=bar_timestamp),
-                "MSFT": _bars(2, end_timestamp=bar_timestamp),
-            }
-        )
         universe_reader = StubUniverseReader(["AAPL", "MSFT"])
         aapl_signal = Signal(
             signal_id=UUID("00000000-0000-0000-0000-000000000401"),
@@ -88,13 +98,26 @@ class TestStrategyEvaluationService:
             confidence=1.0,
         )
         strategy = StubStrategy(signal_by_symbol={"AAPL": aapl_signal, "MSFT": None})
-        service = StrategyEvaluationService(
-            market_bar_reader=market_bar_reader,
-            universe_reader=universe_reader,
-            strategy=strategy,
-            lookback_bars=3,
+        context_builder = StubContextBuilder(
+            {
+                "AAPL": StrategyContext(
+                    run_id=RUN_ID,
+                    strategy_id="test_strategy_v1",
+                    symbol="AAPL",
+                    bar_timestamp=bar_timestamp,
+                    evaluation_timestamp=evaluation_timestamp,
+                    bars=_bars(3, end_timestamp=bar_timestamp),
+                    features={},
+                    state={},
+                ),
+            }
         )
 
+        service = StrategyEvaluationService(
+            context_builder=context_builder,
+            universe_reader=universe_reader,
+            strategy=strategy,
+        )
         result = service.evaluate(
             bar_timestamp=bar_timestamp,
             run_id=RUN_ID,
@@ -116,19 +139,29 @@ class TestStrategyEvaluationService:
         bar_timestamp = datetime(2025, 1, 1, 15, 35, tzinfo=UTC)
         evaluation_timestamp = datetime(2025, 1, 1, 15, 36, tzinfo=UTC)
 
-        market_bar_reader = StubMarketBarReader(
-            bars_by_symbol={"AAPL": _bars(3, end_timestamp=bar_timestamp)}
-        )
         universe_reader = StubUniverseReader(["AAPL"])
         strategy = StubStrategy(signal_by_symbol={"AAPL": None})
 
-        service = StrategyEvaluationService(
-            market_bar_reader=market_bar_reader,
-            universe_reader=universe_reader,
-            strategy=strategy,
-            lookback_bars=3,
+        context_builder = StubContextBuilder(
+            {
+                "AAPL": StrategyContext(
+                    run_id=RUN_ID,
+                    strategy_id="test_strategy_v1",
+                    symbol="AAPL",
+                    bar_timestamp=bar_timestamp,
+                    evaluation_timestamp=evaluation_timestamp,
+                    bars=_bars(3, end_timestamp=bar_timestamp),
+                    features={},
+                    state={},
+                ),
+            }
         )
 
+        service = StrategyEvaluationService(
+            context_builder=context_builder,
+            universe_reader=universe_reader,
+            strategy=strategy,
+        )
         result = service.evaluate(
             bar_timestamp=bar_timestamp,
             run_id=RUN_ID,
