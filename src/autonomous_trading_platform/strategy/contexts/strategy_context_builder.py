@@ -36,7 +36,7 @@ class StrategyContextBuilder:
         state: dict[str, Any],
     ) -> StrategyContext | None:
         symbol_bars = window.bars_by_symbol.get(symbol, [])
-        bars_up_to = [b for b in symbol_bars if b.timestamp <= timestamp]
+        bars_up_to = [b for b in symbol_bars if b.timestamp < timestamp]
 
         if len(bars_up_to) < self.lookback_bars:
             return None

@@ -19,6 +19,9 @@ from autonomous_trading_platform.execution.services.portfolio_construction_servi
 from autonomous_trading_platform.execution.services.position_ledger_service import (
     PositionLedgerService,
 )
+from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
+    LookaheadGuardService,
+)
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
     StrategyContextBuilder,
 )
@@ -38,9 +41,11 @@ class SimulationExecutionEngine:
         *,
         cash_ledger_service: CashLedgerService,
         position_ledger_service: PositionLedgerService,
+        lookahead_guard_service: LookaheadGuardService,
     ):
         self.cash_ledger_service = cash_ledger_service
         self.position_ledger_service = position_ledger_service
+        self.lookahead_guard_service = lookahead_guard_service
 
     def execute(
         self,
@@ -64,6 +69,10 @@ class SimulationExecutionEngine:
         position_rows: list[dict[str, Any]] = []
 
         strategy_state: dict[str, Any] = {}
+
+        self.lookahead_guard_service.assert_timeline_strictly_increasing(
+            timeline=list(window.timeline),
+        )
 
         for timestamp in window.timeline:
             bars_at_timestamp = window.bars_by_timestamp[timestamp]
@@ -183,6 +192,12 @@ class SimulationExecutionEngine:
 
             if context is None:
                 continue
+
+            self.lookahead_guard_service.assert_historical_only(
+                symbol=symbol,
+                simulation_timestamp=timestamp,
+                bars=context.bars,
+            )
 
             signal = strategy.evaluate_symbol(context)
 
