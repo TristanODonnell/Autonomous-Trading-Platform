@@ -16,7 +16,7 @@ from autonomous_trading_platform.strategy.services.strategy_evaluation_service i
 
 
 @dataclass
-class StrategyContext:
+class StrategyRuntimeContext:
     strategy_evaluation_service: StrategyEvaluationService
     strategy_bar_readiness_service: StrategyBarReadinessService
     signal_writer: SignalWriter

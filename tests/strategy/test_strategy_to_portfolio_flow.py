@@ -27,6 +27,22 @@ class FakeBar:
     timestamp: datetime
 
 
+class StubContextBuilder:
+    def __init__(self, context_by_symbol: dict[str, StrategyContext | None]) -> None:
+        self.context_by_symbol = context_by_symbol
+
+    def build(
+        self,
+        *,
+        run_id: UUID,
+        strategy_id: str,
+        symbol: str,
+        bar_timestamp: datetime,
+        evaluation_timestamp: datetime,
+    ) -> StrategyContext | None:
+        return self.context_by_symbol.get(symbol)
+
+
 class StubMarketBarReader:
     def __init__(self, bars_by_symbol: dict[str, list[FakeBar]]) -> None:
         self.bars_by_symbol = bars_by_symbol
@@ -83,11 +99,23 @@ def test_strategy_evaluation_result_flows_into_portfolio_construction() -> None:
     bar_timestamp = datetime(2025, 1, 2, 15, 35, tzinfo=UTC)
     evaluation_timestamp = datetime(2025, 1, 2, 15, 36, tzinfo=UTC)
 
+    context_builder = StubContextBuilder(
+        {
+            "AAPL": StrategyContext(
+                run_id=RUN_ID,
+                strategy_id="strategy-alpha",
+                symbol="AAPL",
+                bar_timestamp=bar_timestamp,
+                evaluation_timestamp=evaluation_timestamp,
+                bars=_bars(3, end_timestamp=bar_timestamp),
+            )
+        }
+    )
+
     evaluation_service = StrategyEvaluationService(
-        market_bar_reader=StubMarketBarReader({"AAPL": _bars(3, end_timestamp=bar_timestamp)}),
+        context_builder=context_builder,
         universe_reader=StubUniverseReader(["AAPL"]),
         strategy=StubStrategy(),
-        lookback_bars=3,
     )
 
     evaluation_result = evaluation_service.evaluate(

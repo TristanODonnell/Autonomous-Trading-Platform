@@ -14,7 +14,12 @@ from autonomous_trading_platform.storage.sor.repositories.strategy_runtime_state
 from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
     UniverseSnapshotRepository,
 )
-from autonomous_trading_platform.strategy.contexts.strategy_context import StrategyContext
+from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
+    StrategyContextBuilder,
+)
+from autonomous_trading_platform.strategy.contexts.strategy_runtime_context import (
+    StrategyRuntimeContext,
+)
 from autonomous_trading_platform.strategy.implementations.base_strategy import BaseStrategy
 from autonomous_trading_platform.strategy.jobs.evaluate_strategy_job import SignalWriter
 from autonomous_trading_platform.strategy.services.strategy_bar_readiness_service import (
@@ -65,11 +70,11 @@ class SqlAlchemyUniverseMembershipReader:
         return list(snapshot.symbols)
 
 
-def build_strategy_context(
+def build_strategy_runtime_context(
     *,
     session: Session,
     strategy: BaseStrategy,
-) -> StrategyContext:
+) -> StrategyRuntimeContext:
     market_bar_repository = MarketBarRepository(session)
     universe_repository = UniverseSnapshotRepository(session)
     runtime_state_repository = StrategyRuntimeStateRepository(session)
@@ -89,8 +94,12 @@ def build_strategy_context(
     )
     ingestion_status_reader = IngestionStatusReader()
 
-    strategy_evaluation_service = StrategyEvaluationService(
+    strategy_context_builder = StrategyContextBuilder(
         market_bar_reader=market_bar_reader,
+    )
+
+    strategy_evaluation_service = StrategyEvaluationService(
+        context_builder=strategy_context_builder,
         universe_reader=universe_reader,
         strategy=strategy,
     )
@@ -102,7 +111,7 @@ def build_strategy_context(
 
     run_manifest_service = RunManifestService(session=session)
 
-    return StrategyContext(
+    return StrategyRuntimeContext(
         strategy_evaluation_service=strategy_evaluation_service,
         strategy_bar_readiness_service=strategy_bar_readiness_service,
         signal_writer=signal_writer,

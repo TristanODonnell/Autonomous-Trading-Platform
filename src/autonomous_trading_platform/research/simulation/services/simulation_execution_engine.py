@@ -1,0 +1,334 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from decimal import Decimal
+from typing import Any
+from uuid import UUID
+
+import pandas as pd
+
+from autonomous_trading_platform.contracts.trading.signal import Signal
+from autonomous_trading_platform.execution.services.portfolio_construction_service import (
+    PortfolioConstructionService,
+)
+from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
+    StrategyContextBuilder,
+)
+
+
+@dataclass(slots=True)
+class SimulationExecutionResult:
+    trade_logs: pd.DataFrame
+    equity_curve: pd.DataFrame
+    per_bar_metrics: pd.DataFrame
+
+
+class SimulationExecutionEngine:
+    def execute(
+        self,
+        *,
+        run_id: UUID,
+        strategy: Any,
+        window: Any,
+        context_builder: StrategyContextBuilder,
+        portfolio_construction_service: PortfolioConstructionService,
+        simulated_execution_service: Any,
+        initial_cash: float,
+    ) -> SimulationExecutionResult:
+        cash = Decimal(str(initial_cash))
+        positions: dict[str, int] = {}
+
+        trade_rows: list[dict[str, Any]] = []
+        equity_rows: list[dict[str, Any]] = []
+        metric_rows: list[dict[str, Any]] = []
+
+        strategy_state: dict[str, Any] = {}
+
+        for timestamp in window.timeline:
+            bars_at_timestamp = window.bars_by_timestamp[timestamp]
+
+            signals = self._evaluate_signals(
+                run_id=run_id,
+                strategy=strategy,
+                window=window,
+                context_builder=context_builder,
+                timestamp=timestamp,
+                positions=positions,
+                strategy_state=strategy_state,
+            )
+
+            prices = self._extract_prices(bars_at_timestamp)
+
+            order_intents = self._construct_orders(
+                signals=signals,
+                positions=positions,
+                prices=prices,
+                run_id=run_id,
+                strategy_id=strategy.strategy_id,
+                timestamp=timestamp,
+                portfolio_construction_service=portfolio_construction_service,
+            )
+
+            fills = self._simulate_fills(
+                order_intents=order_intents,
+                bars_at_timestamp=bars_at_timestamp,
+                simulated_execution_service=simulated_execution_service,
+            )
+
+            cash = self._apply_fills(
+                fills=fills,
+                positions=positions,
+                cash=cash,
+            )
+
+            trade_rows.extend(
+                self._build_trade_rows(
+                    fills=fills,
+                    strategy_id=strategy.strategy_id,
+                )
+            )
+
+            equity_rows.append(
+                self._build_equity_row(
+                    run_id=run_id,
+                    strategy_id=strategy.strategy_id,
+                    timestamp=timestamp,
+                    cash=cash,
+                    positions=positions,
+                    prices=prices,
+                )
+            )
+
+            metric_rows.extend(
+                self._record_metrics(
+                    run_id=run_id,
+                    strategy_id=strategy.strategy_id,
+                    timestamp=timestamp,
+                    cash=cash,
+                    positions=positions,
+                    prices=prices,
+                    bars_at_timestamp=bars_at_timestamp,
+                    signals=signals,
+                    fills=fills,
+                )
+            )
+
+        return SimulationExecutionResult(
+            trade_logs=pd.DataFrame(trade_rows),
+            equity_curve=pd.DataFrame(equity_rows),
+            per_bar_metrics=pd.DataFrame(metric_rows),
+        )
+
+    def _evaluate_signals(
+        self,
+        *,
+        run_id: UUID,
+        strategy: Any,
+        window: Any,
+        context_builder: Any,
+        timestamp: datetime,
+        positions: dict[str, int],
+        strategy_state: dict[str, Any],
+    ) -> list[Signal]:
+        signals: list[Signal] = []
+
+        for symbol in window.symbols:
+            context = context_builder.build_from_window(
+                run_id=run_id,
+                strategy_id=strategy.strategy_id,
+                symbol=symbol,
+                timestamp=timestamp,
+                window=window,
+                positions=positions,
+                state=strategy_state,
+            )
+
+            if context is None:
+                continue
+
+            signal = strategy.evaluate_symbol(context)
+
+            if signal is not None:
+                signals.append(signal)
+
+        return signals
+
+    def _construct_orders(
+        self,
+        *,
+        signals: list[Signal],
+        positions: dict[str, int],
+        prices: dict[str, float],
+        run_id: UUID,
+        strategy_id: str,
+        timestamp: datetime,
+        portfolio_construction_service: Any,
+    ) -> list[Any]:
+        return list(
+            portfolio_construction_service.generate_order_intents(
+                signals=signals,
+                positions=positions,
+                prices=prices,
+                run_id=run_id,
+                strategy_id=strategy_id,
+                bar_timestamp=timestamp,
+                now=timestamp,
+            )
+        )
+
+    def _simulate_fills(
+        self,
+        *,
+        order_intents: list[Any],
+        bars_at_timestamp: dict[str, Any],
+        simulated_execution_service: Any,
+    ) -> list[Any]:
+        return list(
+            simulated_execution_service.fill(
+                order_intents=order_intents,
+                bars_at_timestamp=bars_at_timestamp,
+            )
+        )
+
+    def _apply_fills(
+        self,
+        *,
+        fills: list[Any],
+        positions: dict[str, int],
+        cash: Decimal,
+    ) -> Decimal:
+        updated_cash = cash
+
+        for fill in fills:
+            qty = int(fill.quantity)
+            price = Decimal(str(fill.price))
+            symbol = fill.symbol
+            side = fill.side.value.lower()
+
+            if side == "buy":
+                positions[symbol] = positions.get(symbol, 0) + qty
+                updated_cash -= price * qty
+            elif side == "sell":
+                positions[symbol] = positions.get(symbol, 0) - qty
+                updated_cash += price * qty
+
+                if positions[symbol] == 0:
+                    del positions[symbol]
+
+        return updated_cash
+
+    def _record_metrics(
+        self,
+        *,
+        run_id: UUID,
+        strategy_id: str,
+        timestamp: datetime,
+        cash: Decimal,
+        positions: dict[str, int],
+        prices: dict[str, float],
+        bars_at_timestamp: dict[str, Any],
+        signals: list[Signal],
+        fills: list[Any],
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+
+        for symbol in bars_at_timestamp:
+            position_qty = positions.get(symbol, 0)
+
+            rows.append(
+                {
+                    "run_id": str(run_id),
+                    "strategy_id": strategy_id,
+                    "symbol": symbol,
+                    "timestamp": timestamp,
+                    "bar_return": 0.0,
+                    "position_size": float(position_qty),
+                    "unrealized_pnl": 0.0,
+                    "realized_pnl": 0.0,
+                }
+            )
+
+        return rows
+
+    def _extract_prices(self, bars_at_timestamp: dict[str, Any]) -> dict[str, float]:
+        return {symbol: float(bar.close) for symbol, bar in bars_at_timestamp.items()}
+
+    def _calculate_equity(
+        self,
+        *,
+        cash: Decimal,
+        positions: dict[str, int],
+        prices: dict[str, float],
+    ) -> Decimal:
+        return cash + self._calculate_positions_value(
+            positions=positions,
+            prices=prices,
+        )
+
+    def _build_equity_row(
+        self,
+        *,
+        run_id: UUID,
+        strategy_id: str,
+        timestamp: datetime,
+        cash: Decimal,
+        positions: dict[str, int],
+        prices: dict[str, float],
+    ) -> dict[str, Any]:
+        positions_value = self._calculate_positions_value(
+            positions=positions,
+            prices=prices,
+        )
+
+        equity = cash + positions_value
+
+        return {
+            "run_id": str(run_id),
+            "strategy_id": strategy_id,
+            "timestamp": timestamp,
+            "equity": float(equity),
+            "cash": float(cash),
+            "positions_value": float(positions_value),
+            "drawdown": 0.0,
+        }
+
+    def _calculate_positions_value(
+        self,
+        *,
+        positions: dict[str, int],
+        prices: dict[str, float],
+    ) -> Decimal:
+        positions_value = Decimal("0")
+
+        for symbol, qty in positions.items():
+            price = Decimal(str(prices.get(symbol, 0.0)))
+            positions_value += Decimal(qty) * price
+
+        return positions_value
+
+    def _build_trade_rows(
+        self,
+        *,
+        fills: list[Any],
+        strategy_id: str,
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+
+        for fill in fills:
+            rows.append(
+                {
+                    "run_id": str(fill.run_id),
+                    "strategy_id": strategy_id,
+                    "symbol": fill.symbol,
+                    "timestamp": fill.timestamp,
+                    "side": fill.side.value,
+                    "quantity": float(fill.quantity),
+                    "price": float(fill.price),
+                    "notional": float(Decimal(str(fill.quantity)) * Decimal(str(fill.price))),
+                    "fees": 0.0,
+                    "slippage": 0.0,
+                }
+            )
+
+        return rows
