@@ -28,9 +28,9 @@ from autonomous_trading_platform.safety.readers.risk_state_reader import StubRis
 from autonomous_trading_platform.storage.sor.repositories.audit_logs_repository import (
     AuditLogRepository,
 )
-from autonomous_trading_platform.strategy.contexts.build_strategy_context import (
-    StrategyContext,
-    build_strategy_context,
+from autonomous_trading_platform.strategy.contexts.build_strategy_runtime_context import (
+    StrategyRuntimeContext,
+    build_strategy_runtime_context,
 )
 from autonomous_trading_platform.strategy.implementations.stub_strategy import StubStrategy
 
@@ -49,7 +49,7 @@ class TradingCycleDependencies:
     settings: Settings
     audit_logger: AuditLoggingService
     manifest_service: RunManifestService
-    strategy_context: StrategyContext
+    strategy_context: StrategyRuntimeContext
     safety_context: SafetyContext
     execution_context: ExecutionContext
 
@@ -86,7 +86,7 @@ def build_trading_cycle_dependencies() -> TradingCycleDependencies:
     environment_safety_policy = EnvironmentSafetyPolicy(settings=settings)
 
     strategy_stub = StubStrategy()
-    strategy_context = build_strategy_context(session=session, strategy=strategy_stub)
+    strategy_context = build_strategy_runtime_context(session=session, strategy=strategy_stub)
 
     risk_state_reader = StubRiskStateReader()
     order_activity_reader = StubOrderActivityReader()

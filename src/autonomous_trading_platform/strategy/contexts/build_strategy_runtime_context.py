@@ -14,6 +14,9 @@ from autonomous_trading_platform.storage.sor.repositories.strategy_runtime_state
 from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
     UniverseSnapshotRepository,
 )
+from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
+    StrategyContextBuilder,
+)
 from autonomous_trading_platform.strategy.contexts.strategy_runtime_context import (
     StrategyRuntimeContext,
 )
@@ -67,7 +70,7 @@ class SqlAlchemyUniverseMembershipReader:
         return list(snapshot.symbols)
 
 
-def build_strategy_context(
+def build_strategy_runtime_context(
     *,
     session: Session,
     strategy: BaseStrategy,
@@ -91,8 +94,12 @@ def build_strategy_context(
     )
     ingestion_status_reader = IngestionStatusReader()
 
-    strategy_evaluation_service = StrategyEvaluationService(
+    strategy_context_builder = StrategyContextBuilder(
         market_bar_reader=market_bar_reader,
+    )
+
+    strategy_evaluation_service = StrategyEvaluationService(
+        context_builder=strategy_context_builder,
         universe_reader=universe_reader,
         strategy=strategy,
     )

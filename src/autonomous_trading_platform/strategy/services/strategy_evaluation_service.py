@@ -38,12 +38,10 @@ class StrategyEvaluationService:
         context_builder: StrategyContextBuilder,
         universe_reader: UniverseMembershipReaderProtocol,
         strategy: BaseStrategy,
-        lookback_bars: int = 20,
     ) -> None:
         self.context_builder = context_builder
         self.universe_reader = universe_reader
         self.strategy = strategy
-        self.lookback_bars = lookback_bars
 
     def evaluate(
         self,
