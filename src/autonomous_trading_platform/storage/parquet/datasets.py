@@ -12,6 +12,9 @@ from .schemas import (
     FEATURE_REGIME_SCHEMA,
     FEATURE_RETURNS_SCHEMA,
     FEATURE_VOLATILITY_SCHEMA,
+    SIMULATION_EQUITY_CURVE_SCHEMA,
+    SIMULATION_PER_BAR_METRICS_SCHEMA,
+    SIMULATION_TRADE_LOGS_SCHEMA,
 )
 
 
@@ -94,4 +97,28 @@ FEATURE_REGIME_DATASET = ParquetDataset(
     schema_version="1.0.0",
     root_parts=("features", "regime"),
     partition_cols=("symbol", "year", "month"),
+)
+
+SIMULATION_TRADE_LOGS_DATASET = ParquetDataset(
+    dataset_key="simulation_trade_logs",
+    schema=SIMULATION_TRADE_LOGS_SCHEMA,
+    schema_version="1.0.0",
+    root_parts=("simulations", "trade_logs"),
+    partition_cols=("experiment_id", "strategy_id", "date"),
+)
+
+SIMULATION_EQUITY_CURVE_DATASET = ParquetDataset(
+    dataset_key="simulation_equity_curve",
+    root_parts=("simulations", "equity_curve"),
+    schema=SIMULATION_EQUITY_CURVE_SCHEMA,
+    schema_version="1.0.0",
+    partition_cols=("experiment_id", "strategy_id", "date"),
+)
+
+SIMULATION_PER_BAR_METRICS_DATASET = ParquetDataset(
+    dataset_key="simulation_per_bar_metrics",
+    root_parts=("simulations", "per_bar_metrics"),
+    schema=SIMULATION_PER_BAR_METRICS_SCHEMA,
+    schema_version="1.0.0",
+    partition_cols=("experiment_id", "strategy_id", "date"),
 )

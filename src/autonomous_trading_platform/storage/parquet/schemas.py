@@ -120,3 +120,48 @@ FEATURE_REGIME_SCHEMA = pa.schema(
         pa.field("month", pa.string(), nullable=False),
     ]
 )
+
+SIMULATION_TRADE_LOGS_SCHEMA = pa.schema(
+    [
+        pa.field("run_id", pa.string()),
+        pa.field("experiment_id", pa.string()),
+        pa.field("strategy_id", pa.string()),
+        pa.field("symbol", pa.string()),
+        pa.field("timestamp", pa.timestamp("us", tz="UTC")),
+        pa.field("side", pa.string()),
+        pa.field("quantity", pa.float64()),
+        pa.field("price", pa.float64()),
+        pa.field("notional", pa.float64()),
+        pa.field("fees", pa.float64()),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+SIMULATION_EQUITY_CURVE_SCHEMA = pa.schema(
+    [
+        pa.field("run_id", pa.string()),
+        pa.field("experiment_id", pa.string()),
+        pa.field("strategy_id", pa.string()),
+        pa.field("timestamp", pa.timestamp("us", tz="UTC")),
+        pa.field("equity", pa.float64()),
+        pa.field("cash", pa.float64()),
+        pa.field("positions_value", pa.float64()),
+        pa.field("drawdown", pa.float64()),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+SIMULATION_PER_BAR_METRICS_SCHEMA = pa.schema(
+    [
+        pa.field("run_id", pa.string()),
+        pa.field("experiment_id", pa.string()),
+        pa.field("strategy_id", pa.string()),
+        pa.field("symbol", pa.string()),
+        pa.field("timestamp", pa.timestamp("us", tz="UTC")),
+        pa.field("bar_return", pa.float64()),
+        pa.field("position_size", pa.float64()),
+        pa.field("unrealized_pnl", pa.float64()),
+        pa.field("realized_pnl", pa.float64()),
+        pa.field("date", pa.date32()),
+    ]
+)
