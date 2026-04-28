@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from datetime import date
 
 from autonomous_trading_platform.cli.formatters import print_header, print_json
@@ -49,6 +50,24 @@ def register(subparsers) -> None:
     )
     run_simulation_parser.add_argument("--start-date", required=True)
     run_simulation_parser.add_argument("--end-date", required=True)
+    run_simulation_parser.add_argument(
+        "--strategy-type",
+        required=True,
+        choices=[
+            "stub",
+            "moving_average_crossover",
+            "mean_reversion",
+            "momentum",
+            "factor_based",
+        ],
+        help="Strategy type to run",
+    )
+
+    run_simulation_parser.add_argument(
+        "--strategy-parameters",
+        default="{}",
+        help='JSON string of strategy parameters, e.g. \'{"short_window": 10, "long_window": 30}\'',
+    )
     run_simulation_parser.add_argument("--strategy-id", required=True)
     run_simulation_parser.add_argument("--initial-cash", type=float, default=100_000.0)
     run_simulation_parser.add_argument("--experiment-id")
@@ -66,9 +85,17 @@ def handle_run_simulation(args: argparse.Namespace) -> int:
     try:
         simulation_context = build_simulation_context(session=session)
 
+        strategy_parameters = json.loads(args.strategy_parameters)
+
+        if not isinstance(strategy_parameters, dict):
+            raise ValueError("--strategy-parameters must be a JSON object")
+
         request = SimulationRunRequest(
             strategy_id=args.strategy_id,
-            strategy_config={},
+            strategy_config={
+                "type": args.strategy_type,
+                "parameters": strategy_parameters,
+            },
             dataset_version=args.dataset_version_id,
             price_basis=PriceBasis(args.price_basis),
             symbols=_parse_symbols(args.symbols),
@@ -88,6 +115,8 @@ def handle_run_simulation(args: argparse.Namespace) -> int:
                 "run_id": str(result.run_id),
                 "experiment_id": result.experiment_id,
                 "strategy_id": result.strategy_id,
+                "strategy_type": args.strategy_type,
+                "strategy_parameters": strategy_parameters,
                 "dataset_version": result.dataset_version,
                 "symbols": result.symbols,
                 "symbol_count": len(result.symbols),

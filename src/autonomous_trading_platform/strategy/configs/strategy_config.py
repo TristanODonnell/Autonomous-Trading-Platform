@@ -8,12 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class StrategyConfig(BaseModel):
-    type: Literal[
-        "stub",
-        "moving_average_crossover",
-        "mean_reversion",
-        "momentum",
-    ]
+    type: Literal["stub", "moving_average_crossover", "mean_reversion", "momentum", "factor_based"]
 
     strategy_id: str
 

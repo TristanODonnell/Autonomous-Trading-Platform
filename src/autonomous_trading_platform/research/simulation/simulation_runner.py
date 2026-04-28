@@ -5,19 +5,27 @@ from datetime import date
 from typing import Any
 from uuid import UUID, uuid4
 
-import pandas as pd
-
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.execution.services.portfolio_construction_service import (
+    PortfolioConstructionService,
+)
 from autonomous_trading_platform.research.services.research_dataset_resolver_service import (
     ResearchDatasetResolver,
 )
 from autonomous_trading_platform.research.simulation.services.result_recorder_service import (
     ResultRecorderService,
 )
+from autonomous_trading_platform.research.simulation.services.simulation_execution_engine import (
+    SimulationExecutionEngine,
+)
 from autonomous_trading_platform.research.simulation.services.simulation_window_loader_service import (
-    SimulationWindowData,
     SimulationWindowLoader,
 )
+from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
+from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
+    StrategyContextBuilder,
+)
+from autonomous_trading_platform.strategy.factories.strategy_factory import StrategyFactory
 
 
 @dataclass(slots=True)
@@ -70,13 +78,23 @@ class SimulationRunner:
         dataset_resolver: ResearchDatasetResolver,
         window_loader: SimulationWindowLoader,
         result_recorder: ResultRecorderService,
+        execution_engine: SimulationExecutionEngine,
+        context_builder: StrategyContextBuilder,
+        portfolio_construction_service: PortfolioConstructionService,
+        simulated_execution_service: Any,
         simulation_run_repository: Any | None = None,
         strategy_config_repository: Any | None = None,
         manifest_service: Any | None = None,
+        strategy_factory: StrategyFactory,
     ) -> None:
+        self.strategy_factory = strategy_factory
         self.dataset_resolver = dataset_resolver
         self.window_loader = window_loader
         self.result_recorder = result_recorder
+        self.execution_engine = execution_engine
+        self.context_builder = context_builder
+        self.portfolio_construction_service = portfolio_construction_service
+        self.simulated_execution_service = simulated_execution_service
         self.simulation_run_repository = simulation_run_repository
         self.strategy_config_repository = strategy_config_repository
         self.manifest_service = manifest_service
@@ -107,10 +125,18 @@ class SimulationRunner:
                 strict=request.strict_data_loading,
             )
 
+            strategy_config = StrategyConfig(
+                strategy_id=request.strategy_id,
+                type=request.strategy_config["type"],
+                parameters=request.strategy_config.get("parameters", {}),
+            )
+            strategy = self.strategy_factory.build(strategy_config)
+
             trade_logs, equity_curve, per_bar_metrics = self._execute_simulation(
                 run_id=run_id,
                 request=request,
                 window=window,
+                strategy=strategy,
             )
 
             self.result_recorder.record_results(
@@ -146,70 +172,17 @@ class SimulationRunner:
             self._record_run_failed(run_id=run_id, error_message=str(exc))
             raise
 
-    def _execute_simulation(
-        self,
-        *,
-        run_id: UUID,
-        request: SimulationRunRequest,
-        window: SimulationWindowData,
-    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-        """
-        Temporary placeholder.
-
-        Replace this with your actual simulation engine once the portfolio,
-        execution simulator, strategy evaluator, and metrics calculator exist.
-        """
-
-        trade_logs = pd.DataFrame(
-            columns=[
-                "run_id",
-                "experiment_id",
-                "strategy_id",
-                "symbol",
-                "timestamp",
-                "side",
-                "quantity",
-                "price",
-                "notional",
-                "fees",
-                "slippage",
-            ]
+    def _execute_simulation(self, *, run_id, request, window, strategy):
+        result = self.execution_engine.execute(
+            run_id=run_id,
+            strategy=strategy,
+            window=window,
+            context_builder=self.context_builder,
+            portfolio_construction_service=self.portfolio_construction_service,
+            simulated_execution_service=self.simulated_execution_service,
+            initial_cash=request.initial_cash,
         )
-
-        equity_rows: list[dict[str, Any]] = []
-        metric_rows: list[dict[str, Any]] = []
-
-        cash = request.initial_cash
-
-        for timestamp in window.timeline:
-            bars_at_timestamp = window.bars_by_timestamp[timestamp]
-
-            for symbol, bar in bars_at_timestamp.items():
-                equity_rows.append(
-                    {
-                        "run_id": str(run_id),
-                        "strategy_id": request.strategy_id,
-                        "timestamp": bar.timestamp,
-                        "symbol": symbol,
-                        "cash": cash,
-                        "equity": cash,
-                    }
-                )
-
-                metric_rows.append(
-                    {
-                        "run_id": str(run_id),
-                        "strategy_id": request.strategy_id,
-                        "timestamp": bar.timestamp,
-                        "symbol": symbol,
-                        "close": bar.close,
-                    }
-                )
-
-        equity_curve = pd.DataFrame(equity_rows)
-        per_bar_metrics = pd.DataFrame(metric_rows)
-
-        return trade_logs, equity_curve, per_bar_metrics
+        return result.trade_logs, result.equity_curve, result.per_bar_metrics
 
     def _record_run_started(
         self,

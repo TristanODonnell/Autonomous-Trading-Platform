@@ -6,6 +6,9 @@ from autonomous_trading_platform.research.services.research_dataset_resolver_ser
 from autonomous_trading_platform.research.simulation.services.result_recorder_service import (
     ResultRecorderService,
 )
+from autonomous_trading_platform.research.simulation.services.simulation_execution_engine import (
+    SimulationExecutionEngine,
+)
 from autonomous_trading_platform.research.simulation.services.simulation_window_loader_service import (
     SimulationWindowLoader,
 )
@@ -24,3 +27,4 @@ class SimulationContext:
     parquet_simulation_repository: ParquetSimulationRepository
     result_recorder_service: ResultRecorderService
     simulation_runner: SimulationRunner
+    simulation_engine: SimulationExecutionEngine

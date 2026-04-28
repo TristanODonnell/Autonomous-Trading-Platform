@@ -9,6 +9,12 @@ from uuid import UUID
 import pandas as pd
 
 from autonomous_trading_platform.contracts.trading.signal import Signal
+from autonomous_trading_platform.execution.services.portfolio_construction_service import (
+    PortfolioConstructionService,
+)
+from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
+    StrategyContextBuilder,
+)
 
 
 @dataclass(slots=True)
@@ -25,8 +31,8 @@ class SimulationExecutionEngine:
         run_id: UUID,
         strategy: Any,
         window: Any,
-        context_builder: Any,
-        portfolio_construction_service: Any,
+        context_builder: StrategyContextBuilder,
+        portfolio_construction_service: PortfolioConstructionService,
         simulated_execution_service: Any,
         initial_cash: float,
     ) -> SimulationExecutionResult:
