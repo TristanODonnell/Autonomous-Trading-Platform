@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 import pyarrow as pa
@@ -20,7 +20,9 @@ class SimulationWindowData:
     end_date: date
     dataset_version: str
     symbols: list[str]
+    timeline: list[datetime]
     bars_by_symbol: dict[str, list[MarketBar]]
+    bars_by_timestamp: dict[datetime, dict[str, MarketBar]]
     feature_tables_by_symbol: dict[str, pa.Table] | None = None
 
 
@@ -125,12 +127,22 @@ class SimulationWindowLoader:
 
                 feature_tables_by_symbol[symbol] = feature_table
 
+        bars_by_timestamp: dict[datetime, dict[str, MarketBar]] = {}
+
+        for symbol, bars in bars_by_symbol.items():
+            for bar in bars:
+                bars_by_timestamp.setdefault(bar.timestamp, {})[symbol] = bar
+
+        timeline = sorted(bars_by_timestamp.keys())
+
         return SimulationWindowData(
             start_date=start_date,
             end_date=end_date,
             dataset_version=dataset_version,
             symbols=normalized_symbols,
+            timeline=timeline,
             bars_by_symbol=bars_by_symbol,
+            bars_by_timestamp=bars_by_timestamp,
             feature_tables_by_symbol=feature_tables_by_symbol,
         )
 

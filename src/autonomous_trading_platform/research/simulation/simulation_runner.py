@@ -181,8 +181,10 @@ class SimulationRunner:
 
         cash = request.initial_cash
 
-        for symbol, bars in window.bars_by_symbol.items():
-            for bar in bars:
+        for timestamp in window.timeline:
+            bars_at_timestamp = window.bars_by_timestamp[timestamp]
+
+            for symbol, bar in bars_at_timestamp.items():
                 equity_rows.append(
                     {
                         "run_id": str(run_id),
