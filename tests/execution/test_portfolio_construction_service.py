@@ -34,8 +34,8 @@ class FakeRiskService(PreTradeRiskService):
 def make_signal(*, symbol: str, direction: str) -> Signal:
     direction_map = {
         "long": SignalDirection.BUY,
-        "short": SignalDirection.SELL,
-        "flat": SignalDirection.FLAT,  # adjust if needed
+        "sell": SignalDirection.SELL,
+        "flat": SignalDirection.FLAT,
     }
 
     return Signal(
@@ -153,7 +153,7 @@ class TestPortfolioConstructionService:
         assert intent.side == Side.BUY
         assert intent.qty == 6
 
-    def test_generate_order_intents_sizes_relative_to_current_short_position(
+    def test_generate_order_intents_sell_signal_reduces_or_closes_long_position(
         self,
         service: PortfolioConstructionService,
         run_id: UUID,
@@ -161,8 +161,8 @@ class TestPortfolioConstructionService:
         bar_timestamp: datetime,
         now: datetime,
     ) -> None:
-        signals = [make_signal(symbol="TSLA", direction="short")]
-        positions = {"TSLA": -3}
+        signals = [make_signal(symbol="TSLA", direction="sell")]
+        positions = {"TSLA": 3}
         prices = {"TSLA": 210.0}
 
         intents = list(
@@ -179,12 +179,11 @@ class TestPortfolioConstructionService:
 
         assert len(intents) == 1
         intent = intents[0]
-
-        # position_sizer currently targets -10 for a short signal
-        # so delta should be -10 - (-3) = -7 => SELL 7
+        # SELL signal exits long position (target = 0)
+        # so delta should be 0 - 3 = -3 => SELL 3
         assert intent.symbol == "TSLA"
         assert intent.side == Side.SELL
-        assert intent.qty == 7
+        assert intent.qty == 3
 
     def test_generate_order_intents_calls_pre_trade_risk_for_each_intent(
         self,
@@ -197,9 +196,9 @@ class TestPortfolioConstructionService:
     ) -> None:
         signals = [
             make_signal(symbol="AAPL", direction="long"),
-            make_signal(symbol="MSFT", direction="short"),
+            make_signal(symbol="MSFT", direction="sell"),
         ]
-        positions = {"AAPL": 0, "MSFT": 0}
+        positions = {"AAPL": 0, "MSFT": 5}
         prices = {"AAPL": 100.0, "MSFT": 200.0}
 
         intents = list(

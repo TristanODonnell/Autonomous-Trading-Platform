@@ -23,6 +23,7 @@ class ResultRecorderService:
         trade_logs: pd.DataFrame,
         equity_curve: pd.DataFrame,
         per_bar_metrics: pd.DataFrame,
+        positions: pd.DataFrame,
     ) -> None:
         self.parquet_simulation_repository.write_trade_logs(
             frame=trade_logs,
@@ -38,6 +39,12 @@ class ResultRecorderService:
 
         self.parquet_simulation_repository.write_per_bar_metrics(
             frame=per_bar_metrics,
+            experiment_id=experiment_id,
+            strategy_id=strategy_id,
+        )
+
+        self.parquet_simulation_repository.write_positions(
+            frame=positions,
             experiment_id=experiment_id,
             strategy_id=strategy_id,
         )

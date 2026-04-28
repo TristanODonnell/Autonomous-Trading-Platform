@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.contracts.runtime.experiment import Experiment
+from autonomous_trading_platform.contracts.runtime.simulation_run import SimulationRun
+from autonomous_trading_platform.contracts.runtime.strategy_config import (
+    StrategyConfig as RuntimeStrategyConfig,
+)
 from autonomous_trading_platform.execution.services.portfolio_construction_service import (
     PortfolioConstructionService,
 )
@@ -20,6 +26,15 @@ from autonomous_trading_platform.research.simulation.services.simulation_executi
 )
 from autonomous_trading_platform.research.simulation.services.simulation_window_loader_service import (
     SimulationWindowLoader,
+)
+from autonomous_trading_platform.storage.sor.repositories.experiments_repository import (
+    ExperimentsRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.simulation_runs_repository import (
+    SimulationRunsRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.strategy_configs_repository import (
+    StrategyConfigsRepository,
 )
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
@@ -45,7 +60,7 @@ class SimulationRunRequest:
 @dataclass(slots=True)
 class SimulationRunResult:
     run_id: UUID
-    experiment_id: str
+    experiment_id: str | None  # TODO change later on
     strategy_id: str
     dataset_version: str
     symbols: list[str]
@@ -82,8 +97,9 @@ class SimulationRunner:
         context_builder: StrategyContextBuilder,
         portfolio_construction_service: PortfolioConstructionService,
         simulated_execution_service: Any,
-        simulation_run_repository: Any | None = None,
-        strategy_config_repository: Any | None = None,
+        simulation_run_repository: SimulationRunsRepository,
+        strategy_config_repository: StrategyConfigsRepository,
+        experiment_repository: ExperimentsRepository,
         manifest_service: Any | None = None,
         strategy_factory: StrategyFactory,
     ) -> None:
@@ -97,6 +113,7 @@ class SimulationRunner:
         self.simulated_execution_service = simulated_execution_service
         self.simulation_run_repository = simulation_run_repository
         self.strategy_config_repository = strategy_config_repository
+        self.experiment_repository = experiment_repository
         self.manifest_service = manifest_service
 
     def run(self, request: SimulationRunRequest) -> SimulationRunResult:
@@ -114,6 +131,7 @@ class SimulationRunner:
             experiment_id=experiment_id,
             resolved_dataset_metadata=resolved_dataset.metadata,
         )
+        self._commit_metadata()
 
         try:
             window = self.window_loader.load_window(
@@ -132,7 +150,7 @@ class SimulationRunner:
             )
             strategy = self.strategy_factory.build(strategy_config)
 
-            trade_logs, equity_curve, per_bar_metrics = self._execute_simulation(
+            trade_logs, equity_curve, per_bar_metrics, positions = self._execute_simulation(
                 run_id=run_id,
                 request=request,
                 window=window,
@@ -145,6 +163,7 @@ class SimulationRunner:
                 trade_logs=trade_logs,
                 equity_curve=equity_curve,
                 per_bar_metrics=per_bar_metrics,
+                positions=positions,
             )
 
             self._record_run_completed(
@@ -153,6 +172,7 @@ class SimulationRunner:
                 equity_points=len(equity_curve),
                 per_bar_metric_points=len(per_bar_metrics),
             )
+            self._commit_metadata()
 
             return SimulationRunResult(
                 run_id=run_id,
@@ -170,6 +190,7 @@ class SimulationRunner:
 
         except Exception as exc:
             self._record_run_failed(run_id=run_id, error_message=str(exc))
+            self._commit_metadata()
             raise
 
     def _execute_simulation(self, *, run_id, request, window, strategy):
@@ -182,28 +203,87 @@ class SimulationRunner:
             simulated_execution_service=self.simulated_execution_service,
             initial_cash=request.initial_cash,
         )
-        return result.trade_logs, result.equity_curve, result.per_bar_metrics
+        return (
+            result.trade_logs,
+            result.equity_curve,
+            result.per_bar_metrics,
+            result.positions,
+        )
 
     def _record_run_started(
         self,
         *,
         run_id: UUID,
         request: SimulationRunRequest,
-        experiment_id: str,
+        experiment_id: str | None,
         resolved_dataset_metadata: dict[str, Any],
     ) -> None:
+        now = datetime.now(UTC)
 
         if self.strategy_config_repository is not None:
-            # Later: upsert strategy config/config_hash here.
-            pass
+            build_config = StrategyConfig(
+                strategy_id=request.strategy_id,
+                type=request.strategy_config["type"],
+                parameters=request.strategy_config.get("parameters", {}),
+            )
+
+            if self.experiment_repository is not None and experiment_id is not None:
+                experiment_contract = Experiment(
+                    experiment_id=experiment_id,
+                    experiment_name=request.experiment_id or f"Auto Experiment {run_id}",
+                    created_at=datetime.now(UTC),
+                    description="Auto-created from simulation runner",
+                    status="ACTIVE",
+                    metadata_json={
+                        "dataset_version": request.dataset_version,
+                        "price_basis": request.price_basis.value,
+                        "symbols": request.symbols,
+                        "start_date": str(request.start_date),
+                        "end_date": str(request.end_date),
+                    },
+                )
+
+                experiment_row = self.experiment_repository.to_row(experiment_contract)
+                self.experiment_repository.upsert(experiment_row)
+                self.experiment_repository.session.flush()
+
+            strategy_config = RuntimeStrategyConfig(
+                strategy_id=build_config.strategy_id,
+                config_hash=build_config.config_hash(),
+                config_json=json.loads(build_config.canonical_json()),
+                created_at=now,
+                strategy_type=build_config.type,
+                metadata_json={"source": "simulation_runner"},
+            )
+
+            strategy_config_row = self.strategy_config_repository.to_row(strategy_config)
+            self.strategy_config_repository.upsert(strategy_config_row)
+            self.strategy_config_repository.session.flush()
 
         if self.simulation_run_repository is not None:
-            # Later: create simulation_runs row here.
-            pass
+            simulation_run = SimulationRun(
+                run_id=str(run_id),
+                experiment_id=experiment_id,
+                strategy_id=request.strategy_id,
+                dataset_version=request.dataset_version,
+                universe_version="v1",
+                start_time=now,
+                end_time=None,
+                execution_config={
+                    "price_basis": request.price_basis.value,
+                    "symbols": request.symbols,
+                    "start_date": str(request.start_date),
+                    "end_date": str(request.end_date),
+                    "initial_cash": request.initial_cash,
+                    "strict_data_loading": request.strict_data_loading,
+                    "resolved_dataset_metadata": resolved_dataset_metadata,
+                },
+                status="RUNNING",
+                metrics_snapshot_id=None,
+            )
 
-        if self.manifest_service is not None:
-            # Later: create/save research run_manifest here.
-            pass
+            simulation_run_row = self.simulation_run_repository.to_row(simulation_run)
+            self.simulation_run_repository.upsert(simulation_run_row)
 
     def _record_run_completed(
         self,
@@ -213,19 +293,46 @@ class SimulationRunner:
         equity_points: int,
         per_bar_metric_points: int,
     ) -> None:
+        now = datetime.now(UTC)
+
         if self.simulation_run_repository is not None:
-            # Later: mark simulation_run completed.
-            pass
+            row = self.simulation_run_repository.get_by_run_id(str(run_id))
+
+            if row is not None:
+                row.status = "COMPLETED"
+                row.end_time = now
+                row.execution_config = {
+                    **row.execution_config,
+                    "result_summary": {
+                        "trade_count": trade_count,
+                        "equity_points": equity_points,
+                        "per_bar_metric_points": per_bar_metric_points,
+                    },
+                }
 
         if self.manifest_service is not None:
-            # Later: mark manifest completed.
+            # Optional later: mark manifest completed.
             pass
 
     def _record_run_failed(self, *, run_id: UUID, error_message: str) -> None:
+        now = datetime.now(UTC)
+
         if self.simulation_run_repository is not None:
-            # Later: mark simulation_run failed.
-            pass
+            row = self.simulation_run_repository.get_by_run_id(str(run_id))
+
+            if row is not None:
+                row.status = "FAILED"
+                row.end_time = now
+                row.execution_config = {
+                    **row.execution_config,
+                    "error": error_message,
+                }
 
         if self.manifest_service is not None:
-            # Later: mark manifest failed.
+            # Optional later: mark manifest failed.
             pass
+
+    def _commit_metadata(self) -> None:
+        repo = self.simulation_run_repository or self.strategy_config_repository
+        if repo is not None:
+            repo.session.commit()

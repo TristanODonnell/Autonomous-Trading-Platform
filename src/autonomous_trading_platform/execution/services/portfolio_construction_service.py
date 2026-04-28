@@ -5,7 +5,12 @@ from decimal import Decimal
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from autonomous_trading_platform.contracts.common.enums import OrderType, Side, TimeInForce
+from autonomous_trading_platform.contracts.common.enums import (
+    OrderType,
+    Side,
+    SignalDirection,
+    TimeInForce,
+)
 from autonomous_trading_platform.contracts.common.types import UTCDateTime
 from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
 from autonomous_trading_platform.contracts.trading.signal import Signal
@@ -52,12 +57,13 @@ class PortfolioConstructionService:
 
         for signal in signals:
             target_qty = 10
-            direction = signal.direction.value.lower()
 
-            if direction in {"long", "buy"}:
+            if signal.direction == SignalDirection.BUY:
                 target_positions[signal.symbol] = target_qty
-            elif direction in {"short", "sell"}:
-                target_positions[signal.symbol] = -target_qty
+            elif (
+                signal.direction == SignalDirection.SELL or signal.direction == SignalDirection.FLAT
+            ):
+                target_positions[signal.symbol] = 0
             else:
                 target_positions[signal.symbol] = 0
 
@@ -72,7 +78,13 @@ class PortfolioConstructionService:
 
         all_symbols = sorted(set(current_positions) | set(target_positions))
         for symbol in all_symbols:
-            current_qty = current_positions.get(symbol, 0)
+            current_position = current_positions.get(symbol, 0)
+
+            if hasattr(current_position, "quantity"):
+                current_qty = int(current_position.quantity)
+            else:
+                current_qty = int(current_position)
+
             target_qty = target_positions.get(symbol, 0)
             delta_qty = target_qty - current_qty
 

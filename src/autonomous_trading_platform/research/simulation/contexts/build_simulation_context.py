@@ -1,8 +1,12 @@
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.execution.services.cash_ledger_service import CashLedgerService
 from autonomous_trading_platform.execution.services.portfolio_construction_service import (
     PortfolioConstructionService,
+)
+from autonomous_trading_platform.execution.services.position_ledger_service import (
+    PositionLedgerService,
 )
 from autonomous_trading_platform.research.services.research_dataset_resolver_service import (
     ResearchDatasetResolver,
@@ -32,6 +36,15 @@ from autonomous_trading_platform.storage.parquet.reader import HistoricalBarData
 from autonomous_trading_platform.storage.parquet.repositories.parquet_simulation_repository import (
     ParquetSimulationRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.experiments_repository import (
+    ExperimentsRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.simulation_runs_repository import (
+    SimulationRunsRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.strategy_configs_repository import (
+    StrategyConfigsRepository,
+)
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
     StrategyContextBuilder,
 )
@@ -51,10 +64,13 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
 
     window_loader = SimulationWindowLoader(
         bar_reader=bar_reader,
+        feature_reader=bar_reader,
     )
 
     parquet_simulation_repository = ParquetSimulationRepository()
-
+    simulation_runs_repository = SimulationRunsRepository(session=session)
+    strategy_configs_repository = StrategyConfigsRepository(session=session)
+    experiment_repository = ExperimentsRepository(session=session)
     result_recorder_service = ResultRecorderService(
         parquet_simulation_repository=parquet_simulation_repository,
     )
@@ -71,8 +87,12 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         pre_trade_risk_service=pre_trade_risk_service
     )
     simulated_execution_service = SimulatedExecutionService()
-
-    simulation_engine = SimulationExecutionEngine()
+    cash_ledger_service = CashLedgerService()
+    position_ledger_service = PositionLedgerService()
+    simulation_engine = SimulationExecutionEngine(
+        cash_ledger_service=cash_ledger_service,
+        position_ledger_service=position_ledger_service,
+    )
     simulation_runner = SimulationRunner(
         dataset_resolver=dataset_resolver,
         window_loader=window_loader,
@@ -82,6 +102,9 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         portfolio_construction_service=portfolio_construction_service,
         simulated_execution_service=simulated_execution_service,
         strategy_factory=strategy_factory,
+        strategy_config_repository=strategy_configs_repository,
+        simulation_run_repository=simulation_runs_repository,
+        experiment_repository=experiment_repository,
     )
 
     return SimulationContext(

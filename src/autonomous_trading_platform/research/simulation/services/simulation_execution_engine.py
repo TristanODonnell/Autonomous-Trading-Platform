@@ -4,13 +4,20 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pandas as pd
 
+from autonomous_trading_platform.contracts.accounting.cash_snapshot import CashSnapshot
+from autonomous_trading_platform.contracts.accounting.position_snapshot import Position
+from autonomous_trading_platform.contracts.common.enums import OrderSource
 from autonomous_trading_platform.contracts.trading.signal import Signal
+from autonomous_trading_platform.execution.services.cash_ledger_service import CashLedgerService
 from autonomous_trading_platform.execution.services.portfolio_construction_service import (
     PortfolioConstructionService,
+)
+from autonomous_trading_platform.execution.services.position_ledger_service import (
+    PositionLedgerService,
 )
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
     StrategyContextBuilder,
@@ -22,9 +29,19 @@ class SimulationExecutionResult:
     trade_logs: pd.DataFrame
     equity_curve: pd.DataFrame
     per_bar_metrics: pd.DataFrame
+    positions: pd.DataFrame
 
 
 class SimulationExecutionEngine:
+    def __init__(
+        self,
+        *,
+        cash_ledger_service: CashLedgerService,
+        position_ledger_service: PositionLedgerService,
+    ):
+        self.cash_ledger_service = cash_ledger_service
+        self.position_ledger_service = position_ledger_service
+
     def execute(
         self,
         *,
@@ -37,11 +54,14 @@ class SimulationExecutionEngine:
         initial_cash: float,
     ) -> SimulationExecutionResult:
         cash = Decimal(str(initial_cash))
-        positions: dict[str, int] = {}
+        positions: dict[str, Position] = {}
+
+        realized_pnl_by_symbol: dict[str, Decimal] = {}
 
         trade_rows: list[dict[str, Any]] = []
         equity_rows: list[dict[str, Any]] = []
         metric_rows: list[dict[str, Any]] = []
+        position_rows: list[dict[str, Any]] = []
 
         strategy_state: dict[str, Any] = {}
 
@@ -77,9 +97,24 @@ class SimulationExecutionEngine:
             )
 
             cash = self._apply_fills(
+                run_id=run_id,
+                timestamp=timestamp,
                 fills=fills,
                 positions=positions,
                 cash=cash,
+                prices=prices,
+                realized_pnl_by_symbol=realized_pnl_by_symbol,
+            )
+
+            position_rows.extend(
+                self._build_position_rows(
+                    run_id=run_id,
+                    strategy_id=strategy.strategy_id,
+                    timestamp=timestamp,
+                    positions=positions,
+                    prices=prices,
+                    realized_pnl_by_symbol=realized_pnl_by_symbol,
+                )
             )
 
             trade_rows.extend(
@@ -111,6 +146,7 @@ class SimulationExecutionEngine:
                     bars_at_timestamp=bars_at_timestamp,
                     signals=signals,
                     fills=fills,
+                    realized_pnl_by_symbol=realized_pnl_by_symbol,
                 )
             )
 
@@ -118,6 +154,7 @@ class SimulationExecutionEngine:
             trade_logs=pd.DataFrame(trade_rows),
             equity_curve=pd.DataFrame(equity_rows),
             per_bar_metrics=pd.DataFrame(metric_rows),
+            positions=pd.DataFrame(position_rows),
         )
 
     def _evaluate_signals(
@@ -128,7 +165,7 @@ class SimulationExecutionEngine:
         window: Any,
         context_builder: Any,
         timestamp: datetime,
-        positions: dict[str, int],
+        positions: dict[str, Position],
         strategy_state: dict[str, Any],
     ) -> list[Signal]:
         signals: list[Signal] = []
@@ -158,7 +195,7 @@ class SimulationExecutionEngine:
         self,
         *,
         signals: list[Signal],
-        positions: dict[str, int],
+        positions: dict[str, Position],
         prices: dict[str, float],
         run_id: UUID,
         strategy_id: str,
@@ -194,27 +231,56 @@ class SimulationExecutionEngine:
     def _apply_fills(
         self,
         *,
+        run_id: UUID,
+        timestamp: datetime,
         fills: list[Any],
-        positions: dict[str, int],
+        positions: dict[str, Position],
         cash: Decimal,
+        prices: dict[str, float],
+        realized_pnl_by_symbol: dict[str, Decimal],
     ) -> Decimal:
         updated_cash = cash
 
         for fill in fills:
-            qty = int(fill.quantity)
-            price = Decimal(str(fill.price))
-            symbol = fill.symbol
-            side = fill.side.value.lower()
+            cash_snapshot = CashSnapshot(
+                snapshot_id=uuid4(),
+                run_id=run_id,
+                timestamp=timestamp,
+                currency="USD",
+                cash=updated_cash,
+                buying_power=updated_cash,
+                reserved_cash=Decimal("0"),
+                equity=self._calculate_equity(
+                    cash=updated_cash,
+                    positions=positions,
+                    prices=prices,
+                ),
+                source=OrderSource.SIMULATION,
+                capital_bucket=None,
+            )
 
-            if side == "buy":
-                positions[symbol] = positions.get(symbol, 0) + qty
-                updated_cash -= price * qty
-            elif side == "sell":
-                positions[symbol] = positions.get(symbol, 0) - qty
-                updated_cash += price * qty
+            cash_result = self.cash_ledger_service.apply_fill(
+                existing_snapshot=cash_snapshot,
+                fill=fill,
+            )
+            updated_cash = cash_result.cash
 
-                if positions[symbol] == 0:
-                    del positions[symbol]
+            market_price = Decimal(str(prices.get(fill.symbol, fill.price)))
+
+            position_result = self.position_ledger_service.apply_fill(
+                existing_position=positions.get(fill.symbol),
+                fill=fill,
+                market_price=market_price,
+            )
+
+            if position_result.updated_position is None:
+                positions.pop(fill.symbol, None)
+            else:
+                positions[fill.symbol] = position_result.updated_position
+
+            realized_pnl_by_symbol[fill.symbol] = (
+                realized_pnl_by_symbol.get(fill.symbol, Decimal("0")) + position_result.realized_pnl
+            )
 
         return updated_cash
 
@@ -225,16 +291,25 @@ class SimulationExecutionEngine:
         strategy_id: str,
         timestamp: datetime,
         cash: Decimal,
-        positions: dict[str, int],
+        positions: dict[str, Position],
         prices: dict[str, float],
         bars_at_timestamp: dict[str, Any],
         signals: list[Signal],
         fills: list[Any],
+        realized_pnl_by_symbol: dict[str, Decimal],
     ) -> list[dict[str, Any]]:
-        rows: list[dict[str, Any]] = []
 
+        rows: list[dict[str, Any]] = []
         for symbol in bars_at_timestamp:
-            position_qty = positions.get(symbol, 0)
+            position = positions.get(symbol)
+
+            position_qty = Decimal(position.quantity) if position else Decimal("0")
+            unrealized_pnl = (
+                Decimal(position.unrealized_pnl)
+                if position is not None and position.unrealized_pnl is not None
+                else Decimal("0")
+            )
+            realized_pnl = realized_pnl_by_symbol.get(symbol, Decimal("0"))
 
             rows.append(
                 {
@@ -244,8 +319,8 @@ class SimulationExecutionEngine:
                     "timestamp": timestamp,
                     "bar_return": 0.0,
                     "position_size": float(position_qty),
-                    "unrealized_pnl": 0.0,
-                    "realized_pnl": 0.0,
+                    "unrealized_pnl": float(unrealized_pnl),
+                    "realized_pnl": float(realized_pnl),
                 }
             )
 
@@ -258,7 +333,7 @@ class SimulationExecutionEngine:
         self,
         *,
         cash: Decimal,
-        positions: dict[str, int],
+        positions: dict[str, Position],
         prices: dict[str, float],
     ) -> Decimal:
         return cash + self._calculate_positions_value(
@@ -273,7 +348,7 @@ class SimulationExecutionEngine:
         strategy_id: str,
         timestamp: datetime,
         cash: Decimal,
-        positions: dict[str, int],
+        positions: dict[str, Position],
         prices: dict[str, float],
     ) -> dict[str, Any]:
         positions_value = self._calculate_positions_value(
@@ -296,14 +371,14 @@ class SimulationExecutionEngine:
     def _calculate_positions_value(
         self,
         *,
-        positions: dict[str, int],
+        positions: dict[str, Position],
         prices: dict[str, float],
     ) -> Decimal:
         positions_value = Decimal("0")
 
-        for symbol, qty in positions.items():
-            price = Decimal(str(prices.get(symbol, 0.0)))
-            positions_value += Decimal(qty) * price
+        for position in positions.values():
+            price = Decimal(str(prices.get(position.symbol, position.market_price)))
+            positions_value += Decimal(position.quantity) * price
 
         return positions_value
 
@@ -328,6 +403,40 @@ class SimulationExecutionEngine:
                     "notional": float(Decimal(str(fill.quantity)) * Decimal(str(fill.price))),
                     "fees": 0.0,
                     "slippage": 0.0,
+                }
+            )
+
+        return rows
+
+    def _build_position_rows(
+        self,
+        *,
+        run_id: UUID,
+        strategy_id: str,
+        timestamp: datetime,
+        positions: dict[str, Position],
+        prices: dict[str, float],
+        realized_pnl_by_symbol: dict[str, Decimal],
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+
+        for symbol, position in positions.items():
+            market_price = Decimal(str(prices.get(symbol, position.market_price)))
+            quantity = Decimal(position.quantity)
+            market_value = quantity * market_price
+
+            rows.append(
+                {
+                    "run_id": str(run_id),
+                    "strategy_id": strategy_id,
+                    "symbol": symbol,
+                    "timestamp": timestamp,
+                    "quantity": float(quantity),
+                    "avg_cost": float(position.avg_cost or 0),
+                    "market_price": float(market_price),
+                    "market_value": float(market_value),
+                    "unrealized_pnl": float(position.unrealized_pnl or 0),
+                    "realized_pnl": float(realized_pnl_by_symbol.get(symbol, Decimal("0"))),
                 }
             )
 
