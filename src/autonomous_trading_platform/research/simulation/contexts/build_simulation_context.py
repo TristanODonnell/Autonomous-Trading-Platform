@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.config.settings import Settings
@@ -22,6 +24,10 @@ from autonomous_trading_platform.research.simulation.services.result_recorder_se
 )
 from autonomous_trading_platform.research.simulation.services.simulated_execution_service import (
     SimulatedExecutionService,
+)
+from autonomous_trading_platform.research.simulation.services.simulation_cost_model_service import (
+    SimulationCostModelConfig,
+    SimulationCostModelService,
 )
 from autonomous_trading_platform.research.simulation.services.simulation_execution_engine import (
     SimulationExecutionEngine,
@@ -89,7 +95,21 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
     portfolio_construction_service = PortfolioConstructionService(
         pre_trade_risk_service=pre_trade_risk_service
     )
-    simulated_execution_service = SimulatedExecutionService()
+
+    # TODO Later should move into settings
+    simulation_cost_model_config = SimulationCostModelConfig(
+        commission_per_share=Decimal("0.0000"),
+        min_commission=Decimal("0.00"),
+        slippage_bps=Decimal("1.0"),
+    )
+
+    simulation_cost_model_service = SimulationCostModelService(
+        config=simulation_cost_model_config,
+    )
+
+    simulated_execution_service = SimulatedExecutionService(
+        simulation_cost_model_service=simulation_cost_model_service
+    )
     cash_ledger_service = CashLedgerService()
     position_ledger_service = PositionLedgerService()
     lookahead_guard_service = LookaheadGuardService()
