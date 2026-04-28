@@ -23,6 +23,7 @@ class TimeInForce(enum.StrEnum):
 class OrderSource(enum.StrEnum):
     LEDGER = "ledger"
     BROKER_RECONCILED = "broker_reconciled"
+    SIMULATION = "simulation"
 
 
 class OrderStatus(enum.StrEnum):

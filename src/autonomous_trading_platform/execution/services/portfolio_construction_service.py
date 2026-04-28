@@ -56,7 +56,9 @@ class PortfolioConstructionService:
 
             if direction in {"long", "buy"}:
                 target_positions[signal.symbol] = target_qty
-            elif direction in {"short", "sell"}:
+            elif direction in {"sell"}:
+                target_positions[signal.symbol] = 0
+            elif direction in {"short"}:
                 target_positions[signal.symbol] = -target_qty
             else:
                 target_positions[signal.symbol] = 0
@@ -72,7 +74,13 @@ class PortfolioConstructionService:
 
         all_symbols = sorted(set(current_positions) | set(target_positions))
         for symbol in all_symbols:
-            current_qty = current_positions.get(symbol, 0)
+            current_position = current_positions.get(symbol, 0)
+
+            if hasattr(current_position, "quantity"):
+                current_qty = int(current_position.quantity)
+            else:
+                current_qty = int(current_position)
+
             target_qty = target_positions.get(symbol, 0)
             delta_qty = target_qty - current_qty
 

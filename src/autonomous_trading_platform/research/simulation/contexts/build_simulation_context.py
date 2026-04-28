@@ -1,8 +1,12 @@
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.execution.services.cash_ledger_service import CashLedgerService
 from autonomous_trading_platform.execution.services.portfolio_construction_service import (
     PortfolioConstructionService,
+)
+from autonomous_trading_platform.execution.services.position_ledger_service import (
+    PositionLedgerService,
 )
 from autonomous_trading_platform.research.services.research_dataset_resolver_service import (
     ResearchDatasetResolver,
@@ -71,8 +75,12 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         pre_trade_risk_service=pre_trade_risk_service
     )
     simulated_execution_service = SimulatedExecutionService()
-
-    simulation_engine = SimulationExecutionEngine()
+    cash_ledger_service = CashLedgerService()
+    position_ledger_service = PositionLedgerService()
+    simulation_engine = SimulationExecutionEngine(
+        cash_ledger_service=cash_ledger_service,
+        position_ledger_service=position_ledger_service,
+    )
     simulation_runner = SimulationRunner(
         dataset_resolver=dataset_resolver,
         window_loader=window_loader,
