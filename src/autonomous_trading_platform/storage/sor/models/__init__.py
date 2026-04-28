@@ -4,6 +4,7 @@ from . import cash_snapshots as cash_snapshots
 from . import checksums as checksums
 from . import corporate_actions as corporate_actions
 from . import dataset_versions as dataset_versions
+from . import experiments as experiments
 from . import fills as fills
 from . import ingestion_checkpoint as ingestion_checkpoint
 from . import ingestion_runs as ingestion_runs
@@ -15,6 +16,8 @@ from . import position_snapshots as position_snapshots
 from . import risk_snapshots as risk_snapshots
 from . import run_manifests as run_manifests
 from . import signals as signals
+from . import simulation_runs as simulation_runs
+from . import strategy_configs as strategy_configs
 from . import strategy_runtime_states as strategy_runtime_states
 from . import symbol_date_coverage as symbol_date_coverage
 from . import ticker_lifecycle_event as ticker_lifecycle_events
@@ -46,4 +49,7 @@ __all__ = [
     "symbol_date_coverage",
     "dataset_versions",
     "ingestion_checkpoint",
+    "experiments",
+    "strategy_configs",
+    "simulation_runs",
 ]

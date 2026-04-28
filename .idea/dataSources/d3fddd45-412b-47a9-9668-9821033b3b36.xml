@@ -3,15 +3,7 @@
   <database-model serializer="dbm" dbms="POSTGRES" family-id="POSTGRES" format-version="4.53">
     <root id="1">
       <DateStyle>mdy</DateStyle>
-      <Grants>1||-9223372036854775808|c|G
-1||10|c|G
-1||10|C|G
-1||10|T|G
-4||-9223372036854775808|c|G
-4||10|c|G
-4||10|C|G
-4||10|T|G</Grants>
-      <IntrospectionStateNumber>42543</IntrospectionStateNumber>
+      <IntrospectionStateNumber>42547</IntrospectionStateNumber>
       <ServerVersion>16.11</ServerVersion>
       <StartupTime>1776980516</StartupTime>
       <TimeZones>true ACDT
@@ -711,7 +703,7 @@ true posixrules
 13276||10|C|G
 13276||-9223372036854775808|U|G
 13276||10|U|G</Grants>
-      <IntrospectionStateNumber>42543</IntrospectionStateNumber>
+      <IntrospectionStateNumber>42547</IntrospectionStateNumber>
       <ObjectId>49368</ObjectId>
       <OwnerName>ratp</OwnerName>
     </database>
@@ -4131,11 +4123,11 @@ true posixrules
       <AutoIntrospectionLevel>3</AutoIntrospectionLevel>
       <Comment>standard public schema</Comment>
       <Current>1</Current>
-      <LastIntrospectionL1Xid>42543</LastIntrospectionL1Xid>
-      <LastIntrospectionL2Xid>42543</LastIntrospectionL2Xid>
-      <LastIntrospectionL3Xid>42543</LastIntrospectionL3Xid>
+      <LastIntrospectionL1Xid>42547</LastIntrospectionL1Xid>
+      <LastIntrospectionL2Xid>42547</LastIntrospectionL2Xid>
+      <LastIntrospectionL3Xid>42547</LastIntrospectionL3Xid>
       <LastIntrospectionLevel>3</LastIntrospectionLevel>
-      <LastIntrospectionLocalTimestamp>2026-04-28.21:20:45</LastIntrospectionLocalTimestamp>
+      <LastIntrospectionLocalTimestamp>2026-04-28.21:43:22</LastIntrospectionLocalTimestamp>
       <ObjectId>2200</ObjectId>
       <StateNumber>524</StateNumber>
       <OwnerName>pg_database_owner</OwnerName>
