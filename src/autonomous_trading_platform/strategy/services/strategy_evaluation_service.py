@@ -6,6 +6,7 @@ from uuid import UUID
 
 from autonomous_trading_platform.contracts.trading.signal import Signal
 
+from ..contexts.strategy_context_builder import StrategyContextBuilder
 from ..contracts.strategy_context import StrategyContext
 from ..contracts.strategy_evaluation_result import StrategyEvaluationResult
 from ..implementations.base_strategy import BaseStrategy
@@ -33,12 +34,13 @@ class StrategyProtocol(Protocol):
 class StrategyEvaluationService:
     def __init__(
         self,
-        market_bar_reader: MarketBarReaderProtocol,
+        *,
+        context_builder: StrategyContextBuilder,
         universe_reader: UniverseMembershipReaderProtocol,
         strategy: BaseStrategy,
         lookback_bars: int = 20,
     ) -> None:
-        self.market_bar_reader = market_bar_reader
+        self.context_builder = context_builder
         self.universe_reader = universe_reader
         self.strategy = strategy
         self.lookback_bars = lookback_bars
@@ -53,23 +55,16 @@ class StrategyEvaluationService:
         signals: list[Signal] = []
 
         for symbol in symbols:
-            bars = self.market_bar_reader.get_bars_up_to_timestamp(
-                symbol=symbol,
-                end_timestamp=bar_timestamp,
-                lookback_bars=self.lookback_bars,
-            )
-
-            if len(bars) < self.lookback_bars:
-                continue
-
-            context = StrategyContext(
+            context = self.context_builder.build(
                 run_id=run_id,
                 strategy_id=self.strategy.strategy_id,
                 symbol=symbol,
                 bar_timestamp=bar_timestamp,
                 evaluation_timestamp=evaluation_timestamp,
-                bars=bars,
             )
+
+            if context is None:
+                continue
 
             signal = self.strategy.evaluate_symbol(context)
 
