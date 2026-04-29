@@ -61,6 +61,9 @@ from autonomous_trading_platform.storage.parquet.repositories.parquet_simulation
 from autonomous_trading_platform.storage.sor.repositories.experiments_repository import (
     ExperimentsRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.metrics_summary_repository import (
+    MetricsSummaryRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.run_manifests_repository import (
     RunManifestRepository,
 )
@@ -144,6 +147,7 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         order_simulator_service=order_simulator_service,
     )
     experiments_repository = ExperimentsRepository(session=session)
+    metrics_summary_repository = MetricsSummaryRepository(session=session)
     simulation_runner = SimulationRunner(
         dataset_resolver=dataset_resolver,
         window_loader=window_loader,
@@ -156,6 +160,7 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         simulation_run_repository=simulation_runs_repository,
         manifest_service=RunManifestRepository(session),
         experiment_repository=experiments_repository,
+        metrics_summary_repository=metrics_summary_repository,
     )
     experiment_orchestration_service = ExperimentOrchestrationService(
         experiment_repository=experiments_repository,
