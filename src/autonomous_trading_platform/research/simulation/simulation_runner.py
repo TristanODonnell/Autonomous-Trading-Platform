@@ -60,6 +60,7 @@ class SimulationRunRequest:
     experiment_id: str | None = None
     strict_data_loading: bool = True
     shuffle_timestamp: bool = False
+    window_role: str | None = None
 
 
 @dataclass(slots=True)

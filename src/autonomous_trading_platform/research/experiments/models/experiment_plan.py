@@ -1,3 +1,4 @@
+import enum
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -5,9 +6,18 @@ from typing import Any
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 
 
+class ExperimentType(enum.StrEnum):
+    AB = "ab"
+    SWEEP = "sweep"
+    TIME_SEGMENTATION = "time_segmentation"
+    ROLLING_WINDOW = "rolling_window"
+    CROSS_UNIVERSE = "cross_universe"
+
+
 @dataclass(slots=True)
 class ExperimentDefinition:
     experiment_id: str
+    experiment_type: ExperimentType
     description: str | None
     strategy_set: list[dict[str, Any]]
     parameter_grid: list[dict[str, Any]]
@@ -19,3 +29,10 @@ class ExperimentDefinition:
     end_date: date
     random_seed: int
     initial_cash: float = 100_000.0
+    # TIME_SEGMENTATION
+    train_ratio: float | None = None  # e.g. 0.7
+    # ROLLING_WINDOW
+    window_size_days: int | None = None
+    step_size_days: int | None = None
+    # CROSS_UNIVERSE
+    universe_set: list[list[str]] | None = None
