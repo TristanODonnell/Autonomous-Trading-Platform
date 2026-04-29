@@ -20,6 +20,9 @@ from autonomous_trading_platform.storage.sor.repositories.corporate_action_repos
 from autonomous_trading_platform.storage.sor.repositories.dataset_versions_repository import (
     DatasetVersionsRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.experiments_repository import (
+    ExperimentsRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.feature_dataset_versions_repository import (
     FeatureDatasetVersionsRepository,
 )
@@ -32,6 +35,9 @@ from autonomous_trading_platform.storage.sor.repositories.ingestion_runs_reposit
 )
 from autonomous_trading_platform.storage.sor.repositories.market_bar_repository import (
     MarketBarRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.metrics_summary_repository import (
+    MetricsSummaryRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.missing_bar_incidents_repository import (
     MissingBarIncidentsRepository,
@@ -93,6 +99,8 @@ class SorUnitOfWork:
         self.checksums = ChecksumsRepository(session)
         self.ingestion_checkpoints = IngestionCheckpointsRepository(session)
         self.feature_dataset_versions = FeatureDatasetVersionsRepository(session)
+        self.experiments_repository = ExperimentsRepository(session)
+        self.metrics_summary_repository = MetricsSummaryRepository(session)
 
     def __enter__(self) -> "SorUnitOfWork":
         self._started_transaction = False

@@ -30,6 +30,9 @@ from autonomous_trading_platform.research.simulation.services.simulation_window_
     SimulationWindowLoader,
     shuffle_window_bar_timestamps,
 )
+from autonomous_trading_platform.storage.sor.repositories.experiments_repository import (
+    ExperimentsRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.simulation_runs_repository import (
     SimulationRunsRepository,
 )
@@ -100,6 +103,7 @@ class SimulationRunner:
         simulated_execution_service: Any,
         simulation_run_repository: SimulationRunsRepository,
         strategy_config_repository: StrategyConfigsRepository,
+        experiment_repository: ExperimentsRepository | None = None,
         manifest_service: Any | None = None,
         strategy_factory: StrategyFactory,
     ) -> None:
@@ -113,6 +117,7 @@ class SimulationRunner:
         self.simulation_run_repository = simulation_run_repository
         self.strategy_config_repository = strategy_config_repository
         self.manifest_service = manifest_service
+        self.experiment_repository = experiment_repository
 
     def run(self, request: SimulationRunRequest) -> SimulationRunResult:
         if not isinstance(request.random_seed, int):
@@ -224,10 +229,34 @@ class SimulationRunner:
         *,
         run_id: UUID,
         request: SimulationRunRequest,
-        experiment_id: str | None,
+        experiment_id: str,
         resolved_dataset_metadata: dict[str, Any],
     ) -> None:
         now = datetime.now(UTC)
+        if self.experiment_repository is not None:
+            existing = self.experiment_repository.get_by_experiment_id(experiment_id)
+            if existing is None:
+                from autonomous_trading_platform.contracts.runtime.experiment import Experiment
+
+                adhoc_experiment = Experiment(
+                    experiment_id=experiment_id,
+                    experiment_name=experiment_id,
+                    created_at=now,
+                    description="Auto-created adhoc experiment",
+                    status="RUNNING",
+                    metadata_json={
+                        "dataset_version": request.dataset_version,
+                        "price_basis": request.price_basis.value,
+                        "symbols": request.symbols,
+                        "start_date": str(request.start_date),
+                        "end_date": str(request.end_date),
+                        "random_seed": request.random_seed,
+                        "initial_cash": request.initial_cash,
+                    },
+                )
+                row = self.experiment_repository.to_row(adhoc_experiment)
+                self.experiment_repository.upsert(row)
+                self.experiment_repository.session.flush()
 
         if self.strategy_config_repository is not None:
             build_config = StrategyConfig(
@@ -397,6 +426,7 @@ class SimulationRunner:
         repos = [
             self.simulation_run_repository,
             self.strategy_config_repository,
+            self.experiment_repository,
             self.manifest_service,
         ]
 

@@ -9,6 +9,7 @@ from . import fills as fills
 from . import ingestion_checkpoint as ingestion_checkpoint
 from . import ingestion_runs as ingestion_runs
 from . import market_bars as market_bars
+from . import metrics_summary as metrics_summary
 from . import missing_bar_incidents as missing_bar_incidents
 from . import order_intents as order_intents
 from . import position_snapshot_items as position_snapshot_items
@@ -52,4 +53,5 @@ __all__ = [
     "experiments",
     "strategy_configs",
     "simulation_runs",
+    "metrics_summary",
 ]
