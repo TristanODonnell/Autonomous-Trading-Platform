@@ -11,7 +11,11 @@ from sqlalchemy.orm import Session
 from autonomous_trading_platform.common.errors import (
     TransientInfrastructureError,
 )
-from autonomous_trading_platform.contracts.common.enums import BarInterval, RunType
+from autonomous_trading_platform.contracts.common.enums import (
+    BarInterval,
+    PriceBasis,
+    RunType,
+)
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.contracts.trading.signal import Signal
 from autonomous_trading_platform.observability.enums import SpanTimespan
@@ -230,6 +234,7 @@ class EvaluateStrategyJob:
             start_date=bar_timestamp.date(),
             end_date=bar_timestamp.date(),
             dataset_version="unknown",
+            price_basis=PriceBasis.RAW,
             universe_version="unknown",
             random_seed=None,
             git_commit="dev",
