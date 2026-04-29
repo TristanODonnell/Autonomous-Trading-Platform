@@ -3,6 +3,9 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
+from autonomous_trading_platform.research.simulation.models.fill_model import (
+    SimulatedFillModelConfig,
+)
 from autonomous_trading_platform.research.simulation.services.simulated_execution_service import (
     SimulatedExecutionService,
 )
@@ -46,6 +49,7 @@ class MockCostModel:
 def test_limit_buy_fills_when_bar_low_crosses_limit():
     service = SimulatedExecutionService(
         simulation_cost_model_service=MockCostModel(),
+        fill_model_config=SimulatedFillModelConfig(),
     )
 
     intent = MockIntent(
@@ -82,6 +86,7 @@ def test_limit_buy_fills_when_bar_low_crosses_limit():
 def test_limit_buy_does_not_fill_when_bar_low_does_not_cross_limit():
     service = SimulatedExecutionService(
         simulation_cost_model_service=MockCostModel(),
+        fill_model_config=SimulatedFillModelConfig(),
     )
 
     intent = MockIntent(
@@ -114,6 +119,7 @@ def test_limit_buy_does_not_fill_when_bar_low_does_not_cross_limit():
 def test_limit_sell_fills_when_bar_high_crosses_limit():
     service = SimulatedExecutionService(
         simulation_cost_model_service=MockCostModel(),
+        fill_model_config=SimulatedFillModelConfig(),
     )
 
     intent = MockIntent(
@@ -150,6 +156,7 @@ def test_limit_sell_fills_when_bar_high_crosses_limit():
 def test_limit_sell_does_not_fill_when_bar_high_does_not_cross_limit():
     service = SimulatedExecutionService(
         simulation_cost_model_service=MockCostModel(),
+        fill_model_config=SimulatedFillModelConfig(),
     )
 
     intent = MockIntent(

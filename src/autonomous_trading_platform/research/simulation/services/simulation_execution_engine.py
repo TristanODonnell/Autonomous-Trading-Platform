@@ -417,7 +417,7 @@ class SimulationExecutionEngine:
                     "quantity": float(fill.quantity),
                     "price": float(fill.price),
                     "notional": float(Decimal(str(fill.quantity)) * Decimal(str(fill.price))),
-                    "fees": 0.0,
+                    "fees": float(fill.fees or 0),
                     "slippage": 0.0,
                 }
             )

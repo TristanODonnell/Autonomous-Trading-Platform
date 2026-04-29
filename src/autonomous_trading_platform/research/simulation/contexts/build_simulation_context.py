@@ -16,6 +16,9 @@ from autonomous_trading_platform.research.services.research_dataset_resolver_ser
 from autonomous_trading_platform.research.simulation.contexts.simulation_context import (
     SimulationContext,
 )
+from autonomous_trading_platform.research.simulation.models.fill_model import (
+    SimulatedFillModelConfig,
+)
 from autonomous_trading_platform.research.simulation.models.slippage_model import (
     SlippageModel,
     SlippageModelConfig,
@@ -122,9 +125,10 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         config=simulation_cost_model_config,
         slippage_model=slippage_model,
     )
-
+    fill_model_config = SimulatedFillModelConfig()
     simulated_execution_service = SimulatedExecutionService(
-        simulation_cost_model_service=simulation_cost_model_service
+        simulation_cost_model_service=simulation_cost_model_service,
+        fill_model_config=fill_model_config,
     )
     cash_ledger_service = CashLedgerService()
     position_ledger_service = PositionLedgerService()
