@@ -16,6 +16,10 @@ from autonomous_trading_platform.research.services.research_dataset_resolver_ser
 from autonomous_trading_platform.research.simulation.contexts.simulation_context import (
     SimulationContext,
 )
+from autonomous_trading_platform.research.simulation.models.slippage_model import (
+    SlippageModel,
+    SlippageModelConfig,
+)
 from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
     LookaheadGuardService,
 )
@@ -109,11 +113,14 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
     simulation_cost_model_config = SimulationCostModelConfig(
         commission_per_share=Decimal("0.0000"),
         min_commission=Decimal("0.00"),
-        slippage_bps=Decimal("1.0"),
     )
-
+    slippage_model_config = SlippageModelConfig(
+        slippage_rate=Decimal("0.0001")  # or from settings
+    )
+    slippage_model = SlippageModel(config=slippage_model_config)
     simulation_cost_model_service = SimulationCostModelService(
         config=simulation_cost_model_config,
+        slippage_model=slippage_model,
     )
 
     simulated_execution_service = SimulatedExecutionService(
