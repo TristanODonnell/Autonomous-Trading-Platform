@@ -6,15 +6,16 @@ from autonomous_trading_platform.contracts.common.enums import PriceBasis
 
 
 @dataclass(slots=True)
-class ExperimentRunPlan:
+class ExperimentDefinition:
     experiment_id: str
     description: str | None
+    strategy_set: list[dict[str, Any]]
+    parameter_grid: list[dict[str, Any]]
     dataset_version: str
+    universe_version: str
     price_basis: PriceBasis
     symbols: list[str]
     start_date: date
     end_date: date
-    strategy_set: list[dict[str, Any]]
-    parameter_grid: list[dict[str, Any]]
     random_seed: int
     initial_cash: float = 100_000.0

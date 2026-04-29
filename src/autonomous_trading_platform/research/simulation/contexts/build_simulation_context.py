@@ -10,6 +10,9 @@ from autonomous_trading_platform.execution.services.portfolio_construction_servi
 from autonomous_trading_platform.execution.services.position_ledger_service import (
     PositionLedgerService,
 )
+from autonomous_trading_platform.research.experiments.services.experiment_orchestration_service import (
+    ExperimentOrchestrationService,
+)
 from autonomous_trading_platform.research.services.research_dataset_resolver_service import (
     ResearchDatasetResolver,
 )
@@ -92,7 +95,6 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
     parquet_simulation_repository = ParquetSimulationRepository()
     simulation_runs_repository = SimulationRunsRepository(session=session)
     strategy_configs_repository = StrategyConfigsRepository(session=session)
-    experiment_repository = ExperimentsRepository(session=session)
     result_recorder_service = ResultRecorderService(
         parquet_simulation_repository=parquet_simulation_repository,
     )
@@ -151,8 +153,12 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         strategy_factory=strategy_factory,
         strategy_config_repository=strategy_configs_repository,
         simulation_run_repository=simulation_runs_repository,
-        experiment_repository=experiment_repository,
         manifest_service=RunManifestRepository(session),
+    )
+    experiments_repository = ExperimentsRepository(session=session)
+    experiment_orchestration_service = ExperimentOrchestrationService(
+        experiment_repository=experiments_repository,
+        simulation_runner=simulation_runner,
     )
 
     return SimulationContext(
@@ -163,4 +169,5 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         result_recorder_service=result_recorder_service,
         simulation_runner=simulation_runner,
         simulation_engine=simulation_engine,
+        experiment_orchestration_service=experiment_orchestration_service,
     )

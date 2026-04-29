@@ -5,7 +5,7 @@ from typing import Any
 
 from autonomous_trading_platform.contracts.runtime.experiment import Experiment
 from autonomous_trading_platform.research.experiments.models.experiment_plan import (
-    ExperimentRunPlan,
+    ExperimentDefinition,
 )
 from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunner,
@@ -27,7 +27,7 @@ class ExperimentOrchestrationService:
         self.experiment_repository = experiment_repository
         self.simulation_runner = simulation_runner
 
-    def run_experiment(self, plan: ExperimentRunPlan) -> list[SimulationRunResult]:
+    def run_experiment(self, plan: ExperimentDefinition) -> list[SimulationRunResult]:
         self._create_experiment(plan)
 
         results: list[SimulationRunResult] = []
@@ -56,7 +56,7 @@ class ExperimentOrchestrationService:
             self._mark_experiment_failed(plan.experiment_id)
             raise
 
-    def _create_experiment(self, plan: ExperimentRunPlan) -> None:
+    def _create_experiment(self, plan: ExperimentDefinition) -> None:
         experiment = Experiment(
             experiment_id=plan.experiment_id,
             experiment_name=plan.experiment_id,
@@ -65,6 +65,7 @@ class ExperimentOrchestrationService:
             status="RUNNING",
             metadata_json={
                 "dataset_version": plan.dataset_version,
+                "universe_version": plan.universe_version,
                 "price_basis": plan.price_basis.value,
                 "symbols": plan.symbols,
                 "start_date": str(plan.start_date),
@@ -80,7 +81,7 @@ class ExperimentOrchestrationService:
         self.experiment_repository.upsert(row)
         self.experiment_repository.session.commit()
 
-    def _expand_strategy_configs(self, plan: ExperimentRunPlan) -> list[dict[str, Any]]:
+    def _expand_strategy_configs(self, plan: ExperimentDefinition) -> list[dict[str, Any]]:
         configs: list[dict[str, Any]] = []
 
         if not plan.parameter_grid:

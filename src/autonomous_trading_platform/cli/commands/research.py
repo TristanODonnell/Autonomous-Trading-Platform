@@ -7,6 +7,9 @@ from datetime import date
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.research.experiments.models.experiment_plan import (
+    ExperimentDefinition,
+)
 from autonomous_trading_platform.research.simulation.contexts.build_simulation_context import (
     build_simulation_context,
 )
@@ -64,7 +67,6 @@ def register(subparsers) -> None:
         ],
         help="Strategy type to run",
     )
-
     run_simulation_parser.add_argument(
         "--strategy-parameters",
         default="{}",
@@ -85,6 +87,11 @@ def register(subparsers) -> None:
     run_simulation_parser.add_argument("--initial-cash", type=float, default=100_000.0)
     run_simulation_parser.add_argument("--experiment-id")
     run_simulation_parser.add_argument(
+        "--universe-version",
+        default="v1",
+        help="Universe version tag (used when routing through the experiment orchestrator)",
+    )
+    run_simulation_parser.add_argument(
         "--strict-data-loading",
         action="store_true",
         help="Fail if any requested symbol has no bars in the requested window",
@@ -103,25 +110,54 @@ def handle_run_simulation(args: argparse.Namespace) -> int:
         if not isinstance(strategy_parameters, dict):
             raise ValueError("--strategy-parameters must be a JSON object")
 
-        request = SimulationRunRequest(
-            strategy_id=args.strategy_id,
-            strategy_config={
-                "type": args.strategy_type,
-                "parameters": strategy_parameters,
-            },
-            dataset_version=args.dataset_version_id,
-            random_seed=args.random_seed,
-            price_basis=PriceBasis(args.price_basis),
-            symbols=_parse_symbols(args.symbols),
-            start_date=_parse_date(args.start_date),
-            end_date=_parse_date(args.end_date),
-            initial_cash=args.initial_cash,
-            experiment_id=args.experiment_id,
-            strict_data_loading=args.strict_data_loading,
-            shuffle_timestamp=args.shuffle_timestamps,
-        )
+        # --- Route through ExperimentOrchestrationService when an experiment-id
+        #     is supplied; fall back to a direct SimulationRunner call for ad-hoc
+        #     / debug runs so the existing debug config keeps working unchanged.
+        if args.experiment_id:
+            plan = ExperimentDefinition(
+                experiment_id=args.experiment_id,
+                description=None,
+                strategy_set=[
+                    {
+                        "strategy_id": args.strategy_id,
+                        "type": args.strategy_type,
+                        "parameters": strategy_parameters,
+                    }
+                ],
+                parameter_grid=[],
+                dataset_version=args.dataset_version_id,
+                universe_version=args.universe_version,
+                price_basis=PriceBasis(args.price_basis),
+                symbols=_parse_symbols(args.symbols),
+                start_date=_parse_date(args.start_date),
+                end_date=_parse_date(args.end_date),
+                random_seed=args.random_seed,
+                initial_cash=args.initial_cash,
+            )
 
-        result = simulation_context.simulation_runner.run(request)
+            results = simulation_context.experiment_orchestration_service.run_experiment(plan)
+            result = results[0]  # single-strategy run always yields one result
+
+        else:
+            # Ad-hoc / debug path — bypasses orchestration layer entirely.
+            request = SimulationRunRequest(
+                strategy_id=args.strategy_id,
+                strategy_config={
+                    "type": args.strategy_type,
+                    "parameters": strategy_parameters,
+                },
+                dataset_version=args.dataset_version_id,
+                random_seed=args.random_seed,
+                price_basis=PriceBasis(args.price_basis),
+                symbols=_parse_symbols(args.symbols),
+                start_date=_parse_date(args.start_date),
+                end_date=_parse_date(args.end_date),
+                initial_cash=args.initial_cash,
+                strict_data_loading=args.strict_data_loading,
+                shuffle_timestamp=args.shuffle_timestamps,
+            )
+
+            result = simulation_context.simulation_runner.run(request)
 
         print_header("Run Simulation")
         print_json(
