@@ -1,7 +1,11 @@
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
-from autonomous_trading_platform.contracts.common.enums import BarInterval, RunType
+from autonomous_trading_platform.contracts.common.enums import (
+    BarInterval,
+    PriceBasis,
+    RunType,
+)
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.contracts.validators.core import run_rules
 from autonomous_trading_platform.contracts.validators.run_manifest import RUN_MANIFEST_RULES
@@ -23,6 +27,7 @@ def make_run_manifest(**overrides) -> RunManifest:
         "start_date": date.today(),
         "end_date": None,
         "dataset_version": "dataset_v1",
+        "price_basis": PriceBasis.RAW,
         "universe_version": "universe_v1",
         "cost_model": None,
         "fill_model": None,

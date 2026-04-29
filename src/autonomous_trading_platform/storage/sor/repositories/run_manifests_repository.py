@@ -22,6 +22,7 @@ class RunManifestRepository(BaseRepository):
             start_date=manifest.start_date,
             end_date=manifest.end_date,
             dataset_version=manifest.dataset_version,
+            price_basis=manifest.price_basis,
             universe_version=manifest.universe_version,
             cost_model=manifest.cost_model,
             fill_model=manifest.fill_model,
@@ -62,6 +63,7 @@ class RunManifestRepository(BaseRepository):
         existing.start_date = manifest.start_date
         existing.end_date = manifest.end_date
         existing.dataset_version = manifest.dataset_version
+        existing.price_basis = manifest.price_basis
         existing.universe_version = manifest.universe_version
         existing.cost_model = manifest.cost_model
         existing.fill_model = manifest.fill_model
@@ -106,6 +108,7 @@ class RunManifestRepository(BaseRepository):
             end_date=row.end_date,
             dataset_version=row.dataset_version,
             universe_version=row.universe_version,
+            price_basis=row.price_basis,
             cost_model=row.cost_model,
             fill_model=row.fill_model,
             random_seed=row.random_seed,

@@ -3,7 +3,7 @@
   <database-model serializer="dbm" dbms="POSTGRES" family-id="POSTGRES" format-version="4.53">
     <root id="1">
       <DateStyle>mdy</DateStyle>
-      <IntrospectionStateNumber>42547</IntrospectionStateNumber>
+      <IntrospectionStateNumber>42672</IntrospectionStateNumber>
       <ServerVersion>16.11</ServerVersion>
       <StartupTime>1776980516</StartupTime>
       <TimeZones>true ACDT
@@ -703,7 +703,7 @@ true posixrules
 13276||10|C|G
 13276||-9223372036854775808|U|G
 13276||10|U|G</Grants>
-      <IntrospectionStateNumber>42547</IntrospectionStateNumber>
+      <IntrospectionStateNumber>42672</IntrospectionStateNumber>
       <ObjectId>49368</ObjectId>
       <OwnerName>ratp</OwnerName>
     </database>
@@ -4123,11 +4123,11 @@ true posixrules
       <AutoIntrospectionLevel>3</AutoIntrospectionLevel>
       <Comment>standard public schema</Comment>
       <Current>1</Current>
-      <LastIntrospectionL1Xid>42547</LastIntrospectionL1Xid>
-      <LastIntrospectionL2Xid>42547</LastIntrospectionL2Xid>
-      <LastIntrospectionL3Xid>42547</LastIntrospectionL3Xid>
+      <LastIntrospectionL1Xid>42672</LastIntrospectionL1Xid>
+      <LastIntrospectionL2Xid>42672</LastIntrospectionL2Xid>
+      <LastIntrospectionL3Xid>42672</LastIntrospectionL3Xid>
       <LastIntrospectionLevel>3</LastIntrospectionLevel>
-      <LastIntrospectionLocalTimestamp>2026-04-28.21:43:22</LastIntrospectionLocalTimestamp>
+      <LastIntrospectionLocalTimestamp>2026-04-29.01:46:22</LastIntrospectionLocalTimestamp>
       <ObjectId>2200</ObjectId>
       <StateNumber>524</StateNumber>
       <OwnerName>pg_database_owner</OwnerName>
@@ -4363,7 +4363,7 @@ REJECTED</Labels>
     <table id="286" parent="264" name="corporate_actions">
       <DetailsLevel>2</DetailsLevel>
       <ObjectId>49449</ObjectId>
-      <StateNumber>42526</StateNumber>
+      <StateNumber>42648</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
@@ -4412,7 +4412,7 @@ REJECTED</Labels>
     <table id="293" parent="264" name="market_bars">
       <DetailsLevel>2</DetailsLevel>
       <ObjectId>49487</ObjectId>
-      <StateNumber>42526</StateNumber>
+      <StateNumber>42648</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
@@ -4454,7 +4454,7 @@ REJECTED</Labels>
     <table id="299" parent="264" name="run_manifests">
       <DetailsLevel>2</DetailsLevel>
       <ObjectId>49529</ObjectId>
-      <StateNumber>42535</StateNumber>
+      <StateNumber>42667</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
@@ -5073,7 +5073,7 @@ pg_catalog</CollationParentNames>
       <ColNames>action_id</ColNames>
       <ObjectId>49454</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>42526</StateNumber>
+      <StateNumber>42648</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default</CollationNames>
@@ -5086,7 +5086,7 @@ action_type
 effective_date
 source</ColNames>
       <ObjectId>49456</ObjectId>
-      <StateNumber>42526</StateNumber>
+      <StateNumber>42648</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default
@@ -5967,7 +5967,7 @@ started_at</ColNames>
       <ColNames>bar_id</ColNames>
       <ObjectId>49492</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>42526</StateNumber>
+      <StateNumber>42648</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default</CollationNames>
@@ -5980,7 +5980,7 @@ interval
 timestamp
 price_basis</ColNames>
       <ObjectId>49494</ObjectId>
-      <StateNumber>42526</StateNumber>
+      <StateNumber>42648</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default</CollationNames>
@@ -6722,88 +6722,95 @@ source</ColNames>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <index id="618" parent="299" name="pk_run_manifests">
+    <column id="618" parent="299" name="price_basis">
+      <NotNull>1</NotNull>
+      <Position>31</Position>
+      <StateNumber>42667</StateNumber>
+      <StoredType>price_basis_enum|0s</StoredType>
+      <TypeId>49482</TypeId>
+    </column>
+    <index id="619" parent="299" name="pk_run_manifests">
       <ColNames>run_id</ColNames>
       <ObjectId>49534</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>42535</StateNumber>
+      <StateNumber>42657</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
     </index>
-    <key id="619" parent="299" name="pk_run_manifests">
+    <key id="620" parent="299" name="pk_run_manifests">
       <ObjectId>49535</ObjectId>
       <Primary>1</Primary>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49534</UnderlyingIndexId>
     </key>
-    <column id="620" parent="300" name="signal_id">
+    <column id="621" parent="300" name="signal_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="621" parent="300" name="run_id">
+    <column id="622" parent="300" name="run_id">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="622" parent="300" name="timestamp">
+    <column id="623" parent="300" name="timestamp">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="623" parent="300" name="bar_timestamp">
+    <column id="624" parent="300" name="bar_timestamp">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="624" parent="300" name="strategy_id">
+    <column id="625" parent="300" name="strategy_id">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="625" parent="300" name="symbol">
+    <column id="626" parent="300" name="symbol">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="626" parent="300" name="direction">
+    <column id="627" parent="300" name="direction">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>signal_direction_enum|0s</StoredType>
       <TypeId>49537</TypeId>
     </column>
-    <column id="627" parent="300" name="confidence">
+    <column id="628" parent="300" name="confidence">
       <Position>8</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>double precision|0s</StoredType>
       <TypeId>701</TypeId>
     </column>
-    <column id="628" parent="300" name="target_position">
+    <column id="629" parent="300" name="target_position">
       <Position>9</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>numeric(18,9 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="629" parent="300" name="params">
+    <column id="630" parent="300" name="params">
       <Position>10</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <index id="630" parent="300" name="pk_signals">
+    <index id="631" parent="300" name="pk_signals">
       <ColNames>signal_id</ColNames>
       <ObjectId>49548</ObjectId>
       <Primary>1</Primary>
@@ -6811,7 +6818,7 @@ source</ColNames>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
     </index>
-    <index id="631" parent="300" name="uq_signals_run_bar_symbol_strategy">
+    <index id="632" parent="300" name="uq_signals_run_bar_symbol_strategy">
       <ColNames>run_id
 bar_timestamp
 symbol
@@ -6833,106 +6840,106 @@ pg_catalog</CollationParentNames>
 default
 default</CollationNames>
     </index>
-    <key id="632" parent="300" name="pk_signals">
+    <key id="633" parent="300" name="pk_signals">
       <ObjectId>49549</ObjectId>
       <Primary>1</Primary>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49548</UnderlyingIndexId>
     </key>
-    <key id="633" parent="300" name="uq_signals_run_bar_symbol_strategy">
+    <key id="634" parent="300" name="uq_signals_run_bar_symbol_strategy">
       <ObjectId>49551</ObjectId>
       <StateNumber>12459</StateNumber>
       <UnderlyingIndexId>49550</UnderlyingIndexId>
     </key>
-    <column id="634" parent="301" name="run_id">
+    <column id="635" parent="301" name="run_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="635" parent="301" name="experiment_id">
+    <column id="636" parent="301" name="experiment_id">
       <Position>2</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="636" parent="301" name="strategy_id">
+    <column id="637" parent="301" name="strategy_id">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="637" parent="301" name="dataset_version">
+    <column id="638" parent="301" name="dataset_version">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="638" parent="301" name="universe_version">
+    <column id="639" parent="301" name="universe_version">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="639" parent="301" name="start_time">
+    <column id="640" parent="301" name="start_time">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="640" parent="301" name="end_time">
+    <column id="641" parent="301" name="end_time">
       <Position>7</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="641" parent="301" name="execution_config">
+    <column id="642" parent="301" name="execution_config">
       <NotNull>1</NotNull>
       <Position>8</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <column id="642" parent="301" name="status">
+    <column id="643" parent="301" name="status">
       <NotNull>1</NotNull>
       <Position>9</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="643" parent="301" name="metrics_snapshot_id">
+    <column id="644" parent="301" name="metrics_snapshot_id">
       <Position>10</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <foreign-key id="644" parent="301" name="fk_simulation_runs_experiment_id_experiments">
+    <foreign-key id="645" parent="301" name="fk_simulation_runs_experiment_id_experiments">
       <ColNames>experiment_id</ColNames>
       <ObjectId>82651</ObjectId>
       <StateNumber>42542</StateNumber>
       <RefKeyColPositions>1</RefKeyColPositions>
       <RefTableId>82627</RefTableId>
     </foreign-key>
-    <foreign-key id="645" parent="301" name="fk_simulation_runs_strategy_id_strategy_configs">
+    <foreign-key id="646" parent="301" name="fk_simulation_runs_strategy_id_strategy_configs">
       <ColNames>strategy_id</ColNames>
       <ObjectId>82656</ObjectId>
       <StateNumber>42542</StateNumber>
       <RefKeyColPositions>1</RefKeyColPositions>
       <RefTableId>82635</RefTableId>
     </foreign-key>
-    <foreign-key id="646" parent="301" name="fk_simulation_runs_dataset_version_dataset_versions">
+    <foreign-key id="647" parent="301" name="fk_simulation_runs_dataset_version_dataset_versions">
       <ColNames>dataset_version</ColNames>
       <ObjectId>82661</ObjectId>
       <StateNumber>42542</StateNumber>
       <RefKeyColPositions>1</RefKeyColPositions>
       <RefTableId>66044</RefTableId>
     </foreign-key>
-    <index id="647" parent="301" name="pk_simulation_runs">
+    <index id="648" parent="301" name="pk_simulation_runs">
       <ColNames>run_id</ColNames>
       <ObjectId>82649</ObjectId>
       <Primary>1</Primary>
@@ -6943,7 +6950,7 @@ default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <index id="648" parent="301" name="ix_simulation_runs_experiment_id">
+    <index id="649" parent="301" name="ix_simulation_runs_experiment_id">
       <ColNames>experiment_id</ColNames>
       <ObjectId>82666</ObjectId>
       <StateNumber>42542</StateNumber>
@@ -6952,7 +6959,7 @@ default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <index id="649" parent="301" name="ix_simulation_runs_strategy_id">
+    <index id="650" parent="301" name="ix_simulation_runs_strategy_id">
       <ColNames>strategy_id</ColNames>
       <ObjectId>82667</ObjectId>
       <StateNumber>42542</StateNumber>
@@ -6961,7 +6968,7 @@ default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <index id="650" parent="301" name="ix_simulation_runs_dataset_version">
+    <index id="651" parent="301" name="ix_simulation_runs_dataset_version">
       <ColNames>dataset_version</ColNames>
       <ObjectId>82668</ObjectId>
       <StateNumber>42542</StateNumber>
@@ -6970,7 +6977,7 @@ default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <index id="651" parent="301" name="ix_simulation_runs_status">
+    <index id="652" parent="301" name="ix_simulation_runs_status">
       <ColNames>status</ColNames>
       <ObjectId>82669</ObjectId>
       <StateNumber>42542</StateNumber>
@@ -6979,53 +6986,53 @@ default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="652" parent="301" name="pk_simulation_runs">
+    <key id="653" parent="301" name="pk_simulation_runs">
       <ObjectId>82650</ObjectId>
       <Primary>1</Primary>
       <StateNumber>42542</StateNumber>
       <UnderlyingIndexId>82649</UnderlyingIndexId>
     </key>
-    <column id="653" parent="302" name="strategy_id">
+    <column id="654" parent="302" name="strategy_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="654" parent="302" name="config_hash">
+    <column id="655" parent="302" name="config_hash">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>varchar(128)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="655" parent="302" name="config_json">
+    <column id="656" parent="302" name="config_json">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <column id="656" parent="302" name="created_at">
+    <column id="657" parent="302" name="created_at">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="657" parent="302" name="strategy_type">
+    <column id="658" parent="302" name="strategy_type">
       <Position>5</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="658" parent="302" name="metadata_json">
+    <column id="659" parent="302" name="metadata_json">
       <Position>6</Position>
       <StateNumber>42542</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <index id="659" parent="302" name="pk_strategy_configs">
+    <index id="660" parent="302" name="pk_strategy_configs">
       <ColNames>strategy_id</ColNames>
       <ObjectId>82640</ObjectId>
       <Primary>1</Primary>
@@ -7036,7 +7043,7 @@ default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <index id="660" parent="302" name="uq_strategy_configs_config_hash">
+    <index id="661" parent="302" name="uq_strategy_configs_config_hash">
       <ColNames>config_hash</ColNames>
       <ObjectId>82642</ObjectId>
       <StateNumber>42542</StateNumber>
@@ -7046,64 +7053,64 @@ default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="661" parent="302" name="pk_strategy_configs">
+    <key id="662" parent="302" name="pk_strategy_configs">
       <ObjectId>82641</ObjectId>
       <Primary>1</Primary>
       <StateNumber>42542</StateNumber>
       <UnderlyingIndexId>82640</UnderlyingIndexId>
     </key>
-    <key id="662" parent="302" name="uq_strategy_configs_config_hash">
+    <key id="663" parent="302" name="uq_strategy_configs_config_hash">
       <ObjectId>82643</ObjectId>
       <StateNumber>42542</StateNumber>
       <UnderlyingIndexId>82642</UnderlyingIndexId>
     </key>
-    <column id="663" parent="303" name="strategy_id">
+    <column id="664" parent="303" name="strategy_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>41263</StateNumber>
       <StoredType>varchar(128)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="664" parent="303" name="current_state">
+    <column id="665" parent="303" name="current_state">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>41263</StateNumber>
       <StoredType>strategy_runtime_state_enum|0s</StoredType>
       <TypeId>49596</TypeId>
     </column>
-    <column id="665" parent="303" name="last_signal_at">
+    <column id="666" parent="303" name="last_signal_at">
       <Position>3</Position>
       <StateNumber>41263</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="666" parent="303" name="last_transition_at">
+    <column id="667" parent="303" name="last_transition_at">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>41263</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="667" parent="303" name="cooldown_until">
+    <column id="668" parent="303" name="cooldown_until">
       <Position>5</Position>
       <StateNumber>41263</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="668" parent="303" name="updated_at">
+    <column id="669" parent="303" name="updated_at">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>41263</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="669" parent="303" name="last_evaluated_bar_timestamp">
+    <column id="670" parent="303" name="last_evaluated_bar_timestamp">
       <Position>7</Position>
       <StateNumber>41263</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <index id="670" parent="303" name="pk_strategy_runtime_states">
+    <index id="671" parent="303" name="pk_strategy_runtime_states">
       <ColNames>strategy_id</ColNames>
       <ObjectId>49612</ObjectId>
       <Primary>1</Primary>
@@ -7114,82 +7121,82 @@ default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="671" parent="303" name="pk_strategy_runtime_states">
+    <key id="672" parent="303" name="pk_strategy_runtime_states">
       <ObjectId>49613</ObjectId>
       <Primary>1</Primary>
       <StateNumber>41263</StateNumber>
       <UnderlyingIndexId>49612</UnderlyingIndexId>
     </key>
-    <column id="672" parent="304" name="coverage_id">
+    <column id="673" parent="304" name="coverage_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="673" parent="304" name="symbol">
+    <column id="674" parent="304" name="symbol">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="674" parent="304" name="date">
+    <column id="675" parent="304" name="date">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>date|0s</StoredType>
       <TypeId>1082</TypeId>
     </column>
-    <column id="675" parent="304" name="dataset_version">
+    <column id="676" parent="304" name="dataset_version">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="676" parent="304" name="expected_bar_count">
+    <column id="677" parent="304" name="expected_bar_count">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>integer|0s</StoredType>
       <TypeId>23</TypeId>
     </column>
-    <column id="677" parent="304" name="actual_bar_count">
+    <column id="678" parent="304" name="actual_bar_count">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>integer|0s</StoredType>
       <TypeId>23</TypeId>
     </column>
-    <column id="678" parent="304" name="completeness_status">
+    <column id="679" parent="304" name="completeness_status">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="679" parent="304" name="gap_summary">
+    <column id="680" parent="304" name="gap_summary">
       <Position>8</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="680" parent="304" name="updated_at">
+    <column id="681" parent="304" name="updated_at">
       <NotNull>1</NotNull>
       <Position>9</Position>
       <StateNumber>41557</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <foreign-key id="681" parent="304" name="fk_symbol_date_coverages_dataset_version">
+    <foreign-key id="682" parent="304" name="fk_symbol_date_coverages_dataset_version">
       <ColNames>dataset_version</ColNames>
       <ObjectId>66182</ObjectId>
       <StateNumber>41603</StateNumber>
       <RefKeyColPositions>1</RefKeyColPositions>
       <RefTableId>66044</RefTableId>
     </foreign-key>
-    <index id="682" parent="304" name="pk_symbol_date_coverages">
+    <index id="683" parent="304" name="pk_symbol_date_coverages">
       <ColNames>coverage_id</ColNames>
       <ObjectId>66070</ObjectId>
       <Primary>1</Primary>
@@ -7200,7 +7207,7 @@ default</CollationNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <index id="683" parent="304" name="uq_symbol_date_coverages_dataset_version_symbol_date">
+    <index id="684" parent="304" name="uq_symbol_date_coverages_dataset_version_symbol_date">
       <ColNames>dataset_version
 symbol
 date</ColNames>
@@ -7215,7 +7222,7 @@ default</CollationNames>
       <CollationParentNames>pg_catalog
 pg_catalog</CollationParentNames>
     </index>
-    <index id="684" parent="304" name="ix_symbol_date_coverages_symbol">
+    <index id="685" parent="304" name="ix_symbol_date_coverages_symbol">
       <ColNames>symbol</ColNames>
       <ObjectId>66203</ObjectId>
       <StateNumber>41603</StateNumber>
@@ -7224,7 +7231,7 @@ pg_catalog</CollationParentNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <index id="685" parent="304" name="ix_symbol_date_coverages_dataset_symbol_date">
+    <index id="686" parent="304" name="ix_symbol_date_coverages_dataset_symbol_date">
       <ColNames>dataset_version
 symbol
 date</ColNames>
@@ -7238,7 +7245,7 @@ default</CollationNames>
       <CollationParentNames>pg_catalog
 pg_catalog</CollationParentNames>
     </index>
-    <index id="686" parent="304" name="ix_symbol_date_coverages_dataset_version">
+    <index id="687" parent="304" name="ix_symbol_date_coverages_dataset_version">
       <ColNames>dataset_version</ColNames>
       <ObjectId>66202</ObjectId>
       <StateNumber>41603</StateNumber>
@@ -7247,78 +7254,78 @@ pg_catalog</CollationParentNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="687" parent="304" name="pk_symbol_date_coverages">
+    <key id="688" parent="304" name="pk_symbol_date_coverages">
       <ObjectId>66071</ObjectId>
       <Primary>1</Primary>
       <StateNumber>41557</StateNumber>
       <UnderlyingIndexId>66070</UnderlyingIndexId>
     </key>
-    <key id="688" parent="304" name="uq_symbol_date_coverages_dataset_version_symbol_date">
+    <key id="689" parent="304" name="uq_symbol_date_coverages_dataset_version_symbol_date">
       <ObjectId>66190</ObjectId>
       <StateNumber>41603</StateNumber>
       <UnderlyingIndexId>66189</UnderlyingIndexId>
     </key>
-    <column id="689" parent="305" name="event_id">
+    <column id="690" parent="305" name="event_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="690" parent="305" name="symbol">
+    <column id="691" parent="305" name="symbol">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="691" parent="305" name="event_type">
+    <column id="692" parent="305" name="event_type">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="692" parent="305" name="effective_at">
+    <column id="693" parent="305" name="effective_at">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="693" parent="305" name="new_symbol">
+    <column id="694" parent="305" name="new_symbol">
       <Position>5</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="694" parent="305" name="successor_symbol">
+    <column id="695" parent="305" name="successor_symbol">
       <Position>6</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="695" parent="305" name="source">
+    <column id="696" parent="305" name="source">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="696" parent="305" name="notes">
+    <column id="697" parent="305" name="notes">
       <Position>8</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>text|0s</StoredType>
       <TypeId>25</TypeId>
     </column>
-    <column id="697" parent="305" name="created_at">
+    <column id="698" parent="305" name="created_at">
       <NotNull>1</NotNull>
       <Position>9</Position>
       <StateNumber>41349</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <index id="698" parent="305" name="pk_ticker_lifecycle_events">
+    <index id="699" parent="305" name="pk_ticker_lifecycle_events">
       <ColNames>event_id</ColNames>
       <ObjectId>49637</ObjectId>
       <Primary>1</Primary>
@@ -7329,7 +7336,7 @@ pg_catalog</CollationParentNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <index id="699" parent="305" name="ix_ticker_lifecycle_events_symbol">
+    <index id="700" parent="305" name="ix_ticker_lifecycle_events_symbol">
       <ColNames>symbol</ColNames>
       <ObjectId>49639</ObjectId>
       <StateNumber>41349</StateNumber>
@@ -7338,102 +7345,102 @@ pg_catalog</CollationParentNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="700" parent="305" name="pk_ticker_lifecycle_events">
+    <key id="701" parent="305" name="pk_ticker_lifecycle_events">
       <ObjectId>49638</ObjectId>
       <Primary>1</Primary>
       <StateNumber>41349</StateNumber>
       <UnderlyingIndexId>49637</UnderlyingIndexId>
     </key>
-    <column id="701" parent="306" name="order_id">
+    <column id="702" parent="306" name="order_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="702" parent="306" name="intent_id">
+    <column id="703" parent="306" name="intent_id">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="703" parent="306" name="run_id">
+    <column id="704" parent="306" name="run_id">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>uuid|0s</StoredType>
       <TypeId>2950</TypeId>
     </column>
-    <column id="704" parent="306" name="strategy_id">
+    <column id="705" parent="306" name="strategy_id">
       <NotNull>1</NotNull>
       <Position>4</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>varchar(128)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="705" parent="306" name="account_id">
+    <column id="706" parent="306" name="account_id">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="706" parent="306" name="symbol">
+    <column id="707" parent="306" name="symbol">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>varchar(32)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="707" parent="306" name="broker_order_id">
+    <column id="708" parent="306" name="broker_order_id">
       <Position>7</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>varchar(64)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="708" parent="306" name="current_status">
+    <column id="709" parent="306" name="current_status">
       <NotNull>1</NotNull>
       <Position>8</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>tracked_order_status_enum|0s</StoredType>
       <TypeId>49615</TypeId>
     </column>
-    <column id="709" parent="306" name="previous_filled_qty">
+    <column id="710" parent="306" name="previous_filled_qty">
       <NotNull>1</NotNull>
       <Position>9</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>numeric(18,9 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="710" parent="306" name="previous_avg_fill_price">
+    <column id="711" parent="306" name="previous_avg_fill_price">
       <Position>10</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>numeric(18,6 digit)|0s</StoredType>
       <TypeId>1700</TypeId>
     </column>
-    <column id="711" parent="306" name="is_open">
+    <column id="712" parent="306" name="is_open">
       <NotNull>1</NotNull>
       <Position>11</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>boolean|0s</StoredType>
       <TypeId>16</TypeId>
     </column>
-    <column id="712" parent="306" name="created_at">
+    <column id="713" parent="306" name="created_at">
       <NotNull>1</NotNull>
       <Position>12</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="713" parent="306" name="updated_at">
+    <column id="714" parent="306" name="updated_at">
       <NotNull>1</NotNull>
       <Position>13</Position>
       <StateNumber>41272</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <index id="714" parent="306" name="pk_tracked_orders">
+    <index id="715" parent="306" name="pk_tracked_orders">
       <ColNames>order_id</ColNames>
       <ObjectId>49630</ObjectId>
       <Primary>1</Primary>
@@ -7441,81 +7448,81 @@ pg_catalog</CollationParentNames>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
     </index>
-    <key id="715" parent="306" name="pk_tracked_orders">
+    <key id="716" parent="306" name="pk_tracked_orders">
       <ObjectId>49631</ObjectId>
       <Primary>1</Primary>
       <StateNumber>41272</StateNumber>
       <UnderlyingIndexId>49630</UnderlyingIndexId>
     </key>
-    <column id="716" parent="307" name="universe_id">
+    <column id="717" parent="307" name="universe_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="717" parent="307" name="snapshot_date">
+    <column id="718" parent="307" name="snapshot_date">
       <NotNull>1</NotNull>
       <Position>2</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>date|0s</StoredType>
       <TypeId>1082</TypeId>
     </column>
-    <column id="718" parent="307" name="effective_start">
+    <column id="719" parent="307" name="effective_start">
       <NotNull>1</NotNull>
       <Position>3</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="719" parent="307" name="effective_end">
+    <column id="720" parent="307" name="effective_end">
       <Position>4</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="720" parent="307" name="symbols">
+    <column id="721" parent="307" name="symbols">
       <NotNull>1</NotNull>
       <Position>5</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar(32) []|0s</StoredType>
       <TypeId>1015</TypeId>
     </column>
-    <column id="721" parent="307" name="criteria">
+    <column id="722" parent="307" name="criteria">
       <NotNull>1</NotNull>
       <Position>6</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>jsonb|0s</StoredType>
       <TypeId>3802</TypeId>
     </column>
-    <column id="722" parent="307" name="version">
+    <column id="723" parent="307" name="version">
       <NotNull>1</NotNull>
       <Position>7</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="723" parent="307" name="source">
+    <column id="724" parent="307" name="source">
       <NotNull>1</NotNull>
       <Position>8</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <column id="724" parent="307" name="built_at">
+    <column id="725" parent="307" name="built_at">
       <NotNull>1</NotNull>
       <Position>9</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>timestamp with time zone|0s</StoredType>
       <TypeId>1184</TypeId>
     </column>
-    <column id="725" parent="307" name="notes">
+    <column id="726" parent="307" name="notes">
       <Position>10</Position>
       <StateNumber>12459</StateNumber>
       <StoredType>varchar|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
-    <index id="726" parent="307" name="pk_universe_snapshots">
+    <index id="727" parent="307" name="pk_universe_snapshots">
       <ColNames>universe_id</ColNames>
       <ObjectId>49557</ObjectId>
       <Primary>1</Primary>
@@ -7526,7 +7533,7 @@ pg_catalog</CollationParentNames>
       <CollationIds>100</CollationIds>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
-    <key id="727" parent="307" name="pk_universe_snapshots">
+    <key id="728" parent="307" name="pk_universe_snapshots">
       <ObjectId>49558</ObjectId>
       <Primary>1</Primary>
       <StateNumber>12459</StateNumber>

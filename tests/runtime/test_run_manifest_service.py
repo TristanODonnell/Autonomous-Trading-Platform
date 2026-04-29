@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from autonomous_trading_platform.contracts.common.enums import (
     BarInterval,
+    PriceBasis,
     RunType,
 )
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
@@ -55,6 +56,7 @@ def make_run_manifest(
     start_date: date = date(2025, 1, 1),
     end_date: date | None = date(2025, 1, 31),
     dataset_version: str = "bars-v1",
+    price_basis: PriceBasis = PriceBasis.RAW,
     universe_version: str = "universe-v1",
     cost_model: dict[str, Any] | None = None,
     fill_model: dict[str, Any] | None = None,
@@ -86,6 +88,7 @@ def make_run_manifest(
         start_date=start_date,
         end_date=end_date,
         dataset_version=dataset_version,
+        price_basis=price_basis,
         universe_version=universe_version,
         cost_model=cost_model,
         fill_model=fill_model,
@@ -280,7 +283,7 @@ class TestRunManifestServiceTodoBehavior:
 
         service = RunManifestService(session=db_session)
         saved = service.save(manifest)
-
+        assert saved.price_basis == manifest.price_basis
         assert saved.run_id == manifest.run_id
         assert saved.run_type == manifest.run_type
         assert saved.environment == manifest.environment

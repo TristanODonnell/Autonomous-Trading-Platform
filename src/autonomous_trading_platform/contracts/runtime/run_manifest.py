@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from autonomous_trading_platform.contracts.common.enums import BarInterval, RunType
+from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.common.types import Money, UTCDateTime
 
 
@@ -26,6 +26,7 @@ class RunManifest(BaseModel):
     start_date: date
     end_date: date | None = None
     dataset_version: str
+    price_basis: PriceBasis
     universe_version: str
     cost_model: dict[str, Any] | None = None
     fill_model: dict[str, Any] | None = None

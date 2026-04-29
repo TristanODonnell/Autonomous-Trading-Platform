@@ -70,11 +70,13 @@ class SimulationExecutionEngine:
 
         strategy_state: dict[str, Any] = {}
 
+        timeline = list(window.timeline)
+
         self.lookahead_guard_service.assert_timeline_strictly_increasing(
-            timeline=list(window.timeline),
+            timeline=timeline,
         )
 
-        for timestamp in window.timeline:
+        for timestamp in timeline:
             bars_at_timestamp = window.bars_by_timestamp[timestamp]
 
             signals = self._evaluate_signals(
@@ -189,6 +191,9 @@ class SimulationExecutionEngine:
                 positions=positions,
                 state=strategy_state,
             )
+
+            if context is not None:
+                print(f"{timestamp} | {symbol} | bars={len(context.bars)}")
 
             if context is None:
                 continue
