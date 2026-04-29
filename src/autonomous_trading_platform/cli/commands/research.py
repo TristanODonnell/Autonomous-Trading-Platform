@@ -68,6 +68,12 @@ def register(subparsers) -> None:
         default="{}",
         help='JSON string of strategy parameters, e.g. \'{"short_window": 10, "long_window": 30}\'',
     )
+    run_simulation_parser.add_argument(
+        "--random-seed",
+        type=int,
+        required=True,
+        help="Fixed random seed used for deterministic simulation replay.",
+    )
     run_simulation_parser.add_argument("--strategy-id", required=True)
     run_simulation_parser.add_argument("--initial-cash", type=float, default=100_000.0)
     run_simulation_parser.add_argument("--experiment-id")
@@ -97,6 +103,7 @@ def handle_run_simulation(args: argparse.Namespace) -> int:
                 "parameters": strategy_parameters,
             },
             dataset_version=args.dataset_version_id,
+            random_seed=args.random_seed,
             price_basis=PriceBasis(args.price_basis),
             symbols=_parse_symbols(args.symbols),
             start_date=_parse_date(args.start_date),
@@ -115,6 +122,7 @@ def handle_run_simulation(args: argparse.Namespace) -> int:
                 "run_id": str(result.run_id),
                 "experiment_id": result.experiment_id,
                 "strategy_id": result.strategy_id,
+                "random_seed": args.random_seed,
                 "strategy_type": args.strategy_type,
                 "strategy_parameters": strategy_parameters,
                 "dataset_version": result.dataset_version,
