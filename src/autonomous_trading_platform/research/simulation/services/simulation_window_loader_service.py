@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import random
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -12,6 +14,51 @@ from autonomous_trading_platform.storage.parquet.datasets import (
     ParquetDataset,
 )
 from autonomous_trading_platform.storage.parquet.reader import HistoricalBarDatasetReader
+
+
+def shuffle_window_bar_timestamps(
+    window: SimulationWindowData,
+    *,
+    random_seed: int,
+) -> SimulationWindowData:
+    rng = random.Random(random_seed)
+
+    shuffled_bars_by_symbol = {}
+
+    for symbol, bars in window.bars_by_symbol.items():
+        timestamps = [bar.timestamp for bar in bars]
+        rng.shuffle(timestamps)
+
+        shuffled_bars = []
+
+        for bar, shuffled_timestamp in zip(bars, timestamps, strict=True):
+            copied_bar = copy.copy(bar)
+            copied_bar.timestamp = shuffled_timestamp
+            shuffled_bars.append(copied_bar)
+
+        shuffled_bars_by_symbol[symbol] = sorted(
+            shuffled_bars,
+            key=lambda bar: bar.timestamp,
+        )
+
+    shuffled_bars_by_timestamp: dict[datetime, dict[str, MarketBar]] = {}
+
+    for symbol, bars in shuffled_bars_by_symbol.items():
+        for bar in bars:
+            shuffled_bars_by_timestamp.setdefault(bar.timestamp, {})[symbol] = bar
+
+    shuffled_timeline = sorted(shuffled_bars_by_timestamp.keys())
+
+    return SimulationWindowData(
+        start_date=window.start_date,
+        end_date=window.end_date,
+        dataset_version=window.dataset_version,
+        symbols=window.symbols,
+        timeline=shuffled_timeline,
+        bars_by_symbol=shuffled_bars_by_symbol,
+        bars_by_timestamp=shuffled_bars_by_timestamp,
+        feature_tables_by_symbol=window.feature_tables_by_symbol,
+    )
 
 
 @dataclass(slots=True)

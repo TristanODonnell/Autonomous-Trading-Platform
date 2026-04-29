@@ -76,6 +76,11 @@ def register(subparsers) -> None:
         required=True,
         help="Fixed random seed used for deterministic simulation replay.",
     )
+    run_simulation_parser.add_argument(
+        "--shuffle-timestamps",
+        action="store_true",
+        help="Shuffle timestamps to break temporal structure (diagnostic test)",
+    )
     run_simulation_parser.add_argument("--strategy-id", required=True)
     run_simulation_parser.add_argument("--initial-cash", type=float, default=100_000.0)
     run_simulation_parser.add_argument("--experiment-id")
@@ -113,6 +118,7 @@ def handle_run_simulation(args: argparse.Namespace) -> int:
             initial_cash=args.initial_cash,
             experiment_id=args.experiment_id,
             strict_data_loading=args.strict_data_loading,
+            shuffle_timestamp=args.shuffle_timestamps,
         )
 
         result = simulation_context.simulation_runner.run(request)

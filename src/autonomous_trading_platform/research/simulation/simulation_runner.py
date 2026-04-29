@@ -32,6 +32,7 @@ from autonomous_trading_platform.research.simulation.services.simulation_executi
 )
 from autonomous_trading_platform.research.simulation.services.simulation_window_loader_service import (
     SimulationWindowLoader,
+    shuffle_window_bar_timestamps,
 )
 from autonomous_trading_platform.storage.sor.repositories.experiments_repository import (
     ExperimentsRepository,
@@ -62,6 +63,7 @@ class SimulationRunRequest:
     initial_cash: float = 100_000.0
     experiment_id: str | None = None
     strict_data_loading: bool = True
+    shuffle_timestamp: bool = False
 
 
 @dataclass(slots=True)
@@ -154,6 +156,12 @@ class SimulationRunner:
                 end_date=request.end_date,
                 strict=request.strict_data_loading,
             )
+
+            if request.shuffle_timestamp:
+                window = shuffle_window_bar_timestamps(
+                    window,
+                    random_seed=request.random_seed,
+                )
 
             strategy_config = StrategyConfig(
                 strategy_id=request.strategy_id,

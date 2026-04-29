@@ -169,3 +169,56 @@ def test_context_builder_excludes_future_bars():
     timestamps = [b.timestamp for b in context.bars]
 
     assert all(ts < t0 for ts in timestamps)
+
+
+def test_guard_raises_when_bar_missing_timestamp():
+    guard = LookaheadGuardService()
+
+    t0 = datetime(2025, 1, 1, 10, 0)
+
+    bars = [SimpleNamespace(close=100.0)]  # no timestamp
+
+    with pytest.raises(ValueError, match="without timestamp"):
+        guard.assert_historical_only(
+            symbol="AAPL",
+            simulation_timestamp=t0,
+            bars=bars,
+        )
+
+
+def test_context_builder_respects_lookback_window():
+    t0 = datetime(2025, 1, 1, 10, 0)
+
+    bars = [
+        make_bar(t0 - timedelta(minutes=20)),
+        make_bar(t0 - timedelta(minutes=15)),
+        make_bar(t0 - timedelta(minutes=10)),
+        make_bar(t0 - timedelta(minutes=5)),
+    ]
+
+    builder = StrategyContextBuilder(
+        market_bar_reader=None,
+        bars_dataset=None,
+        lookback_bars=2,
+    )
+
+    window = SimpleNamespace(
+        bars_by_symbol={"AAPL": bars},
+    )
+
+    context = builder.build_from_window(
+        run_id=uuid4(),
+        strategy_id="test",
+        symbol="AAPL",
+        timestamp=t0,
+        window=window,
+        positions={},
+        state={},
+    )
+
+    timestamps = [b.timestamp for b in context.bars]
+
+    assert timestamps == [
+        t0 - timedelta(minutes=10),
+        t0 - timedelta(minutes=5),
+    ]

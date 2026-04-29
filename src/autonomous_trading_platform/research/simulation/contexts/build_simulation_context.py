@@ -90,10 +90,13 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         settings=settings,
         risk_state_reader=StubRiskStateReader(),
     )
+    lookahead_guard_service = LookaheadGuardService()
+
     context_builder = StrategyContextBuilder(
         market_bar_reader=bar_reader,
-        bars_dataset=ADJUSTED_BARS_DATASET,  # or RAW_BARS_DATASET
+        bars_dataset=ADJUSTED_BARS_DATASET,
         lookback_bars=20,
+        lookahead_guard_service=lookahead_guard_service,
     )
     portfolio_construction_service = PortfolioConstructionService(
         pre_trade_risk_service=pre_trade_risk_service
@@ -115,7 +118,6 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
     )
     cash_ledger_service = CashLedgerService()
     position_ledger_service = PositionLedgerService()
-    lookahead_guard_service = LookaheadGuardService()
     simulation_engine = SimulationExecutionEngine(
         cash_ledger_service=cash_ledger_service,
         position_ledger_service=position_ledger_service,
