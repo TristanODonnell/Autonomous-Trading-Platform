@@ -55,6 +55,7 @@ def register(subparsers) -> None:
         required=True,
         choices=[
             "stub",
+            "intentional_loser",
             "moving_average_crossover",
             "mean_reversion",
             "momentum",

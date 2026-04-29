@@ -5,6 +5,9 @@ from autonomous_trading_platform.strategy.implementations.base_strategy import B
 from autonomous_trading_platform.strategy.implementations.factor_based_strategy import (
     FactorBasedStrategy,
 )
+from autonomous_trading_platform.strategy.implementations.intentional_loser_strategy import (
+    IntentionalLoserStrategy,
+)
 from autonomous_trading_platform.strategy.implementations.mean_reversion_strategy import (
     MeanReversionStrategy,
 )
@@ -21,6 +24,11 @@ class StrategyFactory:
     def build(self, config: StrategyConfig) -> BaseStrategy:
         if config.type == "stub":
             return StubStrategy(
+                strategy_id=config.strategy_id,
+                price_change_threshold=float(config.parameters.get("price_change_threshold", 0.0)),
+            )
+        if config.type == "intentional_loser":
+            return IntentionalLoserStrategy(
                 strategy_id=config.strategy_id,
                 price_change_threshold=float(config.parameters.get("price_change_threshold", 0.0)),
             )
