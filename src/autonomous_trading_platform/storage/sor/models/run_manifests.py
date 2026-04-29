@@ -11,7 +11,7 @@ from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from autonomous_trading_platform.contracts.common.enums import BarInterval, RunType
+from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.common.types import Money, UTCDateTime
 
 from .base import Base
@@ -39,6 +39,10 @@ class RunManifestRow(Base):
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     dataset_version: Mapped[str] = mapped_column(String, nullable=False)
+    price_basis: Mapped[PriceBasis] = mapped_column(
+        SAEnum(PriceBasis, name="price_basis_enum"),
+        nullable=False,
+    )
     universe_version: Mapped[str] = mapped_column(String, nullable=False)
     cost_model: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     fill_model: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

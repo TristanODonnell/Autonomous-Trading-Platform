@@ -48,6 +48,9 @@ from autonomous_trading_platform.storage.parquet.repositories.parquet_simulation
 from autonomous_trading_platform.storage.sor.repositories.experiments_repository import (
     ExperimentsRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.run_manifests_repository import (
+    RunManifestRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.simulation_runs_repository import (
     SimulationRunsRepository,
 )
@@ -130,6 +133,7 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         strategy_config_repository=strategy_configs_repository,
         simulation_run_repository=simulation_runs_repository,
         experiment_repository=experiment_repository,
+        manifest_service=RunManifestRepository(session),
     )
 
     return SimulationContext(

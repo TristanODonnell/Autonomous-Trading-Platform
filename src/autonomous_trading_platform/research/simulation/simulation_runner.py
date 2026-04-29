@@ -314,6 +314,7 @@ class SimulationRunner:
                 start_date=request.start_date,
                 end_date=request.end_date,
                 dataset_version=request.dataset_version,
+                price_basis=request.price_basis,
                 universe_version="v1",
                 cost_model=None,
                 fill_model=None,
