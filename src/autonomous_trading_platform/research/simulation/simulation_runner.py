@@ -18,9 +18,6 @@ from autonomous_trading_platform.contracts.runtime.simulation_run import Simulat
 from autonomous_trading_platform.contracts.runtime.strategy_config import (
     StrategyConfig as RuntimeStrategyConfig,
 )
-from autonomous_trading_platform.execution.services.portfolio_construction_service import (
-    PortfolioConstructionService,
-)
 from autonomous_trading_platform.research.services.research_dataset_resolver_service import (
     ResearchDatasetResolver,
 )
@@ -104,7 +101,6 @@ class SimulationRunner:
         result_recorder: ResultRecorderService,
         execution_engine: SimulationExecutionEngine,
         context_builder: StrategyContextBuilder,
-        portfolio_construction_service: PortfolioConstructionService,
         simulated_execution_service: Any,
         simulation_run_repository: SimulationRunsRepository,
         strategy_config_repository: StrategyConfigsRepository,
@@ -118,7 +114,6 @@ class SimulationRunner:
         self.result_recorder = result_recorder
         self.execution_engine = execution_engine
         self.context_builder = context_builder
-        self.portfolio_construction_service = portfolio_construction_service
         self.simulated_execution_service = simulated_execution_service
         self.simulation_run_repository = simulation_run_repository
         self.strategy_config_repository = strategy_config_repository
@@ -220,7 +215,6 @@ class SimulationRunner:
             strategy=strategy,
             window=window,
             context_builder=self.context_builder,
-            portfolio_construction_service=self.portfolio_construction_service,
             simulated_execution_service=self.simulated_execution_service,
             initial_cash=request.initial_cash,
         )

@@ -13,14 +13,14 @@ from autonomous_trading_platform.contracts.accounting.position_snapshot import P
 from autonomous_trading_platform.contracts.common.enums import OrderSource
 from autonomous_trading_platform.contracts.trading.signal import Signal
 from autonomous_trading_platform.execution.services.cash_ledger_service import CashLedgerService
-from autonomous_trading_platform.execution.services.portfolio_construction_service import (
-    PortfolioConstructionService,
-)
 from autonomous_trading_platform.execution.services.position_ledger_service import (
     PositionLedgerService,
 )
 from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
     LookaheadGuardService,
+)
+from autonomous_trading_platform.research.simulation.services.order_simulator_service import (
+    OrderSimulatorService,
 )
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
     StrategyContextBuilder,
@@ -42,10 +42,12 @@ class SimulationExecutionEngine:
         cash_ledger_service: CashLedgerService,
         position_ledger_service: PositionLedgerService,
         lookahead_guard_service: LookaheadGuardService,
+        order_simulator_service: OrderSimulatorService,
     ):
         self.cash_ledger_service = cash_ledger_service
         self.position_ledger_service = position_ledger_service
         self.lookahead_guard_service = lookahead_guard_service
+        self.order_simulator_service = order_simulator_service
 
     def execute(
         self,
@@ -54,7 +56,6 @@ class SimulationExecutionEngine:
         strategy: Any,
         window: Any,
         context_builder: StrategyContextBuilder,
-        portfolio_construction_service: PortfolioConstructionService,
         simulated_execution_service: Any,
         initial_cash: float,
     ) -> SimulationExecutionResult:
@@ -98,7 +99,6 @@ class SimulationExecutionEngine:
                 run_id=run_id,
                 strategy_id=strategy.strategy_id,
                 timestamp=timestamp,
-                portfolio_construction_service=portfolio_construction_service,
             )
 
             fills = self._simulate_fills(
@@ -220,18 +220,14 @@ class SimulationExecutionEngine:
         run_id: UUID,
         strategy_id: str,
         timestamp: datetime,
-        portfolio_construction_service: Any,
     ) -> list[Any]:
-        return list(
-            portfolio_construction_service.generate_order_intents(
-                signals=signals,
-                positions=positions,
-                prices=prices,
-                run_id=run_id,
-                strategy_id=strategy_id,
-                bar_timestamp=timestamp,
-                now=timestamp,
-            )
+        return self.order_simulator_service.generate_order_intents(
+            signals=signals,
+            positions=positions,
+            prices=prices,
+            run_id=run_id,
+            strategy_id=strategy_id,
+            timestamp=timestamp,
         )
 
     def _simulate_fills(

@@ -19,6 +19,9 @@ from autonomous_trading_platform.research.simulation.contexts.simulation_context
 from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
     LookaheadGuardService,
 )
+from autonomous_trading_platform.research.simulation.services.order_simulator_service import (
+    OrderSimulatorService,
+)
 from autonomous_trading_platform.research.simulation.services.result_recorder_service import (
     ResultRecorderService,
 )
@@ -118,10 +121,14 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
     )
     cash_ledger_service = CashLedgerService()
     position_ledger_service = PositionLedgerService()
+    order_simulator_service = OrderSimulatorService(
+        portfolio_construction_service=portfolio_construction_service,
+    )
     simulation_engine = SimulationExecutionEngine(
         cash_ledger_service=cash_ledger_service,
         position_ledger_service=position_ledger_service,
         lookahead_guard_service=lookahead_guard_service,
+        order_simulator_service=order_simulator_service,
     )
     simulation_runner = SimulationRunner(
         dataset_resolver=dataset_resolver,
@@ -129,7 +136,6 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         result_recorder=result_recorder_service,
         execution_engine=simulation_engine,
         context_builder=context_builder,
-        portfolio_construction_service=portfolio_construction_service,
         simulated_execution_service=simulated_execution_service,
         strategy_factory=strategy_factory,
         strategy_config_repository=strategy_configs_repository,

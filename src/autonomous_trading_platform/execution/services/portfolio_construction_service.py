@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+from autonomous_trading_platform.contracts.accounting.position_snapshot import Position
 from autonomous_trading_platform.contracts.common.enums import (
     OrderType,
     Side,
@@ -24,7 +26,7 @@ class PortfolioConstructionService:
     def generate_order_intents(
         self,
         signals: list[Signal],
-        positions: dict[str, int],
+        positions: Mapping[str, int | Position],
         prices: dict[str, float],
         run_id: UUID,
         strategy_id: str,
@@ -71,7 +73,7 @@ class PortfolioConstructionService:
 
     def calculate_deltas(
         self,
-        current_positions: dict[str, int],
+        current_positions: Mapping[str, int | Position],
         target_positions: dict[str, int],
     ) -> list[dict[str, int | str]]:
         deltas: list[dict[str, int | str]] = []
