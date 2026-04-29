@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import random
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID, uuid4
+
+import numpy as np
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.contracts.runtime.experiment import Experiment
@@ -48,6 +51,7 @@ class SimulationRunRequest:
     strategy_id: str
     strategy_config: dict[str, Any]
     dataset_version: str
+    random_seed: int
     price_basis: PriceBasis
     symbols: list[str]
     start_date: date
@@ -117,6 +121,7 @@ class SimulationRunner:
         self.manifest_service = manifest_service
 
     def run(self, request: SimulationRunRequest) -> SimulationRunResult:
+        self._set_seed(request.random_seed)
         run_id = uuid4()
         experiment_id = request.experiment_id or f"experiment_{run_id}"
 
@@ -270,6 +275,7 @@ class SimulationRunner:
                 start_time=now,
                 end_time=None,
                 execution_config={
+                    "random_seed": request.random_seed,
                     "price_basis": request.price_basis.value,
                     "symbols": request.symbols,
                     "start_date": str(request.start_date),
@@ -336,3 +342,7 @@ class SimulationRunner:
         repo = self.simulation_run_repository or self.strategy_config_repository
         if repo is not None:
             repo.session.commit()
+
+    def _set_seed(self, seed: int) -> None:
+        random.seed(seed)
+        np.random.seed(seed)
