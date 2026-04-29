@@ -392,8 +392,10 @@ class SimulationRunner:
                 )
                 snapshot_row = self.metrics_summary_repository.to_row(snapshot)
                 self.metrics_summary_repository.upsert(snapshot_row)
+                self.metrics_summary_repository.session.flush()
 
                 # link FK back onto run
+                row.metrics_snapshot_id = snapshot_id
                 row.status = "COMPLETED"
                 row.end_time = now
                 row.execution_config = {
