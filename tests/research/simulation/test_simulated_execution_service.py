@@ -4,6 +4,13 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from autonomous_trading_platform.contracts.common.enums import Side
+from autonomous_trading_platform.research.simulation.models.fill_model import (
+    SimulatedFillModelConfig,
+)
+from autonomous_trading_platform.research.simulation.models.slippage_model import (
+    SlippageModel,
+    SlippageModelConfig,
+)
 from autonomous_trading_platform.research.simulation.services.simulated_execution_service import (
     SimulatedExecutionService,
 )
@@ -21,13 +28,19 @@ def make_bar(*, symbol: str = "AAPL", close: Decimal = Decimal("100")):
     )
 
 
-def make_intent(*, side: Side, symbol: str = "AAPL", qty: Decimal = Decimal("10")):
+def make_intent(
+    *,
+    side: Side,
+    symbol: str = "AAPL",
+    qty: Decimal | None = Decimal("10"),
+):
     return SimpleNamespace(
         intent_id=str(uuid4()),
         run_id=uuid4(),
         symbol=symbol,
         side=side,
         qty=qty,
+        order_type="market",
     )
 
 
@@ -36,12 +49,15 @@ def make_service() -> SimulatedExecutionService:
         config=SimulationCostModelConfig(
             commission_per_share=Decimal("0.01"),
             min_commission=Decimal("1.00"),
-            slippage_bps=Decimal("10"),
-        )
+        ),
+        slippage_model=SlippageModel(
+            config=SlippageModelConfig(slippage_rate=Decimal("0.001")),
+        ),
     )
 
     return SimulatedExecutionService(
         simulation_cost_model_service=cost_model,
+        fill_model_config=SimulatedFillModelConfig(),
     )
 
 

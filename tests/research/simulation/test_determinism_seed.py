@@ -44,7 +44,6 @@ def runner():
         result_recorder=None,
         execution_engine=None,
         context_builder=None,
-        portfolio_construction_service=None,
         simulated_execution_service=None,
         simulation_run_repository=None,
         strategy_config_repository=None,

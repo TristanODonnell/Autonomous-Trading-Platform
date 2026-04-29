@@ -1,6 +1,10 @@
 from decimal import Decimal
 
 from autonomous_trading_platform.contracts.common.enums import Side
+from autonomous_trading_platform.research.simulation.models.slippage_model import (
+    SlippageModel,
+    SlippageModelConfig,
+)
 from autonomous_trading_platform.research.simulation.services.simulation_cost_model_service import (
     SimulationCostModelConfig,
     SimulationCostModelService,
@@ -12,8 +16,10 @@ def test_cost_model_applies_buy_slippage_above_reference_price():
         config=SimulationCostModelConfig(
             commission_per_share=Decimal("0.01"),
             min_commission=Decimal("1.00"),
-            slippage_bps=Decimal("10"),
-        )
+        ),
+        slippage_model=SlippageModel(
+            config=SlippageModelConfig(slippage_rate=Decimal("0.001")),
+        ),
     )
 
     costs = service.apply_costs(
@@ -29,7 +35,13 @@ def test_cost_model_applies_buy_slippage_above_reference_price():
 
 def test_cost_model_applies_sell_slippage_below_reference_price():
     service = SimulationCostModelService(
-        config=SimulationCostModelConfig(slippage_bps=Decimal("10"))
+        config=SimulationCostModelConfig(
+            commission_per_share=Decimal("0.01"),
+            min_commission=Decimal("1.00"),
+        ),
+        slippage_model=SlippageModel(
+            config=SlippageModelConfig(slippage_rate=Decimal("0.001")),
+        ),
     )
 
     costs = service.apply_costs(

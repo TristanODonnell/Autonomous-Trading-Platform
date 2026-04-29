@@ -16,8 +16,18 @@ from autonomous_trading_platform.research.services.research_dataset_resolver_ser
 from autonomous_trading_platform.research.simulation.contexts.simulation_context import (
     SimulationContext,
 )
+from autonomous_trading_platform.research.simulation.models.fill_model import (
+    SimulatedFillModelConfig,
+)
+from autonomous_trading_platform.research.simulation.models.slippage_model import (
+    SlippageModel,
+    SlippageModelConfig,
+)
 from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
     LookaheadGuardService,
+)
+from autonomous_trading_platform.research.simulation.services.order_simulator_service import (
+    OrderSimulatorService,
 )
 from autonomous_trading_platform.research.simulation.services.result_recorder_service import (
     ResultRecorderService,
@@ -106,22 +116,30 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
     simulation_cost_model_config = SimulationCostModelConfig(
         commission_per_share=Decimal("0.0000"),
         min_commission=Decimal("0.00"),
-        slippage_bps=Decimal("1.0"),
     )
-
+    slippage_model_config = SlippageModelConfig(
+        slippage_rate=Decimal("0.0001")  # or from settings
+    )
+    slippage_model = SlippageModel(config=slippage_model_config)
     simulation_cost_model_service = SimulationCostModelService(
         config=simulation_cost_model_config,
+        slippage_model=slippage_model,
     )
-
+    fill_model_config = SimulatedFillModelConfig()
     simulated_execution_service = SimulatedExecutionService(
-        simulation_cost_model_service=simulation_cost_model_service
+        simulation_cost_model_service=simulation_cost_model_service,
+        fill_model_config=fill_model_config,
     )
     cash_ledger_service = CashLedgerService()
     position_ledger_service = PositionLedgerService()
+    order_simulator_service = OrderSimulatorService(
+        portfolio_construction_service=portfolio_construction_service,
+    )
     simulation_engine = SimulationExecutionEngine(
         cash_ledger_service=cash_ledger_service,
         position_ledger_service=position_ledger_service,
         lookahead_guard_service=lookahead_guard_service,
+        order_simulator_service=order_simulator_service,
     )
     simulation_runner = SimulationRunner(
         dataset_resolver=dataset_resolver,
@@ -129,7 +147,6 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         result_recorder=result_recorder_service,
         execution_engine=simulation_engine,
         context_builder=context_builder,
-        portfolio_construction_service=portfolio_construction_service,
         simulated_execution_service=simulated_execution_service,
         strategy_factory=strategy_factory,
         strategy_config_repository=strategy_configs_repository,
