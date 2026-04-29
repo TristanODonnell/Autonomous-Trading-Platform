@@ -36,6 +36,15 @@ class DummyManifestRepo(DummyRepo):
         return row
 
 
+class DummyMetricsSummaryRepo(DummyRepo):
+    def upsert(self, row):
+        self._store[row.metrics_snapshot_id] = row
+        return row
+
+    def to_row(self, contract):
+        return contract
+
+
 @pytest.fixture
 def runner():
     return SimulationRunner(
@@ -49,6 +58,7 @@ def runner():
         strategy_config_repository=None,
         experiment_repository=None,
         manifest_service=DummyManifestRepo(),
+        metrics_summary_repository=DummyMetricsSummaryRepo(),
         strategy_factory=None,
     )
 
