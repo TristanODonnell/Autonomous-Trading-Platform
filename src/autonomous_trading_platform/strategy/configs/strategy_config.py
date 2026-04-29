@@ -15,6 +15,7 @@ class StrategyConfig(BaseModel):
         "mean_reversion",
         "momentum",
         "factor_based",
+        "random",
     ]
 
     strategy_id: str

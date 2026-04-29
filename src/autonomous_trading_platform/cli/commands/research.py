@@ -56,6 +56,7 @@ def register(subparsers) -> None:
         choices=[
             "stub",
             "intentional_loser",
+            "random",
             "moving_average_crossover",
             "mean_reversion",
             "momentum",

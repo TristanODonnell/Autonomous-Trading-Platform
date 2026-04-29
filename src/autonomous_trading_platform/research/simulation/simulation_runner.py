@@ -206,6 +206,7 @@ class SimulationRunner:
             raise
 
     def _execute_simulation(self, *, run_id, request, window, strategy):
+
         result = self.execution_engine.execute(
             run_id=run_id,
             strategy=strategy,

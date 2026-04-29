@@ -17,11 +17,18 @@ from autonomous_trading_platform.strategy.implementations.momentum_strategy impo
 from autonomous_trading_platform.strategy.implementations.moving_average_crossover_strategy import (
     MovingAverageCrossoverStrategy,
 )
+from autonomous_trading_platform.strategy.implementations.random_debug_strategy import (
+    RandomStrategy,
+)
 from autonomous_trading_platform.strategy.implementations.stub_strategy import StubStrategy
 
 
 class StrategyFactory:
     def build(self, config: StrategyConfig) -> BaseStrategy:
+
+        # ================
+        # DEBUGGING STRATEGIES
+        # ================
         if config.type == "stub":
             return StubStrategy(
                 strategy_id=config.strategy_id,
@@ -31,6 +38,17 @@ class StrategyFactory:
             return IntentionalLoserStrategy(
                 strategy_id=config.strategy_id,
                 price_change_threshold=float(config.parameters.get("price_change_threshold", 0.0)),
+            )
+        if config.type == "random":
+            return RandomStrategy(
+                strategy_id=config.strategy_id,
+                signal_probability=float(config.parameters.get("signal_probability", 0.33)),
+                buy_probability=float(config.parameters.get("buy_probability", 0.5)),
+                random_seed=(
+                    int(config.parameters["random_seed"])
+                    if "random_seed" in config.parameters
+                    else None
+                ),
             )
 
         if config.type == "moving_average_crossover":
