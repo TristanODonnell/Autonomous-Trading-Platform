@@ -12,7 +12,6 @@ from uuid import UUID, uuid4
 import numpy as np
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
-from autonomous_trading_platform.contracts.runtime.experiment import Experiment
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.contracts.runtime.simulation_run import SimulationRun
 from autonomous_trading_platform.contracts.runtime.strategy_config import (
@@ -30,9 +29,6 @@ from autonomous_trading_platform.research.simulation.services.simulation_executi
 from autonomous_trading_platform.research.simulation.services.simulation_window_loader_service import (
     SimulationWindowLoader,
     shuffle_window_bar_timestamps,
-)
-from autonomous_trading_platform.storage.sor.repositories.experiments_repository import (
-    ExperimentsRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.simulation_runs_repository import (
     SimulationRunsRepository,
@@ -104,7 +100,6 @@ class SimulationRunner:
         simulated_execution_service: Any,
         simulation_run_repository: SimulationRunsRepository,
         strategy_config_repository: StrategyConfigsRepository,
-        experiment_repository: ExperimentsRepository,
         manifest_service: Any | None = None,
         strategy_factory: StrategyFactory,
     ) -> None:
@@ -117,7 +112,6 @@ class SimulationRunner:
         self.simulated_execution_service = simulated_execution_service
         self.simulation_run_repository = simulation_run_repository
         self.strategy_config_repository = strategy_config_repository
-        self.experiment_repository = experiment_repository
         self.manifest_service = manifest_service
 
     def run(self, request: SimulationRunRequest) -> SimulationRunResult:
@@ -127,7 +121,7 @@ class SimulationRunner:
         self._set_seed(request.random_seed)
 
         run_id = uuid4()
-        experiment_id = request.experiment_id or f"experiment_{run_id}"
+        experiment_id = request.experiment_id or f"adhoc_{run_id}"
 
         resolved_dataset = self.dataset_resolver.resolve_bars_dataset(
             dataset_version=request.dataset_version,
@@ -241,26 +235,6 @@ class SimulationRunner:
                 type=request.strategy_config["type"],
                 parameters=request.strategy_config.get("parameters", {}),
             )
-
-            if self.experiment_repository is not None and experiment_id is not None:
-                experiment_contract = Experiment(
-                    experiment_id=experiment_id,
-                    experiment_name=request.experiment_id or f"Auto Experiment {run_id}",
-                    created_at=datetime.now(UTC),
-                    description="Auto-created from simulation runner",
-                    status="ACTIVE",
-                    metadata_json={
-                        "dataset_version": request.dataset_version,
-                        "price_basis": request.price_basis.value,
-                        "symbols": request.symbols,
-                        "start_date": str(request.start_date),
-                        "end_date": str(request.end_date),
-                    },
-                )
-
-                experiment_row = self.experiment_repository.to_row(experiment_contract)
-                self.experiment_repository.upsert(experiment_row)
-                self.experiment_repository.session.flush()
 
             strategy_config = RuntimeStrategyConfig(
                 strategy_id=build_config.strategy_id,
@@ -423,7 +397,6 @@ class SimulationRunner:
         repos = [
             self.simulation_run_repository,
             self.strategy_config_repository,
-            self.experiment_repository,
             self.manifest_service,
         ]
 
