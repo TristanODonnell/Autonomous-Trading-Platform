@@ -20,4 +20,12 @@ class Experiments(Base):
     created_at: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
     description: Mapped[str | None] = mapped_column(String(512), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    strategy_set_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    parameter_grid_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    dataset_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    universe_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    start_time: Mapped[UTCDateTime | None] = mapped_column(UTCDateTimeType(), nullable=True)
+    end_time: Mapped[UTCDateTime | None] = mapped_column(UTCDateTimeType(), nullable=True)
+
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

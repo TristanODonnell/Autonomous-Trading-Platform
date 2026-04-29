@@ -44,6 +44,12 @@ class ExperimentsRepository(BaseRepository):
             created_at=contract.created_at,
             description=contract.description,
             status=contract.status,
+            strategy_set_json=contract.strategy_set_json,
+            parameter_grid_json=contract.parameter_grid_json,
+            dataset_version=contract.dataset_version,
+            universe_version=contract.universe_version,
+            start_time=contract.start_time,
+            end_time=contract.end_time,
             metadata_json=contract.metadata_json,
         )
 
@@ -54,5 +60,11 @@ class ExperimentsRepository(BaseRepository):
             created_at=row.created_at,
             description=row.description,
             status=row.status,
+            strategy_set_json=row.strategy_set_json,
+            parameter_grid_json=row.parameter_grid_json,
+            dataset_version=row.dataset_version,
+            universe_version=row.universe_version,
+            start_time=row.start_time,
+            end_time=row.end_time,
             metadata_json=row.metadata_json,
         )
