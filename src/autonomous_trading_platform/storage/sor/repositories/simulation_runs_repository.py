@@ -4,6 +4,7 @@ from typing import cast
 
 from sqlalchemy import select
 
+from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.contracts.runtime.simulation_run import SimulationRun
 from autonomous_trading_platform.storage.sor.models.simulation_runs import SimulationRuns
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
@@ -60,6 +61,11 @@ class SimulationRunsRepository(BaseRepository):
             strategy_id=contract.strategy_id,
             dataset_version=contract.dataset_version,
             universe_version=contract.universe_version,
+            price_basis=contract.price_basis.value,
+            symbols=contract.symbols,
+            start_date=contract.start_date,
+            end_date=contract.end_date,
+            window_role=contract.window_role,
             start_time=contract.start_time,
             end_time=contract.end_time,
             execution_config=contract.execution_config,
@@ -74,6 +80,11 @@ class SimulationRunsRepository(BaseRepository):
             strategy_id=row.strategy_id,
             dataset_version=row.dataset_version,
             universe_version=row.universe_version,
+            price_basis=PriceBasis(row.price_basis),
+            symbols=row.symbols,
+            start_date=row.start_date,
+            end_date=row.end_date,
+            window_role=row.window_role,
             start_time=row.start_time,
             end_time=row.end_time,
             execution_config=row.execution_config,

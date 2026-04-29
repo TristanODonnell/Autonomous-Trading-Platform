@@ -1,5 +1,8 @@
 from dataclasses import dataclass
 
+from autonomous_trading_platform.research.experiments.services.experiment_orchestration_service import (
+    ExperimentOrchestrationService,
+)
 from autonomous_trading_platform.research.services.research_dataset_resolver_service import (
     ResearchDatasetResolver,
 )
@@ -28,3 +31,4 @@ class SimulationContext:
     result_recorder_service: ResultRecorderService
     simulation_runner: SimulationRunner
     simulation_engine: SimulationExecutionEngine
+    experiment_orchestration_service: ExperimentOrchestrationService
