@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import json
+import platform
 import random
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
 import numpy as np
 
-from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.runtime.experiment import Experiment
+from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.contracts.runtime.simulation_run import SimulationRun
 from autonomous_trading_platform.contracts.runtime.strategy_config import (
     StrategyConfig as RuntimeStrategyConfig,
@@ -121,7 +124,11 @@ class SimulationRunner:
         self.manifest_service = manifest_service
 
     def run(self, request: SimulationRunRequest) -> SimulationRunResult:
+        if not isinstance(request.random_seed, int):
+            raise ValueError("random_seed must be an int for deterministic execution")
+
         self._set_seed(request.random_seed)
+
         run_id = uuid4()
         experiment_id = request.experiment_id or f"experiment_{run_id}"
 
@@ -291,6 +298,54 @@ class SimulationRunner:
             simulation_run_row = self.simulation_run_repository.to_row(simulation_run)
             self.simulation_run_repository.upsert(simulation_run_row)
 
+        if self.manifest_service is not None:
+            manifest = RunManifest(
+                run_id=run_id,
+                run_type=RunType.SIMULATION,
+                created_at=now,
+                environment="local",
+                broker="alpaca",
+                broker_account_id="paper",
+                strategy_id=request.strategy_id,
+                strategy_version="v1",
+                strategy_config=request.strategy_config,
+                capital_bucket=Decimal(str(request.initial_cash)),
+                interval=BarInterval.FIVE_MIN,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                dataset_version=request.dataset_version,
+                universe_version="v1",
+                cost_model=None,
+                fill_model=None,
+                random_seed=request.random_seed,
+                git_commit="unknown",
+                docker_image=None,
+                python_version=platform.python_version(),
+                dependency_lock_hash=None,
+                notes="Created by SimulationRunner",
+                bar_timestamp=None,
+                status="RUNNING",
+                current_step="simulation_started",
+                last_successful_step=None,
+                error_message=None,
+                artifact_manifest=None,
+                schema_definition={
+                    "determinism": {
+                        "random_seed": request.random_seed,
+                        "python_random_seeded": True,
+                        "numpy_random_seeded": True,
+                        "seed_scope": "simulation_run",
+                    },
+                    "simulation_request": {
+                        "price_basis": request.price_basis.value,
+                        "symbols": request.symbols,
+                        "strict_data_loading": request.strict_data_loading,
+                    },
+                },
+            )
+
+            self.manifest_service.upsert(manifest)
+
     def _record_run_completed(
         self,
         *,
@@ -317,8 +372,23 @@ class SimulationRunner:
                 }
 
         if self.manifest_service is not None:
-            # Optional later: mark manifest completed.
-            pass
+            row = self.manifest_service.get_by_run_id(run_id)
+
+            if row is not None:
+                manifest = self.manifest_service.to_contract(row)
+                manifest.status = "COMPLETED"
+                manifest.current_step = "simulation_completed"
+                manifest.last_successful_step = "record_results"
+                manifest.error_message = None
+                manifest.artifact_manifest = {
+                    "summary": {
+                        "trade_count": trade_count,
+                        "equity_points": equity_points,
+                        "per_bar_metric_points": per_bar_metric_points,
+                    }
+                }
+
+                self.manifest_service.upsert(manifest)
 
     def _record_run_failed(self, *, run_id: UUID, error_message: str) -> None:
         now = datetime.now(UTC)
@@ -335,13 +405,27 @@ class SimulationRunner:
                 }
 
         if self.manifest_service is not None:
-            # Optional later: mark manifest failed.
-            pass
+            row = self.manifest_service.get_by_run_id(run_id)
+
+            if row is not None:
+                manifest = self.manifest_service.to_contract(row)
+                manifest.status = "FAILED"
+                manifest.current_step = "simulation_failed"
+                manifest.error_message = error_message
+
+                self.manifest_service.upsert(manifest)
 
     def _commit_metadata(self) -> None:
-        repo = self.simulation_run_repository or self.strategy_config_repository
-        if repo is not None:
-            repo.session.commit()
+        repos = [
+            self.simulation_run_repository,
+            self.strategy_config_repository,
+            self.experiment_repository,
+            self.manifest_service,
+        ]
+
+        for repo in repos:
+            if repo is not None:
+                repo.session.commit()
 
     def _set_seed(self, seed: int) -> None:
         random.seed(seed)
