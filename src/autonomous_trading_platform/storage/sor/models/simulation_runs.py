@@ -25,7 +25,7 @@ class SimulationRuns(Base):
     )
 
     strategy_id: Mapped[str] = mapped_column(
-        String(64),
+        String(128),
         ForeignKey("strategy_configs.strategy_id"),
         nullable=False,
     )

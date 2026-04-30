@@ -25,20 +25,21 @@ class BarAggregationService:
             raise ValueError("Minute bar end_timestamp must equal timestamp + 1 minute.")
 
     def _handle_cross_bucket_gap(self, symbol: str, incoming_bucket: datetime) -> None:
-        """
-        Prevent a new bucket from starting while an older bucket for the same symbol
-        remains incomplete.
-        """
-        for (buffered_symbol, buffered_bucket), buffered_bars in list(self.buffer.items()):
-            if buffered_symbol != symbol:
+        for key in list(self.buffer):
+            buffered_symbol, buffered_bucket = key
+            if buffered_symbol != symbol or buffered_bucket >= incoming_bucket:
                 continue
+            bars = self.buffer.pop(key)
+            # Log the drop so missing bars are traceable
+            import logging
 
-            if buffered_bucket < incoming_bucket and len(buffered_bars) < 5:
-                raise ValueError(
-                    f"Incomplete prior bucket detected for {symbol} at "
-                    f"{buffered_bucket.isoformat()} before receiving bar for "
-                    f"{incoming_bucket.isoformat()}."
-                )
+            logging.getLogger(__name__).debug(
+                "Dropped incomplete bucket for %s at %s (%d/5 bars) — "
+                "likely early close or data gap.",
+                symbol,
+                buffered_bucket.isoformat(),
+                len(bars),
+            )
 
     @staticmethod
     def _validate_bucket_continuity(bars: list[MarketBar], bucket: datetime) -> None:

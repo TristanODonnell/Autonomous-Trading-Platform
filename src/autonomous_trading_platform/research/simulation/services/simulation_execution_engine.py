@@ -162,10 +162,40 @@ class SimulationExecutionEngine:
             )
 
         return SimulationExecutionResult(
-            trade_logs=pd.DataFrame(trade_rows),
+            trade_logs=pd.DataFrame(trade_rows)
+            if trade_rows
+            else pd.DataFrame(
+                columns=[
+                    "run_id",
+                    "strategy_id",
+                    "symbol",
+                    "timestamp",
+                    "side",
+                    "quantity",
+                    "price",
+                    "notional",
+                    "fees",
+                    "slippage",
+                ]
+            ),
             equity_curve=pd.DataFrame(equity_rows),
             per_bar_metrics=pd.DataFrame(metric_rows),
-            positions=pd.DataFrame(position_rows),
+            positions=pd.DataFrame(position_rows)
+            if position_rows
+            else pd.DataFrame(
+                columns=[
+                    "run_id",
+                    "strategy_id",
+                    "symbol",
+                    "timestamp",
+                    "quantity",
+                    "avg_cost",
+                    "market_price",
+                    "market_value",
+                    "unrealized_pnl",
+                    "realized_pnl",
+                ]
+            ),
         )
 
     def _evaluate_signals(

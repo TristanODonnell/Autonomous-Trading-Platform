@@ -49,6 +49,12 @@ from autonomous_trading_platform.research.simulation.services.simulation_window_
     SimulationWindowLoader,
 )
 from autonomous_trading_platform.research.simulation.simulation_runner import SimulationRunner
+from autonomous_trading_platform.research.strategy_generation.generators.grid_search_generator import (
+    GridSearchGenerator,
+)
+from autonomous_trading_platform.research.strategy_generation.strategy_generation_engine import (
+    StrategyGenerationEngine,
+)
 from autonomous_trading_platform.safety.readers.risk_state_reader import StubRiskStateReader
 from autonomous_trading_platform.safety.services.pre_trade_risk_service import PreTradeRiskService
 from autonomous_trading_platform.storage.parquet.datasets import (
@@ -110,7 +116,7 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
     context_builder = StrategyContextBuilder(
         market_bar_reader=bar_reader,
         bars_dataset=ADJUSTED_BARS_DATASET,
-        lookback_bars=20,
+        lookback_bars=300,
         lookahead_guard_service=lookahead_guard_service,
     )
     portfolio_construction_service = PortfolioConstructionService(
@@ -162,9 +168,14 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         experiment_repository=experiments_repository,
         metrics_summary_repository=metrics_summary_repository,
     )
+    strategy_generation_engine = StrategyGenerationEngine(
+        generator=GridSearchGenerator(),  # Set as default hardcoded for now
+    )
+
     experiment_orchestration_service = ExperimentOrchestrationService(
         experiment_repository=experiments_repository,
         simulation_runner=simulation_runner,
+        strategy_generation_engine=strategy_generation_engine,
     )
 
     return SimulationContext(

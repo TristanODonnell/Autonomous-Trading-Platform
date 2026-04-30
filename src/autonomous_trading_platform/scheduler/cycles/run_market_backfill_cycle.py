@@ -130,6 +130,7 @@ def run_market_backfill_cycle(
             interval=BarInterval.FIVE_MIN,
             start_date=start.date(),
             end_date=end.date(),
+            price_basis=PriceBasis.RAW,
             dataset_version="v1",
             universe_version="v1",
             git_commit="dev",

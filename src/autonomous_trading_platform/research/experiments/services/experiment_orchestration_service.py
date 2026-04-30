@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
 
 from autonomous_trading_platform.contracts.runtime.experiment import Experiment
 from autonomous_trading_platform.research.experiments.models.experiment_plan import (
@@ -14,9 +13,13 @@ from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunRequest,
     SimulationRunResult,
 )
+from autonomous_trading_platform.research.strategy_generation.strategy_generation_engine import (
+    StrategyGenerationEngine,
+)
 from autonomous_trading_platform.storage.sor.repositories.experiments_repository import (
     ExperimentsRepository,
 )
+from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
 
 @dataclass
@@ -33,9 +36,11 @@ class ExperimentOrchestrationService:
         *,
         experiment_repository: ExperimentsRepository,
         simulation_runner: SimulationRunner,
+        strategy_generation_engine: StrategyGenerationEngine,
     ) -> None:
         self.experiment_repository = experiment_repository
         self.simulation_runner = simulation_runner
+        self.strategy_generation_engine = strategy_generation_engine
 
     def run_experiment(self, plan: ExperimentDefinition) -> list[SimulationRunResult]:
         self._create_experiment(plan)
@@ -46,11 +51,11 @@ class ExperimentOrchestrationService:
             windows = self._expand_windows(plan)
 
             for window in windows:
-                for strategy_config in strategy_configs:
+                for config in strategy_configs:
                     request = SimulationRunRequest(
                         experiment_id=plan.experiment_id,
-                        strategy_id=strategy_config["strategy_id"],
-                        strategy_config=strategy_config,
+                        strategy_id=config.strategy_id,
+                        strategy_config=config.model_dump(),
                         dataset_version=plan.dataset_version,
                         random_seed=plan.random_seed,
                         price_basis=plan.price_basis,
@@ -71,21 +76,24 @@ class ExperimentOrchestrationService:
 
     # --- strategy expansion ---------------------------------------------------
 
-    def _expand_strategy_configs(self, plan: ExperimentDefinition) -> list[dict[str, Any]]:
+    def _expand_strategy_configs(self, plan: ExperimentDefinition) -> list[StrategyConfig]:
         if plan.experiment_type == ExperimentType.AB:
             if len(plan.strategy_set) != 2:
                 raise ValueError("AB experiment requires exactly 2 strategies in strategy_set")
-            return plan.strategy_set
+            return [StrategyConfig(**s) for s in plan.strategy_set]
 
-        if not plan.parameter_grid:
-            return plan.strategy_set
+        if not plan.parameter_space:
+            # No generation needed — strategy_set is already fully specified
+            return [StrategyConfig(**s) for s in plan.strategy_set]
 
-        # SWEEP (and any other type that uses a param grid)
-        configs: list[dict[str, Any]] = []
+        # SWEEP or any type using the generation engine
+        configs: list[StrategyConfig] = []
         for strategy in plan.strategy_set:
-            for params in plan.parameter_grid:
-                merged = {**strategy.get("parameters", {}), **params}
-                configs.append({**strategy, "parameters": merged})
+            generated = self.strategy_generation_engine.generate(
+                strategy_type=strategy["type"],
+                parameter_space=plan.parameter_space,
+            )
+            configs.extend(generated)
         return configs
 
     # --- window expansion -----------------------------------------------------
@@ -99,7 +107,6 @@ class ExperimentOrchestrationService:
             case ExperimentType.CROSS_UNIVERSE:
                 return self._cross_universe_windows(plan)
             case _:
-                # AB and SWEEP: single window, plan.symbols
                 return [_Window(plan.start_date, plan.end_date, plan.symbols)]
 
     def _time_segmentation_windows(self, plan: ExperimentDefinition) -> list[_Window]:
@@ -169,7 +176,7 @@ class ExperimentOrchestrationService:
                 "random_seed": plan.random_seed,
                 "initial_cash": plan.initial_cash,
                 "strategy_set": plan.strategy_set,
-                "parameter_grid": plan.parameter_grid,
+                "parameter_space": plan.parameter_space,
             },
         )
         row = self.experiment_repository.to_row(experiment)
