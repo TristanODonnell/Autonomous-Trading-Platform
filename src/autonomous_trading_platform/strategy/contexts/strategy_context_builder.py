@@ -21,7 +21,7 @@ class StrategyContextBuilder:
         *,
         market_bar_reader: HistoricalBarDatasetReader,
         bars_dataset: ParquetDataset,
-        lookback_bars: int = 20,
+        lookback_bars: int = 300,
         lookahead_guard_service: LookaheadGuardService | None = None,
     ) -> None:
         self.market_bar_reader = market_bar_reader
@@ -56,6 +56,9 @@ class StrategyContextBuilder:
             symbol=symbol,
             simulation_timestamp=timestamp,
             bars=context_bars,
+        )
+        print(
+            f"DEBUG context_bars for {symbol} at {timestamp}: {len(bars_up_to)} available, {len(context_bars)} passed to strategy"
         )
 
         return StrategyContext(

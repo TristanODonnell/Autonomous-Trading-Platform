@@ -116,7 +116,7 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
     context_builder = StrategyContextBuilder(
         market_bar_reader=bar_reader,
         bars_dataset=ADJUSTED_BARS_DATASET,
-        lookback_bars=20,
+        lookback_bars=300,
         lookahead_guard_service=lookahead_guard_service,
     )
     portfolio_construction_service = PortfolioConstructionService(
