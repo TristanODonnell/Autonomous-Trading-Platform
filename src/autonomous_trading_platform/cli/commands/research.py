@@ -229,7 +229,9 @@ def handle_run_simulation(args: argparse.Namespace) -> int:
                 initial_cash=args.initial_cash,
             )
 
-            results = simulation_context.experiment_orchestration_service.run_experiment(plan)
+            results, _filter_outputs = (
+                simulation_context.experiment_orchestration_service.run_experiment(plan)
+            )
             result = results[0]
 
         else:
@@ -392,7 +394,9 @@ def handle_run_experiment(args: argparse.Namespace) -> int:
             initial_cash=args.initial_cash,
         )
 
-        results = simulation_context.experiment_orchestration_service.run_experiment(plan)
+        results, filter_outputs = (
+            simulation_context.experiment_orchestration_service.run_experiment(plan)
+        )
 
         print_header(f"Experiment — {args.experiment_id}")
         print_json(
@@ -402,6 +406,8 @@ def handle_run_experiment(args: argparse.Namespace) -> int:
                 "strategy_type": args.strategy_type,
                 "parameter_space": parameter_space,
                 "total_runs": len(results),
+                "total_passed": len([o for o in filter_outputs if o.filter_result.passed]),
+                "total_failed": len([o for o in filter_outputs if not o.filter_result.passed]),
                 "runs": [
                     {
                         "status": r.status,
@@ -411,6 +417,15 @@ def handle_run_experiment(args: argparse.Namespace) -> int:
                         "equity_points": r.equity_points,
                     }
                     for r in results
+                ],
+                "filter_results": [
+                    {
+                        "strategy_id": o.strategy_id,
+                        "passed": o.filter_result.passed,
+                        "score": round(o.score.score, 4) if o.score is not None else None,
+                        "failures": o.filter_result.failures,
+                    }
+                    for o in filter_outputs
                 ],
             }
         )
