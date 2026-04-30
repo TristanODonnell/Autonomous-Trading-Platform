@@ -10,6 +10,13 @@ from autonomous_trading_platform.execution.services.portfolio_construction_servi
 from autonomous_trading_platform.execution.services.position_ledger_service import (
     PositionLedgerService,
 )
+from autonomous_trading_platform.research.experiments.filtering.config import (
+    FilterConfig,
+    ScoringWeights,
+)
+from autonomous_trading_platform.research.experiments.filtering.services.filter_score_service import (
+    FilterScoreService,
+)
 from autonomous_trading_platform.research.experiments.services.experiment_orchestration_service import (
     ExperimentOrchestrationService,
 )
@@ -171,11 +178,16 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
     strategy_generation_engine = StrategyGenerationEngine(
         generator=GridSearchGenerator(),  # Set as default hardcoded for now
     )
-
+    filter_config = FilterConfig()
+    scoring_weights = ScoringWeights()
+    filter_score_service = FilterScoreService(
+        filter_config=filter_config, scoring_weights=scoring_weights
+    )
     experiment_orchestration_service = ExperimentOrchestrationService(
         experiment_repository=experiments_repository,
         simulation_runner=simulation_runner,
         strategy_generation_engine=strategy_generation_engine,
+        filter_score_service=filter_score_service,
     )
 
     return SimulationContext(

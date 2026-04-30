@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
 from autonomous_trading_platform.contracts.runtime.experiment import Experiment
+from autonomous_trading_platform.research.experiments.filtering.services.filter_score_service import (
+    FilterScoreInput,
+    FilterScoreOutput,
+    FilterScoreService,
+)
 from autonomous_trading_platform.research.experiments.models.experiment_plan import (
     ExperimentDefinition,
     ExperimentType,
@@ -21,6 +27,8 @@ from autonomous_trading_platform.storage.sor.repositories.experiments_repository
 )
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class _Window:
@@ -37,20 +45,27 @@ class ExperimentOrchestrationService:
         experiment_repository: ExperimentsRepository,
         simulation_runner: SimulationRunner,
         strategy_generation_engine: StrategyGenerationEngine,
+        filter_score_service: FilterScoreService,
     ) -> None:
         self.experiment_repository = experiment_repository
         self.simulation_runner = simulation_runner
         self.strategy_generation_engine = strategy_generation_engine
+        self.filter_score_service = filter_score_service
 
-    def run_experiment(self, plan: ExperimentDefinition) -> list[SimulationRunResult]:
+    def run_experiment(
+        self, plan: ExperimentDefinition
+    ) -> tuple[list[SimulationRunResult], list[FilterScoreOutput]]:
         self._create_experiment(plan)
-        results: list[SimulationRunResult] = []
 
         try:
             strategy_configs = self._expand_strategy_configs(plan)
             windows = self._expand_windows(plan)
+            all_results: list[SimulationRunResult] = []
+            all_filter_outputs: list[FilterScoreOutput] = []
 
             for window in windows:
+                window_results: list[SimulationRunResult] = []
+
                 for config in strategy_configs:
                     request = SimulationRunRequest(
                         experiment_id=plan.experiment_id,
@@ -65,10 +80,58 @@ class ExperimentOrchestrationService:
                         initial_cash=plan.initial_cash,
                         window_role=window.window_role,
                     )
-                    results.append(self.simulation_runner.run(request))
+                    window_results.append(self.simulation_runner.run(request))
+
+                inputs = [
+                    FilterScoreInput(
+                        strategy_id=result.strategy_id,
+                        rm=result.return_metrics,
+                        risk=result.risk_metrics,
+                        tm=result.trade_metrics,
+                        sm=result.stability_metrics,
+                        equity_curve=result.equity_curve,
+                    )
+                    for result in window_results
+                ]
+
+                outputs, ranked = self.filter_score_service.filter_and_rank(inputs)
+                all_results.extend(window_results)
+                all_filter_outputs.extend(outputs)
+
+                passed = [o for o in outputs if o.filter_result.passed]
+                failed = [o for o in outputs if not o.filter_result.passed]
+
+                logger.info(
+                    "Window %s→%s | ran %d strategies | %d passed | %d failed",
+                    window.start_date,
+                    window.end_date,
+                    len(window_results),
+                    len(passed),
+                    len(failed),
+                )
+                for o in failed:
+                    logger.debug(
+                        "  FAILED %s: %s", o.strategy_id, "; ".join(o.filter_result.failures)
+                    )
+                for o in passed:
+                    if o.score is not None:
+                        logger.debug(
+                            "  PASSED %s | score=%.4f | sharpe=%.3f | return=%.3f | drawdown=%.3f",
+                            o.strategy_id,
+                            o.score.score,
+                            o.score.sharpe_contrib,
+                            o.score.return_contrib,
+                            o.score.drawdown_contrib,
+                        )
 
             self._mark_experiment_completed(plan.experiment_id)
-            return results
+            logger.info(
+                "Experiment %s complete | total results=%d | total passed=%d",
+                plan.experiment_id,
+                len(all_results),
+                len([o for o in all_filter_outputs if o.filter_result.passed]),
+            )
+            return all_results, all_filter_outputs
 
         except Exception:
             self._mark_experiment_failed(plan.experiment_id)

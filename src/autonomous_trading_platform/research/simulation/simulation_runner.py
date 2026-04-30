@@ -10,6 +10,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import numpy as np
+import pandas as pd
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.runtime.metrics_summary import MetricsSummary
@@ -17,6 +18,30 @@ from autonomous_trading_platform.contracts.runtime.run_manifest import RunManife
 from autonomous_trading_platform.contracts.runtime.simulation_run import SimulationRun
 from autonomous_trading_platform.contracts.runtime.strategy_config import (
     StrategyConfig as RuntimeStrategyConfig,
+)
+from autonomous_trading_platform.research.experiments.filtering.metrics.return_metrics import (
+    ReturnMetrics,
+)
+from autonomous_trading_platform.research.experiments.filtering.metrics.return_metrics import (
+    return_metrics as compute_return_metrics,
+)
+from autonomous_trading_platform.research.experiments.filtering.metrics.risk_metrics import (
+    RiskMetrics,
+)
+from autonomous_trading_platform.research.experiments.filtering.metrics.risk_metrics import (
+    risk_metrics as compute_risk_metrics,
+)
+from autonomous_trading_platform.research.experiments.filtering.metrics.stability_metrics import (
+    StabilityMetrics,
+)
+from autonomous_trading_platform.research.experiments.filtering.metrics.stability_metrics import (
+    stability_metrics as compute_stability_metrics,
+)
+from autonomous_trading_platform.research.experiments.filtering.metrics.trade_metrics import (
+    TradeMetrics,
+)
+from autonomous_trading_platform.research.experiments.filtering.metrics.trade_metrics import (
+    trade_metrics as compute_trade_metrics,
 )
 from autonomous_trading_platform.research.services.research_dataset_resolver_service import (
     ResearchDatasetResolver,
@@ -70,7 +95,7 @@ class SimulationRunRequest:
 @dataclass(slots=True)
 class SimulationRunResult:
     run_id: UUID
-    experiment_id: str | None  # TODO change later on
+    experiment_id: str | None
     strategy_id: str
     dataset_version: str
     symbols: list[str]
@@ -80,6 +105,11 @@ class SimulationRunResult:
     equity_points: int
     per_bar_metric_points: int
     status: str
+    return_metrics: ReturnMetrics
+    risk_metrics: RiskMetrics
+    trade_metrics: TradeMetrics
+    stability_metrics: StabilityMetrics
+    equity_curve: pd.DataFrame
 
 
 class SimulationRunner:
@@ -207,6 +237,11 @@ class SimulationRunner:
                 equity_points=len(equity_curve),
                 per_bar_metric_points=len(per_bar_metrics),
                 status="completed",
+                return_metrics=compute_return_metrics(equity_curve),
+                risk_metrics=compute_risk_metrics(equity_curve),
+                trade_metrics=compute_trade_metrics(trade_logs),
+                stability_metrics=compute_stability_metrics(equity_curve),
+                equity_curve=equity_curve,
             )
 
         except Exception as exc:
