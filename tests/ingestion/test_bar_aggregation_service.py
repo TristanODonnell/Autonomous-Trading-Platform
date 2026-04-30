@@ -124,36 +124,29 @@ class TestBarAggregationService:
         assert result.timestamp == start
         assert result.end_timestamp == start + timedelta(minutes=5)
 
-    def test_add_minute_bar_handles_gap_within_bucket_by_raising(self) -> None:
+    def test_add_minute_bar_raises_on_duplicate_bar_in_bucket(self) -> None:
         service = BarAggregationService()
         start = datetime(2025, 1, 1, 14, 30, tzinfo=UTC)
 
-        bars_with_gap = [
-            make_minute_bar(timestamp=start + timedelta(minutes=0)),  # 14:30
-            make_minute_bar(timestamp=start + timedelta(minutes=1)),  # 14:31
-            # missing 14:32
-            make_minute_bar(timestamp=start + timedelta(minutes=3)),  # 14:33
-            make_minute_bar(timestamp=start + timedelta(minutes=4)),  # 14:34
-            make_minute_bar(timestamp=start + timedelta(minutes=5)),  # 14:35
-        ]
+        # Feed 4 bars skipping minute 2
+        for i in [0, 1, 3, 4]:
+            service.add_minute_bar(make_minute_bar(timestamp=start + timedelta(minutes=i)))
 
-        for bar in bars_with_gap[:-1]:
-            assert service.add_minute_bar(bar) is None
-
+        # Adding a duplicate raises before continuity check even runs
         with pytest.raises(ValueError):
-            service.add_minute_bar(bars_with_gap[-1])
+            service.add_minute_bar(make_minute_bar(timestamp=start + timedelta(minutes=0)))
 
-    def test_add_minute_bar_raises_on_cross_bucket_gap_with_incomplete_prior_bucket(self) -> None:
+    def test_add_minute_bar_flushes_incomplete_prior_bucket_on_cross_bucket_gap(self) -> None:
         service = BarAggregationService()
         start = datetime(2025, 1, 1, 14, 30, tzinfo=UTC)
 
         for i in range(4):
-            assert (
-                service.add_minute_bar(make_minute_bar(timestamp=start + timedelta(minutes=i)))
-                is None
-            )
+            service.add_minute_bar(make_minute_bar(timestamp=start + timedelta(minutes=i)))
 
+        # Cross-bucket bar should flush the incomplete prior bucket silently
         next_bar = make_minute_bar(timestamp=start + timedelta(minutes=5))
+        result = service.add_minute_bar(next_bar)
 
-        with pytest.raises(ValueError):
-            service.add_minute_bar(next_bar)
+        assert result is None  # new bucket started, not yet complete
+        assert ("AAPL", start) not in service.buffer  # prior incomplete bucket flushed
+        assert ("AAPL", start + timedelta(minutes=5)) in service.buffer
