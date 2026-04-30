@@ -9,12 +9,25 @@ from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.research.experiments.models.experiment_plan import (
     ExperimentDefinition,
+    ExperimentType,
 )
 from autonomous_trading_platform.research.simulation.contexts.build_simulation_context import (
     build_simulation_context,
 )
 from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunRequest,
+)
+from autonomous_trading_platform.research.strategy_generation.generators.base_generator import (
+    BaseStrategyGenerator,
+)
+from autonomous_trading_platform.research.strategy_generation.generators.grid_search_generator import (
+    GridSearchGenerator,
+)
+from autonomous_trading_platform.research.strategy_generation.generators.random_sampling_generator import (
+    RandomSamplingGenerator,
+)
+from autonomous_trading_platform.research.strategy_generation.strategy_generation_engine import (
+    StrategyGenerationEngine,
 )
 
 
@@ -98,6 +111,9 @@ def register(subparsers) -> None:
     )
     run_simulation_parser.set_defaults(func=handle_run_simulation)
 
+    # Independent strategy generation
+    register_generate_strategies(research_subparsers)
+
 
 def handle_run_simulation(args: argparse.Namespace) -> int:
     session = get_session()
@@ -133,6 +149,7 @@ def handle_run_simulation(args: argparse.Namespace) -> int:
                 end_date=_parse_date(args.end_date),
                 random_seed=args.random_seed,
                 initial_cash=args.initial_cash,
+                experiment_type=ExperimentType.AB,
             )
 
             results = simulation_context.experiment_orchestration_service.run_experiment(plan)
@@ -184,3 +201,102 @@ def handle_run_simulation(args: argparse.Namespace) -> int:
 
     finally:
         session.close()
+
+
+def register_generate_strategies(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "generate-strategies",
+        help="Dry-run the strategy generation engine — no DB, no simulation",
+    )
+    parser.add_argument(
+        "--strategy-type",
+        required=True,
+        choices=[
+            "stub",
+            "intentional_loser",
+            "random",
+            "moving_average_crossover",
+            "mean_reversion",
+            "momentum",
+            "factor_based",
+        ],
+    )
+    parser.add_argument(
+        "--parameter-space",
+        required=True,
+        help="JSON object mapping param name to list of values, e.g. '{\"short_window\": [5,10,20]}'",
+    )
+    parser.add_argument(
+        "--generator",
+        choices=["grid", "random"],
+        default="grid",
+    )
+    parser.add_argument(
+        "--n-samples",
+        type=int,
+        default=50,
+        help="Number of samples for random generator (ignored for grid)",
+    )
+    parser.add_argument(
+        "--random-seed",
+        type=int,
+        default=42,
+        help="Seed for random generator (ignored for grid)",
+    )
+    parser.add_argument(
+        "--show-configs",
+        action="store_true",
+        help="Print each config in full rather than just the summary",
+    )
+    parser.set_defaults(func=handle_generate_strategies)
+
+
+def handle_generate_strategies(args: argparse.Namespace) -> int:
+    parameter_space = json.loads(args.parameter_space)
+
+    if not isinstance(parameter_space, dict):
+        raise ValueError("--parameter-space must be a JSON object")
+
+    generator: BaseStrategyGenerator
+    if args.generator == "grid":
+        generator = GridSearchGenerator()
+    else:
+        generator = RandomSamplingGenerator(
+            n_samples=args.n_samples,
+            seed=args.random_seed,
+        )
+
+    engine = StrategyGenerationEngine(generator=generator)
+    configs = engine.generate(
+        strategy_type=args.strategy_type,
+        parameter_space=parameter_space,
+    )
+
+    print_header(f"Strategy generation — {args.generator} — {args.strategy_type}")
+
+    if args.show_configs:
+        for config in configs:
+            print_json(
+                {
+                    "strategy_id": config.strategy_id,
+                    "config_hash": config.config_hash(),
+                    "parameters": config.parameters,
+                }
+            )
+
+    # Summary
+    print_json(
+        {
+            "generator": args.generator,
+            "strategy_type": args.strategy_type,
+            "parameter_space": parameter_space,
+            "total_generated": len(configs),
+            "unique_hashes": len({c.config_hash() for c in configs}),
+            "duplicates_skipped": (
+                args.n_samples - len(configs) if args.generator == "random" else 0
+            ),
+            "config_hashes": [c.config_hash() for c in configs],
+        }
+    )
+
+    return 0
