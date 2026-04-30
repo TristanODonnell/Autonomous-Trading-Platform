@@ -14,6 +14,7 @@ from autonomous_trading_platform.research.experiments.models.experiment_plan imp
     ExperimentDefinition,
     ExperimentType,
 )
+from autonomous_trading_platform.research.pipeline.pipeline_runner import PipelineRunner
 from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunner,
     SimulationRunRequest,
@@ -58,6 +59,22 @@ class ExperimentOrchestrationService:
         self._create_experiment(plan)
 
         try:
+            # MULTI STAGE PIPELINE CHECK
+            if plan.staged_pipeline_config is not None:
+                initial_configs = self._expand_strategy_configs(plan)
+                pipeline = PipelineRunner(stages=plan.staged_pipeline_config.stages)
+                result = pipeline.run(
+                    initial_configs=initial_configs,
+                    experiment_id=plan.experiment_id,
+                    dataset_version=plan.dataset_version,
+                    random_seed=plan.random_seed,
+                    price_basis=plan.price_basis,
+                    initial_cash=plan.initial_cash,
+                )
+                self._mark_experiment_completed(plan.experiment_id)
+                return result.all_simulation_results, result.all_filter_outputs
+
+            # SINGLE EXPERIMENT PASS BELOW
             strategy_configs = self._expand_strategy_configs(plan)
             windows = self._expand_windows(plan)
             all_results: list[SimulationRunResult] = []
