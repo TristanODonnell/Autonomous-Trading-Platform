@@ -15,7 +15,7 @@ from .helpers.sa_types import UTCDateTimeType
 class StrategyConfigs(Base):
     __tablename__ = "strategy_configs"
 
-    strategy_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    strategy_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     config_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     config_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)

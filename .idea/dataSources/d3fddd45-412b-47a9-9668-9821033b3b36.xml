@@ -3,7 +3,7 @@
   <database-model serializer="dbm" dbms="POSTGRES" family-id="POSTGRES" format-version="4.53">
     <root id="1">
       <DateStyle>mdy</DateStyle>
-      <IntrospectionStateNumber>42819</IntrospectionStateNumber>
+      <IntrospectionStateNumber>42866</IntrospectionStateNumber>
       <ServerVersion>16.11</ServerVersion>
       <StartupTime>1776980516</StartupTime>
       <TimeZones>true ACDT
@@ -703,7 +703,7 @@ true posixrules
 13276||10|C|G
 13276||-9223372036854775808|U|G
 13276||10|U|G</Grants>
-      <IntrospectionStateNumber>42819</IntrospectionStateNumber>
+      <IntrospectionStateNumber>42866</IntrospectionStateNumber>
       <ObjectId>49368</ObjectId>
       <OwnerName>ratp</OwnerName>
     </database>
@@ -4123,11 +4123,11 @@ true posixrules
       <AutoIntrospectionLevel>3</AutoIntrospectionLevel>
       <Comment>standard public schema</Comment>
       <Current>1</Current>
-      <LastIntrospectionL1Xid>42819</LastIntrospectionL1Xid>
-      <LastIntrospectionL2Xid>42819</LastIntrospectionL2Xid>
-      <LastIntrospectionL3Xid>42819</LastIntrospectionL3Xid>
+      <LastIntrospectionL1Xid>42866</LastIntrospectionL1Xid>
+      <LastIntrospectionL2Xid>42866</LastIntrospectionL2Xid>
+      <LastIntrospectionL3Xid>42866</LastIntrospectionL3Xid>
       <LastIntrospectionLevel>3</LastIntrospectionLevel>
-      <LastIntrospectionLocalTimestamp>2026-04-29.23:32:34</LastIntrospectionLocalTimestamp>
+      <LastIntrospectionLocalTimestamp>2026-04-30.02:21:56</LastIntrospectionLocalTimestamp>
       <ObjectId>2200</ObjectId>
       <StateNumber>524</StateNumber>
       <OwnerName>pg_database_owner</OwnerName>
@@ -4364,7 +4364,7 @@ REJECTED</Labels>
     <table id="286" parent="264" name="corporate_actions">
       <DetailsLevel>2</DetailsLevel>
       <ObjectId>49449</ObjectId>
-      <StateNumber>42793</StateNumber>
+      <StateNumber>42849</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
@@ -4413,7 +4413,7 @@ REJECTED</Labels>
     <table id="293" parent="264" name="market_bars">
       <DetailsLevel>2</DetailsLevel>
       <ObjectId>49487</ObjectId>
-      <StateNumber>42793</StateNumber>
+      <StateNumber>42849</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
@@ -4462,7 +4462,7 @@ REJECTED</Labels>
     <table id="300" parent="264" name="run_manifests">
       <DetailsLevel>2</DetailsLevel>
       <ObjectId>49529</ObjectId>
-      <StateNumber>42802</StateNumber>
+      <StateNumber>42858</StateNumber>
       <AccessMethodId>2</AccessMethodId>
       <OwnerName>ratp</OwnerName>
     </table>
@@ -5081,7 +5081,7 @@ pg_catalog</CollationParentNames>
       <ColNames>action_id</ColNames>
       <ObjectId>49454</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>42793</StateNumber>
+      <StateNumber>42849</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default</CollationNames>
@@ -5094,7 +5094,7 @@ action_type
 effective_date
 source</ColNames>
       <ObjectId>49456</ObjectId>
-      <StateNumber>42793</StateNumber>
+      <StateNumber>42849</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default
@@ -6011,7 +6011,7 @@ started_at</ColNames>
       <ColNames>bar_id</ColNames>
       <ObjectId>49492</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>42793</StateNumber>
+      <StateNumber>42849</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default</CollationNames>
@@ -6024,7 +6024,7 @@ interval
 timestamp
 price_basis</ColNames>
       <ObjectId>49494</ObjectId>
-      <StateNumber>42793</StateNumber>
+      <StateNumber>42849</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default</CollationNames>
@@ -6870,7 +6870,7 @@ source</ColNames>
       <ColNames>run_id</ColNames>
       <ObjectId>49534</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>42802</StateNumber>
+      <StateNumber>42858</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
     </index>
@@ -7098,8 +7098,8 @@ default</CollationNames>
     </foreign-key>
     <foreign-key id="672" parent="302" name="fk_simulation_runs_strategy_id_strategy_configs">
       <ColNames>strategy_id</ColNames>
-      <ObjectId>82656</ObjectId>
-      <StateNumber>42542</StateNumber>
+      <ObjectId>83131</ObjectId>
+      <StateNumber>42865</StateNumber>
       <RefKeyColPositions>1</RefKeyColPositions>
       <RefTableId>82635</RefTableId>
     </foreign-key>
@@ -7166,8 +7166,8 @@ default</CollationNames>
     <column id="680" parent="303" name="strategy_id">
       <NotNull>1</NotNull>
       <Position>1</Position>
-      <StateNumber>42542</StateNumber>
-      <StoredType>varchar(64)|0s</StoredType>
+      <StateNumber>42865</StateNumber>
+      <StoredType>varchar(128)|0s</StoredType>
       <TypeId>1043</TypeId>
     </column>
     <column id="681" parent="303" name="config_hash">
@@ -7205,9 +7205,9 @@ default</CollationNames>
     </column>
     <index id="686" parent="303" name="pk_strategy_configs">
       <ColNames>strategy_id</ColNames>
-      <ObjectId>82640</ObjectId>
+      <ObjectId>83129</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>42542</StateNumber>
+      <StateNumber>42865</StateNumber>
       <Unique>1</Unique>
       <AccessMethodId>403</AccessMethodId>
       <CollationNames>default</CollationNames>
@@ -7225,10 +7225,10 @@ default</CollationNames>
       <CollationParentNames>pg_catalog</CollationParentNames>
     </index>
     <key id="688" parent="303" name="pk_strategy_configs">
-      <ObjectId>82641</ObjectId>
+      <ObjectId>83130</ObjectId>
       <Primary>1</Primary>
-      <StateNumber>42542</StateNumber>
-      <UnderlyingIndexId>82640</UnderlyingIndexId>
+      <StateNumber>42865</StateNumber>
+      <UnderlyingIndexId>83129</UnderlyingIndexId>
     </key>
     <key id="689" parent="303" name="uq_strategy_configs_config_hash">
       <ObjectId>82643</ObjectId>

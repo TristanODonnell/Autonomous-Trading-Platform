@@ -29,6 +29,7 @@ class ExperimentDefinition:
     end_date: date
     random_seed: int
     initial_cash: float = 100_000.0
+    parameter_space: dict[str, list] | None = None
     # TIME_SEGMENTATION
     train_ratio: float | None = None  # e.g. 0.7
     # ROLLING_WINDOW
