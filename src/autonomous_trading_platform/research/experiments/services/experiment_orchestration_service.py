@@ -14,7 +14,10 @@ from autonomous_trading_platform.research.experiments.models.experiment_plan imp
     ExperimentDefinition,
     ExperimentType,
 )
-from autonomous_trading_platform.research.pipeline.pipeline_runner import PipelineRunner
+from autonomous_trading_platform.research.pipeline.pipeline_runner import (
+    PipelineRunner,
+    PipelineRunResult,
+)
 from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunner,
     SimulationRunRequest,
@@ -276,3 +279,24 @@ class ExperimentOrchestrationService:
             return
         row.status = "FAILED"
         self.experiment_repository.session.commit()
+
+    def run_staged_experiment(self, plan: ExperimentDefinition) -> PipelineRunResult:
+        self._create_experiment(plan)
+        try:
+            if plan.staged_pipeline_config is None:
+                raise ValueError("run_staged_experiment requires staged_pipeline_config.")
+            initial_configs = self._expand_strategy_configs(plan)
+            pipeline = PipelineRunner(stages=plan.staged_pipeline_config.stages)
+            result = pipeline.run(
+                initial_configs=initial_configs,
+                experiment_id=plan.experiment_id,
+                dataset_version=plan.dataset_version,
+                random_seed=plan.random_seed,
+                price_basis=plan.price_basis,
+                initial_cash=plan.initial_cash,
+            )
+            self._mark_experiment_completed(plan.experiment_id)
+            return result
+        except Exception:
+            self._mark_experiment_failed(plan.experiment_id)
+            raise

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from autonomous_trading_platform.research.experiments.filtering.services.filter_score_service import (
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class StagedPipelineConfig:
-    stages: list[BaseStage] = field(default_factory=list)
+    stages: Sequence[BaseStage] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.stages:
@@ -45,7 +46,7 @@ class PipelineRunResult:
 
 
 class PipelineRunner:
-    def __init__(self, *, stages: list[BaseStage]) -> None:
+    def __init__(self, *, stages: Sequence[BaseStage]) -> None:
         if not stages:
             raise ValueError("PipelineRunner requires at least one stage.")
         self._stages = stages
