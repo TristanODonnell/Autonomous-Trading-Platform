@@ -24,6 +24,8 @@ import argparse
 import json
 from datetime import date
 
+import yaml
+
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.db import get_session
@@ -31,6 +33,8 @@ from autonomous_trading_platform.research.experiments.models.experiment_plan imp
     ExperimentDefinition,
     ExperimentType,
 )
+from autonomous_trading_platform.research.pipeline.pipeline_runner import StagedPipelineConfig
+from autonomous_trading_platform.research.pipeline.stages.stage_registry import StageRegistry
 from autonomous_trading_platform.research.simulation.contexts.build_simulation_context import (
     build_simulation_context,
 )
@@ -298,29 +302,36 @@ def _register_run_experiment(subparsers) -> None:
     runs a simulation for each. When omitted, the single strategy defined by
     --strategy-type and --strategy-parameters is run as-is.
     """
+
     parser = subparsers.add_parser(
         "run-experiment",
         help="Full pipeline — strategy generation → orchestration → simulation",
     )
-    parser.add_argument("--experiment-id", required=True)
-    parser.add_argument("--dataset-version-id", required=True)
+
     parser.add_argument(
-        "--price-basis",
-        required=True,
-        choices=["raw", "adjusted"],
+        "--config",
+        default=None,
+        help="Path to a YAML experiment config file. When supplied, all other flags are ignored.",
     )
+
+    parser.add_argument("--experiment-id", required=False, default=None)
+    parser.add_argument("--dataset-version-id", required=False, default=None)
+    parser.add_argument("--price-basis", required=False, default=None, choices=["raw", "adjusted"])
     parser.add_argument(
         "--symbols",
-        required=True,
+        required=False,
+        default=None,
         help="Comma-separated list of symbols, e.g. SPY,AAPL,MSFT",
     )
-    parser.add_argument("--start-date", required=True)
-    parser.add_argument("--end-date", required=True)
+    parser.add_argument("--start-date", required=False, default=None)
+    parser.add_argument("--end-date", required=False, default=None)
     parser.add_argument(
         "--strategy-type",
-        required=True,
+        required=False,
+        default=None,
         choices=STRATEGY_TYPE_CHOICES,
     )
+    parser.add_argument("--random-seed", type=int, required=False, default=None)
     parser.add_argument(
         "--parameter-space",
         default=None,
@@ -342,98 +353,168 @@ def _register_run_experiment(subparsers) -> None:
         help="Experiment type controlling how windows and strategies are expanded",
     )
     parser.add_argument("--universe-version", default="v1")
-    parser.add_argument("--random-seed", type=int, required=True)
     parser.add_argument("--initial-cash", type=float, default=100_000.0)
     parser.set_defaults(func=handle_run_experiment)
 
 
 def handle_run_experiment(args: argparse.Namespace) -> int:
-    """Handle the run-experiment subcommand.
-
-    Builds an ExperimentDefinition and hands it to
-    ExperimentOrchestrationService which:
-      1. Calls StrategyGenerationEngine to expand parameter_space into configs
-      2. Expands time windows based on experiment_type
-      3. Runs SimulationRunner for each (config, window) pair
-      4. Persists results to the DB
-
-    Output summarises all runs so you can see at a glance which configs
-    generated trades and which did not.
-    """
     session = get_session()
-
+    if not args.config:
+        # inline path — these flags are required
+        missing = [
+            f
+            for f, v in [
+                ("--experiment-id", args.experiment_id),
+                ("--dataset-version-id", args.dataset_version_id),
+                ("--price-basis", args.price_basis),
+                ("--symbols", args.symbols),
+                ("--start-date", args.start_date),
+                ("--end-date", args.end_date),
+                ("--strategy-type", args.strategy_type),
+                ("--random-seed", args.random_seed),
+            ]
+            if v is None
+        ]
+        if missing:
+            raise SystemExit(
+                f"error: the following arguments are required when --config is not supplied: {', '.join(missing)}"
+            )
     try:
         simulation_context = build_simulation_context(session=session)
 
-        strategy_parameters = json.loads(args.strategy_parameters)
-        parameter_space = json.loads(args.parameter_space) if args.parameter_space else None
+        if args.config:
+            plan = _load_experiment_from_yaml(args.config, simulation_context)
+        else:
+            strategy_parameters = json.loads(args.strategy_parameters)
+            parameter_space = json.loads(args.parameter_space) if args.parameter_space else None
 
-        plan = ExperimentDefinition(
-            experiment_id=args.experiment_id,
-            experiment_type=ExperimentType(args.experiment_type),
-            description=None,
-            strategy_set=[
+            plan = ExperimentDefinition(
+                experiment_id=args.experiment_id,
+                experiment_type=ExperimentType(args.experiment_type),
+                description=None,
+                strategy_set=[
+                    {
+                        "strategy_id": f"{args.strategy_type}__base",
+                        "type": args.strategy_type,
+                        "parameters": strategy_parameters,
+                    }
+                ],
+                parameter_grid=[],
+                parameter_space=parameter_space,
+                dataset_version=args.dataset_version_id,
+                universe_version=args.universe_version,
+                price_basis=PriceBasis(args.price_basis),
+                symbols=_parse_symbols(args.symbols),
+                start_date=_parse_date(args.start_date),
+                end_date=_parse_date(args.end_date),
+                random_seed=args.random_seed,
+                initial_cash=args.initial_cash,
+            )
+
+        if plan.staged_pipeline_config is not None:
+            pipeline_result = (
+                simulation_context.experiment_orchestration_service.run_staged_experiment(plan)
+            )
+
+            print_header(f"Experiment — {plan.experiment_id} (staged pipeline)")
+            print_json(
                 {
-                    # Base strategy entry — the generation engine uses the type
-                    # to produce configs; parameters here are the fallback when
-                    # no parameter_space is provided.
-                    "strategy_id": f"{args.strategy_type}__base",
-                    "type": args.strategy_type,
-                    "parameters": strategy_parameters,
+                    "experiment_id": plan.experiment_id,
+                    "total_stages": len(pipeline_result.stage_results),
+                    "final_survivors": len(pipeline_result.final_survivors),
+                    "stages": [
+                        {
+                            "stage": sr.stage_name,
+                            "entered": sr.n_entered,
+                            "passed": sr.n_passed,
+                            "failed": sr.n_failed,
+                            "filter_results": [
+                                {
+                                    "strategy_id": o.strategy_id,
+                                    "passed": o.filter_result.passed,
+                                    "score": round(o.score.score, 4) if o.score else None,
+                                    "failures": o.filter_result.failures,
+                                }
+                                for o in sr.filter_outputs
+                            ],
+                        }
+                        for sr in pipeline_result.stage_results
+                    ],
                 }
-            ],
-            parameter_grid=[],
-            parameter_space=parameter_space,
-            dataset_version=args.dataset_version_id,
-            universe_version=args.universe_version,
-            price_basis=PriceBasis(args.price_basis),
-            symbols=_parse_symbols(args.symbols),
-            start_date=_parse_date(args.start_date),
-            end_date=_parse_date(args.end_date),
-            random_seed=args.random_seed,
-            initial_cash=args.initial_cash,
-        )
-
-        results, filter_outputs = (
-            simulation_context.experiment_orchestration_service.run_experiment(plan)
-        )
-
-        print_header(f"Experiment — {args.experiment_id}")
-        print_json(
-            {
-                "experiment_id": args.experiment_id,
-                "experiment_type": args.experiment_type,
-                "strategy_type": args.strategy_type,
-                "parameter_space": parameter_space,
-                "total_runs": len(results),
-                "total_passed": len([o for o in filter_outputs if o.filter_result.passed]),
-                "total_failed": len([o for o in filter_outputs if not o.filter_result.passed]),
-                "runs": [
-                    {
-                        "status": r.status,
-                        "run_id": str(r.run_id),
-                        "strategy_id": r.strategy_id,
-                        "trade_count": r.trade_count,
-                        "equity_points": r.equity_points,
-                    }
-                    for r in results
-                ],
-                "filter_results": [
-                    {
-                        "strategy_id": o.strategy_id,
-                        "passed": o.filter_result.passed,
-                        "score": round(o.score.score, 4) if o.score is not None else None,
-                        "failures": o.filter_result.failures,
-                    }
-                    for o in filter_outputs
-                ],
-            }
-        )
+            )
+        else:
+            results, filter_outputs = (
+                simulation_context.experiment_orchestration_service.run_experiment(plan)
+            )
+            print_header(f"Experiment — {plan.experiment_id}")
+            print_json(
+                {
+                    "experiment_id": plan.experiment_id,
+                    "total_runs": len(results),
+                    "total_passed": len([o for o in filter_outputs if o.filter_result.passed]),
+                    "total_failed": len([o for o in filter_outputs if not o.filter_result.passed]),
+                    "runs": [
+                        {
+                            "status": r.status,
+                            "run_id": str(r.run_id),
+                            "strategy_id": r.strategy_id,
+                            "trade_count": r.trade_count,
+                            "equity_points": r.equity_points,
+                        }
+                        for r in results
+                    ],
+                    "filter_results": [
+                        {
+                            "strategy_id": o.strategy_id,
+                            "passed": o.filter_result.passed,
+                            "score": round(o.score.score, 4) if o.score is not None else None,
+                            "failures": o.filter_result.failures,
+                        }
+                        for o in filter_outputs
+                    ],
+                }
+            )
 
         return 0
 
     finally:
         session.close()
+
+
+def _load_experiment_from_yaml(
+    config_path: str,
+    simulation_context,
+) -> ExperimentDefinition:
+    with open(config_path) as f:
+        raw = yaml.safe_load(f)
+
+    staged_pipeline_config = None
+    pipeline_raw = raw.get("staged_pipeline_config")
+
+    if pipeline_raw:
+        stages = [
+            StageRegistry.load(stage_raw, simulation_context.simulation_runner)
+            for stage_raw in pipeline_raw["stages"]
+        ]
+        staged_pipeline_config = StagedPipelineConfig(stages=stages)
+
+    return ExperimentDefinition(
+        experiment_id=raw["experiment_id"],
+        experiment_type=ExperimentType(raw.get("experiment_type", "sweep")),
+        description=raw.get("description"),
+        strategy_set=raw.get("strategy_set", []),
+        parameter_grid=raw.get("parameter_grid", []),
+        parameter_space=raw.get("parameter_space"),
+        dataset_version=raw["dataset_version"],
+        universe_version=raw.get("universe_version", "v1"),
+        price_basis=PriceBasis(raw["price_basis"]),
+        symbols=raw.get("symbols", []),
+        start_date=date.fromisoformat(raw["start_date"]) if "start_date" in raw else date.today(),
+        end_date=date.fromisoformat(raw["end_date"]) if "end_date" in raw else date.today(),
+        random_seed=raw.get("random_seed", 42),
+        initial_cash=raw.get("initial_cash", 100_000.0),
+        staged_pipeline_config=staged_pipeline_config,
+    )
 
 
 # ---------------------------------------------------------------------------

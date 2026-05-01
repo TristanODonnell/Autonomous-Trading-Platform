@@ -179,6 +179,16 @@ class SimulationRunner:
         self._commit_metadata()
 
         try:
+            # Compute warmup bars from the strategy's longest lookback window so
+            # indicators (MA, RSI, etc.) are fully seeded before the live window
+            # starts. Uses 78 bars/trading day (5-min, 9:30→16:00 session).
+            _BARS_PER_TRADING_DAY = 78
+            _params = request.strategy_config.get("parameters", {})
+            _long_window = int(
+                _params.get("long_window") or _params.get("window") or _params.get("lookback") or 0
+            )
+            warmup_bars = _long_window * _BARS_PER_TRADING_DAY
+
             window = self.window_loader.load_window(
                 dataset_version=request.dataset_version,
                 bars_dataset=resolved_dataset.dataset,
@@ -186,6 +196,7 @@ class SimulationRunner:
                 start_date=request.start_date,
                 end_date=request.end_date,
                 strict=request.strict_data_loading,
+                warmup_bars=warmup_bars,
             )
 
             if request.shuffle_timestamp:
@@ -225,6 +236,15 @@ class SimulationRunner:
             )
             self._commit_metadata()
 
+            # Strip warmup rows from the equity curve before computing metrics.
+            # Warmup bars predate start_date and must not skew duration, CAGR,
+            # Sharpe or drawdown calculations.
+            live_equity_curve = equity_curve
+            if window.warmup_timestamps and not equity_curve.empty:
+                live_equity_curve = equity_curve[
+                    ~equity_curve["timestamp"].isin(window.warmup_timestamps)
+                ].reset_index(drop=True)
+
             return SimulationRunResult(
                 run_id=run_id,
                 experiment_id=experiment_id,
@@ -234,14 +254,14 @@ class SimulationRunner:
                 start_date=request.start_date,
                 end_date=request.end_date,
                 trade_count=len(trade_logs),
-                equity_points=len(equity_curve),
+                equity_points=len(live_equity_curve),
                 per_bar_metric_points=len(per_bar_metrics),
                 status="completed",
-                return_metrics=compute_return_metrics(equity_curve),
-                risk_metrics=compute_risk_metrics(equity_curve),
+                return_metrics=compute_return_metrics(live_equity_curve),
+                risk_metrics=compute_risk_metrics(live_equity_curve),
                 trade_metrics=compute_trade_metrics(trade_logs),
-                stability_metrics=compute_stability_metrics(equity_curve),
-                equity_curve=equity_curve,
+                stability_metrics=compute_stability_metrics(live_equity_curve),
+                equity_curve=live_equity_curve,
             )
 
         except Exception as exc:

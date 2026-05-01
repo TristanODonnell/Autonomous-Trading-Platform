@@ -58,6 +58,8 @@ def shuffle_window_bar_timestamps(
         bars_by_symbol=shuffled_bars_by_symbol,
         bars_by_timestamp=shuffled_bars_by_timestamp,
         feature_tables_by_symbol=window.feature_tables_by_symbol,
+        warmup_bars_by_symbol=window.warmup_bars_by_symbol,
+        warmup_timestamps=window.warmup_timestamps,
     )
 
 
@@ -81,6 +83,23 @@ class SimulationWindowData:
     # Always present. Empty dict means no features loaded.
     feature_tables_by_symbol: dict[str, dict[str, pa.Table]]
 
+    # Warmup bars come before start_date and are used to seed indicator state
+    # only — the simulation engine must not generate trades on these timestamps.
+    # Empty when warmup_bars=0 (the default).
+    warmup_bars_by_symbol: dict[str, list[MarketBar]] = None  # type: ignore[assignment]
+    warmup_timestamps: set[datetime] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.warmup_bars_by_symbol is None:
+            self.warmup_bars_by_symbol = {}
+        if self.warmup_timestamps is None:
+            self.warmup_timestamps = set()
+
+    def is_warmup(self, timestamp: datetime) -> bool:
+        """Return True if this timestamp belongs to the warmup period.
+        The simulation engine should skip order generation for warmup bars."""
+        return timestamp in self.warmup_timestamps
+
 
 class SimulationWindowLoader:
     """
@@ -97,6 +116,12 @@ class SimulationWindowLoader:
         self.bar_reader = bar_reader
         self.feature_reader = feature_reader
 
+    # 5-min bars per trading day (9:30→16:00 = 6.5h = 78 bars)
+    _BARS_PER_TRADING_DAY: int = 78
+    # Conservative calendar-day multiplier to guarantee enough trading days
+    # are fetched even across weekends/holidays (5 trading days per ~7 cal days)
+    _CALENDAR_DAYS_PER_TRADING_DAY: float = 7 / 5
+
     def load_window(
         self,
         *,
@@ -108,19 +133,48 @@ class SimulationWindowLoader:
         feature_datasets: Iterable[SimulationFeatureDatasetRequest] | None = None,
         engine: str = "duckdb",
         strict: bool = False,
+        warmup_bars: int = 0,
     ) -> SimulationWindowData:
+        """Load bar and feature data for a simulation window.
 
+        Parameters
+        ----------
+        warmup_bars:
+            Number of bars to load *before* start_date to seed indicator state.
+            These bars are included in ``bars_by_symbol`` and ``timeline`` so the
+            strategy context builder can warm up MAs/RSI/etc., but they are
+            flagged in ``warmup_timestamps`` so the execution engine skips order
+            generation on them.  Pass ``strategy.long_window * bars_per_day``
+            (e.g. 200 * 78 = 15_600) to fully warm up a 200-bar MA.
+            Defaults to 0 (no warmup, existing behaviour preserved).
+        """
         if end_date < start_date:
             raise ValueError("end_date must be greater than or equal to start_date")
 
         if not dataset_version.strip():
             raise ValueError("dataset_version must not be empty")
 
+        if warmup_bars < 0:
+            raise ValueError("warmup_bars must be >= 0")
+
         normalized_symbols = sorted(
             {symbol.strip().upper() for symbol in symbols if symbol.strip()}
         )
         if not normalized_symbols:
             raise ValueError("At least one symbol is required")
+
+        # Compute the extended read start to cover warmup bars.
+        # We over-fetch slightly (ceiling) to account for weekends/holidays,
+        # then trim to the exact bar count after reading.
+        from datetime import timedelta
+        from math import ceil
+
+        if warmup_bars > 0:
+            warmup_trading_days = ceil(warmup_bars / self._BARS_PER_TRADING_DAY)
+            warmup_calendar_days = ceil(warmup_trading_days * self._CALENDAR_DAYS_PER_TRADING_DAY)
+            read_start = start_date - timedelta(days=warmup_calendar_days)
+        else:
+            read_start = start_date
 
         bars_by_symbol: dict[str, list[MarketBar]] = {}
         feature_requests = list(feature_datasets or [])
@@ -132,7 +186,7 @@ class SimulationWindowLoader:
                     dataset=bars_dataset,
                     dataset_version=dataset_version,
                     symbol=symbol,
-                    start_date=start_date,
+                    start_date=read_start,
                     end_date=end_date,
                     engine=engine,
                 )
@@ -150,7 +204,19 @@ class SimulationWindowLoader:
                     f"window={start_date}..{end_date}"
                 )
 
-            bars_by_symbol[symbol] = [self._row_to_market_bar(row) for row in bar_table.to_pylist()]
+            all_bars = [self._row_to_market_bar(row) for row in bar_table.to_pylist()]
+
+            if warmup_bars > 0:
+                pre_bars = sorted(
+                    [b for b in all_bars if b.timestamp.date() < start_date],
+                    key=lambda b: b.timestamp,
+                )
+                live_bars = [b for b in all_bars if b.timestamp.date() >= start_date]
+                # Trim pre_bars to exactly warmup_bars (take the most recent ones)
+                warmup_slice = pre_bars[-warmup_bars:] if len(pre_bars) > warmup_bars else pre_bars
+                bars_by_symbol[symbol] = warmup_slice + live_bars
+            else:
+                bars_by_symbol[symbol] = all_bars
 
             if feature_requests:
                 if self.feature_reader is None:
@@ -166,7 +232,7 @@ class SimulationWindowLoader:
                             dataset=feature_request.dataset,
                             dataset_version=feature_request.dataset_version,
                             symbol=symbol,
-                            start_date=start_date,
+                            start_date=read_start,
                             end_date=end_date,
                             engine=engine,
                         )
@@ -197,6 +263,17 @@ class SimulationWindowLoader:
 
         timeline = sorted(bars_by_timestamp.keys())
 
+        # Build warmup tracking structures
+        warmup_bars_by_symbol: dict[str, list[MarketBar]] = {}
+        warmup_timestamps: set[datetime] = set()
+
+        if warmup_bars > 0:
+            for symbol, bars in bars_by_symbol.items():
+                w_bars = [b for b in bars if b.timestamp.date() < start_date]
+                if w_bars:
+                    warmup_bars_by_symbol[symbol] = w_bars
+                    warmup_timestamps.update(b.timestamp for b in w_bars)
+
         return SimulationWindowData(
             start_date=start_date,
             end_date=end_date,
@@ -206,6 +283,8 @@ class SimulationWindowLoader:
             bars_by_symbol=bars_by_symbol,
             bars_by_timestamp=bars_by_timestamp,
             feature_tables_by_symbol=feature_tables_by_symbol,
+            warmup_bars_by_symbol=warmup_bars_by_symbol,
+            warmup_timestamps=warmup_timestamps,
         )
 
     @staticmethod

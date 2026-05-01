@@ -1,0 +1,140 @@
+experiment_id: exp_002_ma_sweep_wf
+dataset_version: raw_bars_20260501T183916Z_b2a62eec
+price_basis: raw
+universe_version: v1
+random_seed: 42
+symbols:
+  - AAPL
+  - MSFT
+  - SPY
+  - AMZN
+  - NVDA
+strategy_set:
+  - type: moving_average_crossover
+parameter_space:
+  short_window: [5, 10, 20]
+  long_window: [50, 100, 200]
+
+staged_pipeline_config:
+  stages:
+
+    # -------------------------------------------------------------------------
+    # Stage 1 — Cheap
+    # Short window, loose filters. Purpose: eliminate catastrophically bad
+    # strategies quickly before spending compute on longer windows.
+    # Extended to 18 months so long_window=200 has enough bars to warm up
+    # and generate meaningful trade counts.
+    # -------------------------------------------------------------------------
+    - name: cheap
+      type: simulation
+      start_date: "2023-07-01"
+      end_date: "2024-12-31"
+      symbols: [AAPL, MSFT, SPY, AMZN, NVDA]
+      filter_config:
+        min_sharpe: 0.0        # just exclude catastrophically negative
+        min_trades: 3          # realistic for slow MAs on 18 months
+        max_drawdown: -0.40    # wide gate — cheap stage casts a broad net
+      scoring_weights:
+        w_sharpe: 0.4
+        w_return: 0.3
+        w_drawdown: 0.2
+        w_consistency: 0.1
+
+    # -------------------------------------------------------------------------
+    # Stage 2 — Intermediate
+    # Full backfill window, stricter filters. Survivors here are genuinely
+    # performing strategies, not just ones that survived loose early gates.
+    # -------------------------------------------------------------------------
+    - name: intermediate
+      type: simulation
+      start_date: "2022-01-01"
+      end_date: "2025-03-31"
+      symbols: [AAPL, MSFT, SPY, AMZN, NVDA]
+      filter_config:
+        min_sharpe: 1.0
+        min_trades: 30
+        max_drawdown: -0.20
+      scoring_weights:
+        w_sharpe: 0.4
+        w_return: 0.3
+        w_drawdown: 0.2
+        w_consistency: 0.1
+
+    # -------------------------------------------------------------------------
+    # Stage 3 — Heavy (Walk-Forward)
+    # 9 folds generated from 2022-01-01 → 2025-03-31
+    # train=365d, test=90d, step=90d
+    #
+    # Fold 0: train 2022-01-01→2023-01-01  test 2023-01-01→2023-04-01
+    # Fold 1: train 2022-04-01→2023-04-01  test 2023-04-01→2023-06-30
+    # Fold 2: train 2022-06-30→2023-06-30  test 2023-06-30→2023-09-28
+    # Fold 3: train 2022-09-28→2023-09-28  test 2023-09-28→2023-12-27
+    # Fold 4: train 2022-12-27→2023-12-27  test 2023-12-27→2024-03-26
+    # Fold 5: train 2023-03-27→2024-03-26  test 2024-03-26→2024-06-24
+    # Fold 6: train 2023-06-25→2024-06-24  test 2024-06-24→2024-09-22
+    # Fold 7: train 2023-09-23→2024-09-22  test 2024-09-22→2024-12-21
+    # Fold 8: train 2023-12-22→2024-12-21  test 2024-12-21→2025-03-21
+    #
+    # require_all_folds: false — a strategy can have one bad quarter
+    # min_folds_passed: 6     — must pass 6/9 folds (67% robustness bar)
+    # train filter is looser than test — cast wide on train, gate hard on test
+    # -------------------------------------------------------------------------
+    - name: heavy_walk_forward
+      type: walk_forward
+      symbols: [AAPL, MSFT, SPY, AMZN, NVDA]
+      start_date: "2022-01-01"
+      end_date: "2025-03-31"
+      train_days: 365
+      test_days: 90
+      step_days: 90
+      require_all_folds: false
+      min_folds_passed: 6
+      train_filter_config:
+        min_sharpe: 0.8        # looser — want breadth entering test window
+        min_trades: 20
+        max_drawdown: -0.25
+      train_scoring_weights:
+        w_sharpe: 0.4
+        w_return: 0.3
+        w_drawdown: 0.2
+        w_consistency: 0.1
+      test_filter_config:
+        min_sharpe: 1.0        # stricter — out-of-sample gate
+        min_trades: 5          # 90-day window produces fewer trades
+        max_drawdown: -0.20
+      test_scoring_weights:
+        w_sharpe: 0.5
+        w_return: 0.25
+        w_drawdown: 0.2
+        w_consistency: 0.05
+
+    # -------------------------------------------------------------------------
+    # Stage 4 — Elite (Monte Carlo)
+    # Only strategies that survived all three prior stages reach here.
+    # Run each strategy 50 times over the same window, each with a different
+    # deterministic seed (seed = base_seed + run_index).
+    #
+    # A strategy passes iff it clears the filter thresholds in >= 70% of runs.
+    # This catches strategies whose backtest performance was lucky trade ordering
+    # rather than structural edge — those will fail frequently across seeds.
+    #
+    # min_pass_rate: 0.70 — must survive 35/50 randomised runs
+    # filter thresholds match Stage 2 (same full-window standard)
+    # scoring weights shift toward Sharpe + stability at this elite bar
+    # -------------------------------------------------------------------------
+    - name: elite_monte_carlo
+      type: monte_carlo
+      start_date: "2022-01-01"
+      end_date: "2025-03-31"
+      symbols: [AAPL, MSFT, SPY, AMZN, NVDA]
+      n_runs: 50
+      min_pass_rate: 0.70
+      filter_config:
+        min_sharpe: 1.0
+        min_trades: 10          # lower than Stage 2 — each seed-run is one sim
+        max_drawdown: -0.20
+      scoring_weights:
+        w_sharpe: 0.5
+        w_return: 0.25
+        w_drawdown: 0.20
+        w_consistency: 0.05

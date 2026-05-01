@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import enum
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.research.pipeline.pipeline_runner import StagedPipelineConfig
 
 
 class ExperimentType(enum.StrEnum):
@@ -37,3 +40,4 @@ class ExperimentDefinition:
     step_size_days: int | None = None
     # CROSS_UNIVERSE
     universe_set: list[list[str]] | None = None
+    staged_pipeline_config: StagedPipelineConfig | None = None
