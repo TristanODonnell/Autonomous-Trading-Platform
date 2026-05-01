@@ -1,0 +1,56 @@
+experiment_id: exp_mc_smoke_test
+dataset_version: raw_bars_20260501T183916Z_b2a62eec
+price_basis: raw
+universe_version: v1
+random_seed: 42
+symbols:
+  - AAPL
+  - MSFT
+strategy_set:
+  - type: moving_average_crossover
+parameter_space:
+  short_window: [5, 10]
+  long_window: [50, 100]
+
+staged_pipeline_config:
+  stages:
+
+    # Passthrough — let everything survive into MC
+    - name: passthrough
+      type: simulation
+      start_date: "2024-01-01"
+      end_date: "2024-06-30"
+      symbols: [AAPL, MSFT]
+      filter_config:
+        min_sharpe: -99.0
+        min_trades: 0
+        max_drawdown: -1.0
+        min_consistency_score: 0.0
+        min_profit_factor: 0.0
+        min_total_return: -99.0
+      scoring_weights:
+        w_sharpe: 0.4
+        w_return: 0.3
+        w_drawdown: 0.2
+        w_consistency: 0.1
+
+    # Monte Carlo — 5 runs, very loose gates, just proving the logic fires
+    - name: elite_monte_carlo
+      type: monte_carlo
+      start_date: "2024-01-01"
+      end_date: "2024-06-30"
+      symbols: [AAPL, MSFT]
+      n_runs: 5
+      min_pass_rate: 0.40        # 2/5 runs need to pass — nearly impossible to fail
+      filter_config:
+        min_sharpe: -99.0
+        min_trades: 0
+        max_drawdown: -1.0
+        min_consistency_score: 0.0
+        min_profit_factor: 0.0
+        min_total_return: -99.0
+      scoring_weights:
+        w_sharpe: 0.5
+        w_return: 0.25
+        w_drawdown: 0.20
+        w_consistency: 0.05

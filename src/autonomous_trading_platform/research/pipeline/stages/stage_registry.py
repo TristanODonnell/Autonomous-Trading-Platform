@@ -23,6 +23,7 @@ from typing import Any
 from autonomous_trading_platform.research.simulation.simulation_runner import SimulationRunner
 
 from .base_stage import BaseStage
+from .monte_carlo_stage import MonteCarloStage
 from .simulation_stage import SimulationStage
 from .walk_forward_stage import WalkForwardStage
 
@@ -33,8 +34,8 @@ from .walk_forward_stage import WalkForwardStage
 _REGISTRY: dict[str, type[BaseStage]] = {
     "simulation": SimulationStage,
     "walk_forward": WalkForwardStage,
-    # "regime":       RegimeStage,        # future
-    # "monte_carlo":  MonteCarloStage,    # future
+    "monte_carlo": MonteCarloStage,
+    # "regime": RegimeStage,   # future
 }
 
 
