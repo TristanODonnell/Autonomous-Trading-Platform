@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 import numpy as np
 import pandas as pd
 
+from autonomous_trading_platform.common.system_info import get_dependency_lock_hash, get_git_commit
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.runtime.metrics_summary import MetricsSummary
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
@@ -212,11 +213,13 @@ class SimulationRunner:
             )
             strategy = self.strategy_factory.build(strategy_config)
 
-            trade_logs, equity_curve, per_bar_metrics, positions = self._execute_simulation(
-                run_id=run_id,
-                request=request,
-                window=window,
-                strategy=strategy,
+            trade_logs, equity_curve, per_bar_metrics, positions, signal_log = (
+                self._execute_simulation(
+                    run_id=run_id,
+                    request=request,
+                    window=window,
+                    strategy=strategy,
+                )
             )
 
             self.result_recorder.record_results(
@@ -226,6 +229,7 @@ class SimulationRunner:
                 equity_curve=equity_curve,
                 per_bar_metrics=per_bar_metrics,
                 positions=positions,
+                signal_log=signal_log,
             )
 
             self._record_run_completed(
@@ -279,11 +283,13 @@ class SimulationRunner:
             simulated_execution_service=self.simulated_execution_service,
             initial_cash=request.initial_cash,
         )
+
         return (
             result.trade_logs,
             result.equity_curve,
             result.per_bar_metrics,
             result.positions,
+            result.signal_log,
         )
 
     def _record_run_started(
@@ -372,6 +378,17 @@ class SimulationRunner:
             self.simulation_run_repository.upsert(simulation_run_row)
 
         if self.manifest_service is not None:
+            cost_model = (
+                self.simulated_execution_service.cost_model_summary
+                if self.simulated_execution_service is not None
+                else None
+            )
+            fill_model = (
+                self.simulated_execution_service.slippage_model_summary
+                if self.simulated_execution_service is not None
+                else None
+            )
+
             manifest = RunManifest(
                 run_id=run_id,
                 run_type=RunType.SIMULATION,
@@ -389,13 +406,13 @@ class SimulationRunner:
                 dataset_version=request.dataset_version,
                 price_basis=request.price_basis,
                 universe_version="v1",
-                cost_model=None,
-                fill_model=None,
+                cost_model=cost_model,
+                fill_model=fill_model,
                 random_seed=request.random_seed,
-                git_commit="unknown",
+                git_commit=get_git_commit(),
                 docker_image=None,
                 python_version=platform.python_version(),
-                dependency_lock_hash=None,
+                dependency_lock_hash=get_dependency_lock_hash(),
                 notes="Created by SimulationRunner",
                 bar_timestamp=None,
                 status="RUNNING",

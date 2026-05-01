@@ -33,6 +33,7 @@ class SimulationExecutionResult:
     equity_curve: pd.DataFrame
     per_bar_metrics: pd.DataFrame
     positions: pd.DataFrame
+    signal_log: pd.DataFrame
 
 
 class SimulationExecutionEngine:
@@ -65,6 +66,7 @@ class SimulationExecutionEngine:
         realized_pnl_by_symbol: dict[str, Decimal] = {}
 
         trade_rows: list[dict[str, Any]] = []
+        signal_rows: list[dict[str, Any]] = []
         equity_rows: list[dict[str, Any]] = []
         metric_rows: list[dict[str, Any]] = []
         position_rows: list[dict[str, Any]] = []
@@ -89,6 +91,14 @@ class SimulationExecutionEngine:
                 timestamp=timestamp,
                 positions=positions,
                 strategy_state=strategy_state,
+            )
+            signal_rows.extend(
+                self._build_signal_rows(
+                    run_id=run_id,
+                    strategy_id=strategy.strategy_id,
+                    timestamp=timestamp,
+                    signals=signals,
+                )
             )
 
             # During warmup we only evaluate signals so indicators accumulate
@@ -200,6 +210,19 @@ class SimulationExecutionEngine:
                     "market_value",
                     "unrealized_pnl",
                     "realized_pnl",
+                ]
+            ),
+            signal_log=pd.DataFrame(signal_rows)
+            if signal_rows
+            else pd.DataFrame(
+                columns=[
+                    "run_id",
+                    "strategy_id",
+                    "symbol",
+                    "timestamp",
+                    "direction",
+                    "strength",
+                    "signal_type",
                 ]
             ),
         )
@@ -492,4 +515,26 @@ class SimulationExecutionEngine:
                 }
             )
 
+        return rows
+
+    def _build_signal_rows(
+        self,
+        *,
+        run_id: UUID,
+        strategy_id: str,
+        timestamp: datetime,
+        signals: list[Signal],
+    ) -> list[dict[str, Any]]:
+        rows = []
+        for signal in signals:
+            rows.append(
+                {
+                    "run_id": str(run_id),
+                    "strategy_id": strategy_id,
+                    "symbol": signal.symbol,
+                    "timestamp": timestamp,
+                    "direction": signal.direction.value,
+                    "signal_type": signal.signal_type if hasattr(signal, "signal_type") else None,
+                }
+            )
         return rows

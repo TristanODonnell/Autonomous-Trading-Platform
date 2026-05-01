@@ -10,6 +10,7 @@ from autonomous_trading_platform.storage.parquet.datasets import (
     SIMULATION_EQUITY_CURVE_DATASET,
     SIMULATION_PER_BAR_METRICS_DATASET,
     SIMULATION_POSITIONS_DATASET,
+    SIMULATION_SIGNAL_LOG_DATASET,
     SIMULATION_TRADE_LOGS_DATASET,
     ParquetDataset,
 )
@@ -19,6 +20,7 @@ SIMULATION_DATASETS_BY_NAME = {
     "equity_curve": SIMULATION_EQUITY_CURVE_DATASET,
     "per_bar_metrics": SIMULATION_PER_BAR_METRICS_DATASET,
     "positions": SIMULATION_POSITIONS_DATASET,
+    "signal_log": SIMULATION_SIGNAL_LOG_DATASET,
 }
 
 
@@ -192,6 +194,20 @@ class ParquetSimulationRepository:
         self.write_simulation_frame(
             frame=frame,
             output_name="positions",
+            experiment_id=experiment_id,
+            strategy_id=strategy_id,
+        )
+
+    def write_signal_log(
+        self,
+        *,
+        frame: pd.DataFrame,
+        experiment_id: str,
+        strategy_id: str,
+    ) -> None:
+        self.write_simulation_frame(
+            frame=frame,
+            output_name="signal_log",
             experiment_id=experiment_id,
             strategy_id=strategy_id,
         )

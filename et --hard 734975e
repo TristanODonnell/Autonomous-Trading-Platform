@@ -1,0 +1,103 @@
+[33mf022eaf[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;32mfeature/story-23-pitfalls-guarantees[m[33m)[m result recording and run manifest recording edits
+[33m734975e[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Merge pull request #88 from TristanODonnell/epic-simulation-workflow-pipeline
+[33m3b16eda[m[33m ([m[1;31morigin/epic-simulation-workflow-pipeline[m[33m, [m[1;32mepic-simulation-workflow-pipeline[m[33m)[m added monte carlo stage analysis logic
+[33m81e9214[m window loading debug and pipeline walk forward testing
+[33m2111a9a[m stage registry with deserialization per stage file for decoupling
+[33mfa7659b[m stage pipeline run debugging test runs
+[33m6203ea1[m research cli updates and print debug testing
+[33m339dc2f[m multi stage pipeline package integration
+[33ma37173b[m Merge pull request #87 from TristanODonnell/epic-strategy-filtering-ranking-system
+[33m327bf5f[m[33m ([m[1;31morigin/epic-strategy-filtering-ranking-system[m[33m)[m additional research cli edits
+[33me5b6f7c[m tilter_score_service wiring debug needed
+[33m2be6c6a[m filtering package logic
+[33m868e87d[m Merge pull request #86 from TristanODonnell/epic-strategy-generation-engine-core-architecture
+[33md6966ad[m[33m ([m[1;31morigin/epic-strategy-generation-engine-core-architecture[m[33m)[m test fixes
+[33mb50b4d4[m backfill to features to full experiments pipeline end to end year plus data
+[33m86e5ea2[m first run experiment run full cycle
+[33m0f629cb[m hashing and cli debugging
+[33m93d2b8e[m evolutionary generator stub
+[33m0af9828[m random sampling, add utils helper file
+[33m920c4f8[m generation engine file setup and package creation
+[33mf89ca04[m Merge pull request #85 from TristanODonnell/epic-strategy-generation-engine
+[33m9beff10[m[33m ([m[1;31morigin/epic-strategy-generation-engine[m[33m)[m test edit
+[33m88a370c[m persistence bug fixes
+[33m68465e6[m metrics summary and simulation run metadata persistence
+[33m9540397[m simulation runs schema updates and migration
+[33mc2747f2[m experiment type orchestration felxibility run orchestrtation
+[33m0bc4613[m cycle debug
+[33m49e4e41[m experiment running and orchestration wiring
+[33m2d3545a[m experiment orchestration archictecure integration
+[33m4db945a[m research model additional migrations
+[33m0b5058a[m Merge pull request #84 from TristanODonnell/epic-simulation-engine-execution-model-realism
+[33m670a4db[m[33m ([m[1;31morigin/epic-simulation-engine-execution-model-realism[m[33m)[m test edit
+[33m88a4a88[m fill model updates, and test updates
+[33m4c38b70[m slippage model and logic integration
+[33mc33e62e[m cost model, and limit fills addition
+[33m1b0b372[m Merge pull request #83 from TristanODonnell/epic-simulation-engine-system-pitfall-run-testing-checks
+[33m4050d6d[m[33m ([m[1;31morigin/epic-simulation-engine-system-pitfall-run-testing-checks[m[33m)[m test run manifest schema fixes
+[33md5d1b50[m shuffle timestamp test and explicit timestamp assertions
+[33m1ccf7dc[m random strategy test
+[33m8342ab6[m  intentional loser test
+[33m9dca65d[m Double run diff test
+[33mf76356d[m Merge pull request #82 from TristanODonnell/epic-simulation-engine-system-pitfall-checks
+[33md203876[m[33m ([m[1;31morigin/epic-simulation-engine-system-pitfall-checks[m[33m)[m cli additional handler param for seed
+[33me6fb2b9[m Seed unit tests checks
+[33m6ba9ead[m run manifest logic and seed tracking and validation check
+[33m0b7eb9b[m initial random seeding logic
+[33m513c249[m cost model service and simaled execution edits and additional unit tests
+[33m93215f4[m lookahead bias guarding integration into engine and unit tests
+[33m69ce825[m Merge pull request #81 from TristanODonnell/epic-simulation-engine-system-additions
+[33mab79ffe[m[33m ([m[1;31morigin/epic-simulation-engine-system-additions[m[33m)[m test debugs, no shorting logic currently
+[33m88b4581[m optional precomputed feature loading
+[33m350c64b[m postgres persistence integration debugging
+[33m6c1a00d[m postgres simulation wiring debugging and migrations
+[33me85f86f[m persist results through ResultRecorder
+[33m8b7cab6[m simulator aditions, integrating cash snapshot and position contracts and services
+[33mb7d07b7[m Merge pull request #80 from TristanODonnell/epic-simulation-engine-core-setup
+[33m30b23f1[m[33m ([m[1;31morigin/epic-simulation-engine-core-setup[m[33m)[m test refactoring/bug fixes with new strategy logic implementation
+[33m3caf132[m debugging full simulation run errors
+[33m1d85793[m full simulator engine wiring, simulation and strategy contexts, simulation execution engine, runner refactors, cli additions
+[33me3ab6fb[m simulation_execution_engine rough first version
+[33m5931d6d[m strategy_context shape extension
+[33me308b10[m build_strategy_runtime_context edits
+[33m6dde136[m strategy_evaluation_service refeactor
+[33m8da452c[m refactor naming, StrategyContext to StrategyRuntimeContext
+[33m70e74d2[m bars by timestamp in wimulation window data
+[33m8aea39d[m basic cli setup with dependencies context
+[33m1d5eb86[m rename
+[33m5f65597[m simulator runner module and package rough setup
+[33m1deca72[m Merge pull request #79 from TristanODonnell/epic-strategy-engine-output-storage
+[33m8a958f3[m[33m ([m[1;31morigin/epic-strategy-engine-output-storage[m[33m)[m result_recorder_service
+[33m8d0ffef[m parquet dataset, schema, repo for simulation metrics and logging
+[33m4a007ff[m runtime, orm, and repos for experiment, metrics summary, simulation run, strategy configs
+[33md6b54b3[m Merge pull request #78 from TristanODonnell/epic-strategy-engine-strategy-definitions
+[33m7cd7182[m[33m ([m[1;31morigin/epic-strategy-engine-strategy-definitions[m[33m)[m strategy implementation package additional strategies
+[33m64e4895[m strategy_config and basic factory
+[33m617eadf[m aggregator classes module
+[33m746f5fe[m signal logic signal rules
+[33m0a7c755[m strategy indicator calculation library modules
+[33mb5a7e0b[m Merge pull request #77 from TristanODonnell/pre-simulator-debug-testing-planning
+[33m0052e97[m[33m ([m[1;31morigin/pre-simulator-debug-testing-planning[m[33m)[m feature pipeline cycle debug session
+[33m379a6fc[m checkpoint status completed debugging, starting cli for features pipeline
+[33m23180f0[m Backfill cycle debug session
+[33m969f241[m Merge pull request #76 from TristanODonnell/epic-storage-backlogged-tasks
+[33m39e61e3[m[33m ([m[1;31morigin/epic-storage-backlogged-tasks[m[33m)[m checksum verification and persisting, storage wiring/debug
+[33meb9a551[m bug fixers and bar chunk writer refactor
+[33m74eef10[m Merge pull request #75 from TristanODonnell/epic-features-dataset-lineage-versioning
+[33m52563b2[m[33m ([m[1;31morigin/epic-features-dataset-lineage-versioning[m[33m)[m contract shape feature_dataset_audit_record and audit service
+[33m4b109d7[m query functions for underlying dataset lineage
+[33m60b580c[m feature dataset contract underlying_dataset change to 'source', add computation_code_version
+[33m0bcee15[m Merge pull request #74 from TristanODonnell/epic-features-feature-pipeline-layering
+[33mefe2841[m[33m ([m[1;31morigin/epic-features-feature-pipeline-layering[m[33m)[m cycle module
+[33m8ae2e59[m jobs and services written v1
+[33m724b8c3[m blank feature cycle structure
+[33mbc00777[m Merge pull request #73 from TristanODonnell/epic-features-feature-store-implementation
+[33m838a1a0[m[33m ([m[1;31morigin/epic-features-feature-store-implementation[m[33m)[m rest api service and interface setup for feature datasets
+[33m75b1928[m dataset validation and registration services
+[33me058d02[m feature dataset contract and postgres repo
+[33m8b11bfd[m feature metadata builder helper
+[33mde7a346[m features metadata, postgres model, parquet schema updates
+[33md4762fb[m features repository and dataset update
+[33m2b34829[m feature schema first pass
+[33m2274a25[m Merge pull request #72 from TristanODonnell/epic-storage-data-platform-rules-enforcement
+[33m480a5e5[m[33m (

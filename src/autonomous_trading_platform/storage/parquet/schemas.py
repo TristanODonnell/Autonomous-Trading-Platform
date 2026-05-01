@@ -182,3 +182,15 @@ SIMULATION_POSITIONS_SCHEMA = pa.schema(
         pa.field("date", pa.date32()),
     ]
 )
+
+SIMULATION_SIGNAL_LOG_SCHEMA = pa.schema(
+    [
+        pa.field("run_id", pa.string()),
+        pa.field("experiment_id", pa.string()),
+        pa.field("strategy_id", pa.string()),
+        pa.field("symbol", pa.string()),
+        pa.field("timestamp", pa.timestamp("us", tz="UTC")),
+        pa.field("direction", pa.string()),
+        pa.field("date", pa.date32()),
+    ]
+)
