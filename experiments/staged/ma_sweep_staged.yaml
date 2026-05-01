@@ -1,5 +1,5 @@
 experiment_id: exp_002_ma_sweep_wf
-dataset_version: raw_bars_20260430T025846Z_47eac54d
+dataset_version: raw_bars_20260501T183916Z_b2a62eec
 price_basis: raw
 universe_version: v1
 random_seed: 42
@@ -100,7 +100,7 @@ staged_pipeline_config:
         w_consistency: 0.1
       test_filter_config:
         min_sharpe: 1.0        # stricter — out-of-sample gate
-        min_trades: 10         # 90-day window produces fewer trades
+        min_trades: 5         # 90-day window produces fewer trades
         max_drawdown: -0.20
       test_scoring_weights:
         w_sharpe: 0.5

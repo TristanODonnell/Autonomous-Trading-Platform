@@ -166,7 +166,7 @@ class HistoricalBarDatasetReader:
         )
 
         if not files:
-            return pa.table([], schema=dataset.schema)
+            return dataset.schema.empty_table()
 
         start_ts, end_ts = self._date_range_to_timestamps(start_date, end_date)
 

@@ -79,6 +79,7 @@ class SimulationExecutionEngine:
 
         for timestamp in timeline:
             bars_at_timestamp = window.bars_by_timestamp[timestamp]
+            is_warmup = window.is_warmup(timestamp)
 
             signals = self._evaluate_signals(
                 run_id=run_id,
@@ -89,6 +90,11 @@ class SimulationExecutionEngine:
                 positions=positions,
                 strategy_state=strategy_state,
             )
+
+            # During warmup we only evaluate signals so indicators accumulate
+            # state. No orders, fills, trades or equity rows are recorded.
+            if is_warmup:
+                continue
 
             prices = self._extract_prices(bars_at_timestamp)
 
