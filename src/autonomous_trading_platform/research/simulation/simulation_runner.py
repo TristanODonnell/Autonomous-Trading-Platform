@@ -378,8 +378,16 @@ class SimulationRunner:
             self.simulation_run_repository.upsert(simulation_run_row)
 
         if self.manifest_service is not None:
-            cost_model = self.simulated_execution_service.cost_model_summary
-            fill_model = self.simulated_execution_service.slippage_model_summary
+            cost_model = (
+                self.simulated_execution_service.cost_model_summary
+                if self.simulated_execution_service is not None
+                else None
+            )
+            fill_model = (
+                self.simulated_execution_service.slippage_model_summary
+                if self.simulated_execution_service is not None
+                else None
+            )
 
             manifest = RunManifest(
                 run_id=run_id,
