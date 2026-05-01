@@ -19,6 +19,7 @@ from . import run_manifests as run_manifests
 from . import signals as signals
 from . import simulation_runs as simulation_runs
 from . import strategy_configs as strategy_configs
+from . import strategy_governance as strategy_governance
 from . import strategy_runtime_states as strategy_runtime_states
 from . import symbol_date_coverage as symbol_date_coverage
 from . import ticker_lifecycle_event as ticker_lifecycle_events
@@ -54,4 +55,5 @@ __all__ = [
     "strategy_configs",
     "simulation_runs",
     "metrics_summary",
+    "strategy_governance",
 ]
