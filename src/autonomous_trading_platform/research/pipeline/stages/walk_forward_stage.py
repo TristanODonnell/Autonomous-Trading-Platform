@@ -3,29 +3,8 @@ WalkForwardStage — Stage 3 (Heavy).
 
 Walk-forward analysis: for each fold, run a train simulation then a test
 simulation. A strategy survives the fold only if it passes filters on BOTH
-windows. A strategy survives the stage only if it passes ALL folds.
-
-Fold generation
----------------
-Given a date range [start_date, end_date] and three integers:
-
-    train_days   length of the train window
-    test_days    length of the test window
-    step_days    how far to slide the window each fold
-
-Fold N:
-    train_start = start_date + N * step_days
-    train_end   = train_start + train_days
-    test_start  = train_end
-    test_end    = test_start + test_days
-
-Generation stops when test_end would exceed end_date.
-
-Example (train=365, test=90, step=90, range Jan-2020→Dec-2023):
-    Fold 0: train Jan20→Jan21  test Jan21→Apr21
-    Fold 1: train Apr20→Apr21  test Apr21→Jul21
-    Fold 2: train Jul20→Jul21  test Jul21→Oct21
-    ...
+windows. A strategy survives the stage only if it passes ALL folds
+(or >= min_folds_passed when require_all_folds=False).
 """
 
 from __future__ import annotations
@@ -33,6 +12,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.research.experiments.filtering.config import (
@@ -56,41 +36,29 @@ from .base_stage import BaseStage, StageResult
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
+def _parse_filter_config(fc: dict[str, Any]) -> FilterConfig:
+    return FilterConfig(
+        min_sharpe=fc.get("min_sharpe", 1.0),
+        max_drawdown=fc.get("max_drawdown", -0.20),
+        min_trades=fc.get("min_trades", 30),
+        min_consistency_score=fc.get("min_consistency_score", 0.5),
+        min_profit_factor=fc.get("min_profit_factor", 1.0),
+        min_win_rate=fc.get("min_win_rate", 0.0),
+        min_total_return=fc.get("min_total_return", 0.0),
+    )
+
+
+def _parse_scoring_weights(sw: dict[str, Any]) -> ScoringWeights:
+    return ScoringWeights(
+        w_sharpe=sw.get("w_sharpe", 0.4),
+        w_return=sw.get("w_return", 0.3),
+        w_drawdown=sw.get("w_drawdown", 0.2),
+        w_consistency=sw.get("w_consistency", 0.1),
+    )
 
 
 @dataclass
 class WalkForwardStageConfig:
-    """
-    Configuration for walk-forward fold generation and filtering.
-
-    name            Human-readable stage label, e.g. "heavy_walk_forward".
-    symbols         Universe of symbols to run on every fold.
-    start_date      Earliest date the fold generator may use.
-    end_date        Latest date the fold generator may use.
-    train_days      Length of the train window in calendar days.
-    test_days       Length of the test (out-of-sample) window in calendar days.
-    step_days       How far to slide the window per fold. Overlapping folds
-                    are fine and give more signal; non-overlapping is also valid.
-    train_filter_config / train_scoring_weights
-                    Filter and scoring config applied to train-window results.
-                    Typically *looser* than the test filter — you want some
-                    breadth coming out of train before the test narrows further.
-    test_filter_config / test_scoring_weights
-                    Filter and scoring config applied to test-window results.
-                    Typically *stricter* — this is the out-of-sample gate.
-    require_all_folds
-                    If True (default), a strategy must pass every fold to
-                    survive the stage. If False, a majority-vote or
-                    min_folds_passed threshold can be used (see below).
-    min_folds_passed
-                    Only used when require_all_folds=False.
-                    Minimum number of folds a strategy must pass (both train
-                    and test) to be considered a survivor. Defaults to 1.
-    """
-
     name: str
     symbols: list[str]
     start_date: date
@@ -123,11 +91,6 @@ class WalkForwardStageConfig:
             )
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class _Fold:
     index: int
@@ -139,19 +102,12 @@ class _Fold:
 
 @dataclass
 class _FoldResult:
-    """Per-fold outcome for a single strategy."""
-
     fold_index: int
     train_sim_result: SimulationRunResult
-    test_sim_result: SimulationRunResult | None  # None if failed train filter
+    test_sim_result: SimulationRunResult | None
     train_filter_output: FilterScoreOutput
-    test_filter_output: FilterScoreOutput | None  # None if failed train filter
-    passed: bool  # True only if passed both train AND test filters
-
-
-# ---------------------------------------------------------------------------
-# Stage
-# ---------------------------------------------------------------------------
+    test_filter_output: FilterScoreOutput | None
+    passed: bool
 
 
 class WalkForwardStage(BaseStage):
@@ -161,13 +117,13 @@ class WalkForwardStage(BaseStage):
     For every fold:
       1. Run simulation over the TRAIN window for all current survivors.
       2. Apply train filter — drop strategies that fail.
-      3. Run simulation over the TEST window for train-passing strategies.
+      3. Run simulation over the TEST window for train-passing strategies only.
       4. Apply test filter — drop strategies that fail.
       5. A strategy passes the fold iff it passed both filters.
 
     After all folds:
-      - require_all_folds=True  → must have passed every single fold.
-      - require_all_folds=False → must have passed >= min_folds_passed folds.
+      - require_all_folds=True  -> must have passed every single fold.
+      - require_all_folds=False -> must have passed >= min_folds_passed folds.
     """
 
     def __init__(
@@ -188,8 +144,31 @@ class WalkForwardStage(BaseStage):
         )
 
     # ------------------------------------------------------------------
-    # BaseStage interface
+    # Loader — owns its own deserialization from a YAML dict block
     # ------------------------------------------------------------------
+
+    @classmethod
+    def from_dict(
+        cls,
+        raw: dict[str, Any],
+        simulation_runner: SimulationRunner,
+    ) -> WalkForwardStage:
+        stage_cfg = WalkForwardStageConfig(
+            name=raw["name"],
+            symbols=raw["symbols"],
+            start_date=date.fromisoformat(raw["start_date"]),
+            end_date=date.fromisoformat(raw["end_date"]),
+            train_days=raw["train_days"],
+            test_days=raw["test_days"],
+            step_days=raw["step_days"],
+            require_all_folds=raw.get("require_all_folds", True),
+            min_folds_passed=raw.get("min_folds_passed", 1),
+            train_filter_config=_parse_filter_config(raw["train_filter_config"]),
+            train_scoring_weights=_parse_scoring_weights(raw["train_scoring_weights"]),
+            test_filter_config=_parse_filter_config(raw["test_filter_config"]),
+            test_scoring_weights=_parse_scoring_weights(raw["test_scoring_weights"]),
+        )
+        return cls(stage_config=stage_cfg, simulation_runner=simulation_runner)
 
     @property
     def stage_name(self) -> str:
@@ -222,9 +201,7 @@ class WalkForwardStage(BaseStage):
             len(survivors),
         )
 
-        # fold_pass_counts[strategy_id] = number of folds where strategy passed both filters
         fold_pass_counts: dict[str, int] = {c.strategy_id: 0 for c in survivors}
-
         all_sim_results: list[SimulationRunResult] = []
         all_filter_outputs: list[FilterScoreOutput] = []
 
@@ -243,18 +220,16 @@ class WalkForwardStage(BaseStage):
             for fr in fold_results:
                 all_sim_results.append(fr.train_sim_result)
                 all_filter_outputs.append(fr.train_filter_output)
-
                 if fr.test_sim_result is not None:
                     all_sim_results.append(fr.test_sim_result)
                 if fr.test_filter_output is not None:
                     all_filter_outputs.append(fr.test_filter_output)
-
                 if fr.passed:
                     fold_pass_counts[fr.train_sim_result.strategy_id] += 1
                     passed_fold += 1
 
             logger.info(
-                "  Fold %d | train %s→%s | test %s→%s | %d/%d passed both",
+                "  Fold %d | train %s->%s | test %s->%s | %d/%d passed both",
                 fold.index,
                 fold.train_start,
                 fold.train_end,
@@ -264,9 +239,6 @@ class WalkForwardStage(BaseStage):
                 len(fold_results),
             )
 
-        # ------------------------------------------------------------------
-        # Determine final survivors across all folds
-        # ------------------------------------------------------------------
         n_folds = len(folds)
         final_survivors: list[StrategyConfig] = []
 
@@ -301,15 +273,7 @@ class WalkForwardStage(BaseStage):
             survivors=final_survivors,
         )
 
-    # ------------------------------------------------------------------
-    # Fold generation
-    # ------------------------------------------------------------------
-
     def _generate_folds(self) -> list[_Fold]:
-        """
-        Slide a (train_days + test_days) window across [start_date, end_date]
-        advancing by step_days each iteration.
-        """
         folds: list[_Fold] = []
         fold_index = 0
         train_start = self._cfg.start_date
@@ -318,10 +282,8 @@ class WalkForwardStage(BaseStage):
             train_end = train_start + timedelta(days=self._cfg.train_days)
             test_start = train_end
             test_end = test_start + timedelta(days=self._cfg.test_days)
-
             if test_end > self._cfg.end_date:
                 break
-
             folds.append(
                 _Fold(
                     index=fold_index,
@@ -331,15 +293,10 @@ class WalkForwardStage(BaseStage):
                     test_end=test_end,
                 )
             )
-
             train_start += timedelta(days=self._cfg.step_days)
             fold_index += 1
 
         return folds
-
-    # ------------------------------------------------------------------
-    # Per-fold execution
-    # ------------------------------------------------------------------
 
     def _run_fold(
         self,
@@ -352,14 +309,6 @@ class WalkForwardStage(BaseStage):
         price_basis: PriceBasis,
         initial_cash: float,
     ) -> list[_FoldResult]:
-        """
-        For one fold:
-          1. Run all configs on the train window.
-          2. Filter — keep only train-passing strategies.
-          3. Run train-passers on the test window.
-          4. Filter test results.
-          5. A strategy passes the fold iff it passed both.
-        """
         cfg = self._cfg
         window_role_train = f"fold_{fold.index}_train"
         window_role_test = f"fold_{fold.index}_test"
@@ -396,12 +345,10 @@ class WalkForwardStage(BaseStage):
         ]
         train_filter_outputs, _ = self._train_filter_service.filter_and_rank(train_filter_inputs)
         train_passed_ids = {o.strategy_id for o in train_filter_outputs if o.filter_result.passed}
-
-        # map strategy_id → train filter output for assembly below
         train_filter_by_id = {o.strategy_id: o for o in train_filter_outputs}
         train_sim_by_id = {r.strategy_id: r for r in train_sim_results}
 
-        # ---- test simulations (only train-passers) ------------------------
+        # ---- test simulations (only train-passers) -----------------------
         test_configs = [c for c in configs if c.strategy_id in train_passed_ids]
         test_sim_results: list[SimulationRunResult] = []
         for config in test_configs:
@@ -420,7 +367,7 @@ class WalkForwardStage(BaseStage):
             )
             test_sim_results.append(self._simulation_runner.run(req))
 
-        # ---- test filter --------------------------------------------------
+        # ---- test filter -------------------------------------------------
         test_filter_inputs = [
             FilterScoreInput(
                 strategy_id=r.strategy_id,
@@ -434,7 +381,6 @@ class WalkForwardStage(BaseStage):
         ]
         test_filter_outputs, _ = self._test_filter_service.filter_and_rank(test_filter_inputs)
         test_passed_ids = {o.strategy_id for o in test_filter_outputs if o.filter_result.passed}
-
         test_filter_by_id = {o.strategy_id: o for o in test_filter_outputs}
         test_sim_by_id = {r.strategy_id: r for r in test_sim_results}
 
@@ -446,7 +392,6 @@ class WalkForwardStage(BaseStage):
             train_fo = train_filter_by_id[sid]
 
             if sid not in train_passed_ids:
-                # Failed train — no test was run
                 fold_results.append(
                     _FoldResult(
                         fold_index=fold.index,
@@ -460,7 +405,6 @@ class WalkForwardStage(BaseStage):
             else:
                 test_sim = test_sim_by_id[sid]
                 test_fo = test_filter_by_id[sid]
-                passed_test = sid in test_passed_ids
                 fold_results.append(
                     _FoldResult(
                         fold_index=fold.index,
@@ -468,7 +412,7 @@ class WalkForwardStage(BaseStage):
                         test_sim_result=test_sim,
                         train_filter_output=train_fo,
                         test_filter_output=test_fo,
-                        passed=passed_test,
+                        passed=sid in test_passed_ids,
                     )
                 )
 

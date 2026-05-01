@@ -29,19 +29,12 @@ import yaml
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.db import get_session
-from autonomous_trading_platform.research.experiments.filtering.config import (
-    FilterConfig,
-    ScoringWeights,
-)
 from autonomous_trading_platform.research.experiments.models.experiment_plan import (
     ExperimentDefinition,
     ExperimentType,
 )
 from autonomous_trading_platform.research.pipeline.pipeline_runner import StagedPipelineConfig
-from autonomous_trading_platform.research.pipeline.stages.simulation_stage import (
-    SimulationStage,
-    SimulationStageConfig,
-)
+from autonomous_trading_platform.research.pipeline.stages.stage_registry import StageRegistry
 from autonomous_trading_platform.research.simulation.contexts.build_simulation_context import (
     build_simulation_context,
 )
@@ -499,37 +492,10 @@ def _load_experiment_from_yaml(
     pipeline_raw = raw.get("staged_pipeline_config")
 
     if pipeline_raw:
-        stages = []
-        for stage_raw in pipeline_raw["stages"]:
-            fc = stage_raw["filter_config"]
-            sw = stage_raw["scoring_weights"]
-            stage_cfg = SimulationStageConfig(
-                name=stage_raw["name"],
-                start_date=date.fromisoformat(stage_raw["start_date"]),
-                end_date=date.fromisoformat(stage_raw["end_date"]),
-                symbols=stage_raw["symbols"],
-                filter_config=FilterConfig(
-                    min_sharpe=fc.get("min_sharpe", 1.0),
-                    max_drawdown=fc.get("max_drawdown", -0.20),
-                    min_trades=fc.get("min_trades", 30),
-                    min_consistency_score=fc.get("min_consistency_score", 0.5),
-                    min_profit_factor=fc.get("min_profit_factor", 1.0),
-                    min_win_rate=fc.get("min_win_rate", 0.0),
-                    min_total_return=fc.get("min_total_return", 0.0),
-                ),
-                scoring_weights=ScoringWeights(
-                    w_sharpe=sw.get("w_sharpe", 0.4),
-                    w_return=sw.get("w_return", 0.3),
-                    w_drawdown=sw.get("w_drawdown", 0.2),
-                    w_consistency=sw.get("w_consistency", 0.1),
-                ),
-            )
-            stages.append(
-                SimulationStage(
-                    stage_config=stage_cfg,
-                    simulation_runner=simulation_context.simulation_runner,
-                )
-            )
+        stages = [
+            StageRegistry.load(stage_raw, simulation_context.simulation_runner)
+            for stage_raw in pipeline_raw["stages"]
+        ]
         staged_pipeline_config = StagedPipelineConfig(stages=stages)
 
     return ExperimentDefinition(

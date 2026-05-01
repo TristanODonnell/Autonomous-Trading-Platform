@@ -4,9 +4,6 @@ SimulationStage — Stage 1 (Cheap) and Stage 2 (Intermediate).
 Runs the simulation runner exactly once per survivor over a fixed window,
 then applies a FilterScoreService to produce pass/fail verdicts.
 Survivors are the strategies whose filter_result.passed == True.
-
-This is the simplest concrete stage and the direct replacement for the
-per-window loop that previously lived in ExperimentOrchestrationService.
 """
 
 from __future__ import annotations
@@ -14,6 +11,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.research.experiments.filtering.config import (
@@ -63,6 +61,42 @@ class SimulationStage(BaseStage):
     @property
     def stage_name(self) -> str:
         return self._stage_config.name
+
+    # ------------------------------------------------------------------
+    # Loader — owns its own deserialization from a YAML dict block
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_dict(
+        cls,
+        raw: dict[str, Any],
+        simulation_runner: SimulationRunner,
+    ) -> SimulationStage:
+        fc = raw["filter_config"]
+        sw = raw["scoring_weights"]
+        stage_cfg = SimulationStageConfig(
+            name=raw["name"],
+            start_date=date.fromisoformat(raw["start_date"]),
+            end_date=date.fromisoformat(raw["end_date"]),
+            symbols=raw["symbols"],
+            window_role=raw.get("window_role"),
+            filter_config=FilterConfig(
+                min_sharpe=fc.get("min_sharpe", 1.0),
+                max_drawdown=fc.get("max_drawdown", -0.20),
+                min_trades=fc.get("min_trades", 30),
+                min_consistency_score=fc.get("min_consistency_score", 0.5),
+                min_profit_factor=fc.get("min_profit_factor", 1.0),
+                min_win_rate=fc.get("min_win_rate", 0.0),
+                min_total_return=fc.get("min_total_return", 0.0),
+            ),
+            scoring_weights=ScoringWeights(
+                w_sharpe=sw.get("w_sharpe", 0.4),
+                w_return=sw.get("w_return", 0.3),
+                w_drawdown=sw.get("w_drawdown", 0.2),
+                w_consistency=sw.get("w_consistency", 0.1),
+            ),
+        )
+        return cls(stage_config=stage_cfg, simulation_runner=simulation_runner)
 
     def run(
         self,
@@ -121,7 +155,7 @@ class SimulationStage(BaseStage):
         failed = [o for o in filter_outputs if not o.filter_result.passed]
 
         logger.info(
-            "Stage %-16s | window %s→%s | entered %d | passed %d | failed %d",
+            "Stage %-16s | window %s->%s | entered %d | passed %d | failed %d",
             self.stage_name,
             cfg.start_date,
             cfg.end_date,

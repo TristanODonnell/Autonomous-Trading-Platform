@@ -9,21 +9,31 @@ survivor list for the next stage.
 Concrete stages
 ---------------
 SimulationStage   — single sim run per survivor over a defined window
+WalkForwardStage  — re-runs survivors across rolling train/test folds
 RegimeStage       — re-runs survivors across bull/bear/sideways windows   (future)
 MonteCarloStage   — re-runs survivors N times with varied seeds            (future)
-WalkForwardStage  — re-runs survivors across rolling train/test folds      (future)
+
+Loader contract
+---------------
+Each concrete stage owns its own deserialization via from_dict(raw, simulation_runner).
+The CLI and any other loader only needs to call StageRegistry.load(stage_raw, runner)
+and never needs to know about individual stage internals.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.research.experiments.filtering.services.filter_score_service import (
     FilterScoreOutput,
 )
-from autonomous_trading_platform.research.simulation.simulation_runner import SimulationRunResult
+from autonomous_trading_platform.research.simulation.simulation_runner import (
+    SimulationRunner,
+    SimulationRunResult,
+)
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
 
@@ -76,3 +86,31 @@ class BaseStage(ABC):
         price_basis: PriceBasis,
         initial_cash: float,
     ) -> StageResult: ...
+
+    @classmethod
+    @abstractmethod
+    def from_dict(
+        cls,
+        raw: dict[str, Any],
+        simulation_runner: SimulationRunner,
+    ) -> BaseStage:
+        """
+        Deserialize a stage from a raw YAML/dict block and return a fully
+        constructed stage instance.
+
+        Each concrete stage owns this logic — the CLI never needs to know
+        about individual stage internals. Just call StageRegistry.load().
+
+        Parameters
+        ----------
+        raw:
+            The raw dict for this stage as parsed from YAML, e.g.:
+            {
+                "name": "cheap",
+                "type": "simulation",
+                "start_date": "2023-07-01",
+                ...
+            }
+        simulation_runner:
+            Injected by the caller — stages don't construct their own runner.
+        """
