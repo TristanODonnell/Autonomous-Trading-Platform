@@ -1,3 +1,4 @@
+import dataclasses
 import uuid
 from decimal import Decimal
 from typing import Any
@@ -20,6 +21,22 @@ class SimulatedExecutionService:
     ):
         self.simulation_cost_model_service = simulation_cost_model_service
         self.fill_model_config = fill_model_config
+
+    @property
+    def cost_model_summary(self) -> dict:
+        return {
+            k: str(v) if isinstance(v, Decimal) else v
+            for k, v in dataclasses.asdict(self.simulation_cost_model_service.config).items()
+        }
+
+    @property
+    def slippage_model_summary(self) -> dict:
+        return {
+            k: str(v) if isinstance(v, Decimal) else v
+            for k, v in dataclasses.asdict(
+                self.simulation_cost_model_service.slippage_model.config
+            ).items()
+        }
 
     def fill(
         self,
