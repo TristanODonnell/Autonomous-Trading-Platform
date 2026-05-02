@@ -1,5 +1,7 @@
+from . import allocation_overrides as allocation_overrides
 from . import audit_logs as audit_logs
 from . import broker_orders as broker_orders
+from . import capital_allocation_policies as capital_allocation_policies
 from . import cash_snapshots as cash_snapshots
 from . import checksums as checksums
 from . import corporate_actions as corporate_actions
@@ -14,6 +16,7 @@ from . import missing_bar_incidents as missing_bar_incidents
 from . import order_intents as order_intents
 from . import position_snapshot_items as position_snapshot_items
 from . import position_snapshots as position_snapshots
+from . import promotion_rules as promotion_rules
 from . import risk_snapshots as risk_snapshots
 from . import run_manifests as run_manifests
 from . import signals as signals
@@ -56,4 +59,7 @@ __all__ = [
     "simulation_runs",
     "metrics_summary",
     "strategy_governance",
+    "allocation_overrides",
+    "capital_allocation_policies",
+    "promotion_rules",
 ]
