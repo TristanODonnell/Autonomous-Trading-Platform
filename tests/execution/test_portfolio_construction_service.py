@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import cast
 from uuid import UUID
 
 import pytest
@@ -12,9 +13,27 @@ from autonomous_trading_platform.contracts.trading.signal import Signal
 from autonomous_trading_platform.execution.services.portfolio_construction_service import (
     PortfolioConstructionService,
 )
+from autonomous_trading_platform.execution.services.position_sizer import PositionSizer
+from autonomous_trading_platform.goverance.models.governance_state import GovernanceState
 from autonomous_trading_platform.safety.services.pre_trade_risk_service import (
     PreTradeRiskService,
 )
+
+
+class FakePositionSizer:
+    def compute_quantity(
+        self,
+        *,
+        strategy_id: str,
+        approval_status: object,
+        symbol: str,
+        current_price: object,
+        performance_tier: str | None = None,
+        vol_scalar: object | None = None,
+    ) -> int:
+        if symbol == "TSLA":
+            return 0
+        return 10
 
 
 @dataclass
@@ -56,8 +75,19 @@ def risk_service() -> FakeRiskService:
 
 
 @pytest.fixture
-def service(risk_service: FakeRiskService) -> PortfolioConstructionService:
-    return PortfolioConstructionService(pre_trade_risk_service=risk_service)
+def position_sizer() -> PositionSizer:
+    return cast(PositionSizer, FakePositionSizer())
+
+
+@pytest.fixture
+def service(
+    risk_service: FakeRiskService,
+    position_sizer: PositionSizer,
+) -> PortfolioConstructionService:
+    return PortfolioConstructionService(
+        pre_trade_risk_service=risk_service,
+        position_sizer=position_sizer,
+    )
 
 
 @pytest.fixture
@@ -141,6 +171,7 @@ class TestPortfolioConstructionService:
                 strategy_id=strategy_id,
                 bar_timestamp=bar_timestamp,
                 now=now,
+                approval_status=GovernanceState.APPROVED_RESEARCH,
             )
         )
 
@@ -174,6 +205,7 @@ class TestPortfolioConstructionService:
                 strategy_id=strategy_id,
                 bar_timestamp=bar_timestamp,
                 now=now,
+                approval_status=GovernanceState.APPROVED_RESEARCH,
             )
         )
 
@@ -210,6 +242,7 @@ class TestPortfolioConstructionService:
                 strategy_id=strategy_id,
                 bar_timestamp=bar_timestamp,
                 now=now,
+                approval_status=GovernanceState.APPROVED_RESEARCH,
             )
         )
 
@@ -240,6 +273,7 @@ class TestPortfolioConstructionService:
                 strategy_id=strategy_id,
                 bar_timestamp=bar_timestamp,
                 now=now,
+                approval_status=GovernanceState.APPROVED_RESEARCH,
             )
         )
 
@@ -269,6 +303,7 @@ class TestPortfolioConstructionService:
                 strategy_id=strategy_id,
                 bar_timestamp=bar_timestamp,
                 now=now,
+                approval_status=GovernanceState.APPROVED_RESEARCH,
             )
         )
 

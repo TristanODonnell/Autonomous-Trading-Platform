@@ -1,5 +1,8 @@
+# autonomous_trading_platform/execution/services/portfolio_construction_service.py
+
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from datetime import datetime
 from decimal import Decimal
@@ -16,12 +19,30 @@ from autonomous_trading_platform.contracts.common.enums import (
 from autonomous_trading_platform.contracts.common.types import UTCDateTime
 from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
 from autonomous_trading_platform.contracts.trading.signal import Signal
+from autonomous_trading_platform.execution.services.position_sizer import PositionSizer
+from autonomous_trading_platform.execution.services.volatility_scaling_service import (
+    VolatilityScalingService,
+)
+from autonomous_trading_platform.goverance.models.governance_state import GovernanceState
+from autonomous_trading_platform.portfolio.exceptions import (
+    AllocationDeniedError,
+    NoPolicyFoundError,
+)
 from autonomous_trading_platform.safety.services.pre_trade_risk_service import PreTradeRiskService
+
+logger = logging.getLogger(__name__)
 
 
 class PortfolioConstructionService:
-    def __init__(self, pre_trade_risk_service: PreTradeRiskService) -> None:
+    def __init__(
+        self,
+        pre_trade_risk_service: PreTradeRiskService,
+        position_sizer: PositionSizer,
+        volatility_scaling_service: VolatilityScalingService | None = None,
+    ) -> None:
         self.pre_trade_risk_service = pre_trade_risk_service
+        self._position_sizer = position_sizer
+        self._vol_scaling = volatility_scaling_service
 
     def generate_order_intents(
         self,
@@ -32,13 +53,20 @@ class PortfolioConstructionService:
         strategy_id: str,
         bar_timestamp: UTCDateTime,
         now: datetime,
+        approval_status: GovernanceState | None = None,
+        performance_tier: str | None = None,
+        recent_closes: dict[str, list[float]] | None = None,
     ):
-        target_positions = self.position_sizer(signals)
+        target_positions = self._compute_target_positions(
+            signals=signals,
+            prices=prices,
+            strategy_id=strategy_id,
+            approval_status=approval_status,
+            performance_tier=performance_tier,
+            recent_closes=recent_closes,
+        )
         deltas = self.calculate_deltas(positions, target_positions)
-        print("signal symbols:", [signal.symbol for signal in signals])
-        print("target_positions:", target_positions)
-        print("deltas:", deltas)
-        print("prices keys:", list(prices.keys()))
+
         for delta in deltas:
             order_intent = self.build_order_intent(
                 delta=delta,
@@ -51,23 +79,77 @@ class PortfolioConstructionService:
             self.pre_trade_risk_service.assert_order_allowed(order_intent, now=now)
             yield order_intent
 
-    def position_sizer(
+    def _compute_target_positions(
         self,
         signals: list[Signal],
+        prices: dict[str, float],
+        strategy_id: str,
+        approval_status: GovernanceState | None = None,
+        performance_tier: str | None = None,
+        recent_closes: dict[str, list[float]] | None = None,
     ) -> dict[str, int]:
         target_positions: dict[str, int] = {}
 
         for signal in signals:
-            target_qty = 10
+            if signal.direction in (SignalDirection.SELL, SignalDirection.FLAT):
+                target_positions[signal.symbol] = 0
+                continue
 
-            if signal.direction == SignalDirection.BUY:
-                target_positions[signal.symbol] = target_qty
-            elif (
-                signal.direction == SignalDirection.SELL or signal.direction == SignalDirection.FLAT
-            ):
+            if signal.direction != SignalDirection.BUY:
+                logger.warning(
+                    "portfolio_construction.unknown_direction",
+                    extra={
+                        "strategy_id": strategy_id,
+                        "symbol": signal.symbol,
+                        "direction": str(signal.direction),
+                    },
+                )
                 target_positions[signal.symbol] = 0
-            else:
+                continue
+
+            raw_price = prices.get(signal.symbol)
+            if raw_price is None:
+                logger.warning(
+                    "portfolio_construction.missing_price",
+                    extra={"strategy_id": strategy_id, "symbol": signal.symbol},
+                )
                 target_positions[signal.symbol] = 0
+                continue
+
+            current_price = Decimal(str(raw_price))
+
+            # TASK-193: compute vol_scalar if scaling service + closes are available
+            vol_scalar = None
+            if self._vol_scaling is not None and recent_closes is not None:
+                closes = recent_closes.get(signal.symbol)
+                if closes:
+                    vol_scalar = self._vol_scaling.compute_scalar(
+                        symbol=signal.symbol,
+                        closes=closes,
+                    )
+
+            try:
+                quantity = self._position_sizer.compute_quantity(
+                    strategy_id=strategy_id,
+                    approval_status=approval_status,
+                    symbol=signal.symbol,
+                    current_price=current_price,
+                    performance_tier=performance_tier,
+                    vol_scalar=vol_scalar,
+                )
+            except (AllocationDeniedError, NoPolicyFoundError) as exc:
+                logger.warning(
+                    "portfolio_construction.allocation_skipped",
+                    extra={
+                        "strategy_id": strategy_id,
+                        "symbol": signal.symbol,
+                        "reason": str(exc),
+                    },
+                )
+                target_positions[signal.symbol] = 0
+                continue
+
+            target_positions[signal.symbol] = quantity
 
         return target_positions
 
@@ -137,7 +219,7 @@ class PortfolioConstructionService:
             bar_timestamp=bar_timestamp,
             symbol=symbol,
             side=side,
-            qty=qty,
+            qty=Decimal(qty),
             notional=None,
             order_type=OrderType.MARKET,
             limit_price=price,

@@ -10,7 +10,13 @@ import pandas as pd
 
 from autonomous_trading_platform.contracts.accounting.cash_snapshot import CashSnapshot
 from autonomous_trading_platform.contracts.accounting.position_snapshot import Position
-from autonomous_trading_platform.contracts.common.enums import OrderSource
+from autonomous_trading_platform.contracts.common.enums import (
+    OrderSource,
+    OrderType,
+    Side,
+    TimeInForce,
+)
+from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
 from autonomous_trading_platform.contracts.trading.signal import Signal
 from autonomous_trading_platform.execution.services.cash_ledger_service import CashLedgerService
 from autonomous_trading_platform.execution.services.position_ledger_service import (
@@ -19,8 +25,8 @@ from autonomous_trading_platform.execution.services.position_ledger_service impo
 from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
     LookaheadGuardService,
 )
-from autonomous_trading_platform.research.simulation.services.order_simulator_service import (
-    OrderSimulatorService,
+from autonomous_trading_platform.research.simulation.services.simple_position_sizer import (
+    SimplePositionSizer,
 )
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
     StrategyContextBuilder,
@@ -43,12 +49,12 @@ class SimulationExecutionEngine:
         cash_ledger_service: CashLedgerService,
         position_ledger_service: PositionLedgerService,
         lookahead_guard_service: LookaheadGuardService,
-        order_simulator_service: OrderSimulatorService,
+        position_sizer: SimplePositionSizer,
     ):
         self.cash_ledger_service = cash_ledger_service
         self.position_ledger_service = position_ledger_service
         self.lookahead_guard_service = lookahead_guard_service
-        self.order_simulator_service = order_simulator_service
+        self.position_sizer = position_sizer
 
     def execute(
         self,
@@ -62,7 +68,6 @@ class SimulationExecutionEngine:
     ) -> SimulationExecutionResult:
         cash = Decimal(str(initial_cash))
         positions: dict[str, Position] = {}
-
         realized_pnl_by_symbol: dict[str, Decimal] = {}
 
         trade_rows: list[dict[str, Any]] = []
@@ -72,12 +77,9 @@ class SimulationExecutionEngine:
         position_rows: list[dict[str, Any]] = []
 
         strategy_state: dict[str, Any] = {}
-
         timeline = list(window.timeline)
 
-        self.lookahead_guard_service.assert_timeline_strictly_increasing(
-            timeline=timeline,
-        )
+        self.lookahead_guard_service.assert_timeline_strictly_increasing(timeline=timeline)
 
         for timestamp in timeline:
             bars_at_timestamp = window.bars_by_timestamp[timestamp]
@@ -279,15 +281,49 @@ class SimulationExecutionEngine:
         run_id: UUID,
         strategy_id: str,
         timestamp: datetime,
-    ) -> list[Any]:
-        return self.order_simulator_service.generate_order_intents(
-            signals=signals,
-            positions=positions,
-            prices=prices,
-            run_id=run_id,
-            strategy_id=strategy_id,
-            timestamp=timestamp,
-        )
+    ) -> list[OrderIntent]:
+        targets = self.position_sizer.compute_targets(signals=signals, prices=prices)
+        order_intents: list[OrderIntent] = []
+
+        for symbol, target_qty in targets.items():
+            current_qty = 0
+            existing = positions.get(symbol)
+            if existing is not None:
+                current_qty = int(existing.quantity)
+
+            delta = target_qty - current_qty
+            if delta == 0:
+                continue
+
+            side = Side.BUY if delta > 0 else Side.SELL
+            qty = abs(delta)
+            price = prices.get(symbol)
+            if price is None:
+                continue
+
+            order_intents.append(
+                OrderIntent(
+                    intent_id=uuid4(),
+                    idempotency_key=f"{run_id}-{strategy_id}-{symbol}-{timestamp.isoformat()}",
+                    run_id=run_id,
+                    strategy_id=strategy_id,
+                    timestamp=timestamp,
+                    bar_timestamp=timestamp,
+                    symbol=symbol,
+                    side=side,
+                    qty=qty,
+                    notional=None,
+                    order_type=OrderType.MARKET,
+                    limit_price=Decimal(str(price)),
+                    stop_price=None,
+                    time_in_force=TimeInForce.DAY,
+                    extended_hours=False,
+                    client_order_id=f"{strategy_id}-{symbol}-{timestamp.isoformat()}-{side.value}",
+                    metadata=None,
+                )
+            )
+
+        return order_intents
 
     def _simulate_fills(
         self,
@@ -341,7 +377,6 @@ class SimulationExecutionEngine:
             updated_cash = cash_result.cash
 
             market_price = Decimal(str(prices.get(fill.symbol, fill.price)))
-
             position_result = self.position_ledger_service.apply_fill(
                 existing_position=positions.get(fill.symbol),
                 fill=fill,
@@ -373,11 +408,9 @@ class SimulationExecutionEngine:
         fills: list[Any],
         realized_pnl_by_symbol: dict[str, Decimal],
     ) -> list[dict[str, Any]]:
-
         rows: list[dict[str, Any]] = []
         for symbol in bars_at_timestamp:
             position = positions.get(symbol)
-
             position_qty = Decimal(position.quantity) if position else Decimal("0")
             unrealized_pnl = (
                 Decimal(position.unrealized_pnl)
@@ -398,7 +431,6 @@ class SimulationExecutionEngine:
                     "realized_pnl": float(realized_pnl),
                 }
             )
-
         return rows
 
     def _extract_prices(self, bars_at_timestamp: dict[str, Any]) -> dict[str, float]:
@@ -411,10 +443,7 @@ class SimulationExecutionEngine:
         positions: dict[str, Position],
         prices: dict[str, float],
     ) -> Decimal:
-        return cash + self._calculate_positions_value(
-            positions=positions,
-            prices=prices,
-        )
+        return cash + self._calculate_positions_value(positions=positions, prices=prices)
 
     def _build_equity_row(
         self,
@@ -426,11 +455,7 @@ class SimulationExecutionEngine:
         positions: dict[str, Position],
         prices: dict[str, float],
     ) -> dict[str, Any]:
-        positions_value = self._calculate_positions_value(
-            positions=positions,
-            prices=prices,
-        )
-
+        positions_value = self._calculate_positions_value(positions=positions, prices=prices)
         equity = cash + positions_value
 
         return {
@@ -450,11 +475,9 @@ class SimulationExecutionEngine:
         prices: dict[str, float],
     ) -> Decimal:
         positions_value = Decimal("0")
-
         for position in positions.values():
             price = Decimal(str(prices.get(position.symbol, position.market_price)))
             positions_value += Decimal(position.quantity) * price
-
         return positions_value
 
     def _build_trade_rows(
@@ -464,7 +487,6 @@ class SimulationExecutionEngine:
         strategy_id: str,
     ) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
-
         for fill in fills:
             rows.append(
                 {
@@ -480,7 +502,6 @@ class SimulationExecutionEngine:
                     "slippage": 0.0,
                 }
             )
-
         return rows
 
     def _build_position_rows(
@@ -494,7 +515,6 @@ class SimulationExecutionEngine:
         realized_pnl_by_symbol: dict[str, Decimal],
     ) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
-
         for symbol, position in positions.items():
             market_price = Decimal(str(prices.get(symbol, position.market_price)))
             quantity = Decimal(position.quantity)
@@ -514,7 +534,6 @@ class SimulationExecutionEngine:
                     "realized_pnl": float(realized_pnl_by_symbol.get(symbol, Decimal("0"))),
                 }
             )
-
         return rows
 
     def _build_signal_rows(

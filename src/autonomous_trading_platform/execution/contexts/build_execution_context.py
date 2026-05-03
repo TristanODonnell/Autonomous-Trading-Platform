@@ -1,3 +1,7 @@
+# autonomous_trading_platform/execution/contexts/build_execution_context.py
+
+from decimal import Decimal
+
 from autonomous_trading_platform.execution.clients.alpaca_broker_client import AlpacaBrokerClient
 from autonomous_trading_platform.execution.contexts.execution_context import ExecutionContext
 from autonomous_trading_platform.execution.mappers.broker_order_mapper import BrokerOrderMapper
@@ -21,6 +25,7 @@ from autonomous_trading_platform.execution.services.portfolio_construction_servi
 from autonomous_trading_platform.execution.services.position_ledger_service import (
     PositionLedgerService,
 )
+from autonomous_trading_platform.execution.services.position_sizer import PositionSizer
 from autonomous_trading_platform.execution.services.post_fill_accounting_service import (
     PostFillAccountingService,
 )
@@ -36,6 +41,10 @@ from autonomous_trading_platform.execution.services.strategy_runtime_state_servi
 from autonomous_trading_platform.execution.services.strategy_state_machine_service import (
     StrategyStateMachineService,
 )
+from autonomous_trading_platform.execution.services.volatility_scaling_service import (
+    VolatilityScalingService,
+)
+from autonomous_trading_platform.portfolio.portfolio_engine import PortfolioEngine
 
 
 def build_execution_context(
@@ -43,6 +52,7 @@ def build_execution_context(
     pre_trade_risk_service,
     audit_log_repository,
     alpaca_settings,
+    portfolio_engine: PortfolioEngine,
 ) -> ExecutionContext:
     broker_client = AlpacaBrokerClient(alpaca_settings)
     broker_adapter = AlpacaBrokerAdapter()
@@ -58,8 +68,17 @@ def build_execution_context(
 
     strategy_state_machine_service = StrategyStateMachineService()
 
+    position_sizer = PositionSizer(
+        portfolio_engine=portfolio_engine,
+        max_symbol_exposure_usd=Decimal(str(alpaca_settings.max_symbol_exposure)),
+    )
+
+    volatility_scaling_service = VolatilityScalingService()
+
     portfolio_construction_service = PortfolioConstructionService(
         pre_trade_risk_service=pre_trade_risk_service,
+        position_sizer=position_sizer,
+        volatility_scaling_service=volatility_scaling_service,
     )
 
     realised_slippage_service = RealisedSlippageService()
@@ -83,6 +102,7 @@ def build_execution_context(
         cash_ledger_service=cash_ledger_service,
     )
     risk_snapshot_service = RiskSnapshotService()
+
     return ExecutionContext(
         broker_client=broker_client,
         broker_adapter=broker_adapter,
