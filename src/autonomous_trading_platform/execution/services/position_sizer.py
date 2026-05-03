@@ -6,8 +6,7 @@ import logging
 from decimal import ROUND_DOWN, Decimal
 
 from autonomous_trading_platform.goverance.models.governance_state import GovernanceState
-from autonomous_trading_platform.portfolio.models import AllocationResult
-from autonomous_trading_platform.portfolio.portfolio_engine import PortfolioEngine
+from autonomous_trading_platform.portfolio.allocation_provider import IAllocationProvider
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
@@ -18,7 +17,7 @@ logger = logging.getLogger(__name__)
 class PositionSizer:
     def __init__(
         self,
-        portfolio_engine: PortfolioEngine,
+        portfolio_engine: IAllocationProvider,
         capital_fraction: Decimal = ONE,
         min_notional_usd: Decimal = Decimal("1.00"),
         max_symbol_exposure_usd: Decimal | None = None,
@@ -42,17 +41,17 @@ class PositionSizer:
         self,
         *,
         strategy_id: str,
-        approval_status: GovernanceState,
         symbol: str,
         current_price: Decimal,
+        approval_status: GovernanceState | None = None,
         performance_tier: str | None = None,
-        vol_scalar: Decimal | None = None,  # TASK-193 hook
+        vol_scalar: Decimal | None = None,
     ) -> int:
 
         if current_price <= ZERO:
             raise ValueError(f"current_price must be positive for '{symbol}', got {current_price}")
 
-        allocation: AllocationResult = self._portfolio_engine.get_allocation(
+        allocation = self._portfolio_engine.get_allocation(
             strategy_id=strategy_id,
             approval_status=approval_status,
             performance_tier=performance_tier,

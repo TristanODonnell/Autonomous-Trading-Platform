@@ -51,13 +51,13 @@ class PortfolioConstructionService:
         prices: dict[str, float],
         run_id: UUID,
         strategy_id: str,
-        approval_status: GovernanceState,
         bar_timestamp: UTCDateTime,
         now: datetime,
+        approval_status: GovernanceState | None = None,
         performance_tier: str | None = None,
         recent_closes: dict[str, list[float]] | None = None,
     ):
-        target_positions = self.position_sizer(
+        target_positions = self._compute_target_positions(
             signals=signals,
             prices=prices,
             strategy_id=strategy_id,
@@ -79,12 +79,12 @@ class PortfolioConstructionService:
             self.pre_trade_risk_service.assert_order_allowed(order_intent, now=now)
             yield order_intent
 
-    def position_sizer(
+    def _compute_target_positions(
         self,
         signals: list[Signal],
         prices: dict[str, float],
         strategy_id: str,
-        approval_status: GovernanceState,
+        approval_status: GovernanceState | None = None,
         performance_tier: str | None = None,
         recent_closes: dict[str, list[float]] | None = None,
     ) -> dict[str, int]:
@@ -97,7 +97,7 @@ class PortfolioConstructionService:
 
             if signal.direction != SignalDirection.BUY:
                 logger.warning(
-                    "position_sizer.unknown_direction",
+                    "portfolio_construction.unknown_direction",
                     extra={
                         "strategy_id": strategy_id,
                         "symbol": signal.symbol,
@@ -110,7 +110,7 @@ class PortfolioConstructionService:
             raw_price = prices.get(signal.symbol)
             if raw_price is None:
                 logger.warning(
-                    "position_sizer.missing_price",
+                    "portfolio_construction.missing_price",
                     extra={"strategy_id": strategy_id, "symbol": signal.symbol},
                 )
                 target_positions[signal.symbol] = 0
@@ -139,7 +139,7 @@ class PortfolioConstructionService:
                 )
             except (AllocationDeniedError, NoPolicyFoundError) as exc:
                 logger.warning(
-                    "position_sizer.allocation_skipped",
+                    "portfolio_construction.allocation_skipped",
                     extra={
                         "strategy_id": strategy_id,
                         "symbol": signal.symbol,
@@ -219,7 +219,7 @@ class PortfolioConstructionService:
             bar_timestamp=bar_timestamp,
             symbol=symbol,
             side=side,
-            qty=qty,
+            qty=Decimal(qty),
             notional=None,
             order_type=OrderType.MARKET,
             limit_price=price,
