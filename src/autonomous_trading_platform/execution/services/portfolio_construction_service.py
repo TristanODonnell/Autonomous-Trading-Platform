@@ -20,6 +20,9 @@ from autonomous_trading_platform.contracts.common.types import UTCDateTime
 from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
 from autonomous_trading_platform.contracts.trading.signal import Signal
 from autonomous_trading_platform.execution.services.position_sizer import PositionSizer
+from autonomous_trading_platform.execution.services.sharpe_scaling_service import (
+    SharpeScalingService,
+)
 from autonomous_trading_platform.execution.services.volatility_scaling_service import (
     VolatilityScalingService,
 )
@@ -30,6 +33,9 @@ from autonomous_trading_platform.portfolio.exceptions import (
 )
 from autonomous_trading_platform.safety.services.pre_trade_risk_service import PreTradeRiskService
 
+ZERO = Decimal("0")
+ONE = Decimal("1")
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,10 +45,13 @@ class PortfolioConstructionService:
         pre_trade_risk_service: PreTradeRiskService,
         position_sizer: PositionSizer,
         volatility_scaling_service: VolatilityScalingService | None = None,
+        # TASK-193: optional Sharpe-based scalar — plug in to enable
+        sharpe_scaling_service: SharpeScalingService | None = None,
     ) -> None:
         self.pre_trade_risk_service = pre_trade_risk_service
         self._position_sizer = position_sizer
         self._vol_scaling = volatility_scaling_service
+        self._sharpe_scaling = sharpe_scaling_service
 
     def generate_order_intents(
         self,
@@ -118,15 +127,10 @@ class PortfolioConstructionService:
 
             current_price = Decimal(str(raw_price))
 
-            # TASK-193: compute vol_scalar if scaling service + closes are available
-            vol_scalar = None
-            if self._vol_scaling is not None and recent_closes is not None:
-                closes = recent_closes.get(signal.symbol)
-                if closes:
-                    vol_scalar = self._vol_scaling.compute_scalar(
-                        symbol=signal.symbol,
-                        closes=closes,
-                    )
+            combined_scalar = self._compute_combined_scalar(
+                symbol=signal.symbol,
+                recent_closes=recent_closes,
+            )
 
             try:
                 quantity = self._position_sizer.compute_quantity(
@@ -135,7 +139,7 @@ class PortfolioConstructionService:
                     symbol=signal.symbol,
                     current_price=current_price,
                     performance_tier=performance_tier,
-                    vol_scalar=vol_scalar,
+                    vol_scalar=combined_scalar,  # PositionSizer already handles this param
                 )
             except (AllocationDeniedError, NoPolicyFoundError) as exc:
                 logger.warning(
@@ -152,6 +156,57 @@ class PortfolioConstructionService:
             target_positions[signal.symbol] = quantity
 
         return target_positions
+
+    def _compute_combined_scalar(
+        self,
+        symbol: str,
+        recent_closes: dict[str, list[float]] | None,
+    ) -> Decimal | None:
+        """
+        Multiply vol_scalar and sharpe_scalar together.
+
+        Rules:
+        - Neither service available → None  (caller uses full size)
+        - One service returns None (insufficient bars) → use only the other
+        - Both return values → multiply, clamped to (0, 1]
+
+        This means each dimension independently down-scales the position.
+        High vol AND low Sharpe → smallest positions.
+        """
+        if recent_closes is None:
+            return None
+
+        closes = recent_closes.get(symbol)
+        if not closes:
+            return None
+
+        vol_scalar: Decimal | None = None
+        if self._vol_scaling is not None:
+            vol_scalar = self._vol_scaling.compute_scalar(symbol=symbol, closes=closes)
+
+        sharpe_scalar: Decimal | None = None
+        if self._sharpe_scaling is not None:
+            sharpe_scalar = self._sharpe_scaling.compute_scalar(symbol=symbol, closes=closes)
+
+        if vol_scalar is None and sharpe_scalar is None:
+            return None
+
+        combined = (vol_scalar or ONE) * (sharpe_scalar or ONE)
+
+        # Clamp to (0, 1] — product should never exceed 1.0 by construction
+        combined = min(combined, ONE)
+
+        logger.debug(
+            "portfolio_construction.combined_scalar",
+            extra={
+                "symbol": symbol,
+                "vol_scalar": float(vol_scalar) if vol_scalar is not None else None,
+                "sharpe_scalar": float(sharpe_scalar) if sharpe_scalar is not None else None,
+                "combined_scalar": float(combined),
+            },
+        )
+
+        return combined
 
     def calculate_deltas(
         self,
