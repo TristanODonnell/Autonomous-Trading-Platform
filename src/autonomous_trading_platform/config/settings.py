@@ -36,6 +36,7 @@ class Settings:
             "UNIVERSE_REBALANCE_CADENCE",
             "daily",
         )
+        self.initial_capital = self._get_float("INITIAL_CAPITAL", 10000.0)
 
         self.max_gross_exposure = self._get_float("MAX_GROSS_EXPOSURE", 100000.0)
         self.max_symbol_exposure = self._get_float("MAX_SYMBOL_EXPOSURE", 10000.0)

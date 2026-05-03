@@ -1,3 +1,5 @@
+# autonomous_trading_platform/scheduler/common/trading_cycle_common.py
+
 from __future__ import annotations
 
 import platform
@@ -16,6 +18,7 @@ from autonomous_trading_platform.execution.contexts.build_execution_context impo
     ExecutionContext,
     build_execution_context,
 )
+from autonomous_trading_platform.portfolio.portfolio_engine import PortfolioEngine
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
 from autonomous_trading_platform.safety.contexts.build_safety_context import (
@@ -25,8 +28,17 @@ from autonomous_trading_platform.safety.contexts.build_safety_context import (
 from autonomous_trading_platform.safety.environment_policy import EnvironmentSafetyPolicy
 from autonomous_trading_platform.safety.readers.order_activity_reader import StubOrderActivityReader
 from autonomous_trading_platform.safety.readers.risk_state_reader import StubRiskStateReader
+from autonomous_trading_platform.storage.sor.repositories.allocation_overrides_repository import (
+    AllocationOverridesRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.audit_logs_repository import (
     AuditLogRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.capital_allocation_policies_repository import (
+    CapitalAllocationPoliciesRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.promotion_rules_repository import (
+    PromotionRulesRepository,
 )
 from autonomous_trading_platform.strategy.contexts.build_strategy_runtime_context import (
     StrategyRuntimeContext,
@@ -52,6 +64,7 @@ class TradingCycleDependencies:
     strategy_context: StrategyRuntimeContext
     safety_context: SafetyContext
     execution_context: ExecutionContext
+    portfolio_engine: PortfolioEngine
 
 
 def floor_to_five_minutes(timestamp: datetime) -> datetime:
@@ -73,6 +86,20 @@ def build_trading_cycle_window(
         cycle_start=cycle_start,
         cycle_end=cycle_end,
         ingestion_deadline=ingestion_deadline,
+    )
+
+
+def _build_portfolio_engine(session: Session, settings: Settings) -> PortfolioEngine:
+    """
+    Construct PortfolioEngine with its three repositories.
+    initial_capital from settings is the starting total_capital;
+    it gets synced to real broker equity at the start of each cycle.
+    """
+    return PortfolioEngine(
+        policies_repo=CapitalAllocationPoliciesRepository(session),
+        overrides_repo=AllocationOverridesRepository(session),
+        promotion_rules_repo=PromotionRulesRepository(session),
+        total_capital=float(settings.initial_capital),
     )
 
 
@@ -99,10 +126,13 @@ def build_trading_cycle_dependencies() -> TradingCycleDependencies:
         audit_log_repository=audit_log_repository,
     )
 
+    portfolio_engine = _build_portfolio_engine(session=session, settings=settings)
+
     execution_context = build_execution_context(
         pre_trade_risk_service=safety_context.pre_trade_risk_service,
         audit_log_repository=audit_logger,
         alpaca_settings=settings,
+        portfolio_engine=portfolio_engine,
     )
 
     return TradingCycleDependencies(
@@ -113,6 +143,7 @@ def build_trading_cycle_dependencies() -> TradingCycleDependencies:
         strategy_context=strategy_context,
         safety_context=safety_context,
         execution_context=execution_context,
+        portfolio_engine=portfolio_engine,
     )
 
 

@@ -1,13 +1,17 @@
-from datetime import datetime, timedelta
-from typing import cast
+# autonomous_trading_platform/strategy/contexts/build_strategy_runtime_context.py
+
+from __future__ import annotations
+
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from autonomous_trading_platform.contracts.market.market_bar import MarketBar
-from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
-from autonomous_trading_platform.storage.sor.repositories.market_bar_repository import (
-    MarketBarRepository,
+from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
+    LookaheadGuardService,
 )
+from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
+from autonomous_trading_platform.storage.parquet.datasets import ADJUSTED_BARS_DATASET
+from autonomous_trading_platform.storage.parquet.reader import HistoricalBarDatasetReader
 from autonomous_trading_platform.storage.sor.repositories.strategy_runtime_state_repository import (
     StrategyRuntimeStateRepository,
 )
@@ -35,30 +39,6 @@ from autonomous_trading_platform.strategy.services.strategy_evaluation_service i
 )
 
 
-class SqlAlchemyMarketBarReader:
-    def __init__(self, repository: MarketBarRepository) -> None:
-        self.repository = repository
-
-    def get_bars_up_to_timestamp(
-        self,
-        symbol: str,
-        end_timestamp: datetime,
-        lookback_bars: int,
-    ) -> list[MarketBar]:
-        start_timestamp = end_timestamp - timedelta(minutes=5 * max(lookback_bars, 1))
-
-        rows = self.repository.get_bars_for_symbols_between(
-            symbols=[symbol],
-            start_ts=start_timestamp,
-            end_ts=end_timestamp,
-        )
-
-        sorted_rows = sorted(rows, key=lambda bar: bar.timestamp)
-        trimmed_rows = sorted_rows[-lookback_bars:]
-
-        return cast(list[MarketBar], trimmed_rows)
-
-
 class SqlAlchemyUniverseMembershipReader:
     def __init__(self, repository: UniverseSnapshotRepository) -> None:
         self.repository = repository
@@ -75,28 +55,35 @@ def build_strategy_runtime_context(
     session: Session,
     strategy: BaseStrategy,
 ) -> StrategyRuntimeContext:
-    market_bar_repository = MarketBarRepository(session)
     universe_repository = UniverseSnapshotRepository(session)
     runtime_state_repository = StrategyRuntimeStateRepository(session)
 
-    market_bar_reader = SqlAlchemyMarketBarReader(market_bar_repository)
     universe_reader = SqlAlchemyUniverseMembershipReader(universe_repository)
+
+    bar_reader = HistoricalBarDatasetReader(
+        session=session,
+        base_path="data",
+    )
+
+    lookahead_guard_service = LookaheadGuardService()
+
+    strategy_context_builder = StrategyContextBuilder(
+        market_bar_reader=bar_reader,
+        bars_dataset=ADJUSTED_BARS_DATASET,
+        lookback_bars=300,
+        lookahead_guard_service=lookahead_guard_service,
+    )
 
     signal_writer = SignalWriter(session)
     strategy_checkpoint_writer = StrategyCheckpointWriter(
         repository=runtime_state_repository,
         strategy_id=strategy.strategy_id,
     )
-
     checkpoint_reader = StrategyEvaluationCheckpointReader(
         repository=runtime_state_repository,
         strategy_id=strategy.strategy_id,
     )
     ingestion_status_reader = IngestionStatusReader()
-
-    strategy_context_builder = StrategyContextBuilder(
-        market_bar_reader=market_bar_reader,
-    )
 
     strategy_evaluation_service = StrategyEvaluationService(
         context_builder=strategy_context_builder,
