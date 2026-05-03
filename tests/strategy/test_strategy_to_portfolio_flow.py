@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import UUID
 
 from autonomous_trading_platform.contracts.common.enums import SignalDirection
@@ -10,6 +11,8 @@ from autonomous_trading_platform.contracts.trading.signal import Signal
 from autonomous_trading_platform.execution.services.portfolio_construction_service import (
     PortfolioConstructionService,
 )
+from autonomous_trading_platform.execution.services.position_sizer import PositionSizer
+from autonomous_trading_platform.goverance.models.governance_state import GovernanceState
 from autonomous_trading_platform.safety.services.pre_trade_risk_service import (
     PreTradeRiskService,
 )
@@ -62,6 +65,22 @@ class StubUniverseReader:
 
     def get_symbols_for_timestamp(self, as_of: datetime) -> list[str]:
         return list(self.symbols)
+
+
+class FakePositionSizer:
+    def compute_quantity(
+        self,
+        *,
+        strategy_id: str,
+        approval_status: object,
+        symbol: str,
+        current_price: object,
+        performance_tier: str | None = None,
+        vol_scalar: object | None = None,
+    ) -> int:
+        if symbol == "TSLA":
+            return 0
+        return 10
 
 
 class StubStrategy(BaseStrategy):
@@ -125,7 +144,10 @@ def test_strategy_evaluation_result_flows_into_portfolio_construction() -> None:
     )
 
     risk_service = FakeRiskService()
-    portfolio_service = PortfolioConstructionService(pre_trade_risk_service=risk_service)
+    portfolio_service = PortfolioConstructionService(
+        pre_trade_risk_service=risk_service,
+        position_sizer=cast(PositionSizer, FakePositionSizer()),
+    )
 
     intents = list(
         portfolio_service.generate_order_intents(
@@ -136,6 +158,7 @@ def test_strategy_evaluation_result_flows_into_portfolio_construction() -> None:
             strategy_id=evaluation_result.strategy_id,
             bar_timestamp=bar_timestamp,
             now=evaluation_timestamp,
+            approval_status=GovernanceState.APPROVED_RESEARCH,
         )
     )
 
