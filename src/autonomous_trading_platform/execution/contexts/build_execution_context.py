@@ -1,5 +1,7 @@
 # autonomous_trading_platform/execution/contexts/build_execution_context.py
 
+from decimal import Decimal
+
 from autonomous_trading_platform.execution.clients.alpaca_broker_client import AlpacaBrokerClient
 from autonomous_trading_platform.execution.contexts.execution_context import ExecutionContext
 from autonomous_trading_platform.execution.mappers.broker_order_mapper import BrokerOrderMapper
@@ -63,7 +65,10 @@ def build_execution_context(
 
     strategy_state_machine_service = StrategyStateMachineService()
 
-    position_sizer = PositionSizer(portfolio_engine=portfolio_engine)
+    position_sizer = PositionSizer(
+        portfolio_engine=portfolio_engine,
+        max_symbol_exposure_usd=Decimal(str(alpaca_settings.max_symbol_exposure)),
+    )
 
     portfolio_construction_service = PortfolioConstructionService(
         pre_trade_risk_service=pre_trade_risk_service,

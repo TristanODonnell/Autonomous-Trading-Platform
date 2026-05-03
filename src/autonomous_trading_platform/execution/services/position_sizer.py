@@ -16,35 +16,27 @@ logger = logging.getLogger(__name__)
 
 
 class PositionSizer:
-    """
-    Converts an AllocationResult + current price into a whole-share quantity.
-
-    Algorithm:
-        target_notional = allocated_capital_usd * capital_fraction
-        target_notional = min(target_notional, max_position_size_usd)  # hard cap if set
-        quantity        = floor(target_notional / current_price)        # whole shares only
-
-    Returns 0 (skip) rather than raising when the allocation is too small
-    to buy even one share — the caller decides whether to warn or skip.
-    Raises ValueError only for unrecoverable bad inputs (zero/negative price).
-
-    """
-
     def __init__(
         self,
         portfolio_engine: PortfolioEngine,
         capital_fraction: Decimal = ONE,
         min_notional_usd: Decimal = Decimal("1.00"),
+        max_symbol_exposure_usd: Decimal | None = None,
     ) -> None:
 
         if not (ZERO < capital_fraction <= ONE):
             raise ValueError(f"capital_fraction must be in (0, 1], got {capital_fraction}")
         if min_notional_usd < ZERO:
             raise ValueError(f"min_notional_usd must be >= 0, got {min_notional_usd}")
+        if max_symbol_exposure_usd is not None and max_symbol_exposure_usd <= ZERO:
+            raise ValueError(
+                f"max_symbol_exposure_usd must be positive, got {max_symbol_exposure_usd}"
+            )
 
         self._portfolio_engine = portfolio_engine
         self._capital_fraction = capital_fraction
         self._min_notional_usd = min_notional_usd
+        self._max_symbol_exposure_usd = max_symbol_exposure_usd
 
     def compute_quantity(
         self,
@@ -77,7 +69,7 @@ class PositionSizer:
                 raise ValueError(f"vol_scalar must be in (0, 1], got {vol_scalar}")
             target_notional = target_notional * vol_scalar
 
-        # Apply max_position_size_usd hard cap from policy/override
+        # Apply max_position_size_usd — policy-level cap per strategy position
         if allocation.max_position_size_usd is not None:
             max_pos = Decimal(str(allocation.max_position_size_usd))
             if target_notional > max_pos:
@@ -91,6 +83,22 @@ class PositionSizer:
                         "max_position_size_usd": float(max_pos),
                     },
                 )
+
+        # Apply max_symbol_exposure_usd — TASK-192 settings-level cap per symbol
+        if (
+            self._max_symbol_exposure_usd is not None
+            and target_notional > self._max_symbol_exposure_usd
+        ):
+            target_notional = self._max_symbol_exposure_usd
+            logger.debug(
+                "position_sizer.capped_by_symbol_exposure",
+                extra={
+                    "strategy_id": strategy_id,
+                    "symbol": symbol,
+                    "target_notional": float(target_notional),
+                    "max_symbol_exposure_usd": float(self._max_symbol_exposure_usd),
+                },
+            )
 
         # Below min notional — skip
         if target_notional < self._min_notional_usd:
