@@ -20,6 +20,9 @@ from autonomous_trading_platform.contracts.common.types import UTCDateTime
 from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
 from autonomous_trading_platform.contracts.trading.signal import Signal
 from autonomous_trading_platform.execution.services.position_sizer import PositionSizer
+from autonomous_trading_platform.execution.services.volatility_scaling_service import (
+    VolatilityScalingService,
+)
 from autonomous_trading_platform.goverance.models.governance_state import GovernanceState
 from autonomous_trading_platform.portfolio.exceptions import (
     AllocationDeniedError,
@@ -35,9 +38,11 @@ class PortfolioConstructionService:
         self,
         pre_trade_risk_service: PreTradeRiskService,
         position_sizer: PositionSizer,
+        volatility_scaling_service: VolatilityScalingService | None = None,
     ) -> None:
         self.pre_trade_risk_service = pre_trade_risk_service
         self._position_sizer = position_sizer
+        self._vol_scaling = volatility_scaling_service
 
     def generate_order_intents(
         self,
@@ -50,19 +55,15 @@ class PortfolioConstructionService:
         bar_timestamp: UTCDateTime,
         now: datetime,
         performance_tier: str | None = None,
+        recent_closes: dict[str, list[float]] | None = None,
     ):
-        """
-        Generate order intents from signals.
-
-        approval_status is required so the position sizer can resolve
-        the correct allocation policy from PortfolioEngine.
-        """
         target_positions = self.position_sizer(
             signals=signals,
             prices=prices,
             strategy_id=strategy_id,
             approval_status=approval_status,
             performance_tier=performance_tier,
+            recent_closes=recent_closes,
         )
         deltas = self.calculate_deltas(positions, target_positions)
 
@@ -85,18 +86,8 @@ class PortfolioConstructionService:
         strategy_id: str,
         approval_status: GovernanceState,
         performance_tier: str | None = None,
+        recent_closes: dict[str, list[float]] | None = None,
     ) -> dict[str, int]:
-        """
-        Convert signals into target whole-share quantities using the allocation
-        resolved from PortfolioEngine.
-
-        BUY signals → compute quantity from allocated capital + current price.
-        SELL / FLAT signals → target 0 (close the position).
-
-        Symbols where sizing fails (insufficient allocation, missing price,
-        policy not found) are skipped with a warning rather than crashing
-        the whole cycle.
-        """
         target_positions: dict[str, int] = {}
 
         for signal in signals:
@@ -105,7 +96,6 @@ class PortfolioConstructionService:
                 continue
 
             if signal.direction != SignalDirection.BUY:
-                # Unknown direction — skip defensively
                 logger.warning(
                     "position_sizer.unknown_direction",
                     extra={
@@ -117,7 +107,6 @@ class PortfolioConstructionService:
                 target_positions[signal.symbol] = 0
                 continue
 
-            # BUY — resolve quantity from allocation
             raw_price = prices.get(signal.symbol)
             if raw_price is None:
                 logger.warning(
@@ -129,6 +118,16 @@ class PortfolioConstructionService:
 
             current_price = Decimal(str(raw_price))
 
+            # TASK-193: compute vol_scalar if scaling service + closes are available
+            vol_scalar = None
+            if self._vol_scaling is not None and recent_closes is not None:
+                closes = recent_closes.get(signal.symbol)
+                if closes:
+                    vol_scalar = self._vol_scaling.compute_scalar(
+                        symbol=signal.symbol,
+                        closes=closes,
+                    )
+
             try:
                 quantity = self._position_sizer.compute_quantity(
                     strategy_id=strategy_id,
@@ -136,9 +135,9 @@ class PortfolioConstructionService:
                     symbol=signal.symbol,
                     current_price=current_price,
                     performance_tier=performance_tier,
+                    vol_scalar=vol_scalar,
                 )
             except (AllocationDeniedError, NoPolicyFoundError) as exc:
-                # Governance / policy issue — skip this symbol, don't crash the cycle
                 logger.warning(
                     "position_sizer.allocation_skipped",
                     extra={

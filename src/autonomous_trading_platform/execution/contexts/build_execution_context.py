@@ -41,6 +41,9 @@ from autonomous_trading_platform.execution.services.strategy_runtime_state_servi
 from autonomous_trading_platform.execution.services.strategy_state_machine_service import (
     StrategyStateMachineService,
 )
+from autonomous_trading_platform.execution.services.volatility_scaling_service import (
+    VolatilityScalingService,
+)
 from autonomous_trading_platform.portfolio.portfolio_engine import PortfolioEngine
 
 
@@ -70,9 +73,12 @@ def build_execution_context(
         max_symbol_exposure_usd=Decimal(str(alpaca_settings.max_symbol_exposure)),
     )
 
+    volatility_scaling_service = VolatilityScalingService()
+
     portfolio_construction_service = PortfolioConstructionService(
         pre_trade_risk_service=pre_trade_risk_service,
         position_sizer=position_sizer,
+        volatility_scaling_service=volatility_scaling_service,
     )
 
     realised_slippage_service = RealisedSlippageService()

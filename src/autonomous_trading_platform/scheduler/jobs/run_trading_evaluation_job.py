@@ -39,44 +39,30 @@ TRADING_EVALUATION_JOB_METRICS = JobMetricSet(
     duration=trading_evaluation_job_duration,
 )
 
+# Number of recent closes to fetch per symbol for vol computation.
+# 20 bars ≈ ~25 minutes of 5-min data — enough for intraday vol estimate.
+_VOL_LOOKBACK_BARS = 20
+
 
 def _fetch_positions(broker_client) -> dict[str, Position]:
-    """
-    Fetch current open positions from the broker and convert to
-    the internal Position contract.
-
-    Returns an empty dict if the broker returns no positions.
-    """
     raw_positions = broker_client.get_positions()
     positions: dict[str, Position] = {}
 
     for raw in raw_positions:
         symbol = raw["symbol"]
-        quantity = Decimal(raw["qty"])
-        avg_cost = Decimal(raw["avg_entry_price"])
-        market_price = Decimal(raw["current_price"])
-        market_value = Decimal(raw["market_value"])
-        unrealized_pnl = Decimal(raw["unrealized_pl"])
-
         positions[symbol] = Position(
             symbol=symbol,
-            quantity=quantity,
-            avg_cost=avg_cost,
-            market_price=market_price,
-            market_value=market_value,
-            unrealized_pnl=unrealized_pnl,
+            quantity=Decimal(raw["qty"]),
+            avg_cost=Decimal(raw["avg_entry_price"]),
+            market_price=Decimal(raw["current_price"]),
+            market_value=Decimal(raw["market_value"]),
+            unrealized_pnl=Decimal(raw["unrealized_pl"]),
         )
 
     return positions
 
 
 def _fetch_prices(broker_client, symbols: list[str]) -> dict[str, float]:
-    """
-    Fetch latest trade prices for the given symbols from the broker.
-
-    Falls back to None for any symbol the broker doesn't return a price
-    for — the PositionSizer will skip those symbols with a warning.
-    """
     if not symbols:
         return {}
 
@@ -88,26 +74,64 @@ def _fetch_prices(broker_client, symbols: list[str]) -> dict[str, float]:
         if trade is not None:
             prices[symbol] = float(trade["p"])
         else:
-            logger.warning(
-                "evaluation_job.missing_price",
-                extra={"symbol": symbol},
-            )
+            logger.warning("evaluation_job.missing_price", extra={"symbol": symbol})
 
     return prices
 
 
 def _fetch_equity(broker_client) -> float | None:
-    """
-    Fetch current account equity from the broker to keep PortfolioEngine
-    total_capital in sync with realised P&L.
-
-    Returns None if the field is missing — caller will skip the update.
-    """
     account = broker_client.get_account()
     equity_str = account.get("equity")
     if equity_str is None:
         return None
     return float(equity_str)
+
+
+def _fetch_recent_closes(
+    strategy_context,
+    symbols: list[str],
+    bar_timestamp: datetime,
+    lookback_bars: int,
+) -> dict[str, list[float]]:
+    """
+    Fetch recent close prices per symbol from Parquet bar store.
+    Used by VolatilityScalingService to compute realized vol.
+
+    Returns an empty list for any symbol where bars are unavailable —
+    the scaling service will skip vol scaling for that symbol.
+    """
+    from datetime import timedelta
+
+    recent_closes: dict[str, list[float]] = {}
+
+    for symbol in symbols:
+        try:
+            bars = strategy_context.strategy_evaluation_service.context_builder.market_bar_reader.read(
+                dataset=strategy_context.strategy_evaluation_service.context_builder.bars_dataset,
+                dataset_version=strategy_context.strategy_evaluation_service.context_builder.dataset_version,
+                symbol=symbol,
+                start_date=(bar_timestamp - timedelta(days=5)).date(),
+                end_date=bar_timestamp.date(),
+            )
+
+            if bars.num_rows == 0:
+                recent_closes[symbol] = []
+                continue
+
+            rows = sorted(
+                [r for r in bars.to_pylist() if r["timestamp"] < bar_timestamp],
+                key=lambda r: r["timestamp"],
+            )
+            recent_closes[symbol] = [float(r["close"]) for r in rows[-lookback_bars:]]
+
+        except Exception as exc:
+            logger.warning(
+                "evaluation_job.recent_closes_fetch_failed",
+                extra={"symbol": symbol, "reason": str(exc)},
+            )
+            recent_closes[symbol] = []
+
+    return recent_closes
 
 
 def run_trading_evaluation_job(
@@ -144,18 +168,13 @@ def run_trading_evaluation_job(
             job_span.set_attribute("ratp.job", job)
             job_span.set_attribute("ratp.now_utc", now_utc.isoformat())
 
-            # --- Sync total_capital with real broker equity ---
-            # Keeps the PositionSizer working off current equity after
-            # each cycle's P&L settlement rather than a stale config value.
+            # Sync total_capital with real broker equity each cycle
             equity = _fetch_equity(broker_client)
             if equity is not None and equity > 0:
                 portfolio_engine.update_total_capital(equity)
-                logger.info(
-                    "evaluation_job.capital_synced",
-                    extra={"equity": equity},
-                )
+                logger.info("evaluation_job.capital_synced", extra={"equity": equity})
 
-            # --- Strategy evaluation ---
+            # Strategy evaluation
             evaluate_strategy_job = EvaluateStrategyJob(
                 readiness_service=strategy_context.strategy_bar_readiness_service,
                 evaluation_service=strategy_context.strategy_evaluation_service,
@@ -197,20 +216,23 @@ def run_trading_evaluation_job(
 
             signal_symbols = sorted({signal.symbol for signal in strategy_job_result.signals})
 
-            # --- Fetch real positions and prices ---
+            # Fetch real positions and prices
             positions = _fetch_positions(broker_client)
             prices = _fetch_prices(broker_client, signal_symbols)
+
+            recent_closes = _fetch_recent_closes(
+                strategy_context=strategy_context,
+                symbols=signal_symbols,
+                bar_timestamp=strategy_job_result.target_bar_timestamp,
+                lookback_bars=_VOL_LOOKBACK_BARS,
+            )
 
             job_span.set_attribute("ratp.position_count", len(positions))
             job_span.set_attribute("ratp.signal_count", len(strategy_job_result.signals))
             job_span.set_attribute("ratp.price_count", len(prices))
 
-            # --- Resolve approval_status for this strategy ---
-            # In v1 the manifest carries the governance state; this is
-            # the bridge between governance and the portfolio/sizing layer.
             approval_status = GovernanceState(manifest.governance_state)
 
-            # --- Generate sized order intents ---
             generated_intents = (
                 execution_context.portfolio_construction_service.generate_order_intents(
                     signals=strategy_job_result.signals,
@@ -221,6 +243,7 @@ def run_trading_evaluation_job(
                     approval_status=approval_status,
                     bar_timestamp=strategy_job_result.target_bar_timestamp,
                     now=now_utc,
+                    recent_closes=recent_closes,
                 )
             )
 
