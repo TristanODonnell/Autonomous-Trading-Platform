@@ -5,6 +5,12 @@ from decimal import Decimal
 from autonomous_trading_platform.execution.clients.alpaca_broker_client import AlpacaBrokerClient
 from autonomous_trading_platform.execution.contexts.execution_context import ExecutionContext
 from autonomous_trading_platform.execution.mappers.broker_order_mapper import BrokerOrderMapper
+from autonomous_trading_platform.execution.policy.execution_policy_engine import (
+    ExecutionPolicyEngine,
+)
+from autonomous_trading_platform.execution.policy.order_type_resolver import OrderTypeResolver
+from autonomous_trading_platform.execution.policy.twap_slicer import TWAPSlicer
+from autonomous_trading_platform.execution.policy.vwap_lite_slicer import VWAPLiteSlicer
 from autonomous_trading_platform.execution.services.broker_adaptor import AlpacaBrokerAdapter
 from autonomous_trading_platform.execution.services.cash_ledger_service import CashLedgerService
 from autonomous_trading_platform.execution.services.order_execution_service import (
@@ -45,10 +51,14 @@ from autonomous_trading_platform.execution.services.volatility_scaling_service i
     VolatilityScalingService,
 )
 from autonomous_trading_platform.portfolio.portfolio_engine import PortfolioEngine
+from autonomous_trading_platform.storage.sor.repositories.fill_quality_metrics_repository import (
+    FillQualityMetricsRepository,
+)
 
 
 def build_execution_context(
     *,
+    session,
     pre_trade_risk_service,
     audit_log_repository,
     alpaca_settings,
@@ -81,7 +91,15 @@ def build_execution_context(
         volatility_scaling_service=volatility_scaling_service,
     )
 
-    realised_slippage_service = RealisedSlippageService()
+    fill_quality_repo = FillQualityMetricsRepository(session)
+    realised_slippage_service = RealisedSlippageService(repository=fill_quality_repo)
+
+    execution_policy_engine = ExecutionPolicyEngine(
+        broker_client=broker_client,
+        order_type_resolver=OrderTypeResolver(),
+        twap_slicer=TWAPSlicer(),
+        vwap_lite_slicer=VWAPLiteSlicer(),
+    )
 
     broker_order_mapper = BrokerOrderMapper()
 
@@ -117,4 +135,5 @@ def build_execution_context(
         strategy_runtime_state_service=strategy_runtime_state_service,
         post_fill_accounting_service=post_fill_accounting_service,
         risk_snapshot_service=risk_snapshot_service,
+        execution_policy_engine=execution_policy_engine,
     )

@@ -88,6 +88,17 @@ def run_order_reconciliation_job(
                                 "job": job,
                             },
                         )
+                    if result.fill is not None:
+                        try:
+                            execution_context.realised_slippage_service.record_fill_actuals(
+                                fill=result.fill,
+                                now_utc=resolved_now,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "fill_quality.record_fill_actuals_failed",
+                                extra={"fill_id": result.fill.fill_id, "error": str(exc)},
+                            )
                 except TimeoutError as exc:
                     raise TransientInfrastructureError(f"reconciliation timeout: {exc}") from exc
                 except ConnectionError as exc:
