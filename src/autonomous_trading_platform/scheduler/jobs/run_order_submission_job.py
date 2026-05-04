@@ -1,3 +1,4 @@
+# autonomous_trading_platform/scheduler/jobs/run_order_submission_job.py
 from __future__ import annotations
 
 from datetime import datetime
@@ -12,8 +13,12 @@ from autonomous_trading_platform.contracts.common.enums import (
     OrderStatus,
     StrategyEvent,
 )
+from autonomous_trading_platform.contracts.execution.execution_policy_config import (
+    ExecutionPolicyConfig,
+)
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.execution.errors import OrderNotAllowedForSubmissionError
+from autonomous_trading_platform.execution.policy.errors import ExecutionPolicyError
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     JobMetricSet,
@@ -42,6 +47,13 @@ ORDER_SUBMISSION_JOB_METRICS = JobMetricSet(
     failures=order_submission_job_failures,
     duration=order_submission_job_duration,
 )
+
+
+def _resolve_execution_policy(intent) -> ExecutionPolicyConfig:
+
+    if intent.metadata and "execution_policy" in intent.metadata:
+        return ExecutionPolicyConfig.from_dict(intent.metadata["execution_policy"])
+    return ExecutionPolicyConfig.passthrough()
 
 
 def run_order_submission_job(
@@ -110,6 +122,8 @@ def run_order_submission_job(
                     )
                 )
                 intent.idempotency_key = idempotency_key
+
+                # ── RISK CHECK ────────────────────────────────────
                 with start_span(
                     "order_submission_job.risk_check",
                     timespan=SpanTimespan.STEP,
@@ -132,29 +146,84 @@ def run_order_submission_job(
                     except OrderNotAllowedForSubmissionError:
                         risk_span.set_attribute("ratp.risk_check.allowed", False)
                         risk_span.set_attribute("ratp.risk_check.rejected", True)
-
                         order_submission_risk_rejection_count.add(
-                            1,
-                            {
-                                "component": component,
-                                "job": job,
-                            },
+                            1, {"component": component, "job": job}
                         )
                         raise
+
                 if shadow_mode_enabled:
                     continue
 
                 try:
+                    policy_config = _resolve_execution_policy(intent)
+
+                    with start_span(
+                        "order_submission_job.execution_policy",
+                        timespan=SpanTimespan.STEP,
+                    ) as policy_span:
+                        policy_span.set_attribute("ratp.run_id", str(run_id))
+                        policy_span.set_attribute("ratp.component", component)
+                        policy_span.set_attribute("ratp.job", job)
+                        policy_span.set_attribute("ratp.order_intent_id", str(intent.intent_id))
+                        policy_span.set_attribute("ratp.symbol", intent.symbol)
+                        policy_span.set_attribute(
+                            "ratp.policy_mode", policy_config.policy_mode.value
+                        )
+
+                        try:
+                            policy_result = execution_context.execution_policy_engine.apply(
+                                intent=intent,
+                                config=policy_config,
+                            )
+                            submit_intent = policy_result.transformed_intent
+
+                            policy_span.set_attribute(
+                                "ratp.policy_mode_applied",
+                                policy_result.policy_mode_applied.value,
+                            )
+                            policy_span.set_attribute(
+                                "ratp.order_type_resolved",
+                                submit_intent.order_type.value,
+                            )
+                            policy_span.set_attribute("ratp.num_slices", len(policy_result.slices))
+                            if policy_result.reference_price is not None:
+                                policy_span.set_attribute(
+                                    "ratp.reference_price",
+                                    str(policy_result.reference_price),
+                                )
+                            if policy_result.expected_slippage is not None:
+                                policy_span.set_attribute(
+                                    "ratp.expected_slippage_bps",
+                                    str(policy_result.expected_slippage.slippage_bps),
+                                )
+
+                        except ExecutionPolicyError as policy_exc:
+                            # Policy errors are non-fatal: log, fall back to
+                            # original intent, and let the order proceed.
+                            # This ensures a misconfigured policy (e.g. LIMIT
+                            # with no quote) never silently drops an order.
+                            logger.warning(
+                                "execution_policy.fallback_to_original_intent",
+                                extra={
+                                    "symbol": intent.symbol,
+                                    "intent_id": str(intent.intent_id),
+                                    "policy_mode": policy_config.policy_mode.value,
+                                    "error": str(policy_exc),
+                                },
+                            )
+                            policy_span.set_attribute("ratp.policy_fallback", True)
+                            policy_span.set_attribute("ratp.policy_error", str(policy_exc))
+                            submit_intent = intent
+                            policy_result = None
+
+                    # ── SUBMIT ────────────────────────────────────────────────
                     try:
                         submit_start = perf_counter()
-                        response = execution_context.order_execution_service.submit(intent)
+                        response = execution_context.order_execution_service.submit(submit_intent)
                         submit_duration = perf_counter() - submit_start
+
                         order_submission_latency_seconds.record(
-                            submit_duration,
-                            {
-                                "component": component,
-                                "job": job,
-                            },
+                            submit_duration, {"component": component, "job": job}
                         )
                         job_span.set_attribute(
                             "ratp.order_submission.last_latency_seconds", submit_duration
@@ -168,7 +237,7 @@ def run_order_submission_job(
 
                     broker_order = execution_context.broker_order_mapper.to_broker_order(
                         payload=response,
-                        intent_id=intent.intent_id,
+                        intent_id=submit_intent.intent_id,
                         run_id=run_id,
                         account_id=manifest.broker_account_id,
                     )
@@ -180,10 +249,15 @@ def run_order_submission_job(
                         event_timestamp=now_utc,
                         run_id=str(run_id),
                         metadata={
-                            "symbol": intent.symbol,
-                            "strategy_id": intent.strategy_id,
+                            "symbol": submit_intent.symbol,
+                            "strategy_id": submit_intent.strategy_id,
                             "broker_order_id": broker_order.broker_order_id,
                             "broker_status": broker_order.status.value,
+                            "policy_mode": (
+                                policy_result.policy_mode_applied.value
+                                if policy_result
+                                else "passthrough"
+                            ),
                         },
                     )
 
@@ -191,13 +265,33 @@ def run_order_submission_job(
                         uow.broker_orders.upsert(broker_order)
                         execution_context.order_runtime_state_service.record_submitted_order(
                             uow=uow,
-                            intent=intent,
+                            intent=submit_intent,
                             broker_order=broker_order,
                             run_id=run_id,
                             strategy_id=manifest.strategy_id,
                             account_id=manifest.broker_account_id,
                             now_utc=now_utc,
                         )
+
+                    if policy_result is not None and policy_config.record_fill_quality:
+                        try:
+                            execution_context.realised_slippage_service.record_submission_context(
+                                intent=submit_intent,
+                                broker_order=broker_order,
+                                policy_result=policy_result,
+                                submit_duration_seconds=submit_duration,
+                                now_utc=now_utc,
+                            )
+                        except Exception as analytics_exc:
+                            # Analytics failure is non-fatal. Log and continue.
+                            logger.warning(
+                                "execution_policy.fill_quality_record_failed",
+                                extra={
+                                    "symbol": submit_intent.symbol,
+                                    "intent_id": str(submit_intent.intent_id),
+                                    "error": str(analytics_exc),
+                                },
+                            )
 
                 except TransientInfrastructureError:
                     raise

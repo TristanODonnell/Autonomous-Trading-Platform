@@ -1,7 +1,11 @@
+# autonomous_trading_platform/execution/contexts/execution_context.py
 from dataclasses import dataclass
 
 from autonomous_trading_platform.execution.clients.alpaca_broker_client import AlpacaBrokerClient
 from autonomous_trading_platform.execution.mappers.broker_order_mapper import BrokerOrderMapper
+from autonomous_trading_platform.execution.policy.execution_policy_engine import (
+    ExecutionPolicyEngine,
+)
 from autonomous_trading_platform.execution.services.broker_adaptor import AlpacaBrokerAdapter
 from autonomous_trading_platform.execution.services.order_execution_service import (
     OrderExecutionService,
@@ -50,3 +54,4 @@ class ExecutionContext:
     strategy_runtime_state_service: StrategyRuntimeStateService
     post_fill_accounting_service: PostFillAccountingService
     risk_snapshot_service: RiskSnapshotService
+    execution_policy_engine: ExecutionPolicyEngine

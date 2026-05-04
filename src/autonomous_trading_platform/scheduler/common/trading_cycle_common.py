@@ -133,6 +133,7 @@ def build_trading_cycle_dependencies() -> TradingCycleDependencies:
         audit_log_repository=audit_logger,
         alpaca_settings=settings,
         portfolio_engine=portfolio_engine,
+        session=session,
     )
 
     return TradingCycleDependencies(

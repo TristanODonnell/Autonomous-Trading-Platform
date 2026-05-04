@@ -52,7 +52,7 @@ class PortfolioEngine:
     def get_allocation(
         self,
         strategy_id: str,
-        approval_status: GovernanceState,
+        approval_status: GovernanceState | None,
         performance_tier: str | None = None,
     ) -> AllocationResult:
         """
@@ -73,6 +73,7 @@ class PortfolioEngine:
         """
         # Step 1 — gate: only approved states may allocate (TASK-185)
         self._assert_allocatable(strategy_id, approval_status)
+        assert approval_status is not None  # narrowed: _assert_allocatable raises if None
 
         # Step 2 — load base policy
         policy = self._policies.get_active_policy(
@@ -148,7 +149,7 @@ class PortfolioEngine:
     def assert_strategy_approved_for_allocation(
         self,
         strategy_id: str,
-        approval_status: GovernanceState,
+        approval_status: GovernanceState | None,
     ) -> None:
         """
         Public guard method for use by the execution layer.
@@ -159,13 +160,14 @@ class PortfolioEngine:
     def _assert_allocatable(
         self,
         strategy_id: str,
-        approval_status: GovernanceState,
+        approval_status: GovernanceState | None,
     ) -> None:
-        if approval_status not in _ALLOCATABLE_STATES:
+        if approval_status is None or approval_status not in _ALLOCATABLE_STATES:
+            state_label = approval_status.value if approval_status is not None else "None"
             raise AllocationDeniedError(
                 strategy_id=strategy_id,
                 reason=(
-                    f"Strategy is in state '{approval_status.value}' which is not "
+                    f"Strategy is in state '{state_label}' which is not "
                     f"approved for capital allocation. "
                     f"Must be one of: {[s.value for s in _ALLOCATABLE_STATES]}."
                 ),
