@@ -9,10 +9,25 @@ from autonomous_trading_platform.execution.services.realised_slippage_service im
 )
 
 
-def test_calculate_buy_slippage_positive_when_fill_above_reference() -> None:
-    service = RealisedSlippageService()
+class DummyFillQualityMetricsRepository:
+    def insert(self, *args, **kwargs):
+        pass
 
-    result = service.calculate(
+    def upsert(self, *args, **kwargs):
+        pass
+
+    def upsert_by_intent_id(self, *args, **kwargs):
+        pass
+
+
+@pytest.fixture
+def slippage_service():
+    return RealisedSlippageService(repository=DummyFillQualityMetricsRepository())
+
+
+def test_calculate_buy_slippage_positive_when_fill_above_reference(slippage_service) -> None:
+
+    result = slippage_service.calculate(
         side=Side.BUY,
         reference_price=Money("100"),
         fill_price=Money("101.25"),
@@ -24,10 +39,9 @@ def test_calculate_buy_slippage_positive_when_fill_above_reference() -> None:
     assert result.slippage_bps == Decimal("125")
 
 
-def test_calculate_buy_slippage_negative_when_fill_below_reference() -> None:
-    service = RealisedSlippageService()
+def test_calculate_buy_slippage_negative_when_fill_below_reference(slippage_service) -> None:
 
-    result = service.calculate(
+    result = slippage_service.calculate(
         side=Side.BUY,
         reference_price=Money("100"),
         fill_price=Money("99.50"),
@@ -39,10 +53,9 @@ def test_calculate_buy_slippage_negative_when_fill_below_reference() -> None:
     assert result.slippage_bps == Decimal("-50")
 
 
-def test_calculate_sell_slippage_positive_when_fill_below_reference() -> None:
-    service = RealisedSlippageService()
+def test_calculate_sell_slippage_positive_when_fill_below_reference(slippage_service) -> None:
 
-    result = service.calculate(
+    result = slippage_service.calculate(
         side=Side.SELL,
         reference_price=Money("100"),
         fill_price=Money("99"),
@@ -54,10 +67,9 @@ def test_calculate_sell_slippage_positive_when_fill_below_reference() -> None:
     assert result.slippage_bps == Decimal("100")
 
 
-def test_calculate_sell_slippage_negative_when_fill_above_reference() -> None:
-    service = RealisedSlippageService()
+def test_calculate_sell_slippage_negative_when_fill_above_reference(slippage_service) -> None:
 
-    result = service.calculate(
+    result = slippage_service.calculate(
         side=Side.SELL,
         reference_price=Money("100"),
         fill_price=Money("100.75"),
@@ -69,10 +81,11 @@ def test_calculate_sell_slippage_negative_when_fill_above_reference() -> None:
     assert result.slippage_bps == Decimal("-75")
 
 
-def test_calculate_notional_slippage_equals_quantity_times_per_share_slippage() -> None:
-    service = RealisedSlippageService()
+def test_calculate_notional_slippage_equals_quantity_times_per_share_slippage(
+    slippage_service,
+) -> None:
 
-    result = service.calculate(
+    result = slippage_service.calculate(
         side=Side.BUY,
         reference_price=Money("250"),
         fill_price=Money("251.20"),
@@ -96,15 +109,15 @@ def test_calculate_notional_slippage_equals_quantity_times_per_share_slippage() 
     ],
 )
 def test_calculate_raises_for_invalid_inputs(
+    slippage_service,
     reference_price: Money,
     fill_price: Money,
     quantity: Quantity,
     expected_message: str,
 ) -> None:
-    service = RealisedSlippageService()
 
     with pytest.raises(ValueError, match=expected_message):
-        service.calculate(
+        slippage_service.calculate(
             side=Side.BUY,
             reference_price=reference_price,
             fill_price=fill_price,
