@@ -274,7 +274,7 @@ class PortfolioConstructionService:
             bar_timestamp=bar_timestamp,
             symbol=symbol,
             side=side,
-            qty=Decimal(qty),  # TODO Double check is this line wrong?
+            qty=Decimal(qty),
             notional=None,
             order_type=OrderType.MARKET,
             limit_price=price,
