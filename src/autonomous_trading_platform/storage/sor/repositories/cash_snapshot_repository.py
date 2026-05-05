@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import cast
 
 from sqlalchemy import desc, select
@@ -27,6 +28,32 @@ class CashSnapshotRepository(BaseRepository):
 
     def list_recent(self, limit: int = 20) -> list[CashSnapshot]:
         stmt = select(CashSnapshot).order_by(desc(CashSnapshot.timestamp)).limit(limit)
+        return list(self.session.execute(stmt).scalars().all())
+
+    def list_since(
+        self,
+        start_timestamp: datetime,
+    ) -> list[CashSnapshot]:
+        stmt = (
+            select(CashSnapshot)
+            .where(CashSnapshot.timestamp >= start_timestamp)
+            .where(CashSnapshot.equity.is_not(None))
+            .order_by(CashSnapshot.timestamp.asc())
+        )
+        return list(self.session.execute(stmt).scalars().all())
+
+    def list_between(
+        self,
+        start_timestamp: datetime,
+        end_timestamp: datetime,
+    ) -> list[CashSnapshot]:
+        stmt = (
+            select(CashSnapshot)
+            .where(CashSnapshot.timestamp >= start_timestamp)
+            .where(CashSnapshot.timestamp <= end_timestamp)
+            .where(CashSnapshot.equity.is_not(None))
+            .order_by(CashSnapshot.timestamp.asc())
+        )
         return list(self.session.execute(stmt).scalars().all())
 
     # -----------------------------
