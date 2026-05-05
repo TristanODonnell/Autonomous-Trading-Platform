@@ -16,7 +16,10 @@ def rolling_standard_deviation(
     subset = values[-window:]
     mean = sum(subset) / window
 
-    variance = sum((value - mean) ** 2 for value in subset) / window
+    if window == 1:
+        return 0.0
+
+    variance = sum((value - mean) ** 2 for value in subset) / (window - 1)
 
     return math.sqrt(variance)
 

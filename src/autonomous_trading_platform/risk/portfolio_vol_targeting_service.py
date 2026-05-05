@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
-import math
 from decimal import Decimal
+
+import numpy as np
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
@@ -88,17 +89,13 @@ class PortfolioVolTargetingService:
             )
             return None
 
-        daily_returns = [
-            equity_curve[i] / equity_curve[i - 1] - 1.0
-            for i in range(1, len(equity_curve))
-            if equity_curve[i - 1] > 0
-        ]
+        equity_arr = np.array(equity_curve, dtype=float)
+        prev = equity_arr[:-1]
+        valid = prev > 0
+        daily_returns = equity_arr[1:][valid] / prev[valid] - 1.0
 
         if len(daily_returns) < self._min_bars - 1:
             return None
 
-        n = len(daily_returns)
-        mean = sum(daily_returns) / n
-        variance = sum((r - mean) ** 2 for r in daily_returns) / (n - 1)
-        daily_vol = math.sqrt(variance)
-        return daily_vol * math.sqrt(_TRADING_DAYS_PER_YEAR)
+        daily_vol = float(np.std(daily_returns, ddof=1))
+        return daily_vol * float(np.sqrt(_TRADING_DAYS_PER_YEAR))

@@ -3,7 +3,8 @@ Computes Sharpe, Sortino, volatility and max drawdown from a simulation equity c
 
 equity_curve columns: timestamp, equity, cash, positions_value, drawdown
 
-Annualisation: 252 trading days × 78 five-minute bars/session = 19_656 bars/year.
+Annualisation convention: trading days (see annualisation.py).
+252 trading days × 78 five-minute bars/session = 19_656 bars/year.
 Pass a custom bars_per_year if adding daily or 1-minute bar support.
 """
 
@@ -14,7 +15,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-_DEFAULT_BARS_PER_YEAR: int = 252 * 78  # 19_656
+from autonomous_trading_platform.common.annualisation import BARS_PER_YEAR as _DEFAULT_BARS_PER_YEAR
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,11 +26,6 @@ class RiskMetrics:
     max_drawdown: float  # min((equity - peak) / peak) — negative decimal
     bars_per_year: int
     risk_free_rate: float
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 def _validate(equity_curve: pd.DataFrame) -> None:
@@ -49,11 +45,6 @@ def _bar_returns(equity_curve: pd.DataFrame) -> np.ndarray:
 def _bar_rf(risk_free_rate: float, bars_per_year: int) -> float:
     """Convert annual risk-free rate to per-bar rate geometrically."""
     return float((1.0 + risk_free_rate) ** (1.0 / bars_per_year)) - 1.0
-
-
-# ---------------------------------------------------------------------------
-# Public
-# ---------------------------------------------------------------------------
 
 
 def volatility(
@@ -120,7 +111,11 @@ def sortino_ratio(
     downside = excess[excess < 0.0]
     if len(downside) == 0:
         return 0.0
-    downside_std = float(np.sqrt(np.mean(downside**2)))
+    # downside_std uses n_total in the denominator (empyrical / Bloomberg convention),
+    # not n_negative (semi-deviation).  This makes the ratio benchmark-comparable:
+    # strategies with few bad periods are not artificially penalised by a small
+    # denominator sample, and Sortino values match externally published figures.
+    downside_std = float(np.sqrt(np.sum(downside**2) / len(excess)))
     if downside_std == 0.0:
         return 0.0
     return float(np.mean(excess) / downside_std * np.sqrt(bars_per_year))

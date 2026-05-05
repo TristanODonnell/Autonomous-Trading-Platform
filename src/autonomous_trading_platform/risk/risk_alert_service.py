@@ -259,8 +259,17 @@ class RiskAlertService:
         if len(equity_curve) < 2:
             return []
 
-        peak = max(equity_curve)
-        current = equity_curve[-1]
+        # np.maximum.accumulate is consistent with risk_metrics.max_drawdown.
+        # At the end-point both approaches agree numerically (running_peak[-1]
+        # == max(equity_curve)), but using accumulate makes the intent explicit
+        # and keeps the two drawdown implementations uniform so they cannot
+        # silently diverge if this method is ever extended to scan mid-curve.
+        import numpy as np
+
+        arr = np.array(equity_curve, dtype=float)
+        running_peak = np.maximum.accumulate(arr)
+        peak = float(running_peak[-1])
+        current = float(arr[-1])
         if peak <= 0:
             return []
 
