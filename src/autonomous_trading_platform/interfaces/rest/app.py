@@ -12,6 +12,9 @@ from autonomous_trading_platform.api.logging_middleware import RequestLoggingMid
 from autonomous_trading_platform.interfaces.rest.routes.metadata_routes import (
     router as metadata_router,
 )
+from autonomous_trading_platform.interfaces.rest.routes.portfolio_routes import (
+    router as portfolio_router,
+)
 from autonomous_trading_platform.interfaces.rest.routes.system_routes import (
     router as system_router,
 )
@@ -31,6 +34,7 @@ def create_app() -> FastAPI:
 
     app.include_router(metadata_router, prefix="/api/v1")
     app.include_router(system_router, prefix="/api/v1")
+    app.include_router(portfolio_router, prefix="/api/v1")
 
     @app.get("/health", tags=["ops"])
     def health() -> dict:
