@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
-import math
 from decimal import Decimal
+
+import numpy as np
 
 from autonomous_trading_platform.goverance.models.governance_state import GovernanceState
 from autonomous_trading_platform.portfolio.allocation_provider import IAllocationProvider
@@ -16,16 +17,10 @@ logger = logging.getLogger(__name__)
 
 def _pearson(xs: list[float], ys: list[float]) -> float:
     """Pearson correlation for two equal-length return series."""
-    n = len(xs)
-    if n < 2:
+    if len(xs) < 2:
         return 0.0
-    mx = sum(xs) / n
-    my = sum(ys) / n
-    cov = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True))
-    var_x = sum((x - mx) ** 2 for x in xs)
-    var_y = sum((y - my) ** 2 for y in ys)
-    denom = math.sqrt(var_x * var_y)
-    return cov / denom if denom > 0 else 0.0
+    r = np.corrcoef(xs, ys)[0, 1]
+    return float(r) if np.isfinite(r) else 0.0
 
 
 def compute_pairwise_correlations(

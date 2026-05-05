@@ -17,6 +17,17 @@ from typing import NamedTuple
 
 import pandas as pd
 
+_INFINITE_PROFIT_FACTOR_CAP: float = 99.0
+"""
+Sentinel returned by TradeMetrics.safe_profit_factor when profit_factor is inf
+(i.e. no losing trades).  99.0 is recognisable as a cap rather than a real
+value — no realistic strategy produces a natural profit factor at this level.
+Use safe_profit_factor in any aggregation (mean, ranking, composite scoring)
+to avoid silently propagating inf through statistics.mean() or numpy operations.
+Use profit_factor directly when you need to distinguish "zero losses" from
+"very high but finite profit factor".
+"""
+
 
 @dataclass(frozen=True, slots=True)
 class TradeMetrics:
@@ -28,10 +39,17 @@ class TradeMetrics:
     largest_win: float  # best single trade pnl ($)
     largest_loss: float  # worst single trade pnl ($)
 
+    @property
+    def safe_profit_factor(self) -> float:
+        """profit_factor capped at 99.0 for use in aggregations and scoring.
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+        Use this instead of profit_factor whenever the value will be passed to
+        statistics.mean(), numpy operations, or composite scoring — inf
+        silently corrupts those results.  The raw profit_factor field is
+        preserved for callers that need the semantically exact value.
+        """
+        return min(self.profit_factor, _INFINITE_PROFIT_FACTOR_CAP)
+
 
 _REQUIRED = {"symbol", "side", "quantity", "price", "fees", "timestamp"}
 
@@ -102,11 +120,6 @@ _EMPTY = TradeMetrics(
     largest_win=0.0,
     largest_loss=0.0,
 )
-
-
-# ---------------------------------------------------------------------------
-# Public
-# ---------------------------------------------------------------------------
 
 
 def closed_trades(trade_logs: pd.DataFrame) -> pd.DataFrame:

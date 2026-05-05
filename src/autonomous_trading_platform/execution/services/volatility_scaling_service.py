@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import logging
-import math
 from decimal import Decimal
+
+import numpy as np
+
+from autonomous_trading_platform.common.annualisation import BARS_PER_YEAR as _BARS_PER_YEAR
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
-
-# 5-min bars per trading day (6.5 hours * 12 bars/hour)
-_BARS_PER_DAY = 78
 
 logger = logging.getLogger(__name__)
 
@@ -60,22 +60,16 @@ class VolatilityScalingService:
             )
             return None
 
-        log_returns = [
-            math.log(closes[i] / closes[i - 1])
-            for i in range(1, len(closes))
-            if closes[i - 1] > 0 and closes[i] > 0
-        ]
+        closes_arr = np.array(closes, dtype=float)
+        valid = (closes_arr[:-1] > 0) & (closes_arr[1:] > 0)
+        log_returns = np.log(closes_arr[1:][valid] / closes_arr[:-1][valid])
 
         if len(log_returns) < self._min_bars - 1:
             return None
 
-        n = len(log_returns)
-        mean = sum(log_returns) / n
-        variance = sum((r - mean) ** 2 for r in log_returns) / (n - 1)
-        bar_vol = math.sqrt(variance)
+        bar_vol = float(np.std(log_returns, ddof=1))
 
-        # Annualize: bars_per_day * ~252 trading days
-        annual_vol = bar_vol * math.sqrt(_BARS_PER_DAY * 252)
+        annual_vol = bar_vol * np.sqrt(_BARS_PER_YEAR)
 
         if annual_vol <= 0:
             return None

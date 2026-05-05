@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import logging
-import math
 from decimal import Decimal
+
+import numpy as np
+
+from autonomous_trading_platform.common.annualisation import BARS_PER_YEAR as _BARS_PER_YEAR
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
-
-# 5-min bars per trading day  (matches VolatilityScalingService)
-_BARS_PER_DAY = 78
 
 logger = logging.getLogger(__name__)
 
@@ -77,28 +77,22 @@ class SharpeScalingService:
             )
             return None
 
-        log_returns = [
-            math.log(closes[i] / closes[i - 1])
-            for i in range(1, len(closes))
-            if closes[i - 1] > 0 and closes[i] > 0
-        ]
+        closes_arr = np.array(closes, dtype=float)
+        valid = (closes_arr[:-1] > 0) & (closes_arr[1:] > 0)
+        log_returns = np.log(closes_arr[1:][valid] / closes_arr[:-1][valid])
 
         if len(log_returns) < self._min_bars - 1:
             return None
 
-        n = len(log_returns)
-        mean_bar = sum(log_returns) / n
-        variance = sum((r - mean_bar) ** 2 for r in log_returns) / (n - 1)
-        bar_vol = math.sqrt(variance)
+        bar_vol = float(np.std(log_returns, ddof=1))
 
         if bar_vol <= 0:
             # Zero vol — perfectly trending or flat; treat as Sharpe = target.
             return ONE
 
         # Annualize both mean and vol using the same convention as VolatilityScalingService
-        bars_per_year = _BARS_PER_DAY * 252
-        annual_mean = mean_bar * bars_per_year
-        annual_vol = bar_vol * math.sqrt(bars_per_year)
+        annual_mean = float(np.mean(log_returns)) * _BARS_PER_YEAR
+        annual_vol = bar_vol * np.sqrt(_BARS_PER_YEAR)
 
         rolling_sharpe = (annual_mean - self._risk_free_rate) / annual_vol
 
