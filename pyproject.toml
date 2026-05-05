@@ -42,6 +42,9 @@ dependencies = [
 
 
 
+  # API layer
+  "fastapi>=0.115",
+
   # external APIs
   "alpaca-py",
 

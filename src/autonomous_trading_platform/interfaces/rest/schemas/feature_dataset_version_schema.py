@@ -22,3 +22,4 @@ class CreateFeatureDatasetVersionRequest(BaseModel):
     date_coverage_end: date | None = None
     checksum: str | None = None
     created_at: datetime | None = None
+    computation_code_version: str

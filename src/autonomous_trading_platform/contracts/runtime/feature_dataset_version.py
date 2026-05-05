@@ -19,6 +19,7 @@ class FeatureDatasetVersion:
     underlying_price_basis: PriceBasis
     computation_parameters: dict[str, Any] | None
     storage_path: str
+    computation_code_version: str
     symbol_coverage: int | None
     date_coverage_start: date | None
     date_coverage_end: date | None
@@ -26,4 +27,3 @@ class FeatureDatasetVersion:
     checksum: str | None
     source_manifest: dict[str, Any] | None
     metadata_json: dict[str, Any] | None
-    computation_code_version: str
