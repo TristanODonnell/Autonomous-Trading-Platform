@@ -109,6 +109,7 @@ def create_feature_dataset_version(
         schema_version=payload.schema_version,
         validation_status=payload.validation_status,
         computation_parameters=payload.computation_parameters,
+        computation_code_version=payload.computation_code_version,
         storage_path=payload.storage_path,
         source_manifest=payload.source_manifest,
         metadata_json=payload.metadata_json,

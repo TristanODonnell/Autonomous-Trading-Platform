@@ -53,12 +53,11 @@ FEATURE_DATASET_VERSION_RULES: list[Rule[FeatureDatasetVersion]] = [
     ),
     Rule(
         code="UNDERLYING_DATASET_VERSION_REQUIRED",
-        field="underlying_dataset_version",
+        field="source_dataset_version",
         check=lambda fdv, _ctx: (
-            isinstance(fdv.underlying_dataset_version, str)
-            and fdv.underlying_dataset_version.strip() != ""
+            isinstance(fdv.source_dataset_version, str) and fdv.source_dataset_version.strip() != ""
         ),
-        message=lambda fdv, _ctx: "underlying_dataset_version must be a non-empty string",
+        message=lambda fdv, _ctx: "source_dataset_version must be a non-empty string",
     ),
     Rule(
         code="UNDERLYING_PRICE_BASIS_REQUIRED",

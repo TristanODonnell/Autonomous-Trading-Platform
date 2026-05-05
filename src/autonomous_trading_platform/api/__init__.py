@@ -1,4 +1,5 @@
 from autonomous_trading_platform.api.dependencies import get_request_id
+from autonomous_trading_platform.api.deprecation import DeprecationMiddleware, deprecated
 from autonomous_trading_platform.api.envelope import (
     API_VERSION,
     ErrorDetail,
@@ -15,6 +16,7 @@ from autonomous_trading_platform.api.middleware import REQUEST_ID_HEADER, Reques
 __all__ = [
     "API_VERSION",
     "APIError",
+    "DeprecationMiddleware",
     "ErrorCode",
     "ErrorDetail",
     "ErrorEnvelope",
@@ -22,6 +24,7 @@ __all__ = [
     "RequestIDMiddleware",
     "ResponseMeta",
     "SuccessEnvelope",
+    "deprecated",
     "error_response",
     "get_request_id",
     "register_exception_handlers",
