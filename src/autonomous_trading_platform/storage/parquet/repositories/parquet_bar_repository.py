@@ -14,14 +14,17 @@ from autonomous_trading_platform.contracts.common.enums import (
 )
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.storage.parquet import paths as _parquet_paths
 from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.reader import HistoricalBarDatasetReader
 
 
 class ParquetBarRepository:
-    def __init__(self, *, base_path: str = "data") -> None:
+    def __init__(self, *, base_path: Path | str | None = None) -> None:
         session: Session = get_session()
-        self.base_path = Path(base_path)
+        self.base_path = (
+            Path(base_path) if base_path is not None else _parquet_paths.get_data_root()
+        )
         self.reader = HistoricalBarDatasetReader(base_path=self.base_path, session=session)
 
     def get_raw_bars_before_date(

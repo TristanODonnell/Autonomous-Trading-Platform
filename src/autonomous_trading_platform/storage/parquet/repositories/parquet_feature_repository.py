@@ -8,6 +8,7 @@ import pyarrow as pa
 import pyarrow.dataset as ds
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.storage.parquet import paths as _parquet_paths
 from autonomous_trading_platform.storage.parquet.datasets import (
     FEATURE_LIQUIDITY_DATASET,
     FEATURE_MOVING_AVERAGE_DATASET,
@@ -31,8 +32,10 @@ FEATURE_DATASETS_BY_NAME = {
 
 
 class ParquetFeatureRepository:
-    def __init__(self, *, base_path: str = "data") -> None:
-        self.base_path = Path(base_path)
+    def __init__(self, *, base_path: Path | str | None = None) -> None:
+        self.base_path = (
+            Path(base_path) if base_path is not None else _parquet_paths.get_data_root()
+        )
 
     def _dataset_root(self, dataset: ParquetDataset, dataset_version: str) -> Path:
         root = self.base_path

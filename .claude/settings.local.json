@@ -15,7 +15,10 @@
       "Bash(python -c ' *)",
       "Bash(python -m pytest tests/scheduler/test_paper_trading_golden_path.py -v --tb=long)",
       "Bash(python -m pytest tests/scheduler/test_paper_trading_golden_path.py -v)",
-      "Bash(python -m pytest tests/scheduler/test_paper_trading_golden_path.py -x -s)"
+      "Bash(python -m pytest tests/scheduler/test_paper_trading_golden_path.py -x -s)",
+      "Bash(python -m pytest tests/scheduler/test_feature_pipeline_cycle.py -x -v)",
+      "Bash(python -m pytest tests/scheduler/test_feature_pipeline_cycle.py -v --no-header)",
+      "Bash(python -m pytest tests/scheduler/test_feature_pipeline_cycle.py::test_feature_parquet_outputs_are_written -v --no-header -s)"
     ]
   }
 }

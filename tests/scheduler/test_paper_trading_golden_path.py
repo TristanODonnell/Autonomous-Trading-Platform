@@ -176,26 +176,31 @@ def test_paper_trading_golden_path_runs_trading_runtime_chain(
     # 3. RUNTIME JOB CHAIN EXISTS
     # -------------------------------------------------
     ingestion_jobs = _runtime_job_runs_by_name(db_session, "market_ingestion_cycle")
+    feature_jobs = _runtime_job_runs_by_name(db_session, "feature_pipeline_cycle")
     trading_jobs = _runtime_job_runs_by_name(db_session, "trading_cycle")
     golden_path_jobs = _runtime_job_runs_by_name(db_session, "paper_trading_golden_path")
 
     assert ingestion_jobs != []
+    assert feature_jobs != []
     assert trading_jobs != []
     assert golden_path_jobs != []
 
     assert ingestion_jobs[0].status == "completed"
+    assert feature_jobs[0].status == "completed"
     assert trading_jobs[0].status == "completed"
     assert golden_path_jobs[0].status == "completed"
 
     runtime_chain_job_names = {
         golden_path_jobs[0].job_name,
         ingestion_jobs[0].job_name,
+        feature_jobs[0].job_name,
         trading_jobs[0].job_name,
     }
 
     assert runtime_chain_job_names == {
         "paper_trading_golden_path",
         "market_ingestion_cycle",
+        "feature_pipeline_cycle",
         "trading_cycle",
     }
 
@@ -273,5 +278,6 @@ def test_paper_trading_golden_path_runs_trading_runtime_chain(
     assert orchestrator_job.input_summary_json["mode"] == "full_pipeline"
     assert orchestrator_job.input_summary_json["steps"] == [
         "market_ingestion_cycle",
+        "feature_pipeline_cycle",
         "trading_cycle",
     ]

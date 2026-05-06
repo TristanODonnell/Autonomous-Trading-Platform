@@ -21,6 +21,10 @@ _engine = create_engine(
 )
 
 from autonomous_trading_platform.db import get_session  # noqa: E402
+from tests.utilities.feature_pipeline_cycle_fixture import (  # noqa: E402
+    SeededFeaturePipelineCycleFixture,
+    seed_feature_pipeline_cycle_fixture,
+)
 from tests.utilities.market_ingestion_cycle_fixture import (  # noqa: E402
     SeededMarketIngestionCycleFixture,
     seed_market_ingestion_cycle_fixture,
@@ -66,6 +70,9 @@ _sqlite.base.SQLiteTypeCompiler.visit_UUID = (  # type: ignore[attr-defined]
 
 from autonomous_trading_platform.interfaces.rest.app import create_app  # noqa: E402
 from autonomous_trading_platform.storage.sor.models import Base  # noqa: E402
+from autonomous_trading_platform.storage.sor.models.runtime_job_runs import (  # noqa: E402,F401
+    RuntimeJobRuns,
+)
 from autonomous_trading_platform.storage.sor.models.strategy_governance import (  # noqa: E402
     StrategyGovernance,
 )
@@ -193,6 +200,19 @@ def seeded_market_ingestion_cycle_fixture(
     monkeypatch,
 ) -> SeededMarketIngestionCycleFixture:
     return seed_market_ingestion_cycle_fixture(
+        session=db_session,
+        data_root=tmp_path,
+        monkeypatch=monkeypatch,
+    )
+
+
+@pytest.fixture()
+def seeded_feature_pipeline_cycle_fixture(
+    db_session,
+    tmp_path,
+    monkeypatch,
+) -> SeededFeaturePipelineCycleFixture:
+    return seed_feature_pipeline_cycle_fixture(
         session=db_session,
         data_root=tmp_path,
         monkeypatch=monkeypatch,

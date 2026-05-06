@@ -6,11 +6,16 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.runtime.services.runtime_job_runner import RuntimeJobRunner
+from autonomous_trading_platform.scheduler.cycles.run_feature_pipeline_cycle import (
+    run_feature_pipeline_cycle,
+)
 from autonomous_trading_platform.scheduler.cycles.run_market_ingestion_cycle import (
     run_market_ingestion_cycle,
 )
 from autonomous_trading_platform.scheduler.cycles.run_trading_cycle import run_trading_cycle
+from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
 from autonomous_trading_platform.storage.sor.repositories.runtime_job_run_repository import (
     RuntimeJobRunRepository,
 )
@@ -47,6 +52,32 @@ class PaperTradingGoldenPathOrchestrator:
 
         def _run_pipeline_chain() -> None:
             run_market_ingestion_cycle(now_utc=now_utc)
+
+            latest_raw_bars = (
+                self.session.query(DatasetVersions)
+                .filter(DatasetVersions.dataset_name == "raw_bars")
+                .filter(DatasetVersions.validation_status == "validated")
+                .order_by(DatasetVersions.created_at.desc())
+                .first()
+            )
+
+            if latest_raw_bars is None:
+                raise RuntimeError("No raw_bars dataset version found after ingestion")
+
+            run_feature_pipeline_cycle(
+                now_utc=now_utc,
+                price_basis=PriceBasis.RAW,
+                dataset_version_id=latest_raw_bars.dataset_version_id,
+                symbols=["SPY"],
+                start_date=latest_raw_bars.date_coverage_start,
+                end_date=latest_raw_bars.date_coverage_end,
+                include_returns=True,
+                include_volatility=False,
+                include_moving_average=False,
+                include_liquidity=False,
+                include_regime=False,
+            )
+
             run_trading_cycle(now_utc=now_utc)
 
         self.runner.run(
@@ -58,6 +89,7 @@ class PaperTradingGoldenPathOrchestrator:
                 "now_utc": now_utc.isoformat(),
                 "steps": [
                     "market_ingestion_cycle",
+                    "feature_pipeline_cycle",
                     "trading_cycle",
                 ],
             },

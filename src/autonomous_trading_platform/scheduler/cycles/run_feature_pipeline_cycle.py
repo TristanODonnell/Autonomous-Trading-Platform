@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
+from autonomous_trading_platform.contracts.runtime.runtime_job_run import RuntimeJobRun
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.feature_engineering.jobs.liquidity_feature_job import (
     LiquidityFeatureJob,
@@ -54,6 +55,7 @@ from autonomous_trading_platform.feature_engineering.services.returns_feature_se
 from autonomous_trading_platform.feature_engineering.services.volatility_feature_service import (
     VolatilityFeatureService,
 )
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     CycleMetricSet,
@@ -89,6 +91,9 @@ from autonomous_trading_platform.storage.parquet.repositories.parquet_feature_re
 from autonomous_trading_platform.storage.sor.repositories.feature_dataset_versions_repository import (
     FeatureDatasetVersionsRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.runtime_job_run_repository import (
+    RuntimeJobRunRepository,
+)
 
 logger = get_logger(__name__)
 
@@ -106,6 +111,7 @@ FEATURE_PIPELINE_STEP_METRICS = StepMetricSet(
 
 def run_feature_pipeline_cycle(
     *,
+    now_utc: datetime | None = None,
     price_basis: PriceBasis = PriceBasis.RAW,
     dataset_version_id: str | None = None,
     symbols: list[str] | None = None,
@@ -117,7 +123,8 @@ def run_feature_pipeline_cycle(
     include_liquidity: bool = True,
     include_regime: bool = True,
 ) -> None:
-    now_utc = datetime.now(UTC)
+    if now_utc is None:
+        now_utc = datetime.now(UTC)
     cycle_wall_start = perf_counter()
 
     session: Session = get_session()
@@ -127,7 +134,52 @@ def run_feature_pipeline_cycle(
 
     run_id = uuid.uuid4()
     component = "scheduler.run_feature_pipeline_cycle"
+    runtime_job_run_repository = RuntimeJobRunRepository(session)
+    job_run_id = str(run_id)
+    job_started_at = now_utc
+
+    def _save_runtime_job_run(
+        *,
+        status: str,
+        completed_at: datetime | None,
+        error_message: str | None,
+        output_summary_json: dict | None,
+    ) -> None:
+        runtime_job_run_repository.save(
+            RuntimeJobRun(
+                job_run_id=job_run_id,
+                job_name="feature_pipeline_cycle",
+                parent_job_run_id=None,
+                status=status,
+                trigger_type="scheduler",
+                started_at=job_started_at,
+                completed_at=completed_at,
+                duration_ms=(
+                    int((perf_counter() - cycle_wall_start) * 1000)
+                    if completed_at is not None
+                    else None
+                ),
+                error_message=error_message,
+                correlation_id=str(run_id),
+                input_summary_json={
+                    "component": component,
+                    "price_basis": price_basis.value,
+                    "dataset_version_id": dataset_version_id,
+                    "symbols": symbols,
+                },
+                output_summary_json=output_summary_json,
+            )
+        )
+
+    _save_runtime_job_run(
+        status="running",
+        completed_at=None,
+        error_message=None,
+        output_summary_json=None,
+    )
+
     base_metadata: dict[str, object] = {}
+    manifest: RunManifest | None = None
 
     record_cycle_started(
         logger=logger,
@@ -157,6 +209,7 @@ def run_feature_pipeline_cycle(
             python_version=platform.python_version(),
             notes="Feature engineering pipeline cycle",
             price_basis=price_basis,
+            governance_state=GovernanceState.APPROVED_RESEARCH,
         )
         manifest_service.save(manifest)
 
@@ -366,6 +419,26 @@ def run_feature_pipeline_cycle(
                     ),
                 )
 
+            manifest.status = "completed"
+            _save_runtime_job_run(
+                status="completed",
+                completed_at=datetime.now(UTC),
+                error_message=None,
+                output_summary_json={
+                    "dataset_version_id": dataset_version_id,
+                    "last_successful_step": "feature_pipeline_completed",
+                    "include_returns": include_returns,
+                    "include_volatility": include_volatility,
+                    "include_moving_average": include_moving_average,
+                    "include_liquidity": include_liquidity,
+                    "include_regime": include_regime,
+                },
+            )
+
+            manifest.current_step = None
+            manifest.error_message = None
+            manifest_service.save(manifest)
+
             audit_logger.record_run_completed(
                 run_id=str(run_id),
                 component=component,
@@ -383,6 +456,20 @@ def run_feature_pipeline_cycle(
 
     except Exception as exc:
         total_duration = perf_counter() - cycle_wall_start
+
+        _save_runtime_job_run(
+            status="failed",
+            completed_at=datetime.now(UTC),
+            error_message=str(exc),
+            output_summary_json={
+                "dataset_version_id": dataset_version_id,
+            },
+        )
+
+        if manifest is not None:
+            manifest.status = "failed"
+            manifest.error_message = str(exc)
+            manifest_service.save(manifest)
         audit_logger.record_run_failed(
             run_id=str(run_id),
             component=component,
