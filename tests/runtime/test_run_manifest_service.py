@@ -16,6 +16,7 @@ from autonomous_trading_platform.contracts.common.enums import (
 )
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.db import get_engine
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.runtime.services.run_manifest_service import (
     RunManifestService,
 )
@@ -72,6 +73,7 @@ def make_run_manifest(
     current_step: str | None = None,
     last_successful_step: str | None = None,
     error_message: str | None = None,
+    governance_state: GovernanceState = GovernanceState.APPROVED_RESEARCH,
 ) -> RunManifest:
     return RunManifest(
         run_id=run_id,
@@ -103,6 +105,7 @@ def make_run_manifest(
         current_step=current_step,
         last_successful_step=last_successful_step,
         error_message=error_message,
+        governance_state=governance_state,
     )
 
 
@@ -260,11 +263,13 @@ class TestRunManifestServiceTodoBehavior:
             run_id=run_id,
             created_at=datetime(2025, 1, 1, 15, 30, tzinfo=UTC),
             environment="paper",
+            governance_state=GovernanceState.APPROVED_RESEARCH,
         )
         manifest_two = make_run_manifest(
             run_id=run_id,
             created_at=datetime(2025, 1, 1, 15, 30, tzinfo=UTC),
             environment="paper",
+            governance_state=GovernanceState.APPROVED_RESEARCH,
         )
 
         service = RunManifestService(session=db_session)
@@ -312,6 +317,7 @@ class TestRunManifestServiceTodoBehavior:
         assert saved.current_step == manifest.current_step
         assert saved.last_successful_step == manifest.last_successful_step
         assert saved.error_message == manifest.error_message
+        assert saved.governance_state == manifest.governance_state
 
     def test_multiple_distinct_manifests_can_be_saved(
         self,
@@ -321,6 +327,7 @@ class TestRunManifestServiceTodoBehavior:
             make_run_manifest(
                 run_id=UUID(f"00000000-0000-0000-0000-00000000052{i}"),
                 environment=f"paper-{i}",
+                governance_state=GovernanceState.APPROVED_RESEARCH,
             )
             for i in range(3)
         ]

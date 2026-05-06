@@ -65,10 +65,10 @@ class OrderStateMachineService:
                 f"Order {order_id} transitioned from {current_status} to {next_status} via {event}"
             ),
             metadata={
-                "order_id": order_id,
-                "from_status": current_status,
-                "to_status": next_status,
-                "event": event,
+                "order_id": str(order_id),
+                "from_status": current_status.value,
+                "to_status": next_status.value,
+                "event": event.value,
                 **(metadata or {}),
             },
         )

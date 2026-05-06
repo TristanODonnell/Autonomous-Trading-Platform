@@ -16,6 +16,10 @@ from autonomous_trading_platform.contracts.common.enums import (
 )
 from autonomous_trading_platform.contracts.trading.broker_order import BrokerOrder
 from autonomous_trading_platform.contracts.trading.fill import Fill
+from autonomous_trading_platform.storage.sor.models.broker_orders import (
+    BrokerOrder as BrokerOrderRow,
+)
+from autonomous_trading_platform.storage.sor.models.fills import Fill as FillRow
 
 
 @dataclass(frozen=True)
@@ -61,6 +65,52 @@ class BrokerOrderMapper:
             last_error=self._extract_last_error(payload),
             raw_broker_payload=payload,
             requested_qty=self._to_decimal_or_none(payload.get("qty")),
+        )
+
+    @staticmethod
+    def to_fill_orm_row(fill: Fill) -> FillRow:
+        return FillRow(
+            fill_id=fill.fill_id,
+            broker_order_id=fill.broker_order_id,
+            intent_id=fill.intent_id,
+            run_id=fill.run_id,
+            timestamp=fill.timestamp,
+            symbol=fill.symbol,
+            side=fill.side,
+            quantity=fill.quantity,
+            price=fill.price,
+            fees=fill.fees,
+            liquidity=fill.liquidity,
+            venue=fill.venue,
+            meta=fill.metadata,
+        )
+
+    @staticmethod
+    def to_orm_row(broker_order: BrokerOrder) -> BrokerOrderRow:
+        return BrokerOrderRow(
+            broker_order_id=broker_order.broker_order_id,
+            client_order_id=broker_order.client_order_id,
+            intent_id=broker_order.intent_id,
+            run_id=broker_order.run_id,
+            broker=broker_order.broker,
+            account_id=broker_order.account_id,
+            symbol=broker_order.symbol,
+            side=broker_order.side,
+            order_type=broker_order.order_type,
+            time_in_force=broker_order.time_in_force,
+            extended_hours=broker_order.extended_hours,
+            qty=broker_order.qty,
+            notional=broker_order.notional,
+            limit_price=broker_order.limit_price,
+            stop_price=broker_order.stop_price,
+            status=broker_order.status,
+            submitted_at=broker_order.submitted_at,
+            updated_at=broker_order.updated_at,
+            filled_qty=broker_order.filled_qty,
+            avg_fill_price=broker_order.avg_fill_price,
+            last_error=broker_order.last_error,
+            raw_broker_payload=broker_order.raw_broker_payload,
+            requested_qty=broker_order.requested_qty,
         )
 
     def to_order_event(self, broker_order: BrokerOrder) -> OrderEvent | None:

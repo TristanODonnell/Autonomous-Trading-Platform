@@ -11,13 +11,14 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.config.settings import Settings
-from autonomous_trading_platform.contracts.common.enums import BarInterval, RunType
+from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.execution.contexts.build_execution_context import (
     ExecutionContext,
     build_execution_context,
 )
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.portfolio.portfolio_engine import PortfolioEngine
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
@@ -130,7 +131,7 @@ def build_trading_cycle_dependencies() -> TradingCycleDependencies:
 
     execution_context = build_execution_context(
         pre_trade_risk_service=safety_context.pre_trade_risk_service,
-        audit_log_repository=audit_logger,
+        audit_log_repository=audit_log_repository,
         alpaca_settings=settings,
         portfolio_engine=portfolio_engine,
         session=session,
@@ -174,6 +175,8 @@ def build_trading_run_manifest(
         git_commit="dev",
         python_version=platform.python_version(),
         notes="5-minute trading cycle",
+        price_basis=PriceBasis.ADJUSTED,
+        governance_state=GovernanceState.APPROVED_PAPER,
     )
 
 

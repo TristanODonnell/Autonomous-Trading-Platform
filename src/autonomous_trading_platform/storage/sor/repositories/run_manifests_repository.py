@@ -39,6 +39,7 @@ class RunManifestRepository(BaseRepository):
             error_message=manifest.error_message,
             artifact_manifest=manifest.artifact_manifest,
             schema_definition=manifest.schema_definition,
+            governance_state=manifest.governance_state,
         )
         self.session.add(row)
         self.session.flush()
@@ -80,6 +81,7 @@ class RunManifestRepository(BaseRepository):
         existing.error_message = manifest.error_message
         existing.artifact_manifest = manifest.artifact_manifest
         existing.schema_definition = manifest.schema_definition
+        existing.governance_state = manifest.governance_state
 
         self.session.flush()
         return existing
@@ -124,6 +126,7 @@ class RunManifestRepository(BaseRepository):
             error_message=row.error_message,
             artifact_manifest=row.artifact_manifest,
             schema_definition=row.schema_definition,
+            governance_state=row.governance_state,
         )
 
     def list_failed_runs(self, *, limit: int = 25) -> list[RunManifestRow]:

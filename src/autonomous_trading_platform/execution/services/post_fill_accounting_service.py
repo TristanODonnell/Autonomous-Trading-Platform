@@ -3,20 +3,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import cast
 from uuid import uuid4
 
-from autonomous_trading_platform.contracts.accounting.cash_snapshot import CashSnapshot
-from autonomous_trading_platform.contracts.accounting.position_snapshot import (
-    Position,
-    PositionSnapshot,
-)
+from autonomous_trading_platform.contracts.common.enums import OrderSource
 from autonomous_trading_platform.contracts.trading.fill import Fill
-from autonomous_trading_platform.execution.services.cash_ledger_service import (
-    CashLedgerService,
-)
+from autonomous_trading_platform.execution.services.cash_ledger_service import CashLedgerService
 from autonomous_trading_platform.execution.services.position_ledger_service import (
     PositionLedgerService,
+)
+from autonomous_trading_platform.storage.sor.models.cash_snapshots import (
+    CashSnapshot as OrmCashSnapshot,
+)
+from autonomous_trading_platform.storage.sor.models.position_snapshot_items import (
+    PositionSnapshotItem as OrmPositionSnapshotItem,
+)
+from autonomous_trading_platform.storage.sor.models.position_snapshots import (
+    PositionSnapshot as OrmPositionSnapshot,
 )
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
@@ -46,22 +48,13 @@ class PostFillAccountingService:
         commissions: Decimal = Decimal("0"),
         fees: Decimal = Decimal("0"),
     ) -> PostFillAccountingResult:
-        latest_position_snapshot = self._get_latest_position_snapshot(
-            uow=uow,
-            fill=fill,
-        )
-        latest_cash_snapshot = self._get_latest_cash_snapshot(
-            uow=uow,
-            fill=fill,
-        )
+        latest_position_snapshot = self._get_latest_position_snapshot(uow)
+        latest_cash_snapshot = self._get_latest_cash_snapshot(uow)
 
         existing_positions = (
             list(latest_position_snapshot.positions) if latest_position_snapshot is not None else []
         )
-        existing_position = self._find_position(
-            positions=existing_positions,
-            symbol=fill.symbol,
-        )
+        existing_position = self._find_position(existing_positions, fill.symbol)
 
         position_result = self.position_ledger_service.apply_fill(
             existing_position=existing_position,
@@ -81,25 +74,36 @@ class PostFillAccountingService:
             updated_position=position_result.updated_position,
         )
 
-        new_position_snapshot = PositionSnapshot(
-            snapshot_id=uuid4(),
+        new_snapshot_id = uuid4()
+        new_position_snapshot = OrmPositionSnapshot(
+            snapshot_id=new_snapshot_id,
             run_id=fill.run_id,
             timestamp=now_utc,
-            positions=updated_positions,
-            source=fill.source,
+            source=OrderSource.LEDGER,
         )
+        new_position_snapshot.positions = [
+            OrmPositionSnapshotItem(
+                snapshot_id=new_snapshot_id,
+                symbol=pos.symbol,
+                quantity=pos.quantity,
+                avg_cost=pos.avg_cost,
+                market_price=pos.market_price,
+                market_value=pos.market_value,
+                unrealized_pnl=pos.unrealized_pnl,
+            )
+            for pos in updated_positions
+        ]
         uow.position_snapshots.upsert(new_position_snapshot)
 
         currency = latest_cash_snapshot.currency if latest_cash_snapshot is not None else "USD"
         capital_bucket = (
             latest_cash_snapshot.capital_bucket if latest_cash_snapshot is not None else None
         )
-
         equity = cash_result.cash + sum(
-            Decimal(position.market_value or Decimal("0")) for position in updated_positions
+            Decimal(pos.market_value or Decimal("0")) for pos in updated_positions
         )
 
-        new_cash_snapshot = CashSnapshot(
+        new_cash_snapshot = OrmCashSnapshot(
             snapshot_id=uuid4(),
             run_id=fill.run_id,
             timestamp=now_utc,
@@ -108,7 +112,7 @@ class PostFillAccountingService:
             buying_power=cash_result.buying_power,
             reserved_cash=cash_result.reserved_cash,
             equity=equity,
-            source=fill.source,
+            source=OrderSource.LEDGER,
             capital_bucket=capital_bucket,
         )
         uow.cash_snapshots.upsert(new_cash_snapshot)
@@ -119,41 +123,24 @@ class PostFillAccountingService:
             updated_position_count=len(updated_positions),
         )
 
-    def _find_position(
-        self,
-        positions: list[Position],
-        symbol: str,
-    ) -> Position | None:
+    def _find_position(self, positions, symbol: str):
         for position in positions:
             if position.symbol == symbol:
                 return position
         return None
 
-    def _replace_position(
-        self,
-        positions: list[Position],
-        symbol: str,
-        updated_position: Position | None,
-    ) -> list[Position]:
-        remaining_positions = [position for position in positions if position.symbol != symbol]
+    def _replace_position(self, positions, symbol: str, updated_position):
+        remaining = [p for p in positions if p.symbol != symbol]
         if updated_position is not None:
-            remaining_positions.append(updated_position)
-        return remaining_positions
+            remaining.append(updated_position)
+        return remaining
 
-    def _get_latest_position_snapshot(
-        self,
-        uow: SorUnitOfWork,
-        fill: Fill,
-    ) -> PositionSnapshot | None:
+    def _get_latest_position_snapshot(self, uow: SorUnitOfWork):
         if hasattr(uow.position_snapshots, "get_latest"):
-            return cast(PositionSnapshot | None, uow.position_snapshots.get_latest())
+            return uow.position_snapshots.get_latest()
         return None
 
-    def _get_latest_cash_snapshot(
-        self,
-        uow: SorUnitOfWork,
-        fill: Fill,
-    ) -> CashSnapshot | None:
+    def _get_latest_cash_snapshot(self, uow: SorUnitOfWork):
         if hasattr(uow.cash_snapshots, "get_latest"):
-            return cast(CashSnapshot | None, uow.cash_snapshots.get_latest())
+            return uow.cash_snapshots.get_latest()
         return None

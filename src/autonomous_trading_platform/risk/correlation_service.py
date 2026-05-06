@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import numpy as np
 
-from autonomous_trading_platform.goverance.models.governance_state import GovernanceState
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.portfolio.allocation_provider import IAllocationProvider
 from autonomous_trading_platform.portfolio.models import AllocationResult
 

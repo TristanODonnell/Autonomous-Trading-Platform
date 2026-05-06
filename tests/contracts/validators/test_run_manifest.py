@@ -9,6 +9,7 @@ from autonomous_trading_platform.contracts.common.enums import (
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.contracts.validators.core import run_rules
 from autonomous_trading_platform.contracts.validators.run_manifest import RUN_MANIFEST_RULES
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 
 
 def make_run_manifest(**overrides) -> RunManifest:
@@ -37,6 +38,7 @@ def make_run_manifest(**overrides) -> RunManifest:
         "python_version": None,
         "dependency_lock_hash": None,
         "notes": None,
+        "governance_state": GovernanceState.APPROVED_RESEARCH,
     }
 
     data.update(overrides)

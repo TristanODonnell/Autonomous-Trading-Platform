@@ -29,7 +29,7 @@ from __future__ import annotations
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from autonomous_trading_platform.governance.deployment.audit_logger import (
     DeploymentAuditLogger,
@@ -225,13 +225,16 @@ class DeploymentRegistry:
             self._history[key].append(self._store[key])
 
         now = datetime.now(tz=UTC)
-        restored = previous.model_copy(
-            update={
-                "deployment_id": str(uuid.uuid4()),
-                "updated_at": now,
-                "status": DeploymentStatus.ACTIVE,
-                "rolled_back_from_deployment_id": current_deployment_id,
-            }
+        restored = cast(
+            DeploymentRecord,
+            previous.model_copy(
+                update={
+                    "deployment_id": str(uuid.uuid4()),
+                    "updated_at": now,
+                    "status": DeploymentStatus.ACTIVE,
+                    "rolled_back_from_deployment_id": current_deployment_id,
+                }
+            ),
         )
         self._store[key] = restored
         self._audit.log_rollback(
@@ -340,4 +343,7 @@ class DeploymentRegistry:
 
     @staticmethod
     def _update_status(record: DeploymentRecord, status: DeploymentStatus) -> DeploymentRecord:
-        return record.model_copy(update={"status": status, "updated_at": datetime.now(tz=UTC)})
+        return cast(
+            DeploymentRecord,
+            record.model_copy(update={"status": status, "updated_at": datetime.now(tz=UTC)}),
+        )

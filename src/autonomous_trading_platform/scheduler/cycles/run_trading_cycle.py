@@ -7,6 +7,7 @@ from autonomous_trading_platform.common.errors import (
     TransientInfrastructureError,
 )
 from autonomous_trading_platform.config.enums import TradingEnvironment
+from autonomous_trading_platform.contracts.runtime.runtime_job_run import RuntimeJobRun
 from autonomous_trading_platform.execution.errors import ExecutionError
 from autonomous_trading_platform.execution.services.trading_freeze_service import (
     TradingFreezeService,
@@ -56,6 +57,9 @@ from autonomous_trading_platform.scheduler.jobs.run_risk_snapshot_job import (
 )
 from autonomous_trading_platform.scheduler.jobs.run_trading_evaluation_job import (
     run_trading_evaluation_job,
+)
+from autonomous_trading_platform.storage.sor.repositories.runtime_job_run_repository import (
+    RuntimeJobRunRepository,
 )
 
 logger = get_logger(__name__)
@@ -111,6 +115,47 @@ def run_trading_cycle(now_utc: datetime | None = None):
         )
         return
     run_id = new_trading_run_id()
+    runtime_job_run_repository = RuntimeJobRunRepository(session)
+    job_run_id = str(run_id)
+    job_started_at = now_utc
+
+    def _save_runtime_job_run(
+        *,
+        status: str,
+        completed_at: datetime | None,
+        error_message: str | None,
+        output_summary_json: dict | None,
+    ) -> None:
+        runtime_job_run_repository.save(
+            RuntimeJobRun(
+                job_run_id=job_run_id,
+                job_name="trading_cycle",
+                parent_job_run_id=None,
+                status=status,
+                trigger_type="scheduler",
+                started_at=job_started_at,
+                completed_at=completed_at,
+                duration_ms=(
+                    int((perf_counter() - cycle_wall_start) * 1000)
+                    if completed_at is not None
+                    else None
+                ),
+                error_message=error_message,
+                correlation_id=str(run_id),
+                input_summary_json={
+                    "component": component,
+                    "trading_environment": settings.trading_environment.value,
+                },
+                output_summary_json=output_summary_json,
+            )
+        )
+
+    _save_runtime_job_run(
+        status="running",
+        completed_at=None,
+        error_message=None,
+        output_summary_json=None,
+    )
 
     trading_cycle_window = build_trading_cycle_window(
         now_utc=now_utc,
@@ -237,6 +282,15 @@ def run_trading_cycle(now_utc: datetime | None = None):
                                 "reason": ingestion_result.reason,
                             },
                         )
+                        _save_runtime_job_run(
+                            status="completed",
+                            completed_at=datetime.now(UTC),
+                            error_message=None,
+                            output_summary_json={
+                                "last_successful_step": manifest.last_successful_step,
+                                "current_step": None,
+                            },
+                        )
                         manifest.status = "completed"
                         manifest.current_step = None
                         manifest.error_message = ingestion_result.reason
@@ -328,6 +382,15 @@ def run_trading_cycle(now_utc: datetime | None = None):
                                     **base_metadata,
                                     "degraded_mode": "hold_positions",
                                     "reason": str(exc),
+                                },
+                            )
+                            _save_runtime_job_run(
+                                status="completed",
+                                completed_at=datetime.now(UTC),
+                                error_message=None,
+                                output_summary_json={
+                                    "last_successful_step": manifest.last_successful_step,
+                                    "current_step": None,
                                 },
                             )
                             manifest.status = "completed"
@@ -547,7 +610,15 @@ def run_trading_cycle(now_utc: datetime | None = None):
                 component=component,
                 metadata=base_metadata,
             )
-
+            _save_runtime_job_run(
+                status="completed",
+                completed_at=datetime.now(UTC),
+                error_message=None,
+                output_summary_json={
+                    "last_successful_step": manifest.last_successful_step,
+                    "current_step": None,
+                },
+            )
             manifest.status = "completed"
             manifest.current_step = None
             manifest.error_message = None
@@ -564,6 +635,15 @@ def run_trading_cycle(now_utc: datetime | None = None):
 
         except TransientInfrastructureError as exc:
             total_duration = perf_counter() - cycle_wall_start
+            _save_runtime_job_run(
+                status="failed",
+                completed_at=datetime.now(UTC),
+                error_message=str(exc),
+                output_summary_json={
+                    "last_successful_step": manifest.last_successful_step,
+                    "current_step": manifest.current_step,
+                },
+            )
             record_cycle_failed(
                 logger=logger,
                 metrics=TRADING_CYCLE_METRICS,
@@ -592,6 +672,15 @@ def run_trading_cycle(now_utc: datetime | None = None):
         except (SafetyError, ExecutionError, PersistentInfrastructureError) as exc:
             # persistent failure → stop trading, require manual intervention
             total_duration = perf_counter() - cycle_wall_start
+            _save_runtime_job_run(
+                status="failed",
+                completed_at=datetime.now(UTC),
+                error_message=str(exc),
+                output_summary_json={
+                    "last_successful_step": manifest.last_successful_step,
+                    "current_step": manifest.current_step,
+                },
+            )
             record_cycle_failed(
                 logger=logger,
                 metrics=TRADING_CYCLE_METRICS,
@@ -622,6 +711,15 @@ def run_trading_cycle(now_utc: datetime | None = None):
 
         except Exception as exc:
             # unknown → fail closed
+            _save_runtime_job_run(
+                status="failed",
+                completed_at=datetime.now(UTC),
+                error_message=str(exc),
+                output_summary_json={
+                    "last_successful_step": manifest.last_successful_step,
+                    "current_step": manifest.current_step,
+                },
+            )
             total_duration = perf_counter() - cycle_wall_start
             record_cycle_failed(
                 logger=logger,

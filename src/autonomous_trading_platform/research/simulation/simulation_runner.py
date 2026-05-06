@@ -20,6 +20,7 @@ from autonomous_trading_platform.contracts.runtime.simulation_run import Simulat
 from autonomous_trading_platform.contracts.runtime.strategy_config import (
     StrategyConfig as RuntimeStrategyConfig,
 )
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.research.experiments.filtering.metrics.return_metrics import (
     ReturnMetrics,
 )
@@ -433,6 +434,7 @@ class SimulationRunner:
                         "strict_data_loading": request.strict_data_loading,
                     },
                 },
+                governance_state=GovernanceState.APPROVED_RESEARCH,
             )
 
             self.manifest_service.upsert(manifest)

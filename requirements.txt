@@ -6,10 +6,14 @@
 #
 alpaca-py==0.43.2
     # via retail-autonomous-trading-platform (pyproject.toml)
+annotated-doc==0.0.4
+    # via fastapi
 annotated-types==0.7.0
     # via pydantic
 anyio==4.13.0
-    # via httpx
+    # via
+    #   httpx
+    #   starlette
 certifi==2026.2.25
     # via
     #   httpcore
@@ -19,8 +23,16 @@ charset-normalizer==3.4.7
     # via requests
 duckdb==1.5.2
     # via retail-autonomous-trading-platform (pyproject.toml)
+fastapi==0.136.1
+    # via retail-autonomous-trading-platform (pyproject.toml)
+googleapis-common-protos==1.74.0
+    # via
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
 greenlet==3.4.0
     # via sqlalchemy
+grpcio==1.80.0
+    # via opentelemetry-exporter-otlp-proto-grpc
 h11==0.16.0
     # via httpcore
 httpcore==1.0.9
@@ -40,11 +52,31 @@ numpy==2.4.4
     # via pandas
 opentelemetry-api==1.41.0
     # via
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
     #   retail-autonomous-trading-platform (pyproject.toml)
-opentelemetry-sdk==1.41.0
+opentelemetry-exporter-otlp==1.41.0
     # via retail-autonomous-trading-platform (pyproject.toml)
+opentelemetry-exporter-otlp-proto-common==1.41.0
+    # via
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp-proto-grpc==1.41.0
+    # via opentelemetry-exporter-otlp
+opentelemetry-exporter-otlp-proto-http==1.41.0
+    # via opentelemetry-exporter-otlp
+opentelemetry-proto==1.41.0
+    # via
+    #   opentelemetry-exporter-otlp-proto-common
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-sdk==1.41.0
+    # via
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+    #   retail-autonomous-trading-platform (pyproject.toml)
 opentelemetry-semantic-conventions==0.62b0
     # via opentelemetry-sdk
 packaging==26.1
@@ -53,6 +85,10 @@ pandas==3.0.2
     # via
     #   alpaca-py
     #   retail-autonomous-trading-platform (pyproject.toml)
+protobuf==6.33.6
+    # via
+    #   googleapis-common-protos
+    #   opentelemetry-proto
 psycopg[binary]==3.3.3
     # via retail-autonomous-trading-platform (pyproject.toml)
 psycopg-binary==3.3.3
@@ -62,6 +98,7 @@ pyarrow==23.0.1
 pydantic==2.13.2
     # via
     #   alpaca-py
+    #   fastapi
     #   retail-autonomous-trading-platform (pyproject.toml)
 pydantic-core==2.46.2
     # via pydantic
@@ -76,6 +113,7 @@ pyyaml==6.0.3
 requests==2.33.1
     # via
     #   alpaca-py
+    #   opentelemetry-exporter-otlp-proto-http
     #   retail-autonomous-trading-platform (pyproject.toml)
 six==1.17.0
     # via python-dateutil
@@ -83,21 +121,30 @@ sqlalchemy==2.0.49
     # via retail-autonomous-trading-platform (pyproject.toml)
 sseclient-py==1.9.0
     # via alpaca-py
+starlette==1.0.0
+    # via fastapi
 tenacity==9.1.4
     # via retail-autonomous-trading-platform (pyproject.toml)
 typing-extensions==4.15.0
     # via
     #   anyio
+    #   fastapi
+    #   grpcio
     #   opentelemetry-api
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
     #   psycopg
     #   pydantic
     #   pydantic-core
     #   sqlalchemy
+    #   starlette
     #   typing-inspection
 typing-inspection==0.4.2
-    # via pydantic
+    # via
+    #   fastapi
+    #   pydantic
 tzdata==2026.1
     # via
     #   pandas
