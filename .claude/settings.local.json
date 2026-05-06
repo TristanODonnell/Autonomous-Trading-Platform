@@ -10,7 +10,12 @@
       "Bash(python -m pytest tests/scheduler/test_market_ingestion_cycle.py --tb=short)",
       "Bash(python -m pytest tests/scheduler/test_market_ingestion_cycle.py -v --tb=long --no-header)",
       "Bash(python -m pytest tests/scheduler/test_market_ingestion_cycle.py -v --tb=long)",
-      "Bash(python -m pytest --ignore=tests/scheduler/test_market_ingestion_cycle.py --tb=short)"
+      "Bash(python -m pytest --ignore=tests/scheduler/test_market_ingestion_cycle.py --tb=short)",
+      "Bash(python -m pytest tests/scheduler/test_paper_trading_golden_path.py -v --tb=short)",
+      "Bash(python -c ' *)",
+      "Bash(python -m pytest tests/scheduler/test_paper_trading_golden_path.py -v --tb=long)",
+      "Bash(python -m pytest tests/scheduler/test_paper_trading_golden_path.py -v)",
+      "Bash(python -m pytest tests/scheduler/test_paper_trading_golden_path.py -x -s)"
     ]
   }
 }

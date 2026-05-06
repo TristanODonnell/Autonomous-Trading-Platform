@@ -65,7 +65,7 @@ _sqlite.base.SQLiteTypeCompiler.visit_UUID = (  # type: ignore[attr-defined]
 )
 
 from autonomous_trading_platform.interfaces.rest.app import create_app  # noqa: E402
-from autonomous_trading_platform.storage.sor.models.base import Base  # noqa: E402
+from autonomous_trading_platform.storage.sor.models import Base  # noqa: E402
 from autonomous_trading_platform.storage.sor.models.strategy_governance import (  # noqa: E402
     StrategyGovernance,
 )

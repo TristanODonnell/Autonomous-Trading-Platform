@@ -61,6 +61,7 @@ from autonomous_trading_platform.scheduler.jobs.run_risk_snapshot_job import (
 from autonomous_trading_platform.scheduler.jobs.run_trading_evaluation_job import (
     run_trading_evaluation_job,
 )
+from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
 from autonomous_trading_platform.storage.sor.repositories.runtime_control_state_repository import (
     RuntimeControlStateRepository,
 )
@@ -383,6 +384,16 @@ def run_trading_cycle(now_utc: datetime | None = None):
                     raise RuntimeError(f"Ingestion readiness failed: {ingestion_result.reason}")
 
                 manifest.last_successful_step = "ingestion_readiness"
+
+                latest_raw_bars = (
+                    session.query(DatasetVersions)
+                    .filter(DatasetVersions.dataset_name == "raw_bars")
+                    .order_by(DatasetVersions.created_at.desc())
+                    .first()
+                )
+                if latest_raw_bars is not None:
+                    manifest.dataset_version = latest_raw_bars.dataset_version_id
+
                 manifest_service.save(manifest)
 
             except Exception as exc:

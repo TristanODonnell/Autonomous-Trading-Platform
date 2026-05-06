@@ -10,6 +10,7 @@ from autonomous_trading_platform.contracts.common.enums import BarInterval, Pric
 from autonomous_trading_platform.contracts.runtime.dataset_version import DatasetVersion
 from autonomous_trading_platform.contracts.runtime.ingestion_run import IngestionRun
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
+from autonomous_trading_platform.contracts.runtime.runtime_job_run import RuntimeJobRun
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.ingestion.market_data.jobs.ingest_bars_job import (
@@ -46,6 +47,9 @@ from autonomous_trading_platform.runtime.services.ingestion_run_registration_ser
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
 from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
+from autonomous_trading_platform.storage.sor.repositories.runtime_job_run_repository import (
+    RuntimeJobRunRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
 )
@@ -93,11 +97,56 @@ def run_market_ingestion_cycle(
     ingestion_run_registration_service = IngestionRunRegistrationService(session=session)
 
     run_id = uuid.uuid4()
+    component = "scheduler.run_market_ingestion_cycle"
+
+    runtime_job_run_repository = RuntimeJobRunRepository(session)
+    job_run_id = str(run_id)
+    job_started_at = now_utc
+
+    def _save_runtime_job_run(
+        *,
+        status: str,
+        completed_at: datetime | None,
+        error_message: str | None,
+        output_summary_json: dict | None,
+    ) -> None:
+        runtime_job_run_repository.save(
+            RuntimeJobRun(
+                job_run_id=job_run_id,
+                job_name="market_ingestion_cycle",
+                parent_job_run_id=None,
+                status=status,
+                trigger_type="scheduler",
+                started_at=job_started_at,
+                completed_at=completed_at,
+                duration_ms=(
+                    int((perf_counter() - cycle_wall_start) * 1000)
+                    if completed_at is not None
+                    else None
+                ),
+                error_message=error_message,
+                correlation_id=str(run_id),
+                input_summary_json={
+                    "component": component,
+                    "dataset_name": RAW_BARS_DATASET.dataset_key,
+                    "price_basis": PriceBasis.RAW.value,
+                    "interval": BarInterval.FIVE_MIN.value,
+                },
+                output_summary_json=output_summary_json,
+            )
+        )
+
+    _save_runtime_job_run(
+        status="running",
+        completed_at=None,
+        error_message=None,
+        output_summary_json=None,
+    )
+
     ingestion_run_id = uuid.uuid4()
     ingestion_run: IngestionRun | None = None
     dataset_version: DatasetVersion | None = None
     dataset_version_id = generate_dataset_version("raw_bars")
-    component = "scheduler.run_market_ingestion_cycle"
     base_metadata: dict[str, object] = {}
 
     record_cycle_started(
@@ -241,6 +290,7 @@ def run_market_ingestion_cycle(
                     job.run_once(start=cycle_start, end=cycle_end)
 
                 step_duration = perf_counter() - step_start
+
                 record_step_completed(
                     logger=logger,
                     metrics=INGESTION_STEP_METRICS,
@@ -263,6 +313,17 @@ def run_market_ingestion_cycle(
                 raise
 
             ingestion_run.status = "completed"
+            _save_runtime_job_run(
+                status="completed",
+                completed_at=datetime.now(UTC),
+                error_message=None,
+                output_summary_json={
+                    "dataset_version_id": str(dataset_version_id),
+                    "ingestion_run_id": str(ingestion_run_id),
+                    "expected_symbol_count": len(expected_symbols),
+                    "last_successful_step": "ingest_bars",
+                },
+            )
             ingestion_run.completed_at = datetime.now(UTC)
             ingestion_run = ingestion_run_registration_service.save(ingestion_run)
 
@@ -292,6 +353,15 @@ def run_market_ingestion_cycle(
             dataset_version = dataset_registration_service.save(dataset_version)
 
         total_duration = perf_counter() - cycle_wall_start
+        _save_runtime_job_run(
+            status="failed",
+            completed_at=datetime.now(UTC),
+            error_message=str(exc),
+            output_summary_json={
+                "dataset_version_id": str(dataset_version_id),
+                "ingestion_run_id": str(ingestion_run_id),
+            },
+        )
         audit_logger.record_run_failed(
             run_id=str(run_id),
             component=component,
