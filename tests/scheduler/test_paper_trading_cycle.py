@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+import autonomous_trading_platform.scheduler.cycles.run_trading_cycle as cycle_module
 from autonomous_trading_platform.scheduler.cycles.run_trading_cycle import run_trading_cycle
 from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
 from autonomous_trading_platform.storage.sor.models.fills import Fill
@@ -9,6 +10,15 @@ from autonomous_trading_platform.storage.sor.models.position_snapshot_items impo
 )
 from autonomous_trading_platform.storage.sor.models.position_snapshots import PositionSnapshot
 from autonomous_trading_platform.storage.sor.models.run_manifests import RunManifestRow
+from autonomous_trading_platform.storage.sor.models.runtime_job_runs import RuntimeJobRuns
+
+
+def _runtime_job_runs_for_run(db_session, correlation_id):
+    return (
+        db_session.query(RuntimeJobRuns)
+        .filter(RuntimeJobRuns.correlation_id == correlation_id)
+        .all()
+    )
 
 
 def _cash_snapshots_for_run(db_session, run_id):
@@ -224,3 +234,120 @@ def test_positions_and_cash_update_after_paper_fills(
     assert latest_cash.cash < fixture.starting_cash
     assert latest_cash.equity > Decimal("0")
     assert latest_cash.buying_power <= fixture.starting_cash
+
+
+def test_portfolio_snapshot_and_equity_curve_persist_after_paper_cycle(
+    seeded_paper_trading_cycle_fixture,
+    db_session,
+):
+    fixture = seeded_paper_trading_cycle_fixture
+
+    run_trading_cycle(now_utc=fixture.now_utc)
+
+    manifest = _latest_manifest(db_session)
+
+    assert manifest is not None
+    assert manifest.status == "completed"
+
+    cash_snapshots = _cash_snapshots_for_run(db_session, manifest.run_id)
+    position_items = _position_items_for_run(db_session, manifest.run_id)
+
+    assert cash_snapshots != []
+    assert position_items != []
+
+    latest_cash = max(cash_snapshots, key=lambda snapshot: snapshot.timestamp)
+    spy_positions = [item for item in position_items if item.symbol == fixture.symbol]
+
+    assert spy_positions != []
+
+    latest_position = spy_positions[-1]
+
+    # Portfolio snapshot persisted
+    assert latest_position.symbol == fixture.symbol
+    assert latest_position.quantity > Decimal("0")
+    assert latest_position.market_price > Decimal("0")
+    assert latest_position.market_value > Decimal("0")
+
+    # Equity curve / equity point persisted through cash snapshot
+    assert latest_cash.run_id == manifest.run_id
+    assert latest_cash.timestamp is not None
+    assert latest_cash.equity > Decimal("0")
+    assert latest_cash.cash < fixture.starting_cash
+
+
+def test_activity_events_are_emitted(
+    seeded_paper_trading_cycle_fixture,
+    db_session,
+    monkeypatch,
+):
+    fixture = seeded_paper_trading_cycle_fixture
+
+    recorded_events = []
+
+    class FakeAuditLogger:
+        def record_run_started(self, **kwargs):
+            recorded_events.append(("started", kwargs))
+
+        def record_run_completed(self, **kwargs):
+            recorded_events.append(("completed", kwargs))
+
+        def record_run_failed(self, **kwargs):
+            recorded_events.append(("failed", kwargs))
+
+    # patch dependency builder to inject fake logger
+    from autonomous_trading_platform.scheduler.common import trading_cycle_common
+
+    original_builder = trading_cycle_common.build_trading_cycle_dependencies
+
+    def patched_builder():
+        deps = original_builder()
+        deps.audit_logger = FakeAuditLogger()
+        return deps
+
+    monkeypatch.setattr(
+        cycle_module,
+        "build_trading_cycle_dependencies",
+        patched_builder,
+    )
+
+    run_trading_cycle(now_utc=fixture.now_utc)
+
+    assert recorded_events != []
+    assert any(event[0] == "started" for event in recorded_events)
+    assert any(event[0] == "completed" for event in recorded_events)
+
+
+def test_runtime_job_run_is_recorded_for_trading_cycle(
+    seeded_paper_trading_cycle_fixture,
+    db_session,
+):
+    fixture = seeded_paper_trading_cycle_fixture
+
+    run_trading_cycle(now_utc=fixture.now_utc)
+
+    manifest = _latest_manifest(db_session)
+
+    assert manifest is not None
+
+    job_runs = _runtime_job_runs_for_run(
+        db_session,
+        correlation_id=str(manifest.run_id),
+    )
+
+    assert job_runs != []
+    assert len(job_runs) == 1
+
+    job = job_runs[0]
+
+    assert job.job_name == "trading_cycle"
+    assert job.parent_job_run_id is None
+    assert job.status == "completed"
+    assert job.trigger_type == "scheduler"
+
+    assert job.started_at is not None
+    assert job.completed_at is not None
+    assert job.duration_ms is not None
+    assert job.duration_ms >= 0
+
+    assert job.error_message is None
+    assert job.correlation_id == str(manifest.run_id)
