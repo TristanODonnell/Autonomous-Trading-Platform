@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\" -Recurse -Directory)",
-      "Bash(Select-Object -ExpandProperty FullName)"
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(python -m pytest tests/scheduler/test_paper_trading_cycle.py -v)"
     ]
   }
 }

@@ -107,14 +107,13 @@ def run_order_reconciliation_job(
                     ) from exc
 
                 with SorUnitOfWork(session) as uow:
-                    uow.broker_orders.upsert(result.broker_order)
+                    uow.broker_orders.upsert(
+                        execution_context.broker_order_mapper.to_orm_row(result.broker_order)
+                    )
 
                     if result.fill is not None:
-                        uow.fills.upsert(result.fill)
-                        execution_context.post_fill_accounting_service.apply_fill(
-                            uow=uow,
-                            fill=result.fill,
-                            now_utc=resolved_now,
+                        uow.fills.upsert(
+                            execution_context.broker_order_mapper.to_fill_orm_row(result.fill)
                         )
 
                     execution_context.order_runtime_state_service.apply_reconciliation_result(
@@ -122,6 +121,20 @@ def run_order_reconciliation_job(
                         result=result,
                         now_utc=resolved_now,
                     )
+
+                if result.fill is not None:
+                    try:
+                        with SorUnitOfWork(session) as uow:
+                            execution_context.post_fill_accounting_service.apply_fill(
+                                uow=uow,
+                                fill=result.fill,
+                                now_utc=resolved_now,
+                            )
+                    except Exception as exc:
+                        logger.warning(
+                            "post_fill_accounting.failed",
+                            extra={"fill_id": result.fill.fill_id, "error": str(exc)},
+                        )
             job_span.set_attribute("ratp.reconciliation.mismatch_count", mismatch_count)
         duration = perf_counter() - job_start
         record_job_completed(

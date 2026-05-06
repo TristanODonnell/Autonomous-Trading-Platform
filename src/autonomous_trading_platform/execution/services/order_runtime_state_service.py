@@ -28,7 +28,7 @@ class OrderRuntimeStateService:
         now_utc: datetime,
     ) -> TrackedOrder:
         row = TrackedOrder(
-            order_id=intent.order_id,
+            order_id=intent.intent_id,
             intent_id=intent.intent_id,
             run_id=run_id,
             strategy_id=strategy_id,
@@ -55,7 +55,7 @@ class OrderRuntimeStateService:
         now_utc: datetime,
     ) -> TrackedOrder:
         row = TrackedOrder(
-            order_id=intent.order_id,
+            order_id=intent.intent_id,
             intent_id=intent.intent_id,
             run_id=run_id,
             strategy_id=strategy_id,

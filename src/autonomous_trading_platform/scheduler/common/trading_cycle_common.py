@@ -131,7 +131,7 @@ def build_trading_cycle_dependencies() -> TradingCycleDependencies:
 
     execution_context = build_execution_context(
         pre_trade_risk_service=safety_context.pre_trade_risk_service,
-        audit_log_repository=audit_logger,
+        audit_log_repository=audit_log_repository,
         alpaca_settings=settings,
         portfolio_engine=portfolio_engine,
         session=session,

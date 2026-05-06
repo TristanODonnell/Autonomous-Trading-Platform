@@ -7,16 +7,19 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import pyarrow as pa
 from sqlalchemy.orm import Session
 
+import autonomous_trading_platform.strategy.services.strategy_evaluation_service as _eval_svc_mod
 from autonomous_trading_platform.contracts.common.enums import (
     BarInterval,
     OrderSource,
     PriceBasis,
+    SignalDirection,
 )
+from autonomous_trading_platform.contracts.trading.signal import Signal
 from autonomous_trading_platform.execution.services.strategy_state_machine_service import (
     StrategyState,
 )
@@ -26,6 +29,9 @@ from autonomous_trading_platform.storage.parquet.datasets import (
 )
 from autonomous_trading_platform.storage.parquet.paths import dataset_version_root
 from autonomous_trading_platform.storage.parquet.writer import write_table
+from autonomous_trading_platform.storage.sor.models.capital_allocation_policies import (
+    CapitalAllocationPolicies,
+)
 from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
 from autonomous_trading_platform.storage.sor.models.feature_dataset_versions import (
@@ -42,6 +48,9 @@ from autonomous_trading_platform.storage.sor.models.strategy_runtime_states impo
 )
 from autonomous_trading_platform.storage.sor.models.symbol_date_coverage import (
     SymbolDateCoverage,
+)
+from autonomous_trading_platform.strategy.contracts.strategy_evaluation_result import (
+    StrategyEvaluationResult,
 )
 
 PAPER_CYCLE_NOW_UTC = datetime(2025, 2, 14, 21, 0, tzinfo=UTC)
@@ -110,13 +119,13 @@ class FakePaperBrokerClient:
             "id": order_id,
             "client_order_id": order_id,
             "symbol": PAPER_CYCLE_SYMBOL,
-            "qty": "0",
+            "qty": "1",
             "side": "buy",
             "type": "market",
             "time_in_force": "day",
-            "status": "accepted",
-            "filled_qty": "0",
-            "filled_avg_price": None,
+            "status": "filled",
+            "filled_qty": "1",
+            "filled_avg_price": "100.00",
             "submitted_at": PAPER_CYCLE_NOW_UTC.isoformat(),
             "updated_at": PAPER_CYCLE_NOW_UTC.isoformat(),
         }
@@ -173,6 +182,33 @@ def _seed_environment(monkeypatch) -> None:
     monkeypatch.setenv("FREEZE_TRADING_ON_RECONCILIATION_FAILURE", "true")
 
 
+def _patch_strategy_evaluation(monkeypatch) -> None:
+    def _fixed_evaluate(self, bar_timestamp, run_id, evaluation_timestamp):
+        signal = Signal(
+            signal_id=uuid4(),
+            run_id=run_id,
+            timestamp=evaluation_timestamp,
+            bar_timestamp=bar_timestamp,
+            strategy_id=self.strategy.strategy_id,
+            symbol=PAPER_CYCLE_SYMBOL,
+            direction=SignalDirection.BUY,
+            confidence=1.0,
+            target_position=Decimal("0.25"),
+            params=None,
+        )
+        return StrategyEvaluationResult(
+            strategy_id=self.strategy.strategy_id,
+            bar_timestamp=bar_timestamp,
+            signals=[signal],
+        )
+
+    monkeypatch.setattr(
+        _eval_svc_mod.StrategyEvaluationService,
+        "evaluate",
+        _fixed_evaluate,
+    )
+
+
 def _patch_runtime_seams(*, session: Session, monkeypatch) -> None:
     import autonomous_trading_platform.execution.contexts.build_execution_context as execution_builder
     import autonomous_trading_platform.scheduler.common.trading_cycle_common as trading_common
@@ -185,6 +221,7 @@ def _patch_runtime_seams(*, session: Session, monkeypatch) -> None:
         "get_symbols_for_timestamp",
         lambda _self, _as_of: [PAPER_CYCLE_SYMBOL],
     )
+    _patch_strategy_evaluation(monkeypatch)
 
 
 def _write_adjusted_spy_bars(*, data_root: Path) -> None:
@@ -264,8 +301,25 @@ def _seed_database(*, session: Session, data_root: Path) -> None:
     _upsert_dataset_metadata(session=session, data_root=data_root)
     _upsert_strategy_config(session=session, strategy_id="stub_strategy_v1")
     _upsert_strategy_config(session=session, strategy_id="baseline_strategy")
+    _upsert_capital_allocation_policy(session=session)
     _upsert_account_state(session=session)
     session.flush()
+
+
+def _upsert_capital_allocation_policy(*, session: Session) -> None:
+    session.merge(
+        CapitalAllocationPolicies(
+            policy_id="fixture-paper-policy",
+            approval_status="approved_paper",
+            performance_tier=None,
+            max_pct_of_capital=0.10,
+            max_position_size_usd=None,
+            max_drawdown_allowed=0.20,
+            is_active=True,
+            created_at=PAPER_CYCLE_NOW_UTC,
+            notes="Test fixture policy for paper trading cycle",
+        )
+    )
 
 
 def _upsert_dataset_metadata(*, session: Session, data_root: Path) -> None:
@@ -341,10 +395,10 @@ def _upsert_dataset_metadata(*, session: Session, data_root: Path) -> None:
 
 def _upsert_strategy_config(*, session: Session, strategy_id: str) -> None:
     config_json = {
-        "strategy_type": "stub_zero_order",
+        "strategy_type": "stub_signal_driven",
         "symbol": PAPER_CYCLE_SYMBOL,
         "price_change_threshold": 0.0,
-        "expected_order_count": 0,
+        "expected_order_count": 1,
     }
     config_hash = hashlib.sha256(
         f"{strategy_id}:{json.dumps(config_json, sort_keys=True, separators=(',', ':'))}".encode()
@@ -356,7 +410,7 @@ def _upsert_strategy_config(*, session: Session, strategy_id: str) -> None:
             config_hash=config_hash,
             config_json=config_json,
             created_at=PAPER_CYCLE_NOW_UTC,
-            strategy_type="stub",
+            strategy_type="stub_signal_driven",
             metadata_json={"fixture": "task_354", "mode": "paper"},
         )
     )

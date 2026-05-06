@@ -38,6 +38,7 @@ from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     TradingCycleDependencies,
 )
+from autonomous_trading_platform.storage.sor.models.order_intents import OrderIntents
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 logger = get_logger(__name__)
@@ -122,6 +123,29 @@ def run_order_submission_job(
                     )
                 )
                 intent.idempotency_key = idempotency_key
+
+                with SorUnitOfWork(session) as uow:
+                    uow.order_intents.upsert(
+                        OrderIntents(
+                            intent_id=intent.intent_id,
+                            idempotency_key=intent.idempotency_key,
+                            run_id=intent.run_id,
+                            strategy_id=intent.strategy_id,
+                            timestamp=intent.timestamp,
+                            bar_timestamp=intent.bar_timestamp,
+                            symbol=intent.symbol,
+                            side=intent.side,
+                            qty=intent.qty,
+                            notional=intent.notional,
+                            order_type=intent.order_type,
+                            limit_price=intent.limit_price,
+                            stop_price=intent.stop_price,
+                            time_in_force=intent.time_in_force,
+                            extended_hours=intent.extended_hours,
+                            client_order_id=intent.client_order_id,
+                            meta=intent.metadata,
+                        )
+                    )
 
                 # ── RISK CHECK ────────────────────────────────────
                 with start_span(
@@ -243,7 +267,7 @@ def run_order_submission_job(
                     )
 
                     order_status = execution_context.order_state_machine_service.apply_event(
-                        order_id=intent.order_id,
+                        order_id=intent.intent_id,
                         current_status=order_status,
                         event=OrderEvent.SUBMIT,
                         event_timestamp=now_utc,
@@ -262,7 +286,9 @@ def run_order_submission_job(
                     )
 
                     with SorUnitOfWork(session) as uow:
-                        uow.broker_orders.upsert(broker_order)
+                        uow.broker_orders.upsert(
+                            execution_context.broker_order_mapper.to_orm_row(broker_order)
+                        )
                         execution_context.order_runtime_state_service.record_submitted_order(
                             uow=uow,
                             intent=submit_intent,
@@ -298,7 +324,7 @@ def run_order_submission_job(
 
                 except Exception as exc:
                     execution_context.order_state_machine_service.apply_event(
-                        order_id=intent.order_id,
+                        order_id=intent.intent_id,
                         current_status=order_status,
                         event=OrderEvent.REJECT,
                         event_timestamp=now_utc,
