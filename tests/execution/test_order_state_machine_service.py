@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 from unittest.mock import Mock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -52,7 +52,7 @@ def test_apply_event_all_valid_transitions_updates_state_and_writes_audit_log(
             assert audit_event.component == "order_state_machine"
             assert audit_event.event_timestamp == timestamp
             assert str(order_id) in audit_event.message
-            assert audit_event.metadata["order_id"] == order_id
+            assert UUID(audit_event.metadata["order_id"]) == order_id
             assert audit_event.metadata["from_status"] == current_status
             assert audit_event.metadata["to_status"] == expected_next_status
             assert audit_event.metadata["event"] == event
