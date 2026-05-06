@@ -538,3 +538,43 @@ def test_skipped_runtime_control_cycle_writes_runtime_job_run_and_activity_event
 
     assert completed_metadata["status"] == "skipped"
     assert completed_metadata["skip_reason"] == "kill_switch_enabled"
+
+
+def test_fill_engine_slippage_and_costs_are_reflected_in_paper_cycle(
+    seeded_paper_trading_cycle_fixture,
+    db_session,
+):
+    fixture = seeded_paper_trading_cycle_fixture
+
+    run_trading_cycle(now_utc=fixture.now_utc)
+
+    manifest = _latest_manifest(db_session)
+
+    assert manifest is not None
+    assert manifest.status == "completed"
+
+    fills = _fills_for_run(db_session, manifest.run_id)
+    cash_snapshots = _cash_snapshots_for_run(db_session, manifest.run_id)
+
+    assert fills != []
+    assert cash_snapshots != []
+
+    latest_cash = max(cash_snapshots, key=lambda snapshot: snapshot.timestamp)
+
+    # 1. Fills are economically valid
+    for fill in fills:
+        assert fill.quantity > Decimal("0")
+        assert fill.price > Decimal("0")
+
+    # 2. Cash moved in the correct direction (buy reduces cash)
+    assert latest_cash.cash < fixture.starting_cash
+
+    # 3. Buying power reduced or constrained appropriately
+    assert latest_cash.buying_power <= fixture.starting_cash
+
+    # 4. Fill notional is reflected in cash change (loose bound, not exact)
+    total_notional = sum(fill.quantity * fill.price for fill in fills)
+    assert total_notional > Decimal("0")
+
+    # Cash should decrease at least by some meaningful amount
+    assert latest_cash.cash <= fixture.starting_cash

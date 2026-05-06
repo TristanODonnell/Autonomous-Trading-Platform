@@ -25,6 +25,10 @@ from tests.utilities.paper_trading_cycle_fixture import (  # noqa: E402
     SeededPaperTradingCycleFixture,
     seed_paper_trading_cycle_fixture,
 )
+from tests.utilities.paper_trading_golden_path_fixture import (  # noqa: E402
+    SeededPaperTradingGoldenPathFixture,
+    seed_paper_trading_golden_path_fixture,
+)
 
 # ── Env vars required before any app import ──────────────────────────────────
 os.environ.setdefault("APP_ENV", "test")
@@ -146,6 +150,19 @@ def seeded_paper_trading_cycle_fixture(
     monkeypatch: pytest.MonkeyPatch,
 ) -> SeededPaperTradingCycleFixture:
     return seed_paper_trading_cycle_fixture(
+        session=db_session,
+        data_root=tmp_path,
+        monkeypatch=monkeypatch,
+    )
+
+
+@pytest.fixture()
+def seeded_paper_trading_golden_path_fixture(
+    db_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> SeededPaperTradingGoldenPathFixture:
+    return seed_paper_trading_golden_path_fixture(
         session=db_session,
         data_root=tmp_path,
         monkeypatch=monkeypatch,
