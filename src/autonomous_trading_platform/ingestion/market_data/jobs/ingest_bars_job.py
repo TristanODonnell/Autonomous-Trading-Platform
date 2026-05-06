@@ -38,6 +38,7 @@ from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.mappers import bars_to_arrow
+from autonomous_trading_platform.storage.parquet.paths import get_data_root
 from autonomous_trading_platform.storage.parquet.writer import write_table
 from autonomous_trading_platform.storage.sor.models.missing_bar_incidents import MissingBarIncidents
 from autonomous_trading_platform.storage.sor.models.symbol_date_coverage import SymbolDateCoverage
@@ -167,7 +168,7 @@ class IngestBarsJob:
             write_table(
                 table=table,
                 dataset=RAW_BARS_DATASET,
-                base_path="data",
+                base_path=get_data_root(),
                 dataset_version=self.dataset_version_id,
             )
 

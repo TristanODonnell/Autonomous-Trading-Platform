@@ -9,7 +9,7 @@ from pathlib import Path
 import jwt
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import JSON, String, Text, create_engine
+from sqlalchemy import JSON, String, Text, create_engine, event
 from sqlalchemy.dialects import sqlite as _sqlite
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -21,6 +21,10 @@ _engine = create_engine(
 )
 
 from autonomous_trading_platform.db import get_session  # noqa: E402
+from tests.utilities.market_ingestion_cycle_fixture import (  # noqa: E402
+    SeededMarketIngestionCycleFixture,
+    seed_market_ingestion_cycle_fixture,
+)
 from tests.utilities.paper_trading_cycle_fixture import (  # noqa: E402
     SeededPaperTradingCycleFixture,
     seed_paper_trading_cycle_fixture,
@@ -83,12 +87,25 @@ def create_tables() -> None:
 
 @pytest.fixture()
 def db_session() -> Generator[Session, None, None]:
-    session = _TestingSessionLocal()
+    connection = _engine.connect()
+    transaction = connection.begin()
+    session = Session(bind=connection)
+
+    nested = connection.begin_nested()
+
+    @event.listens_for(session, "after_transaction_end")
+    def restart_savepoint(session, transaction):
+        nonlocal nested
+        if transaction.nested and not transaction._parent.nested:
+            session.expire_all()
+            nested = connection.begin_nested()
+
     try:
         yield session
     finally:
-        session.rollback()
         session.close()
+        transaction.rollback()
+        connection.close()
 
 
 @pytest.fixture()
@@ -163,6 +180,19 @@ def seeded_paper_trading_golden_path_fixture(
     monkeypatch: pytest.MonkeyPatch,
 ) -> SeededPaperTradingGoldenPathFixture:
     return seed_paper_trading_golden_path_fixture(
+        session=db_session,
+        data_root=tmp_path,
+        monkeypatch=monkeypatch,
+    )
+
+
+@pytest.fixture()
+def seeded_market_ingestion_cycle_fixture(
+    db_session,
+    tmp_path,
+    monkeypatch,
+) -> SeededMarketIngestionCycleFixture:
+    return seed_market_ingestion_cycle_fixture(
         session=db_session,
         data_root=tmp_path,
         monkeypatch=monkeypatch,

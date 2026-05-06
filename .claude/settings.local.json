@@ -3,7 +3,14 @@
     "allow": [
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\" -Recurse -Directory)",
       "Bash(Select-Object -ExpandProperty FullName)",
-      "Bash(python -m pytest tests/scheduler/test_paper_trading_cycle.py -v)"
+      "Bash(python -m pytest tests/scheduler/test_paper_trading_cycle.py -v)",
+      "Bash(python -m pytest tests/scheduler/test_market_ingestion_cycle.py -v)",
+      "Bash(python -m pytest tests/scheduler/test_market_ingestion_cycle.py::test_parquet_contains_one_aggregated_five_minute_bar_per_symbol -v -s)",
+      "Bash(python -m pytest tests/scheduler/test_market_ingestion_cycle.py::test_parquet_contains_one_aggregated_five_minute_bar_per_symbol -v)",
+      "Bash(python -m pytest tests/scheduler/test_market_ingestion_cycle.py --tb=short)",
+      "Bash(python -m pytest tests/scheduler/test_market_ingestion_cycle.py -v --tb=long --no-header)",
+      "Bash(python -m pytest tests/scheduler/test_market_ingestion_cycle.py -v --tb=long)",
+      "Bash(python -m pytest --ignore=tests/scheduler/test_market_ingestion_cycle.py --tb=short)"
     ]
   }
 }

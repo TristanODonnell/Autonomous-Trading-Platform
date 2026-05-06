@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import os
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 from .datasets import ParquetDataset
+
+
+def get_data_root() -> Path:
+    return Path(os.environ.get("DATA_ROOT", "data"))
 
 
 def format_partition_value(value: Any) -> str:

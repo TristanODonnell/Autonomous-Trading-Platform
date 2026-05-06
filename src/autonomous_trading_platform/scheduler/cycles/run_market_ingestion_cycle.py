@@ -11,6 +11,7 @@ from autonomous_trading_platform.contracts.runtime.dataset_version import Datase
 from autonomous_trading_platform.contracts.runtime.ingestion_run import IngestionRun
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.ingestion.market_data.jobs.ingest_bars_job import (
     IngestBarsJob,
 )
@@ -43,6 +44,7 @@ from autonomous_trading_platform.runtime.services.ingestion_run_registration_ser
     IngestionRunRegistrationService,
 )
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
+from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
 from autonomous_trading_platform.storage.sor.repositories.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
@@ -122,7 +124,7 @@ def run_market_ingestion_cycle(
 
         manifest = RunManifest(
             run_id=run_id,
-            run_type=RunType.BACKTEST,
+            run_type=RunType.INGESTION,
             created_at=now_utc,
             environment="local",
             broker="alpaca",
@@ -132,9 +134,11 @@ def run_market_ingestion_cycle(
             strategy_config={},
             capital_bucket=Decimal("10000.00"),
             interval=BarInterval.FIVE_MIN,
+            price_basis=PriceBasis.RAW,
+            governance_state=GovernanceState.APPROVED_RESEARCH,
             start_date=cycle_start.date(),
             end_date=cycle_end.date(),
-            dataset_version="v1",
+            dataset_version=str(dataset_version_id),
             universe_version="v1",
             git_commit="dev",
             python_version=platform.python_version(),
@@ -168,12 +172,12 @@ def run_market_ingestion_cycle(
         # TODO may need to change some field defaults later
         dataset_version_contract = DatasetVersion(
             dataset_version_id=dataset_version_id,
-            dataset_name="market_bars",
+            dataset_name=RAW_BARS_DATASET.dataset_key,
             created_at=now_utc,
             source="alpaca",
             price_basis=PriceBasis.RAW,
             interval=BarInterval.FIVE_MIN,
-            schema_version="bars_schema_v1",
+            schema_version=RAW_BARS_DATASET.schema_version,
             symbol_coverage=len(expected_symbols),
             date_coverage_start=cycle_start.date(),
             date_coverage_end=cycle_end.date(),

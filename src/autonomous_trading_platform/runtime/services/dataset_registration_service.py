@@ -28,6 +28,7 @@ class DatasetRegistrationService:
 
         if not validation_result.ok:
             errors = [violation.message for violation in validation_result.violations]
+            print("DATASET VALIDATION ERRORS:", errors)
             raise DatasetRegistrationValidationError(errors)
 
         with SorUnitOfWork(self.session) as uow:

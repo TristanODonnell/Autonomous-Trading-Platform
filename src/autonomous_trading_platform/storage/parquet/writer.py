@@ -144,11 +144,14 @@ def write_table(
 
     _ensure_dataset_version_is_new(root)
 
+    partition_fields = [dataset.schema.field(col) for col in dataset.partition_cols]
+    hive_partitioning = ds.partitioning(pa.schema(partition_fields), flavor="hive")
+
     ds.write_dataset(
         table,
         base_dir=str(root),
         format="parquet",
-        partitioning=list(dataset.partition_cols),
+        partitioning=hive_partitioning,
         existing_data_behavior="error",
     )
 
