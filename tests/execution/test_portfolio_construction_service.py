@@ -14,7 +14,7 @@ from autonomous_trading_platform.execution.services.portfolio_construction_servi
     PortfolioConstructionService,
 )
 from autonomous_trading_platform.execution.services.position_sizer import PositionSizer
-from autonomous_trading_platform.goverance.models.governance_state import GovernanceState
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.safety.services.pre_trade_risk_service import (
     PreTradeRiskService,
 )

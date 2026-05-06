@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from time import perf_counter
 from typing import Protocol
 from uuid import UUID, uuid4
@@ -18,6 +19,7 @@ from autonomous_trading_platform.contracts.common.enums import (
 )
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.contracts.trading.signal import Signal
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     JobMetricSet,
@@ -229,7 +231,7 @@ class EvaluateStrategyJob:
             strategy_id=strategy_id,
             strategy_version="v1",
             strategy_config={"signals_emitted": signals_emitted},
-            capital_bucket="0",
+            capital_bucket=Decimal("0"),
             interval=BarInterval.FIVE_MIN,
             start_date=bar_timestamp.date(),
             end_date=bar_timestamp.date(),
@@ -247,4 +249,5 @@ class EvaluateStrategyJob:
                 f"for bar {bar_timestamp.isoformat()} "
                 f"at {evaluation_timestamp.isoformat()}"
             ),
+            governance_state=GovernanceState.APPROVED_PAPER,
         )

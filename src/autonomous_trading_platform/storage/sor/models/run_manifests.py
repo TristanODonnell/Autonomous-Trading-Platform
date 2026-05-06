@@ -13,6 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.common.types import Money, UTCDateTime
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 
 from .base import Base
 from .helpers.sa_types import UUID_PK, MoneyType, UTCDateTimeType
@@ -59,3 +60,7 @@ class RunManifestRow(Base):
     error_message: Mapped[str | None] = mapped_column(String, nullable=True)
     artifact_manifest: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     schema_definition: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    governance_state: Mapped[GovernanceState] = mapped_column(
+        SAEnum(GovernanceState, name="governance_state_enum"),
+        nullable=False,
+    )

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from autonomous_trading_platform.goverance.models.deployment_models import (
+from autonomous_trading_platform.governance.models.deployment_models import (
     DeploymentEnvironment,
     DeploymentRecord,
 )

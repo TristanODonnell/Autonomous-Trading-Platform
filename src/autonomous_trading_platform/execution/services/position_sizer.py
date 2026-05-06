@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from decimal import ROUND_DOWN, Decimal
 
-from autonomous_trading_platform.goverance.models.governance_state import GovernanceState
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.portfolio.allocation_provider import IAllocationProvider
 
 ZERO = Decimal("0")

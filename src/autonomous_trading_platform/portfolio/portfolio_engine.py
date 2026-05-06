@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from autonomous_trading_platform.goverance.models.governance_state import GovernanceState
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.portfolio.exceptions import (
     AllocationDeniedError,
     InsufficientCapitalError,

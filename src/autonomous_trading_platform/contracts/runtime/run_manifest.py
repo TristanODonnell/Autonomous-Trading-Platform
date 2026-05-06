@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.common.types import Money, UTCDateTime
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 
 
 class RunManifest(BaseModel):
@@ -43,6 +44,7 @@ class RunManifest(BaseModel):
     error_message: str | None = None
     artifact_manifest: dict[str, Any] | None = None
     schema_definition: dict[str, Any] | None = None
+    governance_state: GovernanceState
 
     def to_dict(self) -> dict[str, Any]:
         """Return manifest as a Python dictionary."""

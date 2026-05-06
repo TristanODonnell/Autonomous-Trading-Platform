@@ -4,11 +4,13 @@ import os
 import uuid
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import jwt
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import JSON, String, Text, create_engine
+from sqlalchemy.dialects import sqlite as _sqlite
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -19,6 +21,10 @@ _engine = create_engine(
 )
 
 from autonomous_trading_platform.db import get_session  # noqa: E402
+from tests.utilities.paper_trading_cycle_fixture import (  # noqa: E402
+    SeededPaperTradingCycleFixture,
+    seed_paper_trading_cycle_fixture,
+)
 
 # ── Env vars required before any app import ──────────────────────────────────
 os.environ.setdefault("APP_ENV", "test")
@@ -34,8 +40,6 @@ os.environ.setdefault("JWT_ALGORITHM", "HS256")
 # Must be patched BEFORE any app models are imported so the type compiler
 # sees the overrides when create_all() runs.
 # ---------------------------------------------------------------------------
-from sqlalchemy import JSON, String, Text  # noqa: E402
-from sqlalchemy.dialects import sqlite as _sqlite  # noqa: E402
 
 # JSONB → JSON
 _sqlite.base.SQLiteTypeCompiler.visit_JSONB = (  # type: ignore[attr-defined]
@@ -133,3 +137,16 @@ def seed_strategy_governance(
     session.add(row)
     session.flush()
     return row
+
+
+@pytest.fixture()
+def seeded_paper_trading_cycle_fixture(
+    db_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> SeededPaperTradingCycleFixture:
+    return seed_paper_trading_cycle_fixture(
+        session=db_session,
+        data_root=tmp_path,
+        monkeypatch=monkeypatch,
+    )

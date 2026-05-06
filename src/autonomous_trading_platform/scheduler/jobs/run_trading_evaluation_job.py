@@ -10,7 +10,7 @@ from autonomous_trading_platform.common.errors import (
 from autonomous_trading_platform.contracts.accounting.position_snapshot import Position
 from autonomous_trading_platform.contracts.common.enums import StrategyEvent
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
-from autonomous_trading_platform.goverance.models.governance_state import GovernanceState
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     JobMetricSet,

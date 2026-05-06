@@ -26,7 +26,7 @@ from autonomous_trading_platform.execution.services.sharpe_scaling_service impor
 from autonomous_trading_platform.execution.services.volatility_scaling_service import (
     VolatilityScalingService,
 )
-from autonomous_trading_platform.goverance.models.governance_state import GovernanceState
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.portfolio.exceptions import (
     AllocationDeniedError,
     NoPolicyFoundError,
