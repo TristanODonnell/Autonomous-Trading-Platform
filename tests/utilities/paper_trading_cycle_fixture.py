@@ -41,6 +41,9 @@ from autonomous_trading_platform.storage.sor.models.position_snapshot_items impo
     PositionSnapshotItem,
 )
 from autonomous_trading_platform.storage.sor.models.position_snapshots import PositionSnapshot
+from autonomous_trading_platform.storage.sor.models.runtime_control_state import (
+    RuntimeControlState,
+)
 from autonomous_trading_platform.storage.sor.models.strategy_configs import StrategyConfigs
 from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
 from autonomous_trading_platform.storage.sor.models.strategy_runtime_states import (
@@ -303,6 +306,7 @@ def _seed_database(*, session: Session, data_root: Path) -> None:
     _upsert_strategy_config(session=session, strategy_id="baseline_strategy")
     _upsert_capital_allocation_policy(session=session)
     _upsert_account_state(session=session)
+    _reset_runtime_control_state(session=session)
     session.flush()
 
 
@@ -474,6 +478,22 @@ def _upsert_account_state(*, session: Session) -> None:
         )
     ]
     session.merge(position_snapshot)
+
+
+def _reset_runtime_control_state(*, session: Session) -> None:
+    session.merge(
+        RuntimeControlState(
+            control_id="global",
+            trading_enabled=True,
+            trading_paused=False,
+            kill_switch_enabled=False,
+            trading_mode="paper",
+            reason=None,
+            updated_by=None,
+            created_at=PAPER_CYCLE_NOW_UTC,
+            updated_at=PAPER_CYCLE_NOW_UTC,
+        )
+    )
 
 
 def _fixture_uuid(name: str) -> UUID:

@@ -19,6 +19,7 @@ from . import position_snapshots as position_snapshots
 from . import promotion_rules as promotion_rules
 from . import risk_snapshots as risk_snapshots
 from . import run_manifests as run_manifests
+from . import runtime_control_state as runtime_control_state
 from . import runtime_job_runs as runtime_job_runs
 from . import signals as signals
 from . import simulation_runs as simulation_runs
@@ -64,4 +65,5 @@ __all__ = [
     "capital_allocation_policies",
     "promotion_rules",
     "runtime_job_runs",
+    "runtime_control_state",
 ]
