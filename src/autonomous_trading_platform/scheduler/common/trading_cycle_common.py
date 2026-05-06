@@ -155,11 +155,12 @@ def build_trading_run_manifest(
     now_utc: datetime,
     cycle_start: datetime,
     cycle_end: datetime,
+    created_at: datetime | None = None,
 ) -> RunManifest:
     return RunManifest(
         run_id=run_id,
         run_type=RunType.BACKTEST,
-        created_at=now_utc,
+        created_at=created_at or datetime.now(UTC),
         environment="local",
         broker="alpaca",
         broker_account_id="paper",

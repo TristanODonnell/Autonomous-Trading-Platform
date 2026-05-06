@@ -35,6 +35,9 @@ from autonomous_trading_platform.observability.metrics import (
 )
 from autonomous_trading_platform.observability.telemetry import setup_telemetry
 from autonomous_trading_platform.observability.tracing import start_span
+from autonomous_trading_platform.runtime.services.runtime_control_service import (
+    RuntimeControlService,
+)
 from autonomous_trading_platform.safety.errors import SafetyError
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_base_metadata,
@@ -57,6 +60,9 @@ from autonomous_trading_platform.scheduler.jobs.run_risk_snapshot_job import (
 )
 from autonomous_trading_platform.scheduler.jobs.run_trading_evaluation_job import (
     run_trading_evaluation_job,
+)
+from autonomous_trading_platform.storage.sor.repositories.runtime_control_state_repository import (
+    RuntimeControlStateRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.runtime_job_run_repository import (
     RuntimeJobRunRepository,
@@ -181,6 +187,68 @@ def run_trading_cycle(now_utc: datetime | None = None):
         expected_symbols=expected_symbols,
         manifest=manifest,
     )
+    runtime_control_repository = RuntimeControlStateRepository(session)
+    runtime_control_service = RuntimeControlService(runtime_control_repository)
+
+    control_block_reason = runtime_control_service.get_cycle_block_reason(
+        expected_trading_mode=settings.trading_environment.value,
+    )
+
+    if control_block_reason is not None:
+        logger.warning(
+            "trading_cycle_skipped_due_to_runtime_control_state",
+            extra=LogContext(
+                run_id=str(run_id),
+                component=component,
+                incident_type=control_block_reason,
+            ).to_extra(),
+        )
+
+        audit_logger.record_run_completed(
+            run_id=str(run_id),
+            component=component,
+            metadata={
+                **base_metadata,
+                "status": "skipped",
+                "skip_reason": control_block_reason,
+            },
+        )
+
+        _save_runtime_job_run(
+            status="completed",
+            completed_at=datetime.now(UTC),
+            error_message=None,
+            output_summary_json={
+                "status": "skipped",
+                "skip_reason": control_block_reason,
+                "last_successful_step": manifest.last_successful_step,
+                "current_step": None,
+            },
+        )
+
+        manifest.status = "completed"
+        manifest.current_step = None
+        manifest.error_message = control_block_reason
+        manifest_service.save(manifest)
+
+        trading_cycle_runs.add(
+            1,
+            {
+                "component": component,
+                "status": "skipped",
+            },
+        )
+
+        trading_cycle_duration.record(
+            perf_counter() - cycle_wall_start,
+            {
+                "component": component,
+                "status": "skipped",
+            },
+        )
+
+        return
+
     record_cycle_started(
         logger=logger,
         metrics=TRADING_CYCLE_METRICS,
