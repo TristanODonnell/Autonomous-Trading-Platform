@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.runtime.services.runtime_job_runner import RuntimeJobRunner
+from autonomous_trading_platform.scheduler.cycles.run_corporate_action_ingestion_cycle import (
+    run_corporate_action_ingestion_cycle,
+)
 from autonomous_trading_platform.scheduler.cycles.run_feature_pipeline_cycle import (
     run_feature_pipeline_cycle,
 )
@@ -80,6 +83,8 @@ class PaperTradingGoldenPathOrchestrator:
 
             run_trading_cycle(now_utc=now_utc)
 
+            run_corporate_action_ingestion_cycle()
+
         self.runner.run(
             job_name="paper_trading_golden_path",
             trigger_type="scheduler",
@@ -91,6 +96,7 @@ class PaperTradingGoldenPathOrchestrator:
                     "market_ingestion_cycle",
                     "feature_pipeline_cycle",
                     "trading_cycle",
+                    "corporate_action_ingestion_cycle",
                 ],
             },
             job=_run_pipeline_chain,

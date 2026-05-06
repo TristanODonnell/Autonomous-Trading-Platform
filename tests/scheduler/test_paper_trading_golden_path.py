@@ -71,6 +71,15 @@ def _latest_dataset_version(db_session):
     )
 
 
+def _latest_corporate_action_dataset_version(db_session):
+    return (
+        db_session.query(DatasetVersions)
+        .filter(DatasetVersions.dataset_name == "corporate_actions")
+        .order_by(DatasetVersions.created_at.desc())
+        .first()
+    )
+
+
 def _runtime_job_runs_by_name(db_session, job_name):
     return (
         db_session.query(RuntimeJobRuns)
@@ -132,10 +141,7 @@ def test_paper_trading_golden_path_runs_trading_runtime_chain(
 
     assert dataset_version is not None
     assert dataset_version.dataset_name == "raw_bars"
-    assert dataset_version.validation_status in {
-        "unvalidated",
-        "validated",
-    }
+    assert dataset_version.validation_status == "validated"
 
     # -------------------------------------------------
     # 2. TRADING MANIFEST COMPLETED
@@ -178,16 +184,27 @@ def test_paper_trading_golden_path_runs_trading_runtime_chain(
     ingestion_jobs = _runtime_job_runs_by_name(db_session, "market_ingestion_cycle")
     feature_jobs = _runtime_job_runs_by_name(db_session, "feature_pipeline_cycle")
     trading_jobs = _runtime_job_runs_by_name(db_session, "trading_cycle")
+    corporate_action_jobs = _runtime_job_runs_by_name(
+        db_session,
+        "corporate_action_ingestion_cycle",
+    )
     golden_path_jobs = _runtime_job_runs_by_name(db_session, "paper_trading_golden_path")
 
     assert ingestion_jobs != []
     assert feature_jobs != []
     assert trading_jobs != []
+    assert corporate_action_jobs != []
     assert golden_path_jobs != []
 
     assert ingestion_jobs[0].status == "completed"
     assert feature_jobs[0].status == "completed"
     assert trading_jobs[0].status == "completed"
+    assert corporate_action_jobs[0].status == "completed"
+    assert corporate_action_jobs[0].output_summary_json is not None
+    assert (
+        corporate_action_jobs[0].output_summary_json["source_raw_bars_dataset_version_id"]
+        == dataset_version.dataset_version_id
+    )
     assert golden_path_jobs[0].status == "completed"
 
     runtime_chain_job_names = {
@@ -195,6 +212,7 @@ def test_paper_trading_golden_path_runs_trading_runtime_chain(
         ingestion_jobs[0].job_name,
         feature_jobs[0].job_name,
         trading_jobs[0].job_name,
+        corporate_action_jobs[0].job_name,
     }
 
     assert runtime_chain_job_names == {
@@ -202,7 +220,16 @@ def test_paper_trading_golden_path_runs_trading_runtime_chain(
         "market_ingestion_cycle",
         "feature_pipeline_cycle",
         "trading_cycle",
+        "corporate_action_ingestion_cycle",
     }
+
+    corporate_action_dataset = _latest_corporate_action_dataset_version(db_session)
+
+    assert corporate_action_dataset is not None
+    assert corporate_action_dataset.dataset_name == "corporate_actions"
+    assert corporate_action_dataset.validation_status == "validated"
+    assert corporate_action_dataset.source_manifest is not None
+    assert corporate_action_dataset.source_manifest["pipeline"] == "corporate_actions_ingestion"
 
     # -------------------------------------------------
     # 4. DETAILED TRADING OUTPUTS
@@ -280,4 +307,5 @@ def test_paper_trading_golden_path_runs_trading_runtime_chain(
         "market_ingestion_cycle",
         "feature_pipeline_cycle",
         "trading_cycle",
+        "corporate_action_ingestion_cycle",
     ]

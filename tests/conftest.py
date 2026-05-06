@@ -21,6 +21,10 @@ _engine = create_engine(
 )
 
 from autonomous_trading_platform.db import get_session  # noqa: E402
+from tests.utilities.corporate_action_ingestion_cycle_fixture import (  # noqa: E402
+    SeededCorporateActionIngestionCycleFixture,
+    seed_corporate_action_ingestion_cycle_fixture,
+)
 from tests.utilities.feature_pipeline_cycle_fixture import (  # noqa: E402
     SeededFeaturePipelineCycleFixture,
     seed_feature_pipeline_cycle_fixture,
@@ -213,6 +217,19 @@ def seeded_feature_pipeline_cycle_fixture(
     monkeypatch,
 ) -> SeededFeaturePipelineCycleFixture:
     return seed_feature_pipeline_cycle_fixture(
+        session=db_session,
+        data_root=tmp_path,
+        monkeypatch=monkeypatch,
+    )
+
+
+@pytest.fixture()
+def seeded_corporate_action_ingestion_cycle_fixture(
+    db_session,
+    tmp_path,
+    monkeypatch,
+) -> SeededCorporateActionIngestionCycleFixture:
+    return seed_corporate_action_ingestion_cycle_fixture(
         session=db_session,
         data_root=tmp_path,
         monkeypatch=monkeypatch,

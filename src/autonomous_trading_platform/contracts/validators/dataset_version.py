@@ -3,14 +3,22 @@ from __future__ import annotations
 from autonomous_trading_platform.contracts.runtime.dataset_version import DatasetVersion
 from autonomous_trading_platform.storage.parquet.datasets import (
     ADJUSTED_BARS_DATASET,
+    CORPORATE_ACTIONS_DATASET,
     RAW_BARS_DATASET,
 )
 
 from .core import Rule, is_non_negative
 
 SUPPORTED_SCHEMA_VERSIONS = {
-    RAW_BARS_DATASET.dataset_key: {RAW_BARS_DATASET.schema_version},
-    ADJUSTED_BARS_DATASET.dataset_key: {ADJUSTED_BARS_DATASET.schema_version},
+    RAW_BARS_DATASET.dataset_key: {
+        RAW_BARS_DATASET.schema_version,
+    },
+    ADJUSTED_BARS_DATASET.dataset_key: {
+        ADJUSTED_BARS_DATASET.schema_version,
+    },
+    CORPORATE_ACTIONS_DATASET.dataset_key: {
+        CORPORATE_ACTIONS_DATASET.schema_version,
+    },
 }
 
 DATASET_VERSION_RULES: list[Rule[DatasetVersion]] = [

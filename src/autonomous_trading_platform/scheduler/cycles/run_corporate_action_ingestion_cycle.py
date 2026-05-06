@@ -12,7 +12,9 @@ from autonomous_trading_platform.contracts.common.enums import BarInterval, Pric
 from autonomous_trading_platform.contracts.runtime.dataset_version import DatasetVersion
 from autonomous_trading_platform.contracts.runtime.ingestion_run import IngestionRun
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
+from autonomous_trading_platform.contracts.runtime.runtime_job_run import RuntimeJobRun
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.ingestion.corporate_actions.jobs.ingest_corporate_actions_job import (
     IngestCorporateActionsJob,
 )
@@ -44,10 +46,17 @@ from autonomous_trading_platform.runtime.services.ingestion_run_registration_ser
     IngestionRunRegistrationService,
 )
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
+from autonomous_trading_platform.storage.parquet.datasets import (
+    CORPORATE_ACTIONS_DATASET,
+    RAW_BARS_DATASET,
+)
 from autonomous_trading_platform.storage.parquet.repositories.parquet_bar_repository import (
     ParquetBarRepository,
 )
 from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
+from autonomous_trading_platform.storage.sor.repositories.runtime_job_run_repository import (
+    RuntimeJobRunRepository,
+)
 
 logger = get_logger(__name__)
 CORPORATE_ACTION_INGESTION_CYCLE_METRICS = CycleMetricSet(
@@ -75,10 +84,55 @@ def run_corporate_action_ingestion_cycle() -> None:
     ingestion_run_registration_service = IngestionRunRegistrationService(session=session)
     run_id = uuid.uuid4()
     ingestion_run_id = uuid.uuid4()
-    dataset_version_id = generate_dataset_version("adjusted_bars")
+    component = "scheduler.run_corporate_action_ingestion_cycle"
+
+    runtime_job_run_repository = RuntimeJobRunRepository(session)
+    job_run_id = str(run_id)
+    job_started_at = now_utc
+
+    def _save_runtime_job_run(
+        *,
+        status: str,
+        completed_at: datetime | None,
+        error_message: str | None,
+        output_summary_json: dict | None,
+    ) -> None:
+        runtime_job_run_repository.save(
+            RuntimeJobRun(
+                job_run_id=job_run_id,
+                job_name="corporate_action_ingestion_cycle",
+                parent_job_run_id=None,
+                status=status,
+                trigger_type="scheduler",
+                started_at=job_started_at,
+                completed_at=completed_at,
+                duration_ms=(
+                    int((perf_counter() - cycle_wall_start) * 1000)
+                    if completed_at is not None
+                    else None
+                ),
+                error_message=error_message,
+                correlation_id=str(run_id),
+                input_summary_json={
+                    "component": component,
+                    "dataset_name": CORPORATE_ACTIONS_DATASET.dataset_key,
+                    "price_basis": PriceBasis.RAW.value,
+                    "interval": BarInterval.ONE_DAY.value,
+                },
+                output_summary_json=output_summary_json,
+            )
+        )
+
+    _save_runtime_job_run(
+        status="running",
+        completed_at=None,
+        error_message=None,
+        output_summary_json=None,
+    )
+
     ingestion_run: IngestionRun | None = None
     dataset_version: DatasetVersion | None = None
-    component = "scheduler.run_corporate_action_ingestion_cycle"
+    manifest: RunManifest | None = None
     base_metadata: dict[str, object] = {}
 
     record_cycle_started(
@@ -92,9 +146,11 @@ def run_corporate_action_ingestion_cycle() -> None:
         cycle_end = now_utc
         cycle_start = cycle_end - timedelta(days=1)
 
+        dataset_version_id = generate_dataset_version("corporate_actions")
+
         manifest = RunManifest(
             run_id=run_id,
-            run_type=RunType.PAPER,
+            run_type=RunType.CORPORATE_ACTION_INGESTION,
             created_at=now_utc,
             environment="local",
             broker="alpaca",
@@ -104,6 +160,8 @@ def run_corporate_action_ingestion_cycle() -> None:
             strategy_config={},
             capital_bucket=Decimal("10000.00"),
             interval=BarInterval.ONE_DAY,
+            price_basis=PriceBasis.RAW,
+            governance_state=GovernanceState.APPROVED_RESEARCH,
             start_date=cycle_start.date(),
             end_date=cycle_end.date(),
             dataset_version=str(dataset_version_id),
@@ -142,12 +200,12 @@ def run_corporate_action_ingestion_cycle() -> None:
 
         dataset_version_contract = DatasetVersion(
             dataset_version_id=dataset_version_id,
-            dataset_name="corporate_actions",
+            dataset_name=CORPORATE_ACTIONS_DATASET.dataset_key,
             created_at=now_utc,
             source="alpaca",
             price_basis=PriceBasis.RAW,
             interval=BarInterval.ONE_DAY,
-            schema_version="corporate_actions_schema_v1",
+            schema_version=CORPORATE_ACTIONS_DATASET.schema_version,
             symbol_coverage=None,
             date_coverage_start=cycle_start.date(),
             date_coverage_end=cycle_end.date(),
@@ -203,7 +261,7 @@ def run_corporate_action_ingestion_cycle() -> None:
                     step_span.set_attribute("ratp.step", step)
 
                     source_raw_dataset = dataset_registration_service.get_latest_validated_dataset(
-                        dataset_name="bars",
+                        dataset_name=RAW_BARS_DATASET.dataset_key,
                         price_basis=PriceBasis.RAW,
                     )
 
@@ -254,6 +312,23 @@ def run_corporate_action_ingestion_cycle() -> None:
             dataset_version.validation_status = "validated"
             dataset_version = dataset_registration_service.save(dataset_version)
 
+            _save_runtime_job_run(
+                status="completed",
+                completed_at=datetime.now(UTC),
+                error_message=None,
+                output_summary_json={
+                    "dataset_version_id": str(dataset_version_id),
+                    "ingestion_run_id": str(ingestion_run_id),
+                    "source_raw_bars_dataset_version_id": str(source_raw_bars_dataset_version_id),
+                    "last_successful_step": "ingest_corporate_actions",
+                },
+            )
+
+            manifest.status = "completed"
+            manifest.current_step = None
+            manifest.error_message = None
+            manifest_service.save(manifest)
+
             audit_logger.record_run_completed(
                 run_id=str(run_id),
                 component=component,
@@ -270,6 +345,18 @@ def run_corporate_action_ingestion_cycle() -> None:
             )
 
     except Exception as exc:
+        _save_runtime_job_run(
+            status="failed",
+            completed_at=datetime.now(UTC),
+            error_message=str(exc),
+            output_summary_json={
+                "dataset_version_id": str(dataset_version_id)
+                if "dataset_version_id" in locals()
+                else None,
+                "ingestion_run_id": str(ingestion_run_id),
+            },
+        )
+
         if ingestion_run is not None:
             ingestion_run.status = "failed"
             ingestion_run.completed_at = datetime.now(UTC)
@@ -280,6 +367,11 @@ def run_corporate_action_ingestion_cycle() -> None:
         if dataset_version is not None:
             dataset_version.validation_status = "failed"
             dataset_version = dataset_registration_service.save(dataset_version)
+
+        if manifest is not None:
+            manifest.status = "failed"
+            manifest.error_message = str(exc)
+            manifest_service.save(manifest)
 
         total_duration = perf_counter() - cycle_wall_start
         audit_logger.record_run_failed(

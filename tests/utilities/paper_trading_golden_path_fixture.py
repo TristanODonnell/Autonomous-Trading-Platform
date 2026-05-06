@@ -7,6 +7,9 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from tests.utilities.corporate_action_ingestion_cycle_fixture import (
+    _patch_runtime_seams as _patch_corporate_action_runtime_seams,
+)
 from tests.utilities.feature_pipeline_cycle_fixture import (
     seed_feature_pipeline_cycle_fixture,
 )
@@ -39,6 +42,11 @@ def seed_paper_trading_golden_path_fixture(
     monkeypatch,
 ) -> SeededPaperTradingGoldenPathFixture:
     _patch_ingestion_runtime_seams(
+        session=session,
+        data_root=data_root,
+        monkeypatch=monkeypatch,
+    )
+    _patch_corporate_action_runtime_seams(
         session=session,
         data_root=data_root,
         monkeypatch=monkeypatch,
