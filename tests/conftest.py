@@ -25,9 +25,17 @@ from tests.utilities.corporate_action_ingestion_cycle_fixture import (  # noqa: 
     SeededCorporateActionIngestionCycleFixture,
     seed_corporate_action_ingestion_cycle_fixture,
 )
+from tests.utilities.experiment_pipeline_cycle_fixture import (  # noqa: E402
+    SeededExperimentPipelineCycleFixture,
+    seed_experiment_pipeline_cycle_fixture,
+)
 from tests.utilities.feature_pipeline_cycle_fixture import (  # noqa: E402
     SeededFeaturePipelineCycleFixture,
     seed_feature_pipeline_cycle_fixture,
+)
+from tests.utilities.historical_research_golden_path_fixture import (  # noqa: E402
+    SeededHistoricalResearchGoldenPathFixture,
+    seed_historical_research_golden_path_fixture,
 )
 from tests.utilities.market_backfill_cycle_fixture import (  # noqa: E402
     SeededMarketBackfillCycleFixture,
@@ -247,6 +255,32 @@ def seeded_market_backfill_cycle_fixture(
     monkeypatch,
 ) -> SeededMarketBackfillCycleFixture:
     return seed_market_backfill_cycle_fixture(
+        session=db_session,
+        data_root=tmp_path,
+        monkeypatch=monkeypatch,
+    )
+
+
+@pytest.fixture()
+def seeded_historical_research_golden_path_fixture(
+    db_session,
+    tmp_path,
+    monkeypatch,
+) -> SeededHistoricalResearchGoldenPathFixture:
+    return seed_historical_research_golden_path_fixture(
+        session=db_session,
+        data_root=tmp_path,
+        monkeypatch=monkeypatch,
+    )
+
+
+@pytest.fixture()
+def seeded_experiment_pipeline_cycle_fixture(
+    db_session,
+    tmp_path,
+    monkeypatch,
+) -> SeededExperimentPipelineCycleFixture:
+    return seed_experiment_pipeline_cycle_fixture(
         session=db_session,
         data_root=tmp_path,
         monkeypatch=monkeypatch,

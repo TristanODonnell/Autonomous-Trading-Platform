@@ -337,7 +337,9 @@ def run_market_ingestion_cycle(
             )
             ingestion_run.completed_at = datetime.now(UTC)
             ingestion_run = ingestion_run_registration_service.save(ingestion_run)
-
+            manifest.status = "completed"
+            manifest.error_message = None
+            manifest_service.save(manifest)
             audit_logger.record_run_completed(
                 run_id=str(run_id),
                 component=component,

@@ -21,7 +21,11 @@
       "Bash(python -m pytest tests/scheduler/test_feature_pipeline_cycle.py::test_feature_parquet_outputs_are_written -v --no-header -s)",
       "Bash(python -m pytest \"tests/scheduler/test_paper_trading_golden_path.py::test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset\" -v -s)",
       "Bash(python -m pytest \"tests/scheduler/test_paper_trading_golden_path.py::test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset\" --tb=short)",
-      "Bash(python -m pytest \"tests/scheduler/test_paper_trading_golden_path.py::test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset\" --tb=long)"
+      "Bash(python -m pytest \"tests/scheduler/test_paper_trading_golden_path.py::test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset\" --tb=long)",
+      "Bash(python -m pytest tests/scheduler/test_market_backfill_cycle.py -v)",
+      "Bash(python -m pytest tests/scheduler/test_historical_research_golden_path.py -v)",
+      "Bash(python -c \"from autonomous_trading_platform.scheduler.cycles.run_experiment_pipeline_cycle import run_experiment_pipeline_cycle, _load_experiment_definition_from_yaml; print\\('OK'\\)\")",
+      "Bash(python -m pytest tests/scheduler/test_experiment_pipeline_cycle.py -v)"
     ]
   }
 }

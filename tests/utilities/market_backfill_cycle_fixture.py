@@ -37,11 +37,6 @@ class FakeProviderBar:
     trade_count: int
 
 
-class FakeAlpacaBarsResponse:
-    def __init__(self, data):
-        self.data = data
-
-
 class FakeRawHistoricalClient:
     pass
 
@@ -50,16 +45,13 @@ class FakeAlpacaHistoricalBarsClient:
     def __init__(self, _raw_client: Any):
         pass
 
-    async def fetch_bars(self, *, symbols, start, end, timeframe="1Min", **kwargs):
+    def fetch_bars(self, *, symbols, start, end, timeframe="1Min", **kwargs):
         data = {}
 
         for symbol_index, symbol in enumerate(symbols):
             base = 100.0 + symbol_index * 10
             bars = []
 
-            # 10 one-minute bars per symbol.
-            # If your backfill job aggregates, this should become 2 five-minute bars.
-            # If it writes directly, this becomes 10 rows per symbol.
             for i in range(10):
                 ts = start + timedelta(minutes=i)
                 open_price = base + i
@@ -81,7 +73,12 @@ class FakeAlpacaHistoricalBarsClient:
 
             data[symbol] = bars
 
-        return FakeAlpacaBarsResponse(data)
+        all_bars = []
+
+        for symbol_bars in data.values():
+            all_bars.extend(symbol_bars)
+
+        return all_bars
 
 
 def seed_market_backfill_cycle_fixture(

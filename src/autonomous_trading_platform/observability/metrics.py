@@ -658,3 +658,37 @@ feature_pipeline_cycle_step_runs = meter.create_counter(
     description="Total number of Feature pipeline step executions",
     unit="1",
 )
+
+# =========================
+# EXPERIMENT PIPELINE CYCLE METRICS
+# =========================
+
+experiment_pipeline_cycle_runs = meter.create_counter(
+    name="ratp_experiment_pipeline_cycle_runs_total",
+    description="Total number of experiment pipeline cycle executions",
+    unit="1",
+)
+
+experiment_pipeline_cycle_failures = meter.create_counter(
+    name="ratp_experiment_pipeline_cycle_failures_total",
+    description="Total number of experiment pipeline cycle failures",
+    unit="1",
+)
+
+experiment_pipeline_cycle_duration = meter.create_histogram(
+    name="ratp_experiment_pipeline_cycle_duration_seconds",
+    description="Experiment pipeline cycle execution duration",
+    unit="s",
+)
+
+experiment_pipeline_cycle_step_runs = meter.create_counter(
+    name="ratp_experiment_pipeline_cycle_step_runs_total",
+    description="Total number of experiment pipeline cycle step executions",
+    unit="1",
+)
+
+experiment_pipeline_cycle_step_duration = meter.create_histogram(
+    name="ratp_experiment_pipeline_cycle_step_duration_seconds",
+    description="Experiment pipeline cycle step execution duration",
+    unit="s",
+)
