@@ -101,5 +101,6 @@ class RuntimeJobRunRepository(BaseRepository):
         row = self.to_row(contract)
         saved = self.upsert(row)
         self.session.flush()
+        self.session.commit()
 
         return self.to_contract(saved)

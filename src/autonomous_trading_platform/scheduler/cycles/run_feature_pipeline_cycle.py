@@ -109,6 +109,54 @@ FEATURE_PIPELINE_STEP_METRICS = StepMetricSet(
 )
 
 
+class MixedLineageError(ValueError):
+    pass
+
+
+def _validate_feature_pipeline_lineage(
+    *,
+    dataset_version_id: str | None,
+    price_basis: PriceBasis,
+    dataset_registration_service: DatasetRegistrationService,
+) -> None:
+    if dataset_version_id is None:
+        return
+
+    source_dataset = dataset_registration_service.get_by_dataset_version_id(
+        dataset_version_id,
+    )
+
+    if source_dataset is None:
+        raise MixedLineageError(
+            f"Dataset version not found for feature pipeline: {dataset_version_id}"
+        )
+
+    if price_basis == PriceBasis.RAW:
+        if source_dataset.dataset_name != "raw_bars":
+            raise MixedLineageError("RAW feature pipeline must use a raw_bars source dataset.")
+
+        if source_dataset.price_basis != PriceBasis.RAW:
+            raise MixedLineageError(
+                "RAW feature pipeline source dataset must have RAW price basis."
+            )
+
+    if price_basis == PriceBasis.ADJUSTED:
+        if source_dataset.dataset_name != "adjusted_bars":
+            raise MixedLineageError(
+                "ADJUSTED feature pipeline must use an adjusted_bars source dataset."
+            )
+
+        if source_dataset.price_basis != PriceBasis.ADJUSTED:
+            raise MixedLineageError(
+                "ADJUSTED feature pipeline source dataset must have ADJUSTED price basis."
+            )
+
+        if source_dataset.source_dataset_version is None:
+            raise MixedLineageError(
+                "ADJUSTED feature pipeline source dataset must link to a raw source dataset."
+            )
+
+
 def run_feature_pipeline_cycle(
     *,
     now_utc: datetime | None = None,
@@ -245,6 +293,24 @@ def run_feature_pipeline_cycle(
             feature_dataset_repository=feature_dataset_repository,
         )
         validation_service = FeatureValidationService()
+
+        source_dataset = (
+            dataset_registration_service.get_by_dataset_version_id(dataset_version_id)
+            if dataset_version_id is not None
+            else None
+        )
+
+        print("DEBUG DATASET:", source_dataset)
+        print(
+            "DEBUG SOURCE DATASET VERSION:",
+            source_dataset.source_dataset_version if source_dataset is not None else None,
+        )
+
+        _validate_feature_pipeline_lineage(
+            dataset_version_id=dataset_version_id,
+            price_basis=price_basis,
+            dataset_registration_service=dataset_registration_service,
+        )
 
         # Compute services
         returns_service = ReturnsFeatureService()

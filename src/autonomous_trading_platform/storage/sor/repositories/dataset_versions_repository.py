@@ -52,6 +52,7 @@ class DatasetVersionsRepository(BaseRepository):
             date_coverage_end=contract.date_coverage_end,
             validation_status=contract.validation_status,
             checksum=contract.checksum,
+            source_dataset_version=contract.source_dataset_version,
             source_manifest=contract.source_manifest,
             metadata_json=contract.metadata_json,
         )
@@ -70,6 +71,7 @@ class DatasetVersionsRepository(BaseRepository):
             date_coverage_end=row.date_coverage_end,
             validation_status=row.validation_status,
             checksum=row.checksum,
+            source_dataset_version=row.source_dataset_version,
             source_manifest=row.source_manifest,
             metadata_json=row.metadata_json,
         )

@@ -1,5 +1,6 @@
 import pyarrow as pa
 import pyarrow.dataset as ds
+import pytest
 
 import autonomous_trading_platform.scheduler.cycles.run_feature_pipeline_cycle as cycle_module
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
@@ -338,3 +339,89 @@ def test_runtime_job_run_is_recorded_for_feature_pipeline_cycle(
     assert job.output_summary_json["include_moving_average"] is True
     assert job.output_summary_json["include_liquidity"] is True
     assert job.output_summary_json["include_regime"] is True
+
+
+def test_feature_pipeline_rejects_adjusted_price_basis_for_raw_dataset(
+    seeded_feature_pipeline_cycle_fixture,
+):
+    fixture = seeded_feature_pipeline_cycle_fixture
+
+    with pytest.raises(ValueError, match="ADJUSTED feature pipeline must use an adjusted_bars"):
+        run_feature_pipeline_cycle(
+            price_basis=PriceBasis.ADJUSTED,
+            dataset_version_id=fixture.dataset_version,
+            symbols=fixture.symbols,
+            start_date=fixture.start_date,
+            end_date=fixture.end_date,
+        )
+
+
+def test_feature_pipeline_cycle_marks_failure_when_parquet_write_fails(
+    seeded_feature_pipeline_cycle_fixture,
+    db_session,
+    monkeypatch,
+):
+    fixture = seeded_feature_pipeline_cycle_fixture
+
+    def failing_write_dataset(*args, **kwargs):
+        raise OSError("simulated parquet write failure")
+
+    monkeypatch.setattr(
+        ds,
+        "write_dataset",
+        failing_write_dataset,
+    )
+
+    with pytest.raises(OSError, match="simulated parquet write failure"):
+        run_feature_pipeline_cycle(
+            price_basis=PriceBasis.RAW,
+            dataset_version_id=fixture.dataset_version,
+            symbols=fixture.symbols,
+            start_date=fixture.start_date,
+            end_date=fixture.end_date,
+        )
+
+    manifest = _latest_manifest(db_session)
+    job = _latest_runtime_job_run(db_session)
+    feature_versions = _feature_dataset_versions_for_source(
+        db_session,
+        fixture.dataset_version,
+    )
+
+    assert manifest is not None
+    assert manifest.status == "failed"
+    assert "simulated parquet write failure" in manifest.error_message
+
+    assert job is not None
+    assert job.status == "failed"
+    assert "simulated parquet write failure" in job.error_message
+
+    assert feature_versions == []
+
+
+def test_feature_pipeline_cycle_marks_failure_when_source_dataset_is_missing(
+    seeded_feature_pipeline_cycle_fixture,
+    db_session,
+):
+    fixture = seeded_feature_pipeline_cycle_fixture
+    missing_dataset_version = "missing_raw_bars_dataset_v1"
+
+    with pytest.raises(ValueError, match="missing_raw_bars_dataset_v1"):
+        run_feature_pipeline_cycle(
+            price_basis=PriceBasis.RAW,
+            dataset_version_id=missing_dataset_version,
+            symbols=fixture.symbols,
+            start_date=fixture.start_date,
+            end_date=fixture.end_date,
+        )
+
+    manifest = _latest_manifest(db_session)
+    job = _latest_runtime_job_run(db_session)
+
+    assert manifest is not None
+    assert manifest.status == "failed"
+    assert missing_dataset_version in manifest.error_message
+
+    assert job is not None
+    assert job.status == "failed"
+    assert missing_dataset_version in job.error_message

@@ -2,7 +2,9 @@ from datetime import timedelta
 from decimal import Decimal
 
 import pyarrow.dataset as ds
+import pytest
 
+import autonomous_trading_platform.scheduler.cycles.run_market_ingestion_cycle as cycle_module
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
 from autonomous_trading_platform.scheduler.cycles.run_market_ingestion_cycle import (
     run_market_ingestion_cycle,
@@ -37,7 +39,7 @@ def _latest_runtime_job_run(db_session):
     return (
         db_session.query(RuntimeJobRuns)
         .filter(RuntimeJobRuns.job_name == "market_ingestion_cycle")
-        .order_by(RuntimeJobRuns.started_at.desc())
+        .order_by(RuntimeJobRuns.completed_at.desc().nullslast())
         .first()
     )
 
@@ -253,3 +255,136 @@ def test_runtime_job_run_is_recorded_for_market_ingestion_cycle(
     assert job.output_summary_json["ingestion_run_id"] == str(ingestion_run.ingestion_run_id)
     assert job.output_summary_json["expected_symbol_count"] == fixture.symbol_count
     assert job.output_summary_json["last_successful_step"] == "ingest_bars"
+
+
+def test_market_ingestion_cycle_marks_failure_when_market_data_job_fails(
+    seeded_market_ingestion_cycle_fixture,
+    db_session,
+    monkeypatch,
+):
+    fixture = seeded_market_ingestion_cycle_fixture
+
+    recorded_events = []
+
+    class FakeAuditLogger:
+        def __init__(self, session):
+            pass
+
+        def record_run_started(self, **kwargs):
+            recorded_events.append(("started", kwargs))
+
+        def record_run_completed(self, **kwargs):
+            recorded_events.append(("completed", kwargs))
+
+        def record_run_failed(self, **kwargs):
+            recorded_events.append(("failed", kwargs))
+
+    class FailingIngestBarsJob:
+        def __init__(self, **kwargs):
+            pass
+
+        def run_once(self, *, start, end):
+            raise RuntimeError("simulated market data failure")
+
+    monkeypatch.setattr(cycle_module, "AuditLoggingService", FakeAuditLogger)
+    monkeypatch.setattr(cycle_module, "IngestBarsJob", FailingIngestBarsJob)
+
+    with pytest.raises(RuntimeError, match="simulated market data failure"):
+        run_market_ingestion_cycle(now_utc=fixture.now_utc)
+
+    ingestion_run = _latest_ingestion_run(db_session)
+    dataset_version = _latest_dataset_version(db_session)
+    jobs = (
+        db_session.query(RuntimeJobRuns)
+        .filter(RuntimeJobRuns.job_name == "market_ingestion_cycle")
+        .all()
+    )
+
+    assert jobs != []
+
+    job = next(job for job in jobs if job.status == "failed")
+
+    assert ingestion_run.status == "failed"
+    assert "simulated market data failure" in ingestion_run.error_message
+
+    assert dataset_version is not None
+    assert dataset_version.validation_status == "failed"
+
+    assert job is not None
+    assert job.status == "failed"
+    assert "simulated market data failure" in job.error_message
+    assert job.output_summary_json is not None
+    assert job.output_summary_json["dataset_version_id"] == dataset_version.dataset_version_id
+    assert job.output_summary_json["ingestion_run_id"] == str(ingestion_run.ingestion_run_id)
+
+    assert recorded_events != []
+    assert any(event[0] == "started" for event in recorded_events)
+    assert any(event[0] == "failed" for event in recorded_events)
+    assert not any(event[0] == "completed" for event in recorded_events)
+
+
+def test_market_ingestion_cycle_marks_failure_when_parquet_write_fails(
+    seeded_market_ingestion_cycle_fixture,
+    db_session,
+    monkeypatch,
+):
+    fixture = seeded_market_ingestion_cycle_fixture
+
+    def failing_write_dataset(*args, **kwargs):
+        raise OSError("simulated parquet write failure")
+
+    monkeypatch.setattr(
+        ds,
+        "write_dataset",
+        failing_write_dataset,
+    )
+
+    with pytest.raises(OSError, match="simulated parquet write failure"):
+        run_market_ingestion_cycle(now_utc=fixture.now_utc)
+
+    ingestion_run = _latest_ingestion_run(db_session)
+    dataset_version = _latest_dataset_version(db_session)
+
+    job = (
+        db_session.query(RuntimeJobRuns)
+        .filter(RuntimeJobRuns.job_name == "market_ingestion_cycle")
+        .filter(RuntimeJobRuns.status == "failed")
+        .one()
+    )
+
+    assert ingestion_run is not None
+    assert ingestion_run.status == "failed"
+    assert "simulated parquet write failure" in ingestion_run.error_message
+
+    assert dataset_version is not None
+    assert dataset_version.validation_status == "failed"
+
+    assert job.status == "failed"
+    assert "simulated parquet write failure" in job.error_message
+    assert job.output_summary_json["dataset_version_id"] == dataset_version.dataset_version_id
+    assert job.output_summary_json["ingestion_run_id"] == str(ingestion_run.ingestion_run_id)
+
+
+def test_market_ingestion_cycle_surfaces_db_write_failure(
+    seeded_market_ingestion_cycle_fixture,
+    db_session,
+    monkeypatch,
+):
+    fixture = seeded_market_ingestion_cycle_fixture
+
+    original_commit = db_session.commit
+    commit_count = 0
+
+    def failing_commit():
+        nonlocal commit_count
+        commit_count += 1
+
+        if commit_count == 2:
+            raise RuntimeError("simulated db write failure")
+
+        return original_commit()
+
+    monkeypatch.setattr(db_session, "commit", failing_commit)
+
+    with pytest.raises(RuntimeError, match="simulated db write failure"):
+        run_market_ingestion_cycle(now_utc=fixture.now_utc)

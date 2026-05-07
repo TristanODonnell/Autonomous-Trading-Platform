@@ -1,3 +1,5 @@
+import pytest
+
 import autonomous_trading_platform.scheduler.cycles.run_corporate_action_ingestion_cycle as cycle_module
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
 from autonomous_trading_platform.scheduler.cycles.run_corporate_action_ingestion_cycle import (
@@ -86,6 +88,7 @@ def test_corporate_action_manifest_is_completed(
 
 def test_corporate_action_job_receives_source_raw_dataset_version(
     seeded_corporate_action_ingestion_cycle_fixture,
+    monkeypatch,
 ):
     fixture = seeded_corporate_action_ingestion_cycle_fixture
 
@@ -98,7 +101,11 @@ def test_corporate_action_job_receives_source_raw_dataset_version(
         def ingest_corporate_actions_job(self):
             return None
 
-    cycle_module.IngestCorporateActionsJob = CapturingFakeIngestCorporateActionsJob
+    monkeypatch.setattr(
+        cycle_module,
+        "IngestCorporateActionsJob",
+        CapturingFakeIngestCorporateActionsJob,
+    )
 
     run_corporate_action_ingestion_cycle()
 
@@ -204,3 +211,41 @@ def test_runtime_job_run_is_recorded_for_corporate_action_ingestion_cycle(
         == fixture.source_raw_bars_dataset_version
     )
     assert job.output_summary_json["last_successful_step"] == "ingest_corporate_actions"
+
+
+def test_corporate_action_ingestion_cycle_marks_failure_when_parquet_write_fails(
+    seeded_corporate_action_ingestion_cycle_fixture,
+    db_session,
+    monkeypatch,
+):
+    class FailingIngestCorporateActionsJob:
+        def __init__(self, **kwargs):
+            pass
+
+        def ingest_corporate_actions_job(self):
+            raise OSError("simulated parquet write failure")
+
+    monkeypatch.setattr(
+        cycle_module,
+        "IngestCorporateActionsJob",
+        FailingIngestCorporateActionsJob,
+    )
+
+    with pytest.raises(OSError, match="simulated parquet write failure"):
+        run_corporate_action_ingestion_cycle()
+
+    ingestion_run = _latest_ingestion_run(db_session)
+    manifest = _latest_manifest(db_session)
+    job = _latest_runtime_job_run(db_session)
+
+    assert ingestion_run is not None
+    assert ingestion_run.status == "failed"
+    assert "simulated parquet write failure" in ingestion_run.error_message
+
+    assert manifest is not None
+    assert manifest.status == "failed"
+    assert "simulated parquet write failure" in manifest.error_message
+
+    assert job is not None
+    assert job.status == "failed"
+    assert "simulated parquet write failure" in job.error_message

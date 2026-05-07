@@ -5,6 +5,11 @@ from time import perf_counter
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.contracts.common.enums import (
+    BarInterval,
+    PriceBasis,
+)
+from autonomous_trading_platform.contracts.runtime.dataset_version import DatasetVersion
 from autonomous_trading_platform.ingestion.corporate_actions.services.corporate_action_ingestion_service import (
     CorporateActionIngestionService,
 )
@@ -23,6 +28,9 @@ from autonomous_trading_platform.observability.metrics import (
 )
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
+from autonomous_trading_platform.runtime.services.dataset_registration_service import (
+    DatasetRegistrationService,
+)
 from autonomous_trading_platform.storage.parquet.datasets import ADJUSTED_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.mappers import bars_to_arrow
 from autonomous_trading_platform.storage.parquet.repositories.parquet_bar_repository import (
@@ -102,6 +110,35 @@ class IngestCorporateActionsJob:
                         dataset=ADJUSTED_BARS_DATASET,
                         base_path="data",
                         dataset_version=self.adjusted_bars_dataset_version_id,
+                    )
+                    dataset_registration_service = DatasetRegistrationService(
+                        session=self.session,
+                    )
+
+                    dataset_registration_service.register(
+                        DatasetVersion(
+                            dataset_version_id=self.adjusted_bars_dataset_version_id,
+                            dataset_name=ADJUSTED_BARS_DATASET.dataset_key,
+                            created_at=self.cycle_timestamp,
+                            source="corporate_action_adjustment",
+                            price_basis=PriceBasis.ADJUSTED,
+                            interval=BarInterval.ONE_DAY,
+                            schema_version=ADJUSTED_BARS_DATASET.schema_version,
+                            symbol_coverage=None,
+                            date_coverage_start=self.cycle_timestamp.date(),
+                            date_coverage_end=self.cycle_timestamp.date(),
+                            validation_status="validated",
+                            checksum=None,
+                            source_dataset_version=self.source_raw_bars_dataset_version_id,
+                            source_manifest={
+                                "pipeline": "corporate_action_adjustment",
+                                "source_raw_bars_dataset_version_id": self.source_raw_bars_dataset_version_id,
+                            },
+                            metadata_json={
+                                "dataset_type": "adjusted_bars",
+                                "source_raw_bars_dataset_version_id": self.source_raw_bars_dataset_version_id,
+                            },
+                        )
                     )
 
             duration = perf_counter() - job_start
