@@ -28,6 +28,7 @@ from autonomous_trading_platform.observability.metrics import (
 )
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
+from autonomous_trading_platform.storage.parquet import paths as _parquet_paths
 from autonomous_trading_platform.storage.parquet.services.bar_chunk_writer_service import (
     BarChunkWriterService,
 )
@@ -127,7 +128,7 @@ class MarketBackfillService:
             enforce_lateness=False,
         )
         self.ingestion_quality_recorder_service = IngestionQualityRecorderService(session)
-        self.bar_chunk_writer = BarChunkWriterService(base_path="data")
+        self.bar_chunk_writer = BarChunkWriterService(base_path=str(_parquet_paths.get_data_root()))
 
     async def backfill(
         self,

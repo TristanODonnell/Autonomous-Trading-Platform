@@ -13,7 +13,9 @@ from autonomous_trading_platform.contracts.common.enums import BarInterval, Pric
 from autonomous_trading_platform.contracts.runtime.dataset_version import DatasetVersion
 from autonomous_trading_platform.contracts.runtime.ingestion_run import IngestionRun
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
+from autonomous_trading_platform.contracts.runtime.runtime_job_run import RuntimeJobRun
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.ingestion.market_data.clients.alpaca_historical_bars_client import (
     AlpacaHistoricalBarsClient,
 )
@@ -51,7 +53,11 @@ from autonomous_trading_platform.runtime.services.ingestion_run_registration_ser
     IngestionRunRegistrationService,
 )
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
+from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
+from autonomous_trading_platform.storage.sor.repositories.runtime_job_run_repository import (
+    RuntimeJobRunRepository,
+)
 
 logger = get_logger(__name__)
 MARKET_BACKFILL_CYCLE_METRICS = CycleMetricSet(
@@ -89,6 +95,46 @@ def run_market_backfill_cycle(
     ingestion_run: IngestionRun | None = None
     dataset_version: DatasetVersion | None = None
     component = "scheduler.run_market_backfill_cycle"
+    runtime_job_run_repository = RuntimeJobRunRepository(session)
+    job_run_id = str(run_id)
+    job_started_at = now
+
+    def _save_runtime_job_run(
+        *,
+        status: str,
+        completed_at: datetime | None,
+        error_message: str | None,
+        output_summary_json: dict | None,
+    ) -> None:
+        runtime_job_run_repository.save(
+            RuntimeJobRun(
+                job_run_id=job_run_id,
+                job_name="market_backfill_cycle",
+                parent_job_run_id=None,
+                status=status,
+                trigger_type="scheduler",
+                started_at=job_started_at,
+                completed_at=completed_at,
+                duration_ms=(
+                    int((perf_counter() - cycle_wall_start) * 1000)
+                    if completed_at is not None
+                    else None
+                ),
+                error_message=error_message,
+                correlation_id=str(run_id),
+                input_summary_json={
+                    "component": component,
+                    "dataset_name": RAW_BARS_DATASET.dataset_key,
+                    "price_basis": PriceBasis.RAW.value,
+                    "interval": BarInterval.FIVE_MIN.value,
+                    "symbols": symbols,
+                    "start": start.isoformat() if start else None,
+                    "end": end.isoformat() if end else None,
+                },
+                output_summary_json=output_summary_json,
+            )
+        )
+
     base_metadata: dict[str, object] = {}
 
     record_cycle_started(
@@ -116,9 +162,17 @@ def run_market_backfill_cycle(
         if start is None:
             start = end - timedelta(days=30)
 
+        _save_runtime_job_run(
+            status="running",
+            completed_at=None,
+            error_message=None,
+            output_summary_json=None,
+        )
         manifest = RunManifest(
             run_id=run_id,
-            run_type=RunType.BACKTEST,
+            run_type=RunType.BACKFILL,
+            dataset_version=str(dataset_version_id),
+            governance_state=GovernanceState.APPROVED_RESEARCH,
             created_at=end,
             environment="local",
             broker="alpaca",
@@ -131,7 +185,6 @@ def run_market_backfill_cycle(
             start_date=start.date(),
             end_date=end.date(),
             price_basis=PriceBasis.RAW,
-            dataset_version="v1",
             universe_version="v1",
             git_commit="dev",
             python_version=platform.python_version(),
@@ -163,12 +216,12 @@ def run_market_backfill_cycle(
 
             dataset_version_contract = DatasetVersion(
                 dataset_version_id=dataset_version_id,
-                dataset_name="bars",
+                dataset_name=RAW_BARS_DATASET.dataset_key,
                 created_at=now,
                 source="alpaca",
                 price_basis=PriceBasis.RAW,
                 interval=BarInterval.FIVE_MIN,
-                schema_version="1.1",
+                schema_version=RAW_BARS_DATASET.schema_version,
                 symbol_coverage=len(symbols),
                 date_coverage_start=start.date(),
                 date_coverage_end=end.date(),
@@ -267,7 +320,27 @@ def run_market_backfill_cycle(
 
             ingestion_run.status = "completed"
             ingestion_run.completed_at = datetime.now(UTC)
+            _save_runtime_job_run(
+                status="completed",
+                completed_at=datetime.now(UTC),
+                error_message=None,
+                output_summary_json={
+                    "dataset_version_id": str(dataset_version_id),
+                    "ingestion_run_id": str(ingestion_run_id),
+                    "expected_symbol_count": len(symbols),
+                    "last_successful_step": "backfill_market_bars",
+                },
+            )
+
             ingestion_run = ingestion_run_registration_service.save(ingestion_run)
+
+            if dataset_version is not None:
+                dataset_version.validation_status = "validated"
+                dataset_version = dataset_registration_service.save(dataset_version)
+
+            manifest.status = "completed"
+            manifest.error_message = None
+            manifest_service.save(manifest)
 
             audit_logger.record_run_completed(
                 run_id=str(run_id),
@@ -285,6 +358,15 @@ def run_market_backfill_cycle(
             )
 
     except Exception as exc:
+        _save_runtime_job_run(
+            status="failed",
+            completed_at=datetime.now(UTC),
+            error_message=str(exc),
+            output_summary_json={
+                "dataset_version_id": str(dataset_version_id),
+                "ingestion_run_id": str(ingestion_run_id),
+            },
+        )
         if ingestion_run is not None:
             ingestion_run.status = "failed"
             ingestion_run.completed_at = datetime.now(UTC)

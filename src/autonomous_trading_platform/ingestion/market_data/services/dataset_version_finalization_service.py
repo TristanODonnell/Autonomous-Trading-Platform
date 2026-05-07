@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from autonomous_trading_platform.contracts.common.enums import CheckpointStatus
+from autonomous_trading_platform.storage.parquet import paths as _parquet_paths
 from autonomous_trading_platform.storage.parquet.compute_checksum import compute_file_checksum
 from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.paths import dataset_version_root
@@ -12,9 +13,9 @@ from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUni
 
 
 class DatasetVersionFinalizationService:
-    def __init__(self, session, base_path: str = "data") -> None:
+    def __init__(self, session, base_path=None) -> None:
         self.session = session
-        self.base_path = base_path
+        self.base_path = base_path if base_path is not None else _parquet_paths.get_data_root()
 
     def finalize_backfill_dataset_version(
         self,

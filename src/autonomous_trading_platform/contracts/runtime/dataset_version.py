@@ -24,3 +24,4 @@ class DatasetVersion(BaseModel):
     checksum: str | None = None
     source_manifest: dict[str, Any] | None = None
     metadata_json: dict[str, Any] | None = None
+    source_dataset_version: str | None = None

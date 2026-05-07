@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -123,6 +124,8 @@ def write_table(
     dataset: ParquetDataset,
     base_path: str | Path,
     dataset_version: str,
+    *,
+    allow_existing: bool = False,
 ) -> None:
     ingestion_timestamp = datetime.now(UTC).isoformat()
 
@@ -142,14 +145,19 @@ def write_table(
 
     root = dataset_version_root(base_path, dataset, dataset_version)
 
-    _ensure_dataset_version_is_new(root)
+    if not allow_existing:
+        _ensure_dataset_version_is_new(root)
+
+    partition_fields = [dataset.schema.field(col) for col in dataset.partition_cols]
+    hive_partitioning = ds.partitioning(pa.schema(partition_fields), flavor="hive")
 
     ds.write_dataset(
         table,
         base_dir=str(root),
         format="parquet",
-        partitioning=list(dataset.partition_cols),
-        existing_data_behavior="error",
+        partitioning=hive_partitioning,
+        existing_data_behavior="overwrite_or_ignore" if allow_existing else "error",
+        basename_template=f"part-{uuid.uuid4().hex}-{{i}}.parquet",
     )
 
     parquet_files = _list_parquet_files(root)

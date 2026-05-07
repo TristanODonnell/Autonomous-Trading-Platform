@@ -80,6 +80,7 @@ class RunType(enum.StrEnum):
     INGESTION = "ingestion"
     BACKFILL = "backfill"
     SIMULATION = "simulation"
+    CORPORATE_ACTION_INGESTION = "corporate_action_ingestion"
 
 
 class SignalDirection(enum.StrEnum):

@@ -159,7 +159,7 @@ def build_trading_run_manifest(
 ) -> RunManifest:
     return RunManifest(
         run_id=run_id,
-        run_type=RunType.BACKTEST,
+        run_type=RunType.PAPER,
         created_at=created_at or datetime.now(UTC),
         environment="local",
         broker="alpaca",
