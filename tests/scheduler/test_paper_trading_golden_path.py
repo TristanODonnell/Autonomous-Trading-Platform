@@ -29,6 +29,16 @@ def _latest_trading_manifest(db_session, fixture):
     )
 
 
+def _latest_raw_feature_dataset_version(db_session):
+    return (
+        db_session.query(DatasetVersions)
+        .filter(DatasetVersions.dataset_name == "features")
+        .filter(DatasetVersions.metadata_json["price_basis"].as_string() == "raw")
+        .order_by(DatasetVersions.created_at.desc())
+        .first()
+    )
+
+
 def _order_intents_for_run(db_session, run_id):
     return db_session.query(OrderIntents).filter(OrderIntents.run_id == run_id).all()
 
@@ -605,6 +615,14 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
     # Capture the ID now — run_eod_maintenance closes the session internally, which
     # detaches ORM objects loaded before the call.
     source_raw_dataset_version_id = source_raw_dataset.dataset_version_id
+    raw_feature_dataset = _latest_raw_feature_dataset_version(db_session)
+
+    # Intraday fixture may produce a no-op feature cycle if no bars
+    # are available for the exact simulated tick.
+    if raw_feature_dataset is not None:
+        assert raw_feature_dataset.dataset_name == "features"
+        assert raw_feature_dataset.validation_status == "validated"
+        assert raw_feature_dataset.source_dataset_version == source_raw_dataset_version_id
 
     # EOD maintenance flow:
     # corporate_action_ingestion_cycle -> adjusted_bars generation -> features on adjusted_bars
