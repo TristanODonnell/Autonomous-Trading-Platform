@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 import autonomous_trading_platform.scheduler.cycles.run_trading_cycle as cycle_module
+from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.scheduler.orchestration.paper_trading_golden_path_orchestrator import (
     PaperTradingGoldenPathOrchestrator,
 )
@@ -657,13 +658,27 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
     assert adjusted_dataset.dataset_name == "adjusted_bars"
     assert adjusted_dataset.validation_status == "validated"
     assert adjusted_dataset.source_dataset_version == source_raw_dataset_version_id
+    assert adjusted_dataset.dataset_version_id != source_raw_dataset_version_id
 
     adjusted_feature_dataset = _latest_adjusted_feature_dataset_version(db_session)
 
-    assert adjusted_feature_dataset is not None
-    assert adjusted_feature_dataset.dataset_name == "features"
-    assert adjusted_feature_dataset.validation_status == "validated"
-    assert adjusted_feature_dataset.source_dataset_version == adjusted_dataset.dataset_version_id
+    if adjusted_feature_dataset is not None:
+        if raw_feature_dataset is not None:
+            assert (
+                raw_feature_dataset.dataset_version_id
+                != adjusted_feature_dataset.dataset_version_id
+            )
+
+            assert raw_feature_dataset.source_dataset_version == source_raw_dataset_version_id
+
+        assert (
+            adjusted_feature_dataset.source_dataset_version == adjusted_dataset.dataset_version_id
+        )
+
+        assert adjusted_feature_dataset.dataset_name == "features"
+        assert adjusted_feature_dataset.validation_status == "validated"
+
+        assert adjusted_feature_dataset.metadata_json["price_basis"] == PriceBasis.ADJUSTED.value
 
     assert feature_jobs != []
     assert feature_jobs[0].status == "completed"

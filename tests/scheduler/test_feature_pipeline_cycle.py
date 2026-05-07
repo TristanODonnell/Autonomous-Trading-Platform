@@ -1,5 +1,6 @@
 import pyarrow as pa
 import pyarrow.dataset as ds
+import pytest
 
 import autonomous_trading_platform.scheduler.cycles.run_feature_pipeline_cycle as cycle_module
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
@@ -338,3 +339,18 @@ def test_runtime_job_run_is_recorded_for_feature_pipeline_cycle(
     assert job.output_summary_json["include_moving_average"] is True
     assert job.output_summary_json["include_liquidity"] is True
     assert job.output_summary_json["include_regime"] is True
+
+
+def test_feature_pipeline_rejects_adjusted_price_basis_for_raw_dataset(
+    seeded_feature_pipeline_cycle_fixture,
+):
+    fixture = seeded_feature_pipeline_cycle_fixture
+
+    with pytest.raises(ValueError, match="ADJUSTED feature pipeline must use an adjusted_bars"):
+        run_feature_pipeline_cycle(
+            price_basis=PriceBasis.ADJUSTED,
+            dataset_version_id=fixture.dataset_version,
+            symbols=fixture.symbols,
+            start_date=fixture.start_date,
+            end_date=fixture.end_date,
+        )
