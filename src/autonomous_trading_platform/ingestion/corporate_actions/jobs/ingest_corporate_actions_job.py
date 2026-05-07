@@ -48,6 +48,7 @@ class IngestCorporateActionsJob:
         cycle_timestamp: datetime,
         ingestion_run_id: str,
         dataset_version_id: str,
+        adjusted_bars_dataset_version_id: str,
         source_raw_bars_dataset_version_id: str,
         bar_repository: ParquetBarRepository,
     ) -> None:
@@ -59,6 +60,7 @@ class IngestCorporateActionsJob:
         self.dataset_version_id = dataset_version_id
         self.source_raw_bars_dataset_version_id = source_raw_bars_dataset_version_id
         self.bar_repository = bar_repository
+        self.adjusted_bars_dataset_version_id = adjusted_bars_dataset_version_id
 
     def ingest_corporate_actions_job(self) -> None:
         component = "ingestion.ingest_corporate_actions_job"
@@ -99,7 +101,7 @@ class IngestCorporateActionsJob:
                         table=table,
                         dataset=ADJUSTED_BARS_DATASET,
                         base_path="data",
-                        dataset_version=self.dataset_version_id,
+                        dataset_version=self.adjusted_bars_dataset_version_id,
                     )
 
             duration = perf_counter() - job_start

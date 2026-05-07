@@ -18,7 +18,10 @@
       "Bash(python -m pytest tests/scheduler/test_paper_trading_golden_path.py -x -s)",
       "Bash(python -m pytest tests/scheduler/test_feature_pipeline_cycle.py -x -v)",
       "Bash(python -m pytest tests/scheduler/test_feature_pipeline_cycle.py -v --no-header)",
-      "Bash(python -m pytest tests/scheduler/test_feature_pipeline_cycle.py::test_feature_parquet_outputs_are_written -v --no-header -s)"
+      "Bash(python -m pytest tests/scheduler/test_feature_pipeline_cycle.py::test_feature_parquet_outputs_are_written -v --no-header -s)",
+      "Bash(python -m pytest \"tests/scheduler/test_paper_trading_golden_path.py::test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset\" -v -s)",
+      "Bash(python -m pytest \"tests/scheduler/test_paper_trading_golden_path.py::test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset\" --tb=short)",
+      "Bash(python -m pytest \"tests/scheduler/test_paper_trading_golden_path.py::test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset\" --tb=long)"
     ]
   }
 }

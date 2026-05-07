@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 
 import pyarrow.dataset as ds
@@ -39,6 +40,71 @@ def _latest_runtime_job_run(db_session):
         .order_by(RuntimeJobRuns.started_at.desc())
         .first()
     )
+
+
+def test_market_ingestion_cycle_reuses_same_daily_raw_dataset_version(
+    seeded_market_ingestion_cycle_fixture,
+    db_session,
+):
+    fixture = seeded_market_ingestion_cycle_fixture
+
+    first_cycle = fixture.now_utc
+    second_cycle = fixture.now_utc + timedelta(minutes=5)
+
+    run_market_ingestion_cycle(now_utc=first_cycle)
+    run_market_ingestion_cycle(now_utc=second_cycle)
+
+    raw_datasets = (
+        db_session.query(DatasetVersions)
+        .filter(DatasetVersions.dataset_name == RAW_BARS_DATASET.dataset_key)
+        .filter(DatasetVersions.price_basis == PriceBasis.RAW)
+        .filter(DatasetVersions.interval == BarInterval.FIVE_MIN)
+        .all()
+    )
+
+    ingestion_runs = db_session.query(IngestionRuns).order_by(IngestionRuns.created_at.asc()).all()
+
+    assert len(raw_datasets) == 1
+    assert len(ingestion_runs) == 2
+
+    daily_dataset = raw_datasets[0]
+
+    assert daily_dataset.metadata_json is not None
+    assert daily_dataset.metadata_json["dataset_lifecycle"] == "active_daily_incremental"
+    assert daily_dataset.metadata_json["trading_date"] == fixture.now_utc.date().isoformat()
+
+    assert {run.dataset_version for run in ingestion_runs} == {daily_dataset.dataset_version_id}
+
+
+def test_market_ingestion_cycle_creates_new_raw_dataset_for_new_trading_day(
+    seeded_market_ingestion_cycle_fixture,
+    db_session,
+):
+    fixture = seeded_market_ingestion_cycle_fixture
+
+    first_day_cycle = fixture.now_utc
+    next_day_cycle = fixture.now_utc + timedelta(days=1)
+
+    run_market_ingestion_cycle(now_utc=first_day_cycle)
+    run_market_ingestion_cycle(now_utc=next_day_cycle)
+
+    raw_datasets = (
+        db_session.query(DatasetVersions)
+        .filter(DatasetVersions.dataset_name == RAW_BARS_DATASET.dataset_key)
+        .filter(DatasetVersions.price_basis == PriceBasis.RAW)
+        .filter(DatasetVersions.interval == BarInterval.FIVE_MIN)
+        .order_by(DatasetVersions.created_at.asc())
+        .all()
+    )
+
+    assert len(raw_datasets) == 2
+
+    trading_dates = {dataset.metadata_json["trading_date"] for dataset in raw_datasets}
+
+    assert trading_dates == {
+        first_day_cycle.date().isoformat(),
+        next_day_cycle.date().isoformat(),
+    }
 
 
 def test_market_ingestion_cycle_runs_successfully(

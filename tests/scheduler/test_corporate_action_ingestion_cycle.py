@@ -56,6 +56,10 @@ def test_corporate_action_dataset_version_is_created_and_validated(
     assert dataset_version is not None
     assert dataset_version.dataset_name == "corporate_actions"
     assert dataset_version.source == "alpaca"
+    assert (
+        dataset_version.source_manifest["source_raw_bars_dataset_version_id"]
+        == seeded_corporate_action_ingestion_cycle_fixture.source_raw_bars_dataset_version
+    )
     assert dataset_version.price_basis == PriceBasis.RAW
     assert dataset_version.interval == BarInterval.ONE_DAY
     assert dataset_version.schema_version == CORPORATE_ACTIONS_DATASET.schema_version
@@ -105,7 +109,9 @@ def test_corporate_action_job_receives_source_raw_dataset_version(
     assert (
         job_kwargs["source_raw_bars_dataset_version_id"] == fixture.source_raw_bars_dataset_version
     )
-    assert job_kwargs["dataset_version_id"] is not None
+    assert job_kwargs["dataset_version_id"].startswith("corporate_actions_")
+    assert job_kwargs["adjusted_bars_dataset_version_id"].startswith("adjusted_bars_")
+    assert job_kwargs["dataset_version_id"] != job_kwargs["adjusted_bars_dataset_version_id"]
     assert job_kwargs["ingestion_run_id"] is not None
     assert job_kwargs["bar_repository"] is not None
 
@@ -163,6 +169,17 @@ def test_runtime_job_run_is_recorded_for_corporate_action_ingestion_cycle(
 
     assert ingestion_run is not None
     assert job is not None
+
+    assert job.output_summary_json["corporate_actions_dataset_version_id"] is not None
+    assert job.output_summary_json["adjusted_bars_dataset_version_id"] is not None
+    assert (
+        job.output_summary_json["corporate_actions_dataset_version_id"]
+        == job.output_summary_json["dataset_version_id"]
+    )
+    assert (
+        job.output_summary_json["corporate_actions_dataset_version_id"]
+        != job.output_summary_json["adjusted_bars_dataset_version_id"]
+    )
 
     assert job.job_name == "corporate_action_ingestion_cycle"
     assert job.parent_job_run_id is None

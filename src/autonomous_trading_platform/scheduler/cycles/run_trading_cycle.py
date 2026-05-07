@@ -7,6 +7,7 @@ from autonomous_trading_platform.common.errors import (
     TransientInfrastructureError,
 )
 from autonomous_trading_platform.config.enums import TradingEnvironment
+from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
 from autonomous_trading_platform.contracts.runtime.runtime_job_run import RuntimeJobRun
 from autonomous_trading_platform.execution.errors import ExecutionError
 from autonomous_trading_platform.execution.services.trading_freeze_service import (
@@ -79,6 +80,30 @@ TRADING_STEP_METRICS = StepMetricSet(
     runs=trading_cycle_step_runs,
     duration=trading_cycle_step_duration,
 )
+
+
+def _get_active_daily_raw_bars_dataset(
+    *,
+    session,
+    trading_date,
+) -> DatasetVersions | None:
+    row = (
+        session.query(DatasetVersions)
+        .filter(DatasetVersions.dataset_name == "raw_bars")
+        .filter(DatasetVersions.price_basis == PriceBasis.RAW.value)
+        .filter(DatasetVersions.interval == BarInterval.FIVE_MIN.value)
+        .filter(DatasetVersions.validation_status == "validated")
+        .filter(DatasetVersions.date_coverage_start == trading_date)
+        .filter(DatasetVersions.date_coverage_end == trading_date)
+        .filter(
+            DatasetVersions.metadata_json["dataset_lifecycle"].as_string()
+            == "active_daily_incremental"
+        )
+        .order_by(DatasetVersions.created_at.desc())
+        .first()
+    )
+
+    return row if isinstance(row, DatasetVersions) else None
 
 
 def run_trading_cycle(now_utc: datetime | None = None):
@@ -385,11 +410,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
 
                 manifest.last_successful_step = "ingestion_readiness"
 
-                latest_raw_bars = (
-                    session.query(DatasetVersions)
-                    .filter(DatasetVersions.dataset_name == "raw_bars")
-                    .order_by(DatasetVersions.created_at.desc())
-                    .first()
+                latest_raw_bars = _get_active_daily_raw_bars_dataset(
+                    session=session,
+                    trading_date=trading_cycle_window.cycle_end.date(),
                 )
                 if latest_raw_bars is not None:
                     manifest.dataset_version = latest_raw_bars.dataset_version_id

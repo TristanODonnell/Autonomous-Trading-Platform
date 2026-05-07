@@ -170,6 +170,7 @@ class IngestBarsJob:
                 dataset=RAW_BARS_DATASET,
                 base_path=get_data_root(),
                 dataset_version=self.dataset_version_id,
+                allow_existing=True,
             )
 
         self.ingestion_quality_recorder_service.record_symbol_date_quality(

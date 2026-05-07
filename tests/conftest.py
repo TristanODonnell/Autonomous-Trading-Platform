@@ -29,6 +29,10 @@ from tests.utilities.feature_pipeline_cycle_fixture import (  # noqa: E402
     SeededFeaturePipelineCycleFixture,
     seed_feature_pipeline_cycle_fixture,
 )
+from tests.utilities.market_backfill_cycle_fixture import (  # noqa: E402
+    SeededMarketBackfillCycleFixture,
+    seed_market_backfill_cycle_fixture,
+)
 from tests.utilities.market_ingestion_cycle_fixture import (  # noqa: E402
     SeededMarketIngestionCycleFixture,
     seed_market_ingestion_cycle_fixture,
@@ -230,6 +234,19 @@ def seeded_corporate_action_ingestion_cycle_fixture(
     monkeypatch,
 ) -> SeededCorporateActionIngestionCycleFixture:
     return seed_corporate_action_ingestion_cycle_fixture(
+        session=db_session,
+        data_root=tmp_path,
+        monkeypatch=monkeypatch,
+    )
+
+
+@pytest.fixture()
+def seeded_market_backfill_cycle_fixture(
+    db_session,
+    tmp_path,
+    monkeypatch,
+) -> SeededMarketBackfillCycleFixture:
+    return seed_market_backfill_cycle_fixture(
         session=db_session,
         data_root=tmp_path,
         monkeypatch=monkeypatch,

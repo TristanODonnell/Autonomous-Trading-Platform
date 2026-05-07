@@ -39,6 +39,7 @@ class DatasetVersions(Base):
 
     validation_status: Mapped[str] = mapped_column(String(32), nullable=False)
     checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    source_dataset_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     source_manifest: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

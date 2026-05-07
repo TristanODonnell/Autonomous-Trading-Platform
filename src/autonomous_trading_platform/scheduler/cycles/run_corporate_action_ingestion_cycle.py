@@ -70,9 +70,16 @@ CORPORATE_ACTION_INGESTION_STEP_METRICS = StepMetricSet(
 )
 
 
-def run_corporate_action_ingestion_cycle() -> None:
+def run_corporate_action_ingestion_cycle(
+    *,
+    source_raw_bars_dataset_version_id: str | None = None,
+) -> None:
     """
     Entry point for the Airflow DAG.
+
+    When called from a parent orchestrator that already resolved the active raw_bars
+    dataset, pass ``source_raw_bars_dataset_version_id`` to skip the internal lookup
+    and use the exact version the caller wants processed.
     """
     now_utc = datetime.now(UTC)
     cycle_wall_start = perf_counter()
@@ -146,7 +153,9 @@ def run_corporate_action_ingestion_cycle() -> None:
         cycle_end = now_utc
         cycle_start = cycle_end - timedelta(days=1)
 
-        dataset_version_id = generate_dataset_version("corporate_actions")
+        corporate_actions_dataset_version_id = generate_dataset_version("corporate_actions")
+        adjusted_bars_dataset_version_id = generate_dataset_version("adjusted_bars")
+        dataset_version_id = corporate_actions_dataset_version_id
 
         manifest = RunManifest(
             run_id=run_id,
@@ -198,6 +207,19 @@ def run_corporate_action_ingestion_cycle() -> None:
         )
         ingestion_run = ingestion_run_registration_service.register(ingestion_run_contract)
 
+        if source_raw_bars_dataset_version_id is not None:
+            _resolved_raw_bars_version_id = source_raw_bars_dataset_version_id
+        else:
+            source_raw_dataset = dataset_registration_service.get_latest_validated_dataset(
+                dataset_name=RAW_BARS_DATASET.dataset_key,
+                price_basis=PriceBasis.RAW,
+            )
+            if source_raw_dataset is None:
+                raise ValueError("No validated raw bars dataset version found.")
+            _resolved_raw_bars_version_id = source_raw_dataset.dataset_version_id
+
+        source_raw_bars_dataset_version_id = _resolved_raw_bars_version_id
+
         dataset_version_contract = DatasetVersion(
             dataset_version_id=dataset_version_id,
             dataset_name=CORPORATE_ACTIONS_DATASET.dataset_key,
@@ -211,11 +233,13 @@ def run_corporate_action_ingestion_cycle() -> None:
             date_coverage_end=cycle_end.date(),
             validation_status="unvalidated",
             checksum=None,
+            source_dataset_version=str(source_raw_bars_dataset_version_id),
             source_manifest={
                 "pipeline": "corporate_actions_ingestion",
                 "ingestion_run_id": str(ingestion_run_id),
                 "cycle_start": cycle_start.isoformat(),
                 "cycle_end": cycle_end.isoformat(),
+                "source_raw_bars_dataset_version_id": str(source_raw_bars_dataset_version_id),
             },
             metadata_json={
                 **base_metadata,
@@ -260,16 +284,6 @@ def run_corporate_action_ingestion_cycle() -> None:
                     step_span.set_attribute("ratp.dataset_version_id", str(dataset_version_id))
                     step_span.set_attribute("ratp.step", step)
 
-                    source_raw_dataset = dataset_registration_service.get_latest_validated_dataset(
-                        dataset_name=RAW_BARS_DATASET.dataset_key,
-                        price_basis=PriceBasis.RAW,
-                    )
-
-                    if source_raw_dataset is None:
-                        raise ValueError("No validated raw bars dataset version found.")
-
-                    source_raw_bars_dataset_version_id = source_raw_dataset.dataset_version_id
-
                     bar_repository = ParquetBarRepository()
                     job = IngestCorporateActionsJob(
                         session=session,
@@ -277,7 +291,8 @@ def run_corporate_action_ingestion_cycle() -> None:
                         audit_logger=audit_logger,
                         cycle_timestamp=cycle_end,
                         ingestion_run_id=str(ingestion_run_id),
-                        dataset_version_id=str(dataset_version_id),
+                        dataset_version_id=str(corporate_actions_dataset_version_id),
+                        adjusted_bars_dataset_version_id=str(adjusted_bars_dataset_version_id),
                         bar_repository=bar_repository,
                         source_raw_bars_dataset_version_id=source_raw_bars_dataset_version_id,
                     )
@@ -317,7 +332,11 @@ def run_corporate_action_ingestion_cycle() -> None:
                 completed_at=datetime.now(UTC),
                 error_message=None,
                 output_summary_json={
-                    "dataset_version_id": str(dataset_version_id),
+                    "dataset_version_id": str(corporate_actions_dataset_version_id),
+                    "corporate_actions_dataset_version_id": str(
+                        corporate_actions_dataset_version_id
+                    ),
+                    "adjusted_bars_dataset_version_id": str(adjusted_bars_dataset_version_id),
                     "ingestion_run_id": str(ingestion_run_id),
                     "source_raw_bars_dataset_version_id": str(source_raw_bars_dataset_version_id),
                     "last_successful_step": "ingest_corporate_actions",

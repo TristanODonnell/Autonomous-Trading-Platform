@@ -38,6 +38,9 @@ from autonomous_trading_platform.observability.metrics import (
 from autonomous_trading_platform.observability.telemetry import setup_telemetry
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
+from autonomous_trading_platform.runtime.services.daily_dataset_version_resolver_service import (
+    DailyDatasetVersionResolverService,
+)
 from autonomous_trading_platform.runtime.services.dataset_registration_service import (
     DatasetRegistrationService,
 )
@@ -46,7 +49,6 @@ from autonomous_trading_platform.runtime.services.ingestion_run_registration_ser
 )
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
 from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
-from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
 from autonomous_trading_platform.storage.sor.repositories.runtime_job_run_repository import (
     RuntimeJobRunRepository,
 )
@@ -95,7 +97,10 @@ def run_market_ingestion_cycle(
     manifest_service = RunManifestService(session=session)
     dataset_registration_service = DatasetRegistrationService(session=session)
     ingestion_run_registration_service = IngestionRunRegistrationService(session=session)
-
+    daily_dataset_resolver_service = DailyDatasetVersionResolverService(
+        session=session,
+        dataset_registration_service=dataset_registration_service,
+    )
     run_id = uuid.uuid4()
     component = "scheduler.run_market_ingestion_cycle"
 
@@ -146,7 +151,7 @@ def run_market_ingestion_cycle(
     ingestion_run_id = uuid.uuid4()
     ingestion_run: IngestionRun | None = None
     dataset_version: DatasetVersion | None = None
-    dataset_version_id = generate_dataset_version("raw_bars")
+    dataset_version_id: str | None = None
     base_metadata: dict[str, object] = {}
 
     record_cycle_started(
@@ -170,6 +175,39 @@ def run_market_ingestion_cycle(
 
         cycle_end = floor_to_five_minutes(now_utc)
         cycle_start = cycle_end - timedelta(minutes=5)
+
+        trading_date = cycle_end.date()
+
+        base_metadata = {
+            "cycle_start": cycle_start.isoformat(),
+            "cycle_end": cycle_end.isoformat(),
+            "expected_symbols": sorted(expected_symbols),
+        }
+
+        dataset_version = daily_dataset_resolver_service.get_or_create_active_daily_dataset(
+            dataset_name=RAW_BARS_DATASET.dataset_key,
+            price_basis=PriceBasis.RAW,
+            interval=BarInterval.FIVE_MIN,
+            trading_date=trading_date,
+            created_at=now_utc,
+            source="alpaca",
+            schema_version=RAW_BARS_DATASET.schema_version,
+            symbol_coverage=len(expected_symbols),
+            date_coverage_start=trading_date,
+            date_coverage_end=trading_date,
+            source_manifest={
+                "pipeline": "market_ingestion",
+                "cycle_start": cycle_start.isoformat(),
+                "cycle_end": cycle_end.isoformat(),
+                "symbols": sorted(expected_symbols),
+            },
+            metadata_json={
+                **base_metadata,
+                "dataset_type": "incremental_market_bars",
+            },
+        )
+
+        dataset_version_id = dataset_version.dataset_version_id
 
         manifest = RunManifest(
             run_id=run_id,
@@ -195,11 +233,10 @@ def run_market_ingestion_cycle(
         )
         manifest_service.save(manifest)
         base_metadata = {
-            "cycle_start": cycle_start.isoformat(),
-            "cycle_end": cycle_end.isoformat(),
-            "expected_symbols": sorted(expected_symbols),
+            **base_metadata,
             "manifest_run_type": manifest.run_type.value,
             "manifest_interval": manifest.interval.value,
+            "dataset_version_id": str(dataset_version_id),
         }
         # TODO may need to change some field defaults later
         ingestion_run_contract = IngestionRun(
@@ -217,35 +254,6 @@ def run_market_ingestion_cycle(
             file_count=None,
         )
         ingestion_run = ingestion_run_registration_service.register(ingestion_run_contract)
-
-        # TODO may need to change some field defaults later
-        dataset_version_contract = DatasetVersion(
-            dataset_version_id=dataset_version_id,
-            dataset_name=RAW_BARS_DATASET.dataset_key,
-            created_at=now_utc,
-            source="alpaca",
-            price_basis=PriceBasis.RAW,
-            interval=BarInterval.FIVE_MIN,
-            schema_version=RAW_BARS_DATASET.schema_version,
-            symbol_coverage=len(expected_symbols),
-            date_coverage_start=cycle_start.date(),
-            date_coverage_end=cycle_end.date(),
-            validation_status="unvalidated",
-            checksum=None,
-            source_manifest={
-                "pipeline": "market_ingestion",
-                "ingestion_run_id": str(ingestion_run_id),
-                "cycle_start": cycle_start.isoformat(),
-                "cycle_end": cycle_end.isoformat(),
-                "symbols": sorted(expected_symbols),
-            },
-            metadata_json={
-                **base_metadata,
-                "dataset_type": "incremental_market_bars",
-            },
-        )
-
-        dataset_version = dataset_registration_service.register(dataset_version_contract)
 
         with start_span("market_ingestion_cycle.run", timespan=SpanTimespan.CYCLE) as cycle_span:
             cycle_span.set_attribute("ratp.run_id", str(run_id))
@@ -313,6 +321,9 @@ def run_market_ingestion_cycle(
                 raise
 
             ingestion_run.status = "completed"
+            if dataset_version is not None:
+                dataset_version.validation_status = "validated"
+                dataset_version = dataset_registration_service.save(dataset_version)
             _save_runtime_job_run(
                 status="completed",
                 completed_at=datetime.now(UTC),
