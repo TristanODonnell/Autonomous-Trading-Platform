@@ -1,4 +1,6 @@
 import pyarrow.dataset as ds
+import pyarrow.parquet as pq
+import pytest
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
 from autonomous_trading_platform.scheduler.cycles.run_market_backfill_cycle import (
@@ -228,3 +230,40 @@ def test_runtime_job_run_is_recorded_for_market_backfill_cycle(
     assert job.output_summary_json["ingestion_run_id"] == str(ingestion_run.ingestion_run_id)
     assert job.output_summary_json["expected_symbol_count"] == fixture.symbol_count
     assert job.output_summary_json["last_successful_step"] == "backfill_market_bars"
+
+
+def test_market_backfill_cycle_marks_failure_when_parquet_write_fails(
+    seeded_market_backfill_cycle_fixture,
+    db_session,
+    monkeypatch,
+):
+    fixture = seeded_market_backfill_cycle_fixture
+
+    def failing_write_dataset(*args, **kwargs):
+        raise OSError("simulated parquet write failure")
+
+    monkeypatch.setattr(
+        pq,
+        "write_table",
+        failing_write_dataset,
+    )
+
+    with pytest.raises(OSError, match="simulated parquet write failure"):
+        run_market_backfill_cycle(
+            symbols=fixture.symbols,
+            start=fixture.start,
+            end=fixture.end,
+        )
+
+    ingestion_run = _latest_ingestion_run(db_session)
+    job = _latest_runtime_job_run(db_session)
+
+    assert ingestion_run.status == "failed"
+    assert "simulated parquet write failure" in ingestion_run.error_message
+
+    assert job.status == "failed"
+    assert "simulated parquet write failure" in job.error_message
+
+    assert ingestion_run is not None
+    assert job is not None
+    assert job.output_summary_json is not None

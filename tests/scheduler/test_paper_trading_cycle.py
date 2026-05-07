@@ -578,3 +578,53 @@ def test_fill_engine_slippage_and_costs_are_reflected_in_paper_cycle(
 
     # Cash should decrease at least by some meaningful amount
     assert latest_cash.cash <= fixture.starting_cash
+
+
+def test_trading_cycle_marks_degraded_when_paper_execution_fails(
+    seeded_paper_trading_cycle_fixture,
+    db_session,
+    monkeypatch,
+):
+    fixture = seeded_paper_trading_cycle_fixture
+
+    from autonomous_trading_platform.scheduler.common import trading_cycle_common
+
+    original_builder = trading_cycle_common.build_trading_cycle_dependencies
+
+    class FailingPortfolioEngine:
+        def update_total_capital(self, *args, **kwargs):
+            raise RuntimeError("simulated paper execution failure")
+
+    def patched_builder():
+        deps = original_builder()
+        deps.portfolio_engine = FailingPortfolioEngine()
+        return deps
+
+    monkeypatch.setattr(
+        cycle_module,
+        "build_trading_cycle_dependencies",
+        patched_builder,
+    )
+
+    run_trading_cycle(now_utc=fixture.now_utc)
+
+    manifest = _latest_manifest(db_session)
+
+    assert manifest is not None
+    assert manifest.status == "completed"
+    assert manifest.error_message == "simulated paper execution failure"
+
+    job_runs = _runtime_job_runs_for_run(
+        db_session,
+        correlation_id=str(manifest.run_id),
+    )
+
+    assert job_runs != []
+
+    job = job_runs[0]
+
+    assert job.status == "completed"
+    assert job.output_summary_json is not None
+
+    fills = _fills_for_run(db_session, manifest.run_id)
+    assert fills == []

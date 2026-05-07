@@ -237,6 +237,34 @@ def test_experiment_pipeline_cycle_marks_manifest_failed_on_error(
     assert manifest.error_message is not None
 
 
+def test_experiment_pipeline_cycle_marks_failure_when_strategy_raises_exception(
+    seeded_experiment_pipeline_cycle_fixture,
+    db_session,
+):
+    fixture = seeded_experiment_pipeline_cycle_fixture
+
+    fixture.fake_orchestration_service.configure_to_raise(
+        RuntimeError("simulated strategy exception")
+    )
+
+    with pytest.raises(RuntimeError, match="simulated strategy exception"):
+        run_experiment_pipeline_cycle(
+            experiment_plan=fixture.experiment_plan,
+            now_utc=fixture.now_utc,
+        )
+
+    manifest = _latest_manifest(db_session)
+    job_run = _latest_runtime_job_run(db_session, "experiment_pipeline_cycle")
+
+    assert manifest is not None
+    assert manifest.status == "failed"
+    assert "simulated strategy exception" in manifest.error_message
+
+    assert job_run is not None
+    assert job_run.status == "failed"
+    assert "simulated strategy exception" in job_run.error_message
+
+
 # ---------------------------------------------------------------------------
 # Argument validation
 # ---------------------------------------------------------------------------
