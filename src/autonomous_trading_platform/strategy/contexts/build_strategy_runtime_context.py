@@ -12,10 +12,10 @@ from autonomous_trading_platform.research.simulation.services.lookahead_guard_se
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
 from autonomous_trading_platform.storage.parquet.datasets import ADJUSTED_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.reader import HistoricalBarDatasetReader
-from autonomous_trading_platform.storage.sor.repositories.strategy_runtime_state_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_runtime_state_repository import (
     StrategyRuntimeStateRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.universe_snapshot_repository import (
     UniverseSnapshotRepository,
 )
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (

@@ -37,7 +37,9 @@ from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.run_manifest_service import (
     RunManifestService,
 )
-from autonomous_trading_platform.storage.sor.repositories.signals_repository import SignalRepository
+from autonomous_trading_platform.storage.sor.repositories.core.signals_repository import (
+    SignalRepository,
+)
 from autonomous_trading_platform.strategy.services.strategy_bar_readiness_service import (
     StrategyBarReadinessService,
 )

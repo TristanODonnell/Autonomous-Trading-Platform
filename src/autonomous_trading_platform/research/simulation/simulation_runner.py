@@ -58,16 +58,16 @@ from autonomous_trading_platform.research.simulation.services.simulation_window_
     SimulationWindowLoader,
     shuffle_window_bar_timestamps,
 )
-from autonomous_trading_platform.storage.sor.repositories.experiments_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.experiments_repository import (
     ExperimentsRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.metrics_summary_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.metrics_summary_repository import (
     MetricsSummaryRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.simulation_runs_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.simulation_runs_repository import (
     SimulationRunsRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.strategy_configs_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_configs_repository import (
     StrategyConfigsRepository,
 )
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
 from autonomous_trading_platform.storage.sor.models.position_snapshots import PositionSnapshot
-from autonomous_trading_platform.storage.sor.repositories.portfolio_summary_repository import (
+from autonomous_trading_platform.storage.sor.repositories.queries.portfolio_summary_repository import (
     PortfolioSummaryRepository,
 )
 

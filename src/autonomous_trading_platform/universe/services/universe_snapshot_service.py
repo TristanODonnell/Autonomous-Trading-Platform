@@ -9,7 +9,7 @@ from typing import Any
 from autonomous_trading_platform.storage.sor.models.universe_snapshots import (
     UniverseSnapshot,
 )
-from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.universe_snapshot_repository import (
     UniverseSnapshotRepository,
 )
 

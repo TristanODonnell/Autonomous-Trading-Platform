@@ -15,13 +15,13 @@ from autonomous_trading_platform.portfolio.models import (
     CriterionResult,
     PromotionEligibility,
 )
-from autonomous_trading_platform.storage.sor.repositories.allocation_overrides_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.allocation_overrides_repository import (
     AllocationOverridesRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.capital_allocation_policies_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.capital_allocation_policies_repository import (
     CapitalAllocationPoliciesRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.promotion_rules_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_repository import (
     PromotionRulesRepository,
 )
 

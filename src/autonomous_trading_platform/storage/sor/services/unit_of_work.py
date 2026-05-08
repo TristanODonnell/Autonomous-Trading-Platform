@@ -2,72 +2,74 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
-from autonomous_trading_platform.storage.sor.repositories.audit_logs_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
     AuditLogRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.broker_order_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.broker_order_repository import (
     BrokerOrderRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.cash_snapshot_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.cash_snapshot_repository import (
     CashSnapshotRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.checksums_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.checksums_repository import (
     ChecksumsRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.corporate_action_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.corporate_action_repository import (
     CorporateActionRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.dataset_versions_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.dataset_versions_repository import (
     DatasetVersionsRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.experiments_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.experiments_repository import (
     ExperimentsRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.feature_dataset_versions_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.feature_dataset_versions_repository import (
     FeatureDatasetVersionsRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.fill_repository import FillRepository
-from autonomous_trading_platform.storage.sor.repositories.ingestion_checkpoints_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.fill_repository import FillRepository
+from autonomous_trading_platform.storage.sor.repositories.core.ingestion_checkpoints_repository import (
     IngestionCheckpointsRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.ingestion_runs_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.ingestion_runs_repository import (
     IngestionRunsRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.market_bar_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.market_bar_repository import (
     MarketBarRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.metrics_summary_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.metrics_summary_repository import (
     MetricsSummaryRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.missing_bar_incidents_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.missing_bar_incidents_repository import (
     MissingBarIncidentsRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.order_intent_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.order_intent_repository import (
     OrderIntentRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.position_snapshot_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.position_snapshot_repository import (
     PositionSnapshotRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.risk_snapshot_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.risk_snapshot_repository import (
     RiskSnapshotRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.run_manifests_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.run_manifests_repository import (
     RunManifestRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.signals_repository import SignalRepository
-from autonomous_trading_platform.storage.sor.repositories.strategy_runtime_state_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.signals_repository import (
+    SignalRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_runtime_state_repository import (
     StrategyRuntimeStateRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.symbol_date_coverage_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.symbol_date_coverage_repository import (
     SymbolDateCoverageRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.ticker_lifecycle_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.tracked_order_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.tracked_order_repository import (
     TrackedOrderRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.universe_snapshot_repository import (
     UniverseSnapshotRepository,
 )
 

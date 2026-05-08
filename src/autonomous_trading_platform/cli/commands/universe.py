@@ -9,10 +9,10 @@ from sqlalchemy.orm import Session
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.cli.helpers import parse_datetime
 from autonomous_trading_platform.db import get_session
-from autonomous_trading_platform.storage.sor.repositories.ticker_lifecycle_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.universe_snapshot_repository import (
     UniverseSnapshotRepository,
 )
 from autonomous_trading_platform.universe.jobs.run_universe_selection_cycle import (

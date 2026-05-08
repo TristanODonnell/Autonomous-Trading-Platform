@@ -5,9 +5,10 @@ from decimal import Decimal
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import desc, select
+from sqlalchemy import asc, case, desc, select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.contracts.common.enums import OrderSource
 from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
 from autonomous_trading_platform.storage.sor.models.position_snapshot_items import (
     PositionSnapshotItem,
@@ -20,24 +21,52 @@ class PortfolioSummaryRepository:
         self.session = session
 
     def get_latest_position_snapshot(self) -> PositionSnapshot | None:
-        stmt = select(PositionSnapshot).order_by(desc(PositionSnapshot.timestamp)).limit(1)
+        stmt = (
+            select(PositionSnapshot)
+            .order_by(
+                desc(PositionSnapshot.timestamp),
+                asc(_position_source_priority()),
+                desc(PositionSnapshot.snapshot_id),
+            )
+            .limit(1)
+        )
         return cast(PositionSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     def get_latest_cash_snapshot(self) -> CashSnapshot | None:
-        stmt = select(CashSnapshot).order_by(desc(CashSnapshot.timestamp)).limit(1)
+        stmt = (
+            select(CashSnapshot)
+            .order_by(
+                desc(CashSnapshot.timestamp),
+                asc(_cash_source_priority()),
+                desc(CashSnapshot.snapshot_id),
+            )
+            .limit(1)
+        )
         return cast(CashSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     def get_prior_position_snapshot(self, before_timestamp: datetime) -> PositionSnapshot | None:
         stmt = (
             select(PositionSnapshot)
             .where(PositionSnapshot.timestamp < before_timestamp)
-            .order_by(desc(PositionSnapshot.timestamp))
+            .order_by(
+                desc(PositionSnapshot.timestamp),
+                asc(_position_source_priority()),
+                desc(PositionSnapshot.snapshot_id),
+            )
             .limit(1)
         )
         return cast(PositionSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     def get_first_position_snapshot(self) -> PositionSnapshot | None:
-        stmt = select(PositionSnapshot).order_by(PositionSnapshot.timestamp.asc()).limit(1)
+        stmt = (
+            select(PositionSnapshot)
+            .order_by(
+                PositionSnapshot.timestamp.asc(),
+                asc(_position_source_priority()),
+                desc(PositionSnapshot.snapshot_id),
+            )
+            .limit(1)
+        )
         return cast(PositionSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     def get_total_market_value_for_snapshot(self, snapshot_id: UUID) -> Decimal:
@@ -67,7 +96,27 @@ class PortfolioSummaryRepository:
         stmt = (
             select(CashSnapshot)
             .where(CashSnapshot.timestamp <= timestamp)
-            .order_by(desc(CashSnapshot.timestamp))
+            .order_by(
+                desc(CashSnapshot.timestamp),
+                asc(_cash_source_priority()),
+                desc(CashSnapshot.snapshot_id),
+            )
             .limit(1)
         )
         return cast(CashSnapshot | None, self.session.scalars(stmt).one_or_none())
+
+
+def _cash_source_priority():
+    return case(
+        (CashSnapshot.source == OrderSource.LEDGER, 0),
+        (CashSnapshot.source == OrderSource.BROKER_RECONCILED, 1),
+        else_=2,
+    )
+
+
+def _position_source_priority():
+    return case(
+        (PositionSnapshot.source == OrderSource.LEDGER, 0),
+        (PositionSnapshot.source == OrderSource.BROKER_RECONCILED, 1),
+        else_=2,
+    )

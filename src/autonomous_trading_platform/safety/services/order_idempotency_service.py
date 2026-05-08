@@ -8,7 +8,7 @@ from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.contracts.runtime.audit_log import AuditLogEvent
 from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
 from autonomous_trading_platform.safety.errors import DuplicateIdempotencyKeyError
-from autonomous_trading_platform.storage.sor.repositories.audit_logs_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
     AuditLogRepository,
 )
 

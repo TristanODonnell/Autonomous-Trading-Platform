@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import cast
 
-from sqlalchemy import desc, select
+from sqlalchemy import asc, case, desc, select
 
+from autonomous_trading_platform.contracts.common.enums import OrderSource
 from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
 
@@ -23,11 +24,27 @@ class CashSnapshotRepository(BaseRepository):
         return cast(CashSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     def get_latest(self) -> CashSnapshot | None:
-        stmt = select(CashSnapshot).order_by(desc(CashSnapshot.timestamp)).limit(1)
+        stmt = (
+            select(CashSnapshot)
+            .order_by(
+                desc(CashSnapshot.timestamp),
+                asc(_cash_source_priority()),
+                desc(CashSnapshot.snapshot_id),
+            )
+            .limit(1)
+        )
         return cast(CashSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     def list_recent(self, limit: int = 20) -> list[CashSnapshot]:
-        stmt = select(CashSnapshot).order_by(desc(CashSnapshot.timestamp)).limit(limit)
+        stmt = (
+            select(CashSnapshot)
+            .order_by(
+                desc(CashSnapshot.timestamp),
+                asc(_cash_source_priority()),
+                desc(CashSnapshot.snapshot_id),
+            )
+            .limit(limit)
+        )
         return list(self.session.execute(stmt).scalars().all())
 
     def list_since(
@@ -38,7 +55,11 @@ class CashSnapshotRepository(BaseRepository):
             select(CashSnapshot)
             .where(CashSnapshot.timestamp >= start_timestamp)
             .where(CashSnapshot.equity.is_not(None))
-            .order_by(CashSnapshot.timestamp.asc())
+            .order_by(
+                CashSnapshot.timestamp.asc(),
+                desc(_cash_source_priority()),
+                CashSnapshot.snapshot_id.asc(),
+            )
         )
         return list(self.session.execute(stmt).scalars().all())
 
@@ -52,7 +73,11 @@ class CashSnapshotRepository(BaseRepository):
             .where(CashSnapshot.timestamp >= start_timestamp)
             .where(CashSnapshot.timestamp <= end_timestamp)
             .where(CashSnapshot.equity.is_not(None))
-            .order_by(CashSnapshot.timestamp.asc())
+            .order_by(
+                CashSnapshot.timestamp.asc(),
+                desc(_cash_source_priority()),
+                CashSnapshot.snapshot_id.asc(),
+            )
         )
         return list(self.session.execute(stmt).scalars().all())
 
@@ -97,3 +122,11 @@ class CashSnapshotRepository(BaseRepository):
         obj = self.get_by_snapshot_id(id_value)
         if obj is not None:
             self.session.delete(obj)
+
+
+def _cash_source_priority():
+    return case(
+        (CashSnapshot.source == OrderSource.LEDGER, 0),
+        (CashSnapshot.source == OrderSource.BROKER_RECONCILED, 1),
+        else_=2,
+    )

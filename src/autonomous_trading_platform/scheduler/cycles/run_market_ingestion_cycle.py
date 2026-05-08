@@ -49,13 +49,13 @@ from autonomous_trading_platform.runtime.services.ingestion_run_registration_ser
 )
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
 from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
-from autonomous_trading_platform.storage.sor.repositories.runtime_job_run_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_repository import (
     RuntimeJobRunRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.ticker_lifecycle_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.universe_snapshot_repository import (
     UniverseSnapshotRepository,
 )
 from autonomous_trading_platform.universe.services.ticker_lifecycle_service import (

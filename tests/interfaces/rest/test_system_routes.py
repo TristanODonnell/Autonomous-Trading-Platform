@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from time import perf_counter
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -114,3 +116,11 @@ class TestSystemHealth:
         assert "request_id" in meta
         assert "timestamp" in meta
         assert "version" in meta
+
+    def test_responds_under_100ms(self, client: TestClient) -> None:
+        start = perf_counter()
+        response = client.get("/api/v1/system/health", headers=auth_headers())
+        elapsed_ms = (perf_counter() - start) * 1000
+
+        assert response.status_code == 200
+        assert elapsed_ms < 100

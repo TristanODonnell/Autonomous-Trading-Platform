@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
 from autonomous_trading_platform.storage.sor.models.corporate_actions import CorporateAction
-from autonomous_trading_platform.storage.sor.repositories.corporate_action_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.corporate_action_repository import (
     CorporateActionRepository,
 )
 from autonomous_trading_platform.universe.services.historical_universe_filter_service import (
@@ -30,6 +30,6 @@ class CorporateActionQueryService:
         )
         return self.corporate_action_repository.get_actions_for_symbols_between(
             symbols=symbols,
-            start_ts=start_ts,
-            end_ts=end_ts,
+            start_date=start_ts.date(),
+            end_date=end_ts.date(),
         )

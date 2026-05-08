@@ -106,6 +106,24 @@ class RuntimeControlStateRepository(BaseRepository):
         self.session.flush()
         return state
 
+    def activate_kill_switch(
+        self,
+        *,
+        triggered_by: str,
+        reason: str,
+        triggered_at: datetime,
+    ) -> RuntimeControlState:
+        state = self.get_or_create_global_state()
+        state.kill_switch_enabled = True
+        state.trading_enabled = False
+        state.trading_paused = False
+        state.reason = reason
+        state.updated_by = triggered_by
+        state.updated_at = triggered_at
+
+        self.session.flush()
+        return state
+
     def set_trading_mode(
         self,
         *,

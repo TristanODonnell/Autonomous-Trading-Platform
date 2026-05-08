@@ -24,7 +24,7 @@ from autonomous_trading_platform.scheduler.cycles.run_market_backfill_cycle impo
     run_market_backfill_cycle,
 )
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
-from autonomous_trading_platform.storage.sor.repositories.runtime_job_run_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_repository import (
     RuntimeJobRunRepository,
 )
 

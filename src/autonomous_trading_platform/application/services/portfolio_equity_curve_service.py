@@ -6,17 +6,19 @@ from typing import Any, Protocol
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
-from autonomous_trading_platform.storage.sor.repositories.cash_snapshot_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.cash_snapshot_repository import (
     CashSnapshotRepository,
 )
 
 
 class EquityCurveReader(Protocol):
+    def get_latest(self) -> CashSnapshot | None: ...
+
     def list_since(self, start_timestamp: datetime) -> list[CashSnapshot]: ...
 
 
-def _resolve_start(period: str) -> datetime:
-    now = datetime.now(UTC)
+def _resolve_start(period: str, *, anchor: datetime | None = None) -> datetime:
+    now = anchor or datetime.now(UTC)
 
     if period == "today":
         return now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -41,7 +43,11 @@ class PortfolioEquityCurveService:
         self.repo = repo or CashSnapshotRepository(session=session)
 
     def get_equity_curve(self, period: str) -> dict[str, Any]:
-        start = _resolve_start(period)
+        latest_snapshot = self.repo.get_latest() if hasattr(self.repo, "get_latest") else None
+        start = _resolve_start(
+            period,
+            anchor=latest_snapshot.timestamp if latest_snapshot is not None else None,
+        )
         snapshots = self.repo.list_since(start)
 
         points = [

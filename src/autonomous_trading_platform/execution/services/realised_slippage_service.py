@@ -16,7 +16,7 @@ from autonomous_trading_platform.contracts.trading.fill import Fill
 from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
 from autonomous_trading_platform.contracts.trading.slippage_measurement import SlippageMeasurement
 from autonomous_trading_platform.storage.sor.models.fill_quality_metrics import FillQualityMetrics
-from autonomous_trading_platform.storage.sor.repositories.fill_quality_metrics_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.fill_quality_metrics_repository import (
     FillQualityMetricsRepository,
 )
 

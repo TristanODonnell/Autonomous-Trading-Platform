@@ -63,19 +63,19 @@ from autonomous_trading_platform.storage.parquet.reader import HistoricalBarData
 from autonomous_trading_platform.storage.parquet.repositories.parquet_simulation_repository import (
     ParquetSimulationRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.experiments_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.experiments_repository import (
     ExperimentsRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.metrics_summary_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.metrics_summary_repository import (
     MetricsSummaryRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.run_manifests_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.run_manifests_repository import (
     RunManifestRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.simulation_runs_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.simulation_runs_repository import (
     SimulationRunsRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.strategy_configs_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_configs_repository import (
     StrategyConfigsRepository,
 )
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (

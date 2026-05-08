@@ -8,7 +8,7 @@ from autonomous_trading_platform.execution.services.strategy_state_machine_servi
 from autonomous_trading_platform.storage.sor.models.strategy_runtime_states import (
     StrategyRuntimeState,
 )
-from autonomous_trading_platform.storage.sor.repositories.strategy_runtime_state_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_runtime_state_repository import (
     StrategyRuntimeStateRepository,
 )
 
