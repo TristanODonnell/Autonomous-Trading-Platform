@@ -51,7 +51,7 @@ from autonomous_trading_platform.execution.services.volatility_scaling_service i
     VolatilityScalingService,
 )
 from autonomous_trading_platform.portfolio.portfolio_engine import PortfolioEngine
-from autonomous_trading_platform.storage.sor.repositories.fill_quality_metrics_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.fill_quality_metrics_repository import (
     FillQualityMetricsRepository,
 )
 

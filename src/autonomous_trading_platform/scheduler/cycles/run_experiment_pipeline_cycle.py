@@ -48,7 +48,7 @@ from autonomous_trading_platform.research.simulation.contexts.build_simulation_c
 from autonomous_trading_platform.research.simulation.simulation_runner import SimulationRunner
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
-from autonomous_trading_platform.storage.sor.repositories.runtime_job_run_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_repository import (
     RuntimeJobRunRepository,
 )
 

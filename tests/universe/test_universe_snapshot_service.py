@@ -8,7 +8,7 @@ import pytest
 from autonomous_trading_platform.contracts.runtime.universe_snapshot import (
     UniverseSnapshot,
 )
-from autonomous_trading_platform.storage.sor.repositories.universe_snapshot_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.universe_snapshot_repository import (
     UniverseSnapshotRepository,
 )
 from autonomous_trading_platform.universe.services.universe_snapshot_service import (

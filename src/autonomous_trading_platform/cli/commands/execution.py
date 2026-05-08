@@ -16,7 +16,7 @@ from autonomous_trading_platform.execution.contexts.build_execution_context impo
     ExecutionContext,
     build_execution_context,
 )
-from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
+from autonomous_trading_platform.portfolio.portfolio_engine import PortfolioEngine
 from autonomous_trading_platform.safety.contexts.build_safety_context import (
     build_safety_context,
 )
@@ -29,8 +29,17 @@ from autonomous_trading_platform.scheduler.jobs.run_order_reconciliation_job imp
     run_order_reconciliation_job,
 )
 from autonomous_trading_platform.storage.sor.models.fills import Fill as SorFill
-from autonomous_trading_platform.storage.sor.repositories.audit_logs_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.allocation_overrides_repository import (
+    AllocationOverridesRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
     AuditLogRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.capital_allocation_policies_repository import (
+    CapitalAllocationPoliciesRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_repository import (
+    PromotionRulesRepository,
 )
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
@@ -59,7 +68,7 @@ class ExecutionCliDependencies:
 def build_cli_execution_dependencies(session: Session) -> ExecutionCliDependencies:
     settings = Settings()
 
-    audit_logger = AuditLoggingService(session)
+    audit_log_repository = AuditLogRepository(session)
     environment_policy = EnvironmentSafetyPolicy(settings=settings)
 
     safety_context = build_safety_context(
@@ -67,13 +76,20 @@ def build_cli_execution_dependencies(session: Session) -> ExecutionCliDependenci
         environment_policy=environment_policy,
         risk_state_reader=StubRiskStateReader(),
         order_activity_reader=StubOrderActivityReader(),
-        audit_log_repository=AuditLogRepository(session),
+        audit_log_repository=audit_log_repository,
     )
-
+    portfolio_engine = PortfolioEngine(
+        policies_repo=CapitalAllocationPoliciesRepository(session),
+        overrides_repo=AllocationOverridesRepository(session),
+        promotion_rules_repo=PromotionRulesRepository(session),
+        total_capital=float(settings.initial_capital),
+    )
     execution_context = build_execution_context(
+        session=session,
         pre_trade_risk_service=safety_context.pre_trade_risk_service,
-        audit_log_repository=audit_logger,
+        audit_log_repository=audit_log_repository,
         alpaca_settings=settings,
+        portfolio_engine=portfolio_engine,
     )
 
     return ExecutionCliDependencies(

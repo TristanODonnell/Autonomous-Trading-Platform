@@ -26,7 +26,7 @@ from autonomous_trading_platform.research.simulation.simulation_runner import (
 from autonomous_trading_platform.research.strategy_generation.strategy_generation_engine import (
     StrategyGenerationEngine,
 )
-from autonomous_trading_platform.storage.sor.repositories.experiments_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.experiments_repository import (
     ExperimentsRepository,
 )
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig

@@ -63,10 +63,10 @@ from autonomous_trading_platform.scheduler.jobs.run_trading_evaluation_job impor
     run_trading_evaluation_job,
 )
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
-from autonomous_trading_platform.storage.sor.repositories.runtime_control_state_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.runtime_control_state_repository import (
     RuntimeControlStateRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.runtime_job_run_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_repository import (
     RuntimeJobRunRepository,
 )
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Protocol, cast
 
-from autonomous_trading_platform.storage.sor.repositories.strategy_runtime_state_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_runtime_state_repository import (
     StrategyRuntimeStateRepository,
 )
 

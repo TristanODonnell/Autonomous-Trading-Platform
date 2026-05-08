@@ -1,8 +1,89 @@
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from uuid import uuid4
 
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from autonomous_trading_platform.contracts.common.enums import OrderSource
+from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
+from autonomous_trading_platform.storage.sor.models.position_snapshot_items import (
+    PositionSnapshotItem,
+)
+from autonomous_trading_platform.storage.sor.models.position_snapshots import PositionSnapshot
 from tests.conftest import auth_headers
+
+
+def seed_portfolio_state(db_session: Session) -> None:
+    run_id = uuid4()
+    prior_snapshot_id = uuid4()
+    latest_snapshot_id = uuid4()
+    prior_timestamp = datetime.now(UTC) - timedelta(days=1)
+    latest_timestamp = datetime.now(UTC)
+    prior_cash_timestamp = prior_timestamp - timedelta(seconds=1)
+    latest_cash_timestamp = latest_timestamp - timedelta(seconds=1)
+
+    db_session.add_all(
+        [
+            PositionSnapshot(
+                snapshot_id=prior_snapshot_id,
+                run_id=run_id,
+                timestamp=prior_timestamp,
+                source=OrderSource.LEDGER,
+            ),
+            PositionSnapshotItem(
+                snapshot_id=prior_snapshot_id,
+                symbol="AAPL",
+                quantity=Decimal("10"),
+                avg_cost=Decimal("100"),
+                market_price=Decimal("5800"),
+                market_value=Decimal("58000"),
+                unrealized_pnl=Decimal("1000"),
+            ),
+            CashSnapshot(
+                snapshot_id=uuid4(),
+                run_id=run_id,
+                timestamp=prior_cash_timestamp,
+                currency="USD",
+                cash=Decimal("50000"),
+                buying_power=Decimal("50000"),
+                reserved_cash=Decimal("0"),
+                equity=Decimal("108000"),
+                source=OrderSource.LEDGER,
+                capital_bucket=None,
+            ),
+            PositionSnapshot(
+                snapshot_id=latest_snapshot_id,
+                run_id=run_id,
+                timestamp=latest_timestamp,
+                source=OrderSource.LEDGER,
+            ),
+            PositionSnapshotItem(
+                snapshot_id=latest_snapshot_id,
+                symbol="AAPL",
+                quantity=Decimal("10"),
+                avg_cost=Decimal("100"),
+                market_price=Decimal("6000"),
+                market_value=Decimal("60000"),
+                unrealized_pnl=Decimal("3000"),
+            ),
+            CashSnapshot(
+                snapshot_id=uuid4(),
+                run_id=run_id,
+                timestamp=latest_cash_timestamp,
+                currency="USD",
+                cash=Decimal("50000"),
+                buying_power=Decimal("50000"),
+                reserved_cash=Decimal("0"),
+                equity=Decimal("110000"),
+                source=OrderSource.LEDGER,
+                capital_bucket=None,
+            ),
+        ]
+    )
+    db_session.flush()
 
 
 class TestPortfolioSummary:
@@ -76,6 +157,22 @@ class TestPortfolioSummary:
         assert "request_id" in meta
         assert "timestamp" in meta
         assert "version" in meta
+
+    def test_returns_seeded_portfolio_values(
+        self,
+        client: TestClient,
+        db_session: Session,
+    ) -> None:
+        seed_portfolio_state(db_session)
+
+        response = client.get("/api/v1/portfolio/summary", headers=auth_headers())
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert Decimal(str(data["current_portfolio_value"])) == Decimal("110000.000000")
+        assert isinstance(data["todays_pnl_amount"], int | float | str)
+        assert isinstance(data["todays_pnl_percent"], int | float | str)
+        assert Decimal(str(data["cash_balance"])) == Decimal("50000.000000")
 
 
 class TestPortfolioEquityCurve:
@@ -179,3 +276,23 @@ class TestPortfolioEquityCurve:
         for point in data["points"]:
             for field in forbidden_fields:
                 assert field not in point
+
+    def test_returns_seeded_equity_curve_points(
+        self,
+        client: TestClient,
+        db_session: Session,
+    ) -> None:
+        seed_portfolio_state(db_session)
+
+        response = client.get(
+            "/api/v1/portfolio/equity-curve?period=1w",
+            headers=auth_headers(),
+        )
+
+        assert response.status_code == 200
+        points = response.json()["data"]["points"]
+        assert len(points) == 2
+        assert [Decimal(str(point["value"])) for point in points] == [
+            Decimal("108000.000000"),
+            Decimal("110000.000000"),
+        ]

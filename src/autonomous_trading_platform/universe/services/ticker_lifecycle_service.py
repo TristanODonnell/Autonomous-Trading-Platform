@@ -5,7 +5,7 @@ from datetime import datetime
 from autonomous_trading_platform.contracts.runtime.ticker_lifecycle_event import (
     TickerLifecycleEventType,
 )
-from autonomous_trading_platform.storage.sor.repositories.ticker_lifecycle_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
 )
 

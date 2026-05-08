@@ -9,7 +9,7 @@ import pytest
 from autonomous_trading_platform.contracts.runtime.ticker_lifecycle_event import (
     TickerLifecycleEventType,
 )
-from autonomous_trading_platform.storage.sor.repositories.ticker_lifecycle_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
 )
 from autonomous_trading_platform.universe.services.ticker_lifecycle_service import (

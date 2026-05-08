@@ -29,16 +29,16 @@ from autonomous_trading_platform.safety.contexts.build_safety_context import (
 from autonomous_trading_platform.safety.environment_policy import EnvironmentSafetyPolicy
 from autonomous_trading_platform.safety.readers.order_activity_reader import StubOrderActivityReader
 from autonomous_trading_platform.safety.readers.risk_state_reader import StubRiskStateReader
-from autonomous_trading_platform.storage.sor.repositories.allocation_overrides_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.allocation_overrides_repository import (
     AllocationOverridesRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.audit_logs_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
     AuditLogRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.capital_allocation_policies_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.capital_allocation_policies_repository import (
     CapitalAllocationPoliciesRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.promotion_rules_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_repository import (
     PromotionRulesRepository,
 )
 from autonomous_trading_platform.strategy.contexts.build_strategy_runtime_context import (

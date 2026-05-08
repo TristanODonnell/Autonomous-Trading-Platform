@@ -14,7 +14,7 @@ from autonomous_trading_platform.storage.sor.models.position_snapshot_items impo
 from autonomous_trading_platform.storage.sor.models.position_snapshots import PositionSnapshot
 from autonomous_trading_platform.storage.sor.models.run_manifests import RunManifestRow
 from autonomous_trading_platform.storage.sor.models.runtime_job_runs import RuntimeJobRuns
-from autonomous_trading_platform.storage.sor.repositories.runtime_control_state_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.runtime_control_state_repository import (
     RuntimeControlStateRepository,
 )
 

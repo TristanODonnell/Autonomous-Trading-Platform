@@ -88,10 +88,10 @@ from autonomous_trading_platform.storage.parquet.repositories.parquet_bar_reposi
 from autonomous_trading_platform.storage.parquet.repositories.parquet_feature_repository import (
     ParquetFeatureRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.feature_dataset_versions_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.feature_dataset_versions_repository import (
     FeatureDatasetVersionsRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.runtime_job_run_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_repository import (
     RuntimeJobRunRepository,
 )
 

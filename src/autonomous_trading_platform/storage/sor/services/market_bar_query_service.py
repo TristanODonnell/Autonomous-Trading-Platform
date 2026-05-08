@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
 from autonomous_trading_platform.storage.sor.models.market_bars import MarketBar
-from autonomous_trading_platform.storage.sor.repositories.market_bar_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.market_bar_repository import (
     MarketBarRepository,
 )
 from autonomous_trading_platform.universe.services.historical_universe_filter_service import (

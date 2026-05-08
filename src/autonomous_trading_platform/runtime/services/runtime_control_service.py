@@ -3,7 +3,7 @@ from __future__ import annotations
 from autonomous_trading_platform.storage.sor.models.runtime_control_state import (
     RuntimeControlState,
 )
-from autonomous_trading_platform.storage.sor.repositories.runtime_control_state_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.runtime_control_state_repository import (
     RuntimeControlStateRepository,
 )
 

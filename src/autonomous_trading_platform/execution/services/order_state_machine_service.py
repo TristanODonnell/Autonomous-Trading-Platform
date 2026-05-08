@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 from autonomous_trading_platform.contracts.common.enums import OrderEvent, OrderStatus
 from autonomous_trading_platform.contracts.runtime.audit_log import AuditLogEvent
-from autonomous_trading_platform.storage.sor.repositories.audit_logs_repository import (
+from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
     AuditLogRepository,
 )
 

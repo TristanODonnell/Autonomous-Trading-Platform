@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import cast
 
 from sqlalchemy import desc, select
@@ -7,9 +8,9 @@ from autonomous_trading_platform.storage.sor.models.broker_orders import BrokerO
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
 
 OPEN_STATUSES = {
-    OrderStatus.NEW.value,
-    OrderStatus.SUBMITTED.value,
-    OrderStatus.PARTIALLY_FILLED.value,
+    OrderStatus.NEW,
+    OrderStatus.SUBMITTED,
+    OrderStatus.PARTIALLY_FILLED,
 }
 
 
@@ -44,6 +45,22 @@ class BrokerOrderRepository(BaseRepository):
             .order_by(desc(BrokerOrder.updated_at))
         )
         return list(self.session.execute(stmt).scalars().all())
+
+    def mark_open_orders_cancelled_by_kill_switch(
+        self,
+        *,
+        cancelled_at: datetime,
+        reason: str,
+    ) -> int:
+        open_orders = self.list_open_orders()
+
+        for order in open_orders:
+            order.status = OrderStatus.CANCELED
+            order.updated_at = cancelled_at
+            order.last_error = reason
+
+        self.session.flush()
+        return len(open_orders)
 
     def list_recent(self, limit: int = 20) -> list[BrokerOrder]:
         stmt = select(BrokerOrder).order_by(desc(BrokerOrder.updated_at)).limit(limit)
