@@ -27,3 +27,14 @@ def require_risk_manager_or_admin(request: Request) -> str:
         )
 
     return str(getattr(request.state, "user_id", None) or "unknown")
+
+
+def require_admin(request: Request) -> str:
+    role = getattr(request.state, "role", None)
+    if role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required.",
+        )
+
+    return str(getattr(request.state, "user_id", None) or "unknown")

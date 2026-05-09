@@ -58,8 +58,28 @@ class PortfolioEquityCurveService:
             for snapshot in snapshots
             if snapshot.equity is not None
         ]
+        drawdown_points = self._drawdown_points(points)
 
         return {
             "period": period,
             "points": points,
+            "drawdown_points": drawdown_points,
         }
+
+    def _drawdown_points(self, points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        peak = None
+        drawdown_points = []
+        for point in points:
+            value = point["value"]
+            if peak is None or value > peak:
+                peak = value
+
+            drawdown = 0 if peak in {None, 0} else (value - peak) / peak
+            drawdown_points.append(
+                {
+                    "timestamp": point["timestamp"],
+                    "value": drawdown,
+                }
+            )
+
+        return drawdown_points

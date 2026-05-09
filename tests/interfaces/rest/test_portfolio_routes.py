@@ -296,3 +296,189 @@ class TestPortfolioEquityCurve:
             Decimal("108000.000000"),
             Decimal("110000.000000"),
         ]
+        drawdown_points = response.json()["data"]["drawdown_points"]
+        assert len(drawdown_points) == 2
+        assert all("timestamp" in point and "value" in point for point in drawdown_points)
+
+
+def _assert_numeric_not_null(value) -> None:
+    assert value is not None
+    assert isinstance(value, int | float | str)
+
+
+class TestPortfolioStory56Endpoints:
+    def test_performance_endpoint_returns_aggregated_metrics(
+        self,
+        client: TestClient,
+        db_session: Session,
+    ) -> None:
+        seed_portfolio_state(db_session)
+
+        response = client.get("/api/v1/portfolio/performance", headers=auth_headers())
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        for field in {
+            "total_return",
+            "cagr",
+            "sharpe_ratio",
+            "sortino_ratio",
+            "max_drawdown",
+            "volatility",
+            "win_rate",
+        }:
+            _assert_numeric_not_null(data[field])
+
+    def test_performance_accepts_date_window(
+        self,
+        client: TestClient,
+        db_session: Session,
+    ) -> None:
+        seed_portfolio_state(db_session)
+        today = datetime.now(UTC).date().isoformat()
+
+        response = client.get(
+            f"/api/v1/portfolio/performance?from_date={today}&to_date={today}",
+            headers=auth_headers(),
+        )
+
+        assert response.status_code == 200
+
+    def test_holdings_values_reconcile_against_portfolio_summary_total(
+        self,
+        client: TestClient,
+        db_session: Session,
+    ) -> None:
+        seed_portfolio_state(db_session)
+
+        holdings_response = client.get("/api/v1/portfolio/holdings", headers=auth_headers())
+        summary_response = client.get("/api/v1/portfolio/summary", headers=auth_headers())
+
+        assert holdings_response.status_code == 200
+        assert summary_response.status_code == 200
+        holdings = holdings_response.json()["data"]["holdings"]
+        assert holdings != []
+
+        for holding in holdings:
+            for field in {
+                "market_value",
+                "quantity",
+                "average_entry_price",
+                "current_price",
+                "todays_change_percent",
+                "todays_change_absolute",
+            }:
+                _assert_numeric_not_null(holding[field])
+            assert holding["symbol"] == "AAPL"
+            assert holding["company_name"] == "AAPL"
+            assert holding["strategy_id"] == "unknown"
+
+        total_holdings_value = sum(Decimal(str(holding["market_value"])) for holding in holdings)
+        summary = summary_response.json()["data"]
+        assert total_holdings_value + Decimal(str(summary["cash_balance"])) == Decimal(
+            str(summary["current_portfolio_value"])
+        )
+
+    def test_allocation_percentages_sum_to_100_when_positions_exist(
+        self,
+        client: TestClient,
+        db_session: Session,
+    ) -> None:
+        seed_portfolio_state(db_session)
+
+        response = client.get("/api/v1/portfolio/allocation", headers=auth_headers())
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["by_strategy"] != []
+        assert data["by_asset"] != []
+
+        strategy_total = sum(
+            Decimal(str(row["percent_of_portfolio"])) for row in data["by_strategy"]
+        )
+        asset_total = sum(Decimal(str(row["percent_of_portfolio"])) for row in data["by_asset"])
+        assert strategy_total == Decimal("100.0000000000")
+        assert asset_total == Decimal("100.0000000000")
+
+    def test_risk_endpoint_returns_numeric_snapshot(
+        self,
+        client: TestClient,
+        db_session: Session,
+    ) -> None:
+        seed_portfolio_state(db_session)
+
+        response = client.get("/api/v1/portfolio/risk", headers=auth_headers())
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        for field in {
+            "portfolio_volatility",
+            "beta",
+            "value_at_risk_1d_95",
+            "average_pairwise_correlation",
+            "current_drawdown",
+        }:
+            _assert_numeric_not_null(data[field])
+
+    def test_performance_by_period_returns_all_period_tabs(
+        self,
+        client: TestClient,
+        db_session: Session,
+    ) -> None:
+        seed_portfolio_state(db_session)
+
+        response = client.get(
+            "/api/v1/portfolio/performance/by-period",
+            headers=auth_headers(),
+        )
+
+        assert response.status_code == 200
+        periods = response.json()["data"]["periods"]
+        assert [row["period"] for row in periods] == ["1M", "3M", "6M", "YTD", "1Y"]
+        for row in periods:
+            _assert_numeric_not_null(row["return_percent"])
+
+    def test_story56_endpoints_return_empty_valid_structures_without_open_positions(
+        self,
+        client: TestClient,
+    ) -> None:
+        endpoints = {
+            "/api/v1/portfolio/performance": {
+                "total_return": "0",
+                "cagr": "0",
+                "sharpe_ratio": "0",
+                "sortino_ratio": "0",
+                "max_drawdown": "0",
+                "volatility": "0",
+                "win_rate": "0",
+            },
+            "/api/v1/portfolio/holdings": {"holdings": []},
+            "/api/v1/portfolio/allocation": {"by_strategy": [], "by_asset": []},
+            "/api/v1/portfolio/risk": {
+                "portfolio_volatility": "0",
+                "beta": "0",
+                "value_at_risk_1d_95": "0",
+                "average_pairwise_correlation": "0",
+                "current_drawdown": "0",
+            },
+            "/api/v1/portfolio/performance/by-period": None,
+        }
+
+        for endpoint, expected in endpoints.items():
+            response = client.get(endpoint, headers=auth_headers())
+            assert response.status_code == 200
+            data = response.json()["data"]
+
+            if endpoint.endswith("/performance/by-period"):
+                assert [row["period"] for row in data["periods"]] == [
+                    "1M",
+                    "3M",
+                    "6M",
+                    "YTD",
+                    "1Y",
+                ]
+                assert all(
+                    Decimal(str(row["return_percent"])) == Decimal("0") for row in data["periods"]
+                )
+            else:
+                assert data == expected
