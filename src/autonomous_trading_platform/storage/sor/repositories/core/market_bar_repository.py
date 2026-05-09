@@ -37,7 +37,7 @@ class MarketBarRepository(BaseRepository):
             source=bar.source,
             ingested_at=bar.ingested_at,
             quality_flags=[flag.value for flag in bar.quality_flags] if bar.quality_flags else [],
-            market_session=bar.session,
+            session=bar.session,
         )
 
     def to_contract(self, row: MarketBarRow) -> MarketBarContract:
@@ -59,7 +59,7 @@ class MarketBarRepository(BaseRepository):
             source=row.source,
             ingested_at=row.ingested_at,
             quality_flags=[],
-            session=row.market_session,
+            session=row.session,
         )
 
     def to_contracts(self, rows: list[MarketBarRow]) -> list[MarketBarContract]:
@@ -158,7 +158,7 @@ class MarketBarRepository(BaseRepository):
         existing.quality_flags = (
             [flag.value for flag in bar.quality_flags] if bar.quality_flags else []
         )
-        existing.market_session = bar.session
+        existing.session = bar.session
         self.session.flush()
         return existing
 

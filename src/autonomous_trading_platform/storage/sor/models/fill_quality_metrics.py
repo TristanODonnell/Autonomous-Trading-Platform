@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy import Boolean, Float, Numeric, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, synonym
 
 from autonomous_trading_platform.contracts.common.types import UTCDateTime
 
@@ -47,4 +47,5 @@ class FillQualityMetrics(Base):
     quantity: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
     is_adverse_fill: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
-    policy_metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    policy_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    policy_metadata_json = synonym("policy_metadata")

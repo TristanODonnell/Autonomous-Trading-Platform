@@ -140,7 +140,7 @@ class RealisedSlippageService:
             policy_mode=policy_result.policy_mode_applied.value,
             quantity=qty,
             is_adverse_fill=None,  # populated in phase 2
-            policy_metadata_json=policy_result.policy_metadata or None,
+            policy_metadata=policy_result.policy_metadata or None,
         )
 
         self._repo.insert(row)
@@ -256,7 +256,7 @@ class RealisedSlippageService:
                 policy_mode=PolicyMode.PASSTHROUGH.value,
                 quantity=fill_qty,
                 is_adverse_fill=is_adverse,
-                policy_metadata_json=None,
+                policy_metadata=None,
             )
             self._repo.insert(row)
 

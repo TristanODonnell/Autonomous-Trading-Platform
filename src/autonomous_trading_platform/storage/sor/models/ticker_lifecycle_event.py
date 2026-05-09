@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import DateTime, String, Text
@@ -25,14 +25,7 @@ class TickerLifecycleEvent(Base):
 
     effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    new_symbol: Mapped[str | None] = mapped_column(String, nullable=True)
     successor_symbol: Mapped[str | None] = mapped_column(String, nullable=True)
 
     source: Mapped[str] = mapped_column(String, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(UTC),
-    )

@@ -37,7 +37,7 @@ class CorporateAction(Base):
 
     currency: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    new_symbol: Mapped[str] = mapped_column(String(64), nullable=True)
+    new_symbol: Mapped[str] = mapped_column(String(64), nullable=False)
 
     source: Mapped[str] = mapped_column(String(64), nullable=False)
 
