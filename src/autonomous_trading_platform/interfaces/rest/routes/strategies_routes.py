@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.api.dependencies import (
@@ -18,6 +20,10 @@ from autonomous_trading_platform.application.services.active_strategies_service 
 from autonomous_trading_platform.application.services.strategy_allocation_service import (
     StrategyAllocationService,
 )
+from autonomous_trading_platform.application.services.strategy_catalog_service import (
+    ExperimentCatalogService,
+    StrategyCatalogService,
+)
 from autonomous_trading_platform.application.services.strategy_control_service import (
     StrategyControlService,
 )
@@ -27,18 +33,72 @@ from autonomous_trading_platform.application.services.strategy_governance_servic
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.interfaces.rest.schemas.active_strategies_schema import (
     ActiveStrategiesResponse,
+    ExperimentCreateRequest,
+    ExperimentCreateResponse,
+    ExperimentDetailResponse,
+    ExperimentListResponse,
     StrategyAllocationUpdateRequest,
     StrategyAllocationUpdateResponse,
+    StrategyCompareRequest,
+    StrategyCompareResponse,
+    StrategyDetailResponse,
     StrategyEnabledUpdateRequest,
     StrategyEnabledUpdateResponse,
+    StrategyEquityCurveResponse,
     StrategyGovernanceTransitionRequest,
     StrategyGovernanceTransitionResponse,
+    StrategyListResponse,
+    StrategyStatus,
 )
 
 router = APIRouter(prefix="/strategies", tags=["strategies"])
+experiments_router = APIRouter(prefix="/experiments", tags=["experiments"])
 
 _request_id_dependency = Depends(get_request_id)
 _session_dependency = Depends(get_session)
+
+
+@router.get(
+    "",
+    response_model=SuccessEnvelope[StrategyListResponse],
+)
+def get_strategies(
+    status_filter: Annotated[StrategyStatus | None, Query(alias="status")] = None,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[StrategyListResponse]:
+    service = StrategyCatalogService(session=session)
+    result = service.list_strategies(status_filter=status_filter)
+
+    return success_response(
+        data=StrategyListResponse(strategies=result),
+        request_id=request_id,
+    )
+
+
+@router.post(
+    "/compare",
+    response_model=SuccessEnvelope[StrategyCompareResponse],
+    status_code=status.HTTP_200_OK,
+)
+def compare_strategies(
+    payload: StrategyCompareRequest,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[StrategyCompareResponse]:
+    service = StrategyCatalogService(session=session)
+    try:
+        result = service.compare_strategies(strategy_ids=payload.strategy_ids)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return success_response(
+        data=StrategyCompareResponse(**result),
+        request_id=request_id,
+    )
 
 
 @router.get(
@@ -54,6 +114,54 @@ def get_active_strategies(
 
     return success_response(
         data=ActiveStrategiesResponse(strategies=result),
+        request_id=request_id,
+    )
+
+
+@router.get(
+    "/{strategy_id}",
+    response_model=SuccessEnvelope[StrategyDetailResponse],
+)
+def get_strategy_detail(
+    strategy_id: str,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[StrategyDetailResponse]:
+    service = StrategyCatalogService(session=session)
+    try:
+        result = service.get_strategy_detail(strategy_id=strategy_id)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return success_response(
+        data=StrategyDetailResponse(**result),
+        request_id=request_id,
+    )
+
+
+@router.get(
+    "/{strategy_id}/equity-curve",
+    response_model=SuccessEnvelope[StrategyEquityCurveResponse],
+)
+def get_strategy_equity_curve(
+    strategy_id: str,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[StrategyEquityCurveResponse]:
+    service = StrategyCatalogService(session=session)
+    try:
+        result = service.get_strategy_equity_curve(strategy_id=strategy_id)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return success_response(
+        data=StrategyEquityCurveResponse(**result),
         request_id=request_id,
     )
 
@@ -218,5 +326,75 @@ def transition_strategy_governance(
             updated_by=result.updated_by,
             updated_at=result.updated_at,
         ),
+        request_id=request_id,
+    )
+
+
+@experiments_router.post(
+    "",
+    response_model=SuccessEnvelope[ExperimentCreateResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+def create_experiment(
+    payload: ExperimentCreateRequest,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+    actor: str = Depends(require_operator_or_admin),
+) -> SuccessEnvelope[ExperimentCreateResponse]:
+    service = ExperimentCatalogService(session=session)
+    try:
+        result = service.create_experiment(
+            strategy_type=payload.strategy_type,
+            risk_level=payload.risk_level,
+            time_horizon=payload.time_horizon,
+            actor=actor,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    return success_response(
+        data=ExperimentCreateResponse(**result),
+        request_id=request_id,
+    )
+
+
+@experiments_router.get(
+    "",
+    response_model=SuccessEnvelope[ExperimentListResponse],
+)
+def get_experiments(
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[ExperimentListResponse]:
+    service = ExperimentCatalogService(session=session)
+    return success_response(
+        data=ExperimentListResponse(experiments=service.list_experiments()),
+        request_id=request_id,
+    )
+
+
+@experiments_router.get(
+    "/{experiment_id}",
+    response_model=SuccessEnvelope[ExperimentDetailResponse],
+)
+def get_experiment_detail(
+    experiment_id: str,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[ExperimentDetailResponse]:
+    service = ExperimentCatalogService(session=session)
+    try:
+        result = service.get_experiment_detail(experiment_id=experiment_id)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return success_response(
+        data=ExperimentDetailResponse(**result),
         request_id=request_id,
     )

@@ -22,6 +22,69 @@ class PortfolioEquityCurvePoint(BaseModel):
     value: Decimal
 
 
+class PortfolioDrawdownPoint(BaseModel):
+    timestamp: datetime
+    value: Decimal
+
+
 class PortfolioEquityCurveResponse(BaseModel):
     period: PortfolioEquityCurvePeriod
     points: list[PortfolioEquityCurvePoint]
+    drawdown_points: list[PortfolioDrawdownPoint] = []
+
+
+class PortfolioPerformanceResponse(BaseModel):
+    total_return: Decimal
+    cagr: Decimal
+    sharpe_ratio: Decimal
+    sortino_ratio: Decimal
+    max_drawdown: Decimal
+    volatility: Decimal
+    win_rate: Decimal
+
+
+class PortfolioHoldingResponse(BaseModel):
+    symbol: str
+    company_name: str
+    market_value: Decimal
+    quantity: Decimal
+    average_entry_price: Decimal
+    current_price: Decimal
+    todays_change_percent: Decimal
+    todays_change_absolute: Decimal
+    strategy_id: str
+
+
+class PortfolioHoldingsResponse(BaseModel):
+    holdings: list[PortfolioHoldingResponse]
+
+
+class PortfolioAllocationItemResponse(BaseModel):
+    name: str
+    allocated_capital: Decimal
+    percent_of_portfolio: Decimal
+
+
+class PortfolioAllocationResponse(BaseModel):
+    by_strategy: list[PortfolioAllocationItemResponse]
+    by_asset: list[PortfolioAllocationItemResponse]
+
+
+class PortfolioRiskResponse(BaseModel):
+    portfolio_volatility: Decimal
+    beta: Decimal
+    value_at_risk_1d_95: Decimal
+    average_pairwise_correlation: Decimal
+    current_drawdown: Decimal
+
+
+PortfolioPerformancePeriod = Literal["1M", "3M", "6M", "YTD", "1Y"]
+
+
+class PortfolioPeriodReturnResponse(BaseModel):
+    period: PortfolioPerformancePeriod
+    return_percent: Decimal
+
+
+class PortfolioPerformanceByPeriodResponse(BaseModel):
+    periods: list[PortfolioPeriodReturnResponse]

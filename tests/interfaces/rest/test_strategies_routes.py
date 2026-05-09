@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import OrderSource
@@ -13,13 +14,161 @@ from autonomous_trading_platform.storage.sor.models.allocation_overrides import 
 )
 from autonomous_trading_platform.storage.sor.models.audit_logs import AuditLogRow
 from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
+from autonomous_trading_platform.storage.sor.models.experiments import Experiments
 from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
 from autonomous_trading_platform.storage.sor.models.promotion_rules import PromotionRules
+from autonomous_trading_platform.storage.sor.models.runtime_job_runs import RuntimeJobRuns
 from autonomous_trading_platform.storage.sor.models.strategy_configs import StrategyConfigs
 from autonomous_trading_platform.storage.sor.models.strategy_control_states import (
     StrategyControlState,
 )
+from autonomous_trading_platform.storage.sor.models.strategy_governance import (
+    StrategyGovernance,
+)
 from tests.conftest import auth_headers, seed_strategy_governance
+
+
+def _seed_story57_strategy(
+    db_session: Session,
+    *,
+    strategy_id: str,
+    state: str,
+    enabled: bool = True,
+    total_return: float = 0.10,
+    sharpe_ratio: float = 1.2,
+    max_drawdown: float = -0.08,
+    trade_count: int = 20,
+    winning_trade_count: int = 12,
+    consistency_score: float = 0.7,
+) -> None:
+    now = datetime.now(UTC)
+    config_hash = f"{strategy_id}-hash"
+    db_session.add(
+        StrategyConfigs(
+            strategy_id=strategy_id,
+            config_hash=config_hash,
+            config_json={"lookback": 20, "threshold": 1.5},
+            created_at=now,
+            strategy_type="momentum",
+            metadata_json={"display_name": strategy_id.replace("_", " ").title()},
+        )
+    )
+    db_session.add(
+        StrategyGovernance(
+            strategy_id=strategy_id,
+            config_hash=config_hash,
+            current_state=state,
+            experiment_id=f"{strategy_id}-experiment",
+            source_run_id=None,
+            submitted_at=now - timedelta(days=2),
+            updated_at=now - timedelta(days=1),
+            submitted_by="researcher-1",
+        )
+    )
+    if not enabled:
+        db_session.add(
+            StrategyControlState(
+                strategy_id=strategy_id,
+                enabled=False,
+                reason="operator pause",
+                updated_by="operator-1",
+                updated_at=now,
+            )
+        )
+    run_id = f"{strategy_id}-run"
+    db_session.execute(
+        text(
+            """
+            INSERT INTO simulation_runs (
+                run_id,
+                experiment_id,
+                strategy_id,
+                dataset_version,
+                universe_version,
+                price_basis,
+                symbols,
+                start_date,
+                end_date,
+                window_role,
+                start_time,
+                end_time,
+                execution_config,
+                status,
+                metrics_snapshot_id
+            )
+            VALUES (
+                :run_id,
+                :experiment_id,
+                :strategy_id,
+                :dataset_version,
+                :universe_version,
+                :price_basis,
+                :symbols,
+                :start_date,
+                :end_date,
+                :window_role,
+                :start_time,
+                :end_time,
+                :execution_config,
+                :status,
+                :metrics_snapshot_id
+            )
+            """
+        ),
+        {
+            "run_id": run_id,
+            "experiment_id": f"{strategy_id}-experiment",
+            "strategy_id": strategy_id,
+            "dataset_version": "dataset-v1",
+            "universe_version": "universe-v1",
+            "price_basis": "adjusted",
+            "symbols": '["AAPL"]',
+            "start_date": date(2026, 1, 1),
+            "end_date": date(2026, 1, 3),
+            "window_role": "test",
+            "start_time": now - timedelta(days=3),
+            "end_time": now - timedelta(days=1),
+            "execution_config": "{}",
+            "status": "complete",
+            "metrics_snapshot_id": f"{strategy_id}-metrics",
+        },
+    )
+    db_session.add(
+        MetricsSummary(
+            metrics_snapshot_id=f"{strategy_id}-metrics",
+            run_id=run_id,
+            created_at=now,
+            total_return=total_return,
+            sharpe_ratio=sharpe_ratio,
+            max_drawdown=max_drawdown,
+            trade_count=trade_count,
+            winning_trade_count=winning_trade_count,
+            losing_trade_count=trade_count - winning_trade_count,
+            volatility=0.2,
+            metrics_json={
+                "win_rate": winning_trade_count / trade_count,
+                "consistency_score": consistency_score,
+                "equity_curve": [
+                    {
+                        "timestamp": "2026-01-03T00:00:00+00:00",
+                        "equity": 103000.0,
+                        "drawdown": 0.0,
+                    },
+                    {
+                        "timestamp": "2026-01-01T00:00:00+00:00",
+                        "equity": 100000.0,
+                        "drawdown": 0.0,
+                    },
+                    {
+                        "timestamp": "2026-01-02T00:00:00+00:00",
+                        "equity": 101000.0,
+                        "drawdown": -0.01,
+                    },
+                ],
+            },
+        )
+    )
+    db_session.flush()
 
 
 def test_active_strategies_requires_auth(client: TestClient) -> None:
@@ -494,3 +643,195 @@ def test_strategy_governance_transition_rejects_when_promotion_criteria_fail(
     db_session.refresh(governance)
     assert governance.current_state == "approved_for_paper_trading"
     assert db_session.query(AuditLogRow).all() == []
+
+
+def test_strategy_list_returns_status_values_and_supports_filter(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    _seed_story57_strategy(
+        db_session,
+        strategy_id="live_v1",
+        state="approved_for_live_trading",
+    )
+    _seed_story57_strategy(
+        db_session,
+        strategy_id="paper_v1",
+        state="approved_for_paper_trading",
+    )
+    _seed_story57_strategy(
+        db_session,
+        strategy_id="research_v1",
+        state="approved_research",
+    )
+    _seed_story57_strategy(
+        db_session,
+        strategy_id="disabled_v1",
+        state="approved_for_live_trading",
+        enabled=False,
+    )
+
+    response = client.get("/api/v1/strategies", headers=auth_headers())
+
+    assert response.status_code == 200
+    strategies = response.json()["data"]["strategies"]
+    statuses = {strategy["strategy_id"]: strategy["status"] for strategy in strategies}
+    assert statuses["live_v1"] == "live"
+    assert statuses["paper_v1"] == "paper"
+    assert statuses["research_v1"] == "research"
+    assert statuses["disabled_v1"] == "off"
+
+    filtered_response = client.get(
+        "/api/v1/strategies?status=paper",
+        headers=auth_headers(),
+    )
+
+    assert filtered_response.status_code == 200
+    filtered = filtered_response.json()["data"]["strategies"]
+    assert [strategy["strategy_id"] for strategy in filtered] == ["paper_v1"]
+
+
+def test_strategy_detail_returns_metrics_configuration_and_history(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    _seed_story57_strategy(
+        db_session,
+        strategy_id="detail_v1",
+        state="approved_for_paper_trading",
+    )
+
+    response = client.get("/api/v1/strategies/detail_v1", headers=auth_headers())
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["strategy_id"] == "detail_v1"
+    assert data["metrics"]["total_return"] == 0.1
+    assert "lookback: 20" in data["configuration_summary"]
+    assert data["approval_status"] == "approved_for_paper_trading"
+    assert data["deployment_history"] != []
+
+
+def test_strategy_compare_accepts_two_to_five_ids(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    for index in range(5):
+        _seed_story57_strategy(
+            db_session,
+            strategy_id=f"compare_{index}",
+            state="approved_for_paper_trading",
+            total_return=0.05 + index / 100,
+            sharpe_ratio=1.0 + index / 10,
+        )
+
+    too_few = client.post(
+        "/api/v1/strategies/compare",
+        json={"strategy_ids": ["compare_0"]},
+        headers=auth_headers(),
+    )
+    valid = client.post(
+        "/api/v1/strategies/compare",
+        json={"strategy_ids": [f"compare_{index}" for index in range(5)]},
+        headers=auth_headers(),
+    )
+    too_many = client.post(
+        "/api/v1/strategies/compare",
+        json={"strategy_ids": [f"compare_{index}" for index in range(5)] + ["extra"]},
+        headers=auth_headers(),
+    )
+
+    assert too_few.status_code == 422
+    assert valid.status_code == 200
+    assert len(valid.json()["data"]["rows"]) == 5
+    assert valid.json()["data"]["metadata"]["total_return"]["best_strategy_id"] == "compare_4"
+    assert too_many.status_code == 422
+
+
+def test_strategy_equity_curve_data_is_ordered_chronologically(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    _seed_story57_strategy(
+        db_session,
+        strategy_id="curve_v1",
+        state="approved_for_paper_trading",
+    )
+
+    response = client.get(
+        "/api/v1/strategies/curve_v1/equity-curve",
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 200
+    points = response.json()["data"]["points"]
+    timestamps = [point["timestamp"] for point in points]
+    assert timestamps == sorted(timestamps)
+    assert [point["value"] for point in points] == [100000.0, 101000.0, 103000.0]
+
+
+def test_experiment_creation_queues_job_and_returns_experiment_id(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    response = client.post(
+        "/api/v1/experiments",
+        json={
+            "strategy_type": "momentum",
+            "risk_level": "medium",
+            "time_horizon": "3m",
+        },
+        headers=auth_headers(role="operator"),
+    )
+
+    assert response.status_code == 201
+    data = response.json()["data"]
+    assert data["experiment_id"]
+    assert data["status"] == "queued"
+
+    experiment = db_session.get(Experiments, data["experiment_id"])
+    assert experiment is not None
+    assert experiment.status == "queued"
+    assert experiment.metadata_json is not None
+    assert experiment.metadata_json["mapping"]["mapping_version"] == "story-57.v1"
+
+    job = (
+        db_session.query(RuntimeJobRuns)
+        .filter(RuntimeJobRuns.correlation_id == data["experiment_id"])
+        .one()
+    )
+    assert job.status == "queued"
+    assert job.job_name == "experiment_pipeline_cycle"
+
+
+def test_experiment_list_and_detail_return_valid_shapes(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    response = client.post(
+        "/api/v1/experiments",
+        json={
+            "strategy_type": "breakout",
+            "risk_level": "low",
+            "time_horizon": "1m",
+        },
+        headers=auth_headers(role="admin"),
+    )
+    experiment_id = response.json()["data"]["experiment_id"]
+
+    list_response = client.get("/api/v1/experiments", headers=auth_headers())
+    detail_response = client.get(f"/api/v1/experiments/{experiment_id}", headers=auth_headers())
+
+    assert list_response.status_code == 200
+    assert list_response.json()["data"]["experiments"][0]["experiment_id"] == experiment_id
+    assert detail_response.status_code == 200
+    detail = detail_response.json()["data"]
+    assert detail["experiment_id"] == experiment_id
+    assert detail["mapping"]["mapping_version"] == "story-57.v1"
+    assert detail["simulation_results"] == []
+    assert detail["filtering_summary"] == {
+        "submitted": 0,
+        "positive_return": 0,
+        "positive_sharpe": 0,
+        "ranked": 0,
+    }

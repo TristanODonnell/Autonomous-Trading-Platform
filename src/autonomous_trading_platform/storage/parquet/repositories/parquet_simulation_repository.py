@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pyarrow as pa
@@ -169,6 +170,40 @@ class ParquetSimulationRepository:
             experiment_id=experiment_id,
             strategy_id=strategy_id,
         )
+
+    def read_equity_curve(
+        self,
+        *,
+        experiment_id: str,
+        strategy_id: str,
+        run_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        dataset_root = self._dataset_root(SIMULATION_EQUITY_CURVE_DATASET)
+        if not dataset_root.exists():
+            return []
+
+        dataset = ds.dataset(str(dataset_root), format="parquet", partitioning="hive")
+        if not {"experiment_id", "strategy_id"}.issubset(set(dataset.schema.names)):
+            return []
+        filter_expr = (ds.field("experiment_id") == experiment_id) & (
+            ds.field("strategy_id") == strategy_id
+        )
+        if run_id is not None:
+            filter_expr = filter_expr & (ds.field("run_id") == run_id)
+
+        table = dataset.to_table(filter=filter_expr)
+        if table.num_rows == 0:
+            return []
+
+        frame = table.to_pandas().sort_values("timestamp")
+        return [
+            {
+                "timestamp": row["timestamp"],
+                "value": float(row["equity"]),
+                "drawdown": float(row["drawdown"] or 0.0),
+            }
+            for _, row in frame.iterrows()
+        ]
 
     def write_per_bar_metrics(
         self,
