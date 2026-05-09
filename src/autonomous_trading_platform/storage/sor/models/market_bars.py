@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy import Float, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, synonym
 
 from autonomous_trading_platform.contracts.common.enums import (
     BarInterval,
@@ -55,12 +55,13 @@ class MarketBar(Base):
 
     ingested_at: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
 
-    quality_flags: Mapped[list[BarQualityFlag] | None] = mapped_column(JSONB, nullable=True)
+    quality_flags: Mapped[list[BarQualityFlag]] = mapped_column(JSONB, nullable=False)
 
-    market_session: Mapped[MarketSession] = mapped_column(
+    session: Mapped[MarketSession] = mapped_column(
         SAEnum(MarketSession, name="market_session_enum"),
         nullable=False,
     )
+    market_session = synonym("session")
 
     __table_args__ = (
         UniqueConstraint(

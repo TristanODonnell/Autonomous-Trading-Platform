@@ -144,8 +144,8 @@ class RecentActivityRepository:
 
     def _audit_severity(self, row: AuditLogRow) -> ActivitySeverity:
         metadata_severity = None
-        if row.event_metadata is not None:
-            metadata_severity = row.event_metadata.get("severity")
+        if row.metadata_ is not None:
+            metadata_severity = row.metadata_.get("severity")
 
         if isinstance(metadata_severity, str) and metadata_severity in _VALID_SEVERITIES:
             return cast(ActivitySeverity, metadata_severity)

@@ -23,13 +23,13 @@ class DatasetVersions(Base):
     created_at: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
     source: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    price_basis: Mapped[PriceBasis | None] = mapped_column(
+    price_basis: Mapped[PriceBasis] = mapped_column(
         SAEnum(PriceBasis, name="price_basis_enum"),
-        nullable=True,
+        nullable=False,
     )
-    interval: Mapped[BarInterval | None] = mapped_column(
+    interval: Mapped[BarInterval] = mapped_column(
         SAEnum(BarInterval, name="bar_interval_enum"),
-        nullable=True,
+        nullable=False,
     )
 
     schema_version: Mapped[str] = mapped_column(String(32), nullable=False)

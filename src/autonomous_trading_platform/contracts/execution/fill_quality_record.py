@@ -17,36 +17,36 @@ class FillQualityRecord(BaseModel):
     record_id: UUID
     run_id: UUID
     intent_id: UUID
-    fill_id: str
+    fill_id: str | None = None
     strategy_id: str
     symbol: str
 
     # Timestamps (for latency computation)
     signal_timestamp: UTCDateTime  # when strategy emitted the signal
     submission_timestamp: UTCDateTime  # when submit() was called
-    fill_timestamp: UTCDateTime  # when fill was confirmed
+    fill_timestamp: UTCDateTime | None = None  # when fill was confirmed
     submission_latency_seconds: float  # submission_timestamp - signal_timestamp
     fill_latency_seconds: float | None  # fill_timestamp - submission_timestamp
 
     # Price quality
     reference_price: Money  # mid-price at submission
-    fill_price: Money  # actual fill price from broker
+    fill_price: Money | None = None  # actual fill price from broker
     expected_fill_price: Money | None  # model-estimated fill price pre-submission
-    slippage_per_share: Money
-    slippage_notional: Money
-    slippage_bps: Decimal
+    slippage_per_share: Money | None = None
+    slippage_notional: Money | None = None
+    slippage_bps: Decimal | None = None
     fill_vs_expected_bps: Decimal | None  # actual fill vs expected fill (model accuracy)
 
     # Cost
-    commission_cost: Money
-    spread_cost: Money
-    slippage_cost: Money
-    total_cost: Money
+    commission_cost: Money | None = None
+    spread_cost: Money | None = None
+    slippage_cost: Money | None = None
+    total_cost: Money | None = None
 
     # Execution policy context
     policy_mode: PolicyMode
-    quantity: Quantity
-    policy_metadata: dict[str, Any] = {}
+    quantity: Quantity | None = None
+    policy_metadata: dict[str, Any] | None = None
 
     # Derived quality flag
-    is_adverse_fill: bool  # True if slippage_bps > configured threshold
+    is_adverse_fill: bool | None = None  # True if slippage_bps > configured threshold

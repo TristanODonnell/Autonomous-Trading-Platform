@@ -29,9 +29,9 @@ class AuditLogRepository(BaseRepository):
         if to_date is not None:
             stmt = stmt.where(AuditLogRow.event_timestamp <= to_date)
         if user_id is not None:
-            stmt = stmt.where(AuditLogRow.event_metadata["actor"].as_string() == user_id)
+            stmt = stmt.where(AuditLogRow.metadata_["actor"].as_string() == user_id)
         if strategy_id is not None:
-            stmt = stmt.where(AuditLogRow.event_metadata["strategy_id"].as_string() == strategy_id)
+            stmt = stmt.where(AuditLogRow.metadata_["strategy_id"].as_string() == strategy_id)
 
         total = self.session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
 
@@ -55,7 +55,7 @@ class AuditLogRepository(BaseRepository):
             component=audit_log.component,
             event_timestamp=audit_log.event_timestamp,
             message=audit_log.message,
-            event_metadata=audit_log.metadata,
+            metadata_=audit_log.metadata,
         )
 
         self.session.add(row)
