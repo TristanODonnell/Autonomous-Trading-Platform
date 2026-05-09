@@ -5,8 +5,6 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from alembic import command
-from alembic.config import Config
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
@@ -341,7 +339,13 @@ def test_contract_matches_orm_mapping(schema_pair: ContractOrmSchemaPair) -> Non
 
 @pytest.fixture(scope="session")
 def migrated_postgres_engine() -> Iterator[Engine]:
+    pytest.importorskip("alembic")
+
+    from alembic import command
+    from alembic.config import Config
+
     database_url = _schema_drift_database_url()
+
     if database_url is None:
         pytest.skip(
             "Set STORAGE_SCHEMA_DRIFT_DATABASE_URL or a PostgreSQL DATABASE_URL "
@@ -350,11 +354,14 @@ def migrated_postgres_engine() -> Iterator[Engine]:
         raise AssertionError("unreachable after pytest.skip")
 
     os.environ["DATABASE_URL"] = database_url
+
     alembic_config = Config(str(_repo_root() / "infra" / "db" / "alembic.ini"))
     alembic_config.set_main_option("sqlalchemy.url", database_url)
+
     command.upgrade(alembic_config, "head")
 
     engine = create_engine(database_url)
+
     try:
         yield engine
     finally:
