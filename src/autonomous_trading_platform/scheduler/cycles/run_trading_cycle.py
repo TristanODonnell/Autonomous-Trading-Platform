@@ -69,6 +69,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.runtime_control_s
 from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_repository import (
     RuntimeJobRunRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_control_state_repository import (
+    StrategyControlStateRepository,
+)
 
 logger = get_logger(__name__)
 TRADING_CYCLE_METRICS = CycleMetricSet(
@@ -255,6 +258,64 @@ def run_trading_cycle(now_utc: datetime | None = None):
         manifest.status = "completed"
         manifest.current_step = None
         manifest.error_message = control_block_reason
+        manifest_service.save(manifest)
+
+        trading_cycle_runs.add(
+            1,
+            {
+                "component": component,
+                "status": "skipped",
+            },
+        )
+
+        trading_cycle_duration.record(
+            perf_counter() - cycle_wall_start,
+            {
+                "component": component,
+                "status": "skipped",
+            },
+        )
+
+        return
+
+    strategy_control_repository = StrategyControlStateRepository(session)
+    if not strategy_control_repository.is_enabled(manifest.strategy_id):
+        skip_reason = "strategy_disabled"
+        logger.warning(
+            "trading_cycle_skipped_due_to_strategy_control_state",
+            extra=LogContext(
+                run_id=str(run_id),
+                component=component,
+                incident_type=skip_reason,
+            ).to_extra(),
+        )
+
+        audit_logger.record_run_completed(
+            run_id=str(run_id),
+            component=component,
+            metadata={
+                **base_metadata,
+                "status": "skipped",
+                "skip_reason": skip_reason,
+                "strategy_id": manifest.strategy_id,
+            },
+        )
+
+        _save_runtime_job_run(
+            status="completed",
+            completed_at=datetime.now(UTC),
+            error_message=None,
+            output_summary_json={
+                "status": "skipped",
+                "skip_reason": skip_reason,
+                "last_successful_step": manifest.last_successful_step,
+                "current_step": None,
+            },
+        )
+
+        manifest.status = "completed"
+        manifest.current_step = None
+        manifest.error_message = skip_reason
         manifest_service.save(manifest)
 
         trading_cycle_runs.add(

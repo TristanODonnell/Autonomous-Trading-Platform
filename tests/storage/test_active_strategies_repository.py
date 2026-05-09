@@ -20,6 +20,9 @@ from autonomous_trading_platform.storage.sor.models.capital_allocation_policies 
 from autonomous_trading_platform.storage.sor.models.fills import Fill
 from autonomous_trading_platform.storage.sor.models.order_intents import OrderIntents
 from autonomous_trading_platform.storage.sor.models.strategy_configs import StrategyConfigs
+from autonomous_trading_platform.storage.sor.models.strategy_control_states import (
+    StrategyControlState,
+)
 from autonomous_trading_platform.storage.sor.models.strategy_governance import (
     StrategyGovernance,
 )
@@ -181,3 +184,48 @@ def test_lists_active_strategies_with_config_fill_and_allocation_data(
     assert momentum.trade_count_today == 1
     assert momentum.allocated_capital == Decimal("25000.0")
     assert momentum.enabled is True
+
+
+def test_active_strategy_enabled_reflects_strategy_control_state(
+    db_session: Session,
+) -> None:
+    now = datetime(2026, 5, 8, 15, 30, tzinfo=UTC)
+    db_session.add_all(
+        [
+            StrategyGovernance(
+                strategy_id="momentum_v1",
+                config_hash="momentum-hash",
+                current_state="approved_for_paper_trading",
+                experiment_id="experiment-1",
+                source_run_id=None,
+                submitted_at=now,
+                updated_at=now,
+                submitted_by="test",
+            ),
+            StrategyConfigs(
+                strategy_id="momentum_v1",
+                config_hash="momentum-hash",
+                config_json={},
+                created_at=now,
+                strategy_type="momentum",
+                metadata_json={"display_name": "Momentum V1"},
+            ),
+            StrategyControlState(
+                strategy_id="momentum_v1",
+                enabled=False,
+                reason="operator disabled",
+                updated_by="operator-1",
+                updated_at=now,
+            ),
+        ]
+    )
+    db_session.flush()
+
+    repository = ActiveStrategiesRepository(db_session)
+
+    result = repository.list_active_strategies(now=now)
+
+    assert len(result) == 1
+    assert result[0].strategy_id == "momentum_v1"
+    assert result[0].status == "paper"
+    assert result[0].enabled is False

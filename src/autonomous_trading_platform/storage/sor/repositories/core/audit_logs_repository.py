@@ -1,12 +1,50 @@
 from datetime import datetime
 from uuid import uuid4
 
+from sqlalchemy import func, select
+
 from autonomous_trading_platform.contracts.runtime.audit_log import AuditLogEvent
 from autonomous_trading_platform.storage.sor.models.audit_logs import AuditLogRow
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
 
 
 class AuditLogRepository(BaseRepository):
+    def list_events(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        action_type: str | None = None,
+        strategy_id: str | None = None,
+        user_id: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> tuple[list[AuditLogRow], int]:
+        stmt = select(AuditLogRow)
+
+        if action_type is not None:
+            stmt = stmt.where(AuditLogRow.event_type == action_type)
+        if from_date is not None:
+            stmt = stmt.where(AuditLogRow.event_timestamp >= from_date)
+        if to_date is not None:
+            stmt = stmt.where(AuditLogRow.event_timestamp <= to_date)
+        if user_id is not None:
+            stmt = stmt.where(AuditLogRow.event_metadata["actor"].as_string() == user_id)
+        if strategy_id is not None:
+            stmt = stmt.where(AuditLogRow.event_metadata["strategy_id"].as_string() == strategy_id)
+
+        total = self.session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+
+        rows = list(
+            self.session.scalars(
+                stmt.order_by(AuditLogRow.event_timestamp.desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            ).all()
+        )
+
+        return rows, total
+
     def add(self, audit_log: AuditLogEvent) -> None:
         """Insert an audit log event into the database."""
 
@@ -38,13 +76,14 @@ class AuditLogRepository(BaseRepository):
         reason: str,
         occurred_at: datetime,
         metadata: dict,
+        component: str = "controls",
     ) -> None:
         self.add(
             AuditLogEvent(
                 event_id=str(uuid4()),
                 run_id=None,
                 event_type=action,
-                component="controls",
+                component=component,
                 event_timestamp=occurred_at,
                 message=f"{action} by {actor}: {reason}",
                 metadata={

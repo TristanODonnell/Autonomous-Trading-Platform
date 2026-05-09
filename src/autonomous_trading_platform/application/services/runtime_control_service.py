@@ -4,8 +4,15 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.storage.sor.models.strategy_control_states import (
+    StrategyControlState,
+)
+from autonomous_trading_platform.storage.sor.models.strategy_governance import (
+    StrategyGovernance,
+)
 from autonomous_trading_platform.storage.sor.repositories.core import (
     runtime_control_state_repository,
 )
@@ -45,6 +52,28 @@ class TradingModeChangeResult:
     reason: str
     updated_by: str
     updated_at: datetime
+
+
+@dataclass(frozen=True)
+class StrategyControlSnapshot:
+    strategy_id: str
+    enabled: bool
+    status: str
+    reason: str | None
+    updated_by: str | None
+    updated_at: datetime | None
+
+
+@dataclass(frozen=True)
+class ControlsStateSnapshot:
+    kill_switch_active: bool
+    trading_enabled: bool
+    trading_paused: bool
+    trading_mode: str
+    reason: str | None
+    updated_by: str | None
+    updated_at: datetime
+    strategies: list[StrategyControlSnapshot]
 
 
 class RuntimeControlStateWriter(Protocol):
@@ -98,6 +127,9 @@ class AuditLogWriter(Protocol):
 
 class RuntimeControlService:
     _VALID_TRADING_MODES = {"simulation", "paper", "live"}
+    _ACTIVE_PAPER_STATES = {"approved_for_paper_trading"}
+    _ACTIVE_LIVE_STATES = {"approved_for_live_trading"}
+    _ACTIVE_STRATEGY_STATES = _ACTIVE_PAPER_STATES | _ACTIVE_LIVE_STATES
     _ALLOWED_TRADING_MODE_TRANSITIONS = {
         ("simulation", "simulation"),
         ("simulation", "paper"),
@@ -275,3 +307,84 @@ class RuntimeControlService:
             updated_by=updated_by,
             updated_at=state.updated_at,
         )
+
+    def get_controls_state(self) -> ControlsStateSnapshot:
+        state = self.runtime_control_repo.get_or_create_global_state()
+        return ControlsStateSnapshot(
+            kill_switch_active=state.kill_switch_enabled,
+            trading_enabled=state.trading_enabled,
+            trading_paused=state.trading_paused,
+            trading_mode=state.trading_mode,
+            reason=state.reason,
+            updated_by=state.updated_by,
+            updated_at=state.updated_at,
+            strategies=self._list_strategy_control_snapshots(),
+        )
+
+    def _list_strategy_control_snapshots(self) -> list[StrategyControlSnapshot]:
+        governance_rows = self._list_active_strategy_governance_rows()
+        strategy_ids = [row.strategy_id for row in governance_rows]
+        control_states_by_strategy_id = self._get_strategy_control_states(strategy_ids)
+
+        return [
+            StrategyControlSnapshot(
+                strategy_id=governance.strategy_id,
+                enabled=self._resolve_strategy_enabled(
+                    control_states_by_strategy_id.get(governance.strategy_id)
+                ),
+                status=self._resolve_strategy_status(governance.current_state),
+                reason=(
+                    control_states_by_strategy_id[governance.strategy_id].reason
+                    if governance.strategy_id in control_states_by_strategy_id
+                    else None
+                ),
+                updated_by=(
+                    control_states_by_strategy_id[governance.strategy_id].updated_by
+                    if governance.strategy_id in control_states_by_strategy_id
+                    else None
+                ),
+                updated_at=(
+                    control_states_by_strategy_id[governance.strategy_id].updated_at
+                    if governance.strategy_id in control_states_by_strategy_id
+                    else None
+                ),
+            )
+            for governance in governance_rows
+        ]
+
+    def _list_active_strategy_governance_rows(self) -> list[StrategyGovernance]:
+        stmt = (
+            select(StrategyGovernance)
+            .where(StrategyGovernance.current_state.in_(self._ACTIVE_STRATEGY_STATES))
+            .order_by(StrategyGovernance.strategy_id.asc(), StrategyGovernance.updated_at.desc())
+        )
+        rows_by_strategy_id: dict[str, StrategyGovernance] = {}
+        for row in self.session.scalars(stmt).all():
+            rows_by_strategy_id.setdefault(row.strategy_id, row)
+
+        return list(rows_by_strategy_id.values())
+
+    def _get_strategy_control_states(
+        self,
+        strategy_ids: list[str],
+    ) -> dict[str, StrategyControlState]:
+        if not strategy_ids:
+            return {}
+
+        stmt = select(StrategyControlState).where(
+            StrategyControlState.strategy_id.in_(strategy_ids)
+        )
+        return {row.strategy_id: row for row in self.session.scalars(stmt).all()}
+
+    def _resolve_strategy_status(self, governance_state: str) -> str:
+        if governance_state in self._ACTIVE_LIVE_STATES:
+            return "live"
+        if governance_state in self._ACTIVE_PAPER_STATES:
+            return "paper"
+        return "off"
+
+    def _resolve_strategy_enabled(self, control_state: StrategyControlState | None) -> bool:
+        if control_state is None:
+            return True
+
+        return bool(control_state.enabled)

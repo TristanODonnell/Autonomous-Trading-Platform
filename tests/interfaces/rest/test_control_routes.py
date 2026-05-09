@@ -18,7 +18,103 @@ from autonomous_trading_platform.storage.sor.models.broker_orders import BrokerO
 from autonomous_trading_platform.storage.sor.models.runtime_control_state import (
     RuntimeControlState,
 )
-from tests.conftest import auth_headers
+from autonomous_trading_platform.storage.sor.models.strategy_control_states import (
+    StrategyControlState,
+)
+from tests.conftest import auth_headers, seed_strategy_governance
+
+
+def test_controls_state_requires_auth(client: TestClient) -> None:
+    response = client.get("/api/v1/controls/state")
+
+    assert response.status_code == 401
+
+
+def test_controls_state_returns_defaults_when_no_state_exists(client: TestClient) -> None:
+    response = client.get(
+        "/api/v1/controls/state",
+        headers=auth_headers(role="researcher"),
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["kill_switch_active"] is False
+    assert data["trading_enabled"] is True
+    assert data["trading_paused"] is False
+    assert data["trading_mode"] == "paper"
+    assert data["reason"] is None
+    assert data["updated_by"] is None
+    assert data["updated_at"] is not None
+    assert data["strategies"] == []
+
+
+def test_controls_state_returns_global_controls_and_strategy_enabled_snapshot(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    now = datetime.now(UTC)
+    db_session.add(
+        RuntimeControlState(
+            control_id="global",
+            trading_enabled=False,
+            trading_paused=True,
+            kill_switch_enabled=False,
+            trading_mode="paper",
+            reason="market data incident",
+            updated_by="operator-1",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    seed_strategy_governance(
+        db_session,
+        strategy_id="momentum_v1",
+        state="approved_for_paper_trading",
+    )
+    seed_strategy_governance(
+        db_session,
+        strategy_id="breakout_v1",
+        state="approved_for_live_trading",
+    )
+    seed_strategy_governance(
+        db_session,
+        strategy_id="research_only_v1",
+        state="approved_research",
+    )
+    db_session.add(
+        StrategyControlState(
+            strategy_id="momentum_v1",
+            enabled=False,
+            reason="operator pause",
+            updated_by="operator-1",
+            updated_at=now,
+        )
+    )
+    db_session.flush()
+
+    response = client.get(
+        "/api/v1/controls/state",
+        headers=auth_headers(role="operator"),
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["kill_switch_active"] is False
+    assert data["trading_enabled"] is False
+    assert data["trading_paused"] is True
+    assert data["trading_mode"] == "paper"
+    assert data["reason"] == "market data incident"
+    assert data["updated_by"] == "operator-1"
+
+    strategies = {strategy["strategy_id"]: strategy for strategy in data["strategies"]}
+    assert set(strategies) == {"breakout_v1", "momentum_v1"}
+    assert strategies["breakout_v1"]["enabled"] is True
+    assert strategies["breakout_v1"]["status"] == "live"
+    assert strategies["breakout_v1"]["reason"] is None
+    assert strategies["momentum_v1"]["enabled"] is False
+    assert strategies["momentum_v1"]["status"] == "paper"
+    assert strategies["momentum_v1"]["reason"] == "operator pause"
+    assert strategies["momentum_v1"]["updated_by"] == "operator-1"
 
 
 def test_kill_switch_requires_operator_or_admin_role(client: TestClient) -> None:

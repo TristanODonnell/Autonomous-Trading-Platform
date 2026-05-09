@@ -25,7 +25,9 @@
       "Bash(python -m pytest tests/scheduler/test_market_backfill_cycle.py -v)",
       "Bash(python -m pytest tests/scheduler/test_historical_research_golden_path.py -v)",
       "Bash(python -c \"from autonomous_trading_platform.scheduler.cycles.run_experiment_pipeline_cycle import run_experiment_pipeline_cycle, _load_experiment_definition_from_yaml; print\\('OK'\\)\")",
-      "Bash(python -m pytest tests/scheduler/test_experiment_pipeline_cycle.py -v)"
+      "Bash(python -m pytest tests/scheduler/test_experiment_pipeline_cycle.py -v)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\" -Recurse -Name)",
+      "Bash(Select-Object -First 30)"
     ]
   }
 }

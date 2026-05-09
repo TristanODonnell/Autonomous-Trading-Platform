@@ -12,6 +12,9 @@ from autonomous_trading_platform.api.logging_middleware import RequestLoggingMid
 from autonomous_trading_platform.interfaces.rest.routes.activity_routes import (
     router as activity_router,
 )
+from autonomous_trading_platform.interfaces.rest.routes.audit_log_routes import (
+    router as audit_log_router,
+)
 from autonomous_trading_platform.interfaces.rest.routes.control_routes import (
     router as control_router,
 )
@@ -49,6 +52,7 @@ def create_app() -> FastAPI:
     app.include_router(portfolio_router, prefix="/api/v1")
     app.include_router(strategies_router, prefix="/api/v1")
     app.include_router(activity_router, prefix="/api/v1")
+    app.include_router(audit_log_router, prefix="/api/v1")
     app.include_router(control_router, prefix="/api/v1")
     app.include_router(operations_router, prefix="/api/v1")
 

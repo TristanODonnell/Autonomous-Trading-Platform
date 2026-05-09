@@ -17,6 +17,9 @@ from autonomous_trading_platform.storage.sor.models.capital_allocation_policies 
 from autonomous_trading_platform.storage.sor.models.fills import Fill
 from autonomous_trading_platform.storage.sor.models.order_intents import OrderIntents
 from autonomous_trading_platform.storage.sor.models.strategy_configs import StrategyConfigs
+from autonomous_trading_platform.storage.sor.models.strategy_control_states import (
+    StrategyControlState,
+)
 from autonomous_trading_platform.storage.sor.models.strategy_governance import (
     StrategyGovernance,
 )
@@ -55,6 +58,7 @@ class ActiveStrategiesRepository:
 
         configs_by_strategy_id = self._get_configs_by_strategy_id(strategy_ids)
         trade_counts_by_strategy_id = self._get_trade_counts_today(strategy_ids, now=now)
+        control_states_by_strategy_id = self._get_control_states_by_strategy_id(strategy_ids)
         overrides_by_strategy_id = self._get_active_overrides_by_strategy_id(
             strategy_ids,
             now=now,
@@ -87,7 +91,12 @@ class ActiveStrategiesRepository:
                         override=override,
                         allocation_policy=allocation_policy,
                     ),
-                    enabled=status != "off",
+                    enabled=self._resolve_enabled(
+                        status=status,
+                        control_state=control_states_by_strategy_id.get(
+                            governance.strategy_id,
+                        ),
+                    ),
                 )
             )
 
@@ -109,6 +118,18 @@ class ActiveStrategiesRepository:
             return {}
 
         stmt = select(StrategyConfigs).where(StrategyConfigs.strategy_id.in_(strategy_ids))
+        return {row.strategy_id: row for row in self.session.scalars(stmt).all()}
+
+    def _get_control_states_by_strategy_id(
+        self,
+        strategy_ids: list[str],
+    ) -> dict[str, StrategyControlState]:
+        if not strategy_ids:
+            return {}
+
+        stmt = select(StrategyControlState).where(
+            StrategyControlState.strategy_id.in_(strategy_ids)
+        )
         return {row.strategy_id: row for row in self.session.scalars(stmt).all()}
 
     def _get_trade_counts_today(
@@ -251,6 +272,17 @@ class ActiveStrategiesRepository:
             return Decimal(str(allocation_policy.max_position_size_usd))
 
         return Decimal("0.00")
+
+    def _resolve_enabled(
+        self,
+        *,
+        status: str,
+        control_state: StrategyControlState | None,
+    ) -> bool:
+        if control_state is not None:
+            return bool(control_state.enabled)
+
+        return status != "off"
 
     def _get_metadata_value(
         self,

@@ -24,6 +24,7 @@ from . import runtime_job_runs as runtime_job_runs
 from . import signals as signals
 from . import simulation_runs as simulation_runs
 from . import strategy_configs as strategy_configs
+from . import strategy_control_states as strategy_control_states
 from . import strategy_governance as strategy_governance
 from . import strategy_runtime_states as strategy_runtime_states
 from . import symbol_date_coverage as symbol_date_coverage
@@ -58,6 +59,7 @@ __all__ = [
     "ingestion_checkpoint",
     "experiments",
     "strategy_configs",
+    "strategy_control_states",
     "simulation_runs",
     "metrics_summary",
     "strategy_governance",

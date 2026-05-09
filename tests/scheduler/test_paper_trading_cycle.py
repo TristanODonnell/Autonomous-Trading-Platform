@@ -17,6 +17,9 @@ from autonomous_trading_platform.storage.sor.models.runtime_job_runs import Runt
 from autonomous_trading_platform.storage.sor.repositories.core.runtime_control_state_repository import (
     RuntimeControlStateRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_control_state_repository import (
+    StrategyControlStateRepository,
+)
 
 
 def _runtime_control_service(db_session):
@@ -478,6 +481,30 @@ def test_trading_mode_mismatch_blocks_unsafe_execution(
     _assert_cycle_skipped_without_trading_outputs(
         db_session,
         expected_reason="trading_mode_mismatch",
+    )
+
+
+def test_strategy_control_disabled_skips_trading_cycle(
+    seeded_paper_trading_cycle_fixture,
+    db_session,
+):
+    fixture = seeded_paper_trading_cycle_fixture
+
+    repository = StrategyControlStateRepository(db_session)
+    repository.set_enabled(
+        strategy_id="baseline_strategy",
+        enabled=False,
+        reason="operator disabled strategy",
+        updated_by="test",
+        updated_at=fixture.now_utc,
+    )
+    db_session.flush()
+
+    run_trading_cycle(now_utc=fixture.now_utc)
+
+    _assert_cycle_skipped_without_trading_outputs(
+        db_session,
+        expected_reason="strategy_disabled",
     )
 
 

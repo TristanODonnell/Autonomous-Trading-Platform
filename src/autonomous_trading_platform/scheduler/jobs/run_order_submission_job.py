@@ -94,6 +94,28 @@ def run_order_submission_job(
             order_intents_created = False
 
             with SorUnitOfWork(session) as uow:
+                if not uow.strategy_control_states.is_enabled(manifest.strategy_id):
+                    job_span.set_attribute("ratp.strategy_disabled", True)
+                    job_span.set_attribute("ratp.skip_reason", "strategy_disabled")
+                    logger.warning(
+                        "order_submission_job.skipped_due_to_strategy_control_state",
+                        extra={
+                            "strategy_id": manifest.strategy_id,
+                            "run_id": str(run_id),
+                            "skip_reason": "strategy_disabled",
+                        },
+                    )
+                    duration = perf_counter() - job_start
+                    record_job_completed(
+                        logger=logger,
+                        metrics=ORDER_SUBMISSION_JOB_METRICS,
+                        job=job,
+                        component=component,
+                        run_id=str(run_id),
+                        duration_seconds=duration,
+                    )
+                    return
+
                 current_state = execution_context.strategy_runtime_state_service.get_current_state(
                     uow=uow,
                     strategy_id=manifest.strategy_id,

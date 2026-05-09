@@ -13,16 +13,55 @@ from autonomous_trading_platform.application.services.runtime_control_service im
 )
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.interfaces.rest.schemas.control_schema import (
+    ControlsStateResponse,
     KillSwitchRequest,
     KillSwitchResponse,
     RuntimeControlActionRequest,
     RuntimeControlActionResponse,
+    StrategyControlStateResponse,
 )
 
 router = APIRouter(prefix="/controls", tags=["controls"])
 
 _request_id_dependency = Depends(get_request_id)
 _session_dependency = Depends(get_session)
+
+
+@router.get(
+    "/state",
+    response_model=SuccessEnvelope[ControlsStateResponse],
+    status_code=status.HTTP_200_OK,
+)
+def get_controls_state(
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[ControlsStateResponse]:
+    service = RuntimeControlService(session=session)
+    result = service.get_controls_state()
+
+    return success_response(
+        data=ControlsStateResponse(
+            kill_switch_active=result.kill_switch_active,
+            trading_enabled=result.trading_enabled,
+            trading_paused=result.trading_paused,
+            trading_mode=result.trading_mode,
+            reason=result.reason,
+            updated_by=result.updated_by,
+            updated_at=result.updated_at,
+            strategies=[
+                StrategyControlStateResponse(
+                    strategy_id=strategy.strategy_id,
+                    enabled=strategy.enabled,
+                    status=strategy.status,
+                    reason=strategy.reason,
+                    updated_by=strategy.updated_by,
+                    updated_at=strategy.updated_at,
+                )
+                for strategy in result.strategies
+            ],
+        ),
+        request_id=request_id,
+    )
 
 
 @router.post(
