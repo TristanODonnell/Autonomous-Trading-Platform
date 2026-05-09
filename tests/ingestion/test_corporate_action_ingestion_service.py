@@ -714,6 +714,7 @@ def test_reprocessing_same_payload_is_idempotent_against_real_storage(
         action_type=CorporateActionType.SPLIT_FORWARD,
         effective_date=date(2025, 1, 10),
         currency="USD",
+        new_symbol="AAPL",
         source="alpaca",
         ingested_at=datetime(2025, 1, 10, tzinfo=UTC),
     )
@@ -729,6 +730,7 @@ def test_reprocessing_same_payload_is_idempotent_against_real_storage(
         low=Decimal("100"),
         close=Decimal("100"),
         volume=100,
+        quality_flags=[],
         price_basis=PriceBasis.RAW,
         adjustment_factor=Decimal("1.0"),
         source="alpaca",
