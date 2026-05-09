@@ -57,6 +57,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.run_manifests_rep
 from autonomous_trading_platform.storage.sor.repositories.core.signals_repository import (
     SignalRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_control_state_repository import (
+    StrategyControlStateRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.strategy_runtime_state_repository import (
     StrategyRuntimeStateRepository,
 )
@@ -92,6 +95,7 @@ class SorUnitOfWork:
         self.audit_logs = AuditLogRepository(session)
         self.run_manifests = RunManifestRepository(session)
         self.tracked_orders = TrackedOrderRepository(session)
+        self.strategy_control_states = StrategyControlStateRepository(session)
         self.strategy_runtime_states = StrategyRuntimeStateRepository(session)
         self.ticker_lifecycles = TickerLifecycleRepository(session)
         self.dataset_versions = DatasetVersionsRepository(session)

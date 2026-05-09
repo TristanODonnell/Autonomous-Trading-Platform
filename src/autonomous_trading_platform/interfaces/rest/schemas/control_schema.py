@@ -29,3 +29,23 @@ class RuntimeControlActionResponse(BaseModel):
     rationale: str
     updated_by: str
     updated_at: datetime
+
+
+class StrategyControlStateResponse(BaseModel):
+    strategy_id: str
+    enabled: bool
+    status: Literal["live", "paper", "off"]
+    reason: str | None
+    updated_by: str | None
+    updated_at: datetime | None
+
+
+class ControlsStateResponse(BaseModel):
+    kill_switch_active: bool
+    trading_enabled: bool
+    trading_paused: bool
+    trading_mode: Literal["simulation", "paper", "live"]
+    reason: str | None
+    updated_by: str | None
+    updated_at: datetime
+    strategies: list[StrategyControlStateResponse]
