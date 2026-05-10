@@ -655,3 +655,48 @@ def test_trading_cycle_marks_degraded_when_paper_execution_fails(
 
     fills = _fills_for_run(db_session, manifest.run_id)
     assert fills == []
+
+
+def test_pre_trade_risk_rejection_blocks_order_submission(
+    seeded_paper_trading_cycle_fixture,
+    db_session,
+    monkeypatch,
+):
+    fixture = seeded_paper_trading_cycle_fixture
+
+    from autonomous_trading_platform.safety.errors import GrossExposureLimitExceededError
+    from autonomous_trading_platform.scheduler.common import trading_cycle_common
+
+    original_builder = trading_cycle_common.build_trading_cycle_dependencies
+
+    class RejectingPreTradeRiskService:
+        def assert_order_allowed(self, order_intent, now):
+            raise GrossExposureLimitExceededError("simulated pre-trade risk rejection")
+
+    def patched_builder():
+        deps = original_builder()
+        deps.execution_context.portfolio_construction_service.pre_trade_risk_service = (
+            RejectingPreTradeRiskService()
+        )
+        return deps
+
+    monkeypatch.setattr(
+        cycle_module,
+        "build_trading_cycle_dependencies",
+        patched_builder,
+    )
+
+    run_trading_cycle(now_utc=fixture.now_utc)
+
+    manifest = _latest_manifest(db_session)
+
+    assert manifest is not None
+    assert manifest.status == "completed"
+    assert manifest.error_message == "simulated pre-trade risk rejection"
+
+    # evaluation never completed successfully
+    assert manifest.last_successful_step == "ingestion_readiness"
+
+    # no downstream trading artifacts produced
+    assert _order_intents_for_run(db_session, manifest.run_id) == []
+    assert _fills_for_run(db_session, manifest.run_id) == []
