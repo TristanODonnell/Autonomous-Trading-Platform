@@ -33,6 +33,7 @@ jobs:
         env:
           APP_ENV: test
           DATABASE_URL: postgresql+psycopg://ratp:ratp_password@localhost:5433/ratp
+          VALIDATE_BROKER_CONFIG: "false"
         run: python -m pytest
 
       - name: Tear down
