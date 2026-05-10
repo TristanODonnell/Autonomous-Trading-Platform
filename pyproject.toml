@@ -98,6 +98,9 @@ addopts = "-q"
 pythonpath = ["."]
 markers = [
   "integration: tests that require external services like Postgres",
+  "external: tests that make real network calls to external services",
+  "alpaca: tests that require Alpaca paper trading access",
+  "smoke: smoke tests that validate end-to-end service reachability",
   "asyncio: mark test as async"
 ]
 
