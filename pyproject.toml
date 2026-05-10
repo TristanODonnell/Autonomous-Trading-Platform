@@ -101,6 +101,7 @@ markers = [
   "external: tests that make real network calls to external services",
   "alpaca: tests that require Alpaca paper trading access",
   "smoke: smoke tests that validate end-to-end service reachability",
+  "paper_runtime: opt-in tests that execute controlled Alpaca paper runtime cycles",
   "asyncio: mark test as async"
 ]
 

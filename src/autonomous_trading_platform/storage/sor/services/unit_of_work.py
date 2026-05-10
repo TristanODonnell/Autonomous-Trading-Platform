@@ -5,6 +5,9 @@ from sqlalchemy.orm import Session
 from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
     AuditLogRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.broker_account_snapshot_repository import (
+    BrokerAccountSnapshotRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.broker_order_repository import (
     BrokerOrderRepository,
 )
@@ -87,6 +90,7 @@ class SorUnitOfWork:
         self.universe_snapshots = UniverseSnapshotRepository(session)
         self.signals = SignalRepository(session)
         self.order_intents = OrderIntentRepository(session)
+        self.broker_account_snapshots = BrokerAccountSnapshotRepository(session)
         self.broker_orders = BrokerOrderRepository(session)
         self.fills = FillRepository(session)
         self.position_snapshots = PositionSnapshotRepository(session)

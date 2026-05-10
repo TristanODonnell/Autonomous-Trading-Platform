@@ -19,6 +19,7 @@ from autonomous_trading_platform.observability.metrics import (
     order_reconciliation_mismatches,
 )
 from autonomous_trading_platform.observability.tracing import start_span
+from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_cycle_dependencies,
 )
@@ -46,6 +47,7 @@ def run_order_reconciliation_job(
     dependencies = build_trading_cycle_dependencies()
     session = dependencies.session
     execution_context = dependencies.execution_context
+    audit_logger = AuditLoggingService(session)
 
     record_job_started(
         logger=logger,
@@ -136,6 +138,16 @@ def run_order_reconciliation_job(
                             extra={"fill_id": result.fill.fill_id, "error": str(exc)},
                         )
             job_span.set_attribute("ratp.reconciliation.mismatch_count", mismatch_count)
+            audit_logger.record_event(
+                run_id=run_id,
+                event_type="RECONCILIATION_COMPLETED",
+                component=component,
+                message="Order reconciliation completed",
+                metadata={
+                    "mismatch_count": mismatch_count,
+                    "severity": "info",
+                },
+            )
         duration = perf_counter() - job_start
         record_job_completed(
             logger=logger,

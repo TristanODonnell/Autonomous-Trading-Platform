@@ -74,6 +74,7 @@ def build_execution_context(
     order_execution_service = OrderExecutionService(
         broker_client=broker_client,
         adapter=broker_adapter,
+        settings=alpaca_settings,
     )
 
     order_state_machine_service = OrderStateMachineService(

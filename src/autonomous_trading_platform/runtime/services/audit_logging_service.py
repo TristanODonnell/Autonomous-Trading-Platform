@@ -77,6 +77,23 @@ class AuditLoggingService:
             metadata=metadata,
         )
 
+    def record_event(
+        self,
+        *,
+        run_id: str | None,
+        event_type: str,
+        component: str,
+        message: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        self._record_event(
+            run_id=run_id,
+            event_type=event_type,
+            component=component,
+            message=message,
+            metadata=metadata,
+        )
+
     def _record_event(
         self,
         run_id: str | None,

@@ -6,6 +6,9 @@ from typing import Any, cast
 import httpx
 
 from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
+from autonomous_trading_platform.execution.services.paper_runtime_order_safeguard_service import (
+    PaperRuntimeOrderSafeguardService,
+)
 
 
 class OrderExecutionService:
@@ -13,16 +16,22 @@ class OrderExecutionService:
         self,
         broker_client: Any,
         adapter: Any,
+        settings: Any | None = None,
+        paper_runtime_order_guard: PaperRuntimeOrderSafeguardService | None = None,
         max_attempts: int = 3,
         initial_backoff_seconds: float = 0.5,
     ) -> None:
         self.client = broker_client
         self.adapter = adapter
+        self.paper_runtime_order_guard = (
+            paper_runtime_order_guard or PaperRuntimeOrderSafeguardService.from_settings(settings)
+        )
         self.max_attempts = max_attempts
         self.initial_backoff_seconds = initial_backoff_seconds
 
     def submit(self, intent: OrderIntent) -> dict[str, Any]:
         payload = self.adapter.to_payload(intent)
+        self.paper_runtime_order_guard.assert_payload_allowed(payload)
 
         attempt = 0
         backoff = self.initial_backoff_seconds

@@ -20,3 +20,7 @@ class BrokerStartupHealthCheckError(ExecutionError):
 
 class InvalidBrokerCredentialsError(BrokerStartupHealthCheckError):
     """Raised when broker credentials are rejected by the broker."""
+
+
+class BrokerRuntimeSyncError(ExecutionError):
+    """Raised when broker runtime synchronization fails closed."""

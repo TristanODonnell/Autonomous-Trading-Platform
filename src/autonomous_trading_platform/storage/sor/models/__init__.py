@@ -1,5 +1,6 @@
 from . import allocation_overrides as allocation_overrides
 from . import audit_logs as audit_logs
+from . import broker_account_snapshots as broker_account_snapshots
 from . import broker_orders as broker_orders
 from . import capital_allocation_policies as capital_allocation_policies
 from . import cash_snapshots as cash_snapshots
@@ -36,6 +37,7 @@ from .base import Base as Base
 
 __all__ = [
     "Base",
+    "broker_account_snapshots",
     "broker_orders",
     "cash_snapshots",
     "corporate_actions",

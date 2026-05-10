@@ -1,4 +1,5 @@
 import os
+from decimal import Decimal
 
 from dotenv import load_dotenv
 
@@ -86,6 +87,29 @@ class Settings:
         )
         self.freeze_trading_on_reconciliation_failure = self._get_bool(
             "FREEZE_TRADING_ON_RECONCILIATION_FAILURE",
+            default=True,
+        )
+        self.paper_runtime_order_safeguards_enabled = self._get_bool(
+            "PAPER_RUNTIME_ORDER_SAFEGUARDS_ENABLED",
+            default=False,
+        )
+        self.paper_runtime_max_order_qty = self._get_decimal(
+            "PAPER_RUNTIME_MAX_ORDER_QTY",
+            Decimal("1"),
+        )
+        self.paper_runtime_max_order_notional = self._get_decimal(
+            "PAPER_RUNTIME_MAX_ORDER_NOTIONAL",
+            Decimal("1.00"),
+        )
+        self.paper_runtime_max_limit_price = self._get_decimal(
+            "PAPER_RUNTIME_MAX_LIMIT_PRICE",
+            Decimal("1.00"),
+        )
+        self.paper_runtime_allowed_symbols = self._get_list(
+            "PAPER_RUNTIME_ALLOWED_SYMBOLS",
+        )
+        self.paper_runtime_require_limit_orders = self._get_bool(
+            "PAPER_RUNTIME_REQUIRE_LIMIT_ORDERS",
             default=True,
         )
         self.trading_cycle_timeout_seconds = self._get_int(
@@ -180,3 +204,10 @@ class Settings:
         if value is None:
             return default
         return float(value.strip())
+
+    def _get_decimal(self, key: str, default: Decimal) -> Decimal:
+        value = os.getenv(key)
+
+        if value is None:
+            return default
+        return Decimal(value.strip())
