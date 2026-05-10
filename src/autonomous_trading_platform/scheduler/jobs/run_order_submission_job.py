@@ -72,6 +72,7 @@ def run_order_submission_job(
     safety_context = trading_cycle_dependencies.safety_context
     execution_context = trading_cycle_dependencies.execution_context
     session = trading_cycle_dependencies.session
+    audit_logger = trading_cycle_dependencies.audit_logger
     shadow_mode_enabled = safety_context.shadow_mode_service.is_enabled()
 
     safety_context.runtime_trading_guard_service.assert_trading_mode_allowed(
@@ -172,6 +173,24 @@ def run_order_submission_job(
                             client_order_id=intent.client_order_id,
                             meta=intent.metadata,
                         )
+                    )
+                if hasattr(audit_logger, "record_event"):
+                    audit_logger.record_event(
+                        run_id=str(run_id),
+                        event_type="ORDER_GENERATED",
+                        component=component,
+                        message=f"Order intent generated for {intent.symbol}",
+                        metadata={
+                            "intent_id": str(intent.intent_id),
+                            "symbol": intent.symbol,
+                            "strategy_id": intent.strategy_id,
+                            "side": intent.side.value,
+                            "qty": str(intent.qty) if intent.qty is not None else None,
+                            "notional": (
+                                str(intent.notional) if intent.notional is not None else None
+                            ),
+                            "severity": "info",
+                        },
                     )
 
                 # ── RISK CHECK ────────────────────────────────────
@@ -350,6 +369,23 @@ def run_order_submission_job(
                     raise
 
                 except Exception as exc:
+                    if isinstance(exc, OrderNotAllowedForSubmissionError) and hasattr(
+                        audit_logger, "record_event"
+                    ):
+                        audit_logger.record_event(
+                            run_id=str(run_id),
+                            event_type="ORDER_REJECTED_BY_SAFEGUARD",
+                            component=component,
+                            message=f"Order rejected by safeguard for {intent.symbol}",
+                            metadata={
+                                "intent_id": str(intent.intent_id),
+                                "symbol": intent.symbol,
+                                "strategy_id": intent.strategy_id,
+                                "error": str(exc),
+                                "severity": "warning",
+                            },
+                        )
+
                     execution_context.order_state_machine_service.apply_event(
                         order_id=intent.intent_id,
                         current_status=order_status,

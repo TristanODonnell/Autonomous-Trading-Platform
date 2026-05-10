@@ -173,6 +173,17 @@ def run_trading_evaluation_job(
             if equity is not None and equity > 0:
                 portfolio_engine.update_total_capital(equity)
                 logger.info("evaluation_job.capital_synced", extra={"equity": equity})
+                if hasattr(trading_cycle_dependencies.audit_logger, "record_event"):
+                    trading_cycle_dependencies.audit_logger.record_event(
+                        run_id=str(manifest.run_id),
+                        event_type="BROKER_SYNC_COMPLETED",
+                        component=component,
+                        message="Broker account equity synchronized",
+                        metadata={
+                            "equity": str(equity),
+                            "severity": "info",
+                        },
+                    )
 
             # Strategy evaluation
             evaluate_strategy_job = EvaluateStrategyJob(
