@@ -58,7 +58,7 @@ jobs:
       - name: Run Alpaca external smoke tests
         env:
           APP_ENV: external-smoke
-          DATABASE_URL: sqlite:///:memory:
+          DATABASE_URL: postgresql+psycopg://ratp:ratp_password@localhost:5433/ratp
           TRADING_ENVIRONMENT: paper
           NO_LIVE_TRADING: "true"
           ENABLE_LIVE_TRADING: "false"
