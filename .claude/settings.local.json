@@ -27,7 +27,13 @@
       "Bash(python -c \"from autonomous_trading_platform.scheduler.cycles.run_experiment_pipeline_cycle import run_experiment_pipeline_cycle, _load_experiment_definition_from_yaml; print\\('OK'\\)\")",
       "Bash(python -m pytest tests/scheduler/test_experiment_pipeline_cycle.py -v)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\" -Recurse -Name)",
-      "Bash(Select-Object -First 30)"
+      "Bash(Select-Object -First 30)",
+      "Bash(npx tsc *)",
+      "Bash(node -e ' *)",
+      "Bash(npx vite *)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); const keys = [...Object.keys\\(p.dependencies||{}\\), ...Object.keys\\(p.devDependencies||{}\\)]; keys.filter\\(k => k.includes\\('tailwind'\\) || k.includes\\('vite'\\) || k.includes\\('react'\\)\\).forEach\\(k => { const v = \\(p.dependencies||{}\\)[k] || \\(p.devDependencies||{}\\)[k]; console.log\\(k, v\\); }\\)\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/tailwindcss/package.json'\\).version\\)\")",
+      "Bash(curl -s http://localhost:5174/)"
     ]
   }
 }
