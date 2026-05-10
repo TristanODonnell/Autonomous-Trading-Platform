@@ -10,6 +10,9 @@ from autonomous_trading_platform.safety.services.order_idempotency_service impor
 from autonomous_trading_platform.safety.services.order_throttle_service import OrderThrottleService
 from autonomous_trading_platform.safety.services.pre_trade_risk_service import PreTradeRiskService
 from autonomous_trading_platform.safety.services.runtime_gate_service import RuntimeGateService
+from autonomous_trading_platform.safety.services.runtime_trading_guard_service import (
+    RuntimeTradingGuardService,
+)
 from autonomous_trading_platform.safety.services.shadow_mode_service import ShadowModeService
 
 
@@ -21,4 +24,5 @@ class SafetyContext:
     order_throttle_service: OrderThrottleService
     pre_trade_risk_service: PreTradeRiskService
     runtime_gate_service: RuntimeGateService
+    runtime_trading_guard_service: RuntimeTradingGuardService
     shadow_mode_service: ShadowModeService

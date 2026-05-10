@@ -34,6 +34,8 @@ def _live_ready_env(monkeypatch) -> None:
     monkeypatch.setenv("NO_LIVE_TRADING", "false")
     monkeypatch.setenv("ENABLE_LIVE_TRADING", "true")
     monkeypatch.setenv("INCLUDE_LIVE_MODULES", "true")
+    monkeypatch.setenv("LIVE_BROKER_API_KEY", "live-key")
+    monkeypatch.setenv("LIVE_BROKER_API_SECRET", "live-secret")
     monkeypatch.setenv("LIVE_ALLOWED_ACCOUNT_IDS", "live-1")
 
 
@@ -124,6 +126,8 @@ def test_live_gate_maps_missing_live_modules_to_build_gate_error(monkeypatch) ->
     monkeypatch.setenv("NO_LIVE_TRADING", "false")
     monkeypatch.setenv("ENABLE_LIVE_TRADING", "true")
     monkeypatch.setenv("INCLUDE_LIVE_MODULES", "false")
+    monkeypatch.setenv("LIVE_BROKER_API_KEY", "live-key")
+    monkeypatch.setenv("LIVE_BROKER_API_SECRET", "live-secret")
     monkeypatch.setenv("LIVE_ALLOWED_ACCOUNT_IDS", "live-1")
 
     live_gate_service, runtime_gate_service, _ = _build_service(monkeypatch)
@@ -139,6 +143,8 @@ def test_live_gate_maps_config_disable_to_config_gate_error(monkeypatch) -> None
     monkeypatch.setenv("NO_LIVE_TRADING", "false")
     monkeypatch.setenv("ENABLE_LIVE_TRADING", "false")
     monkeypatch.setenv("INCLUDE_LIVE_MODULES", "true")
+    monkeypatch.setenv("LIVE_BROKER_API_KEY", "live-key")
+    monkeypatch.setenv("LIVE_BROKER_API_SECRET", "live-secret")
     monkeypatch.setenv("LIVE_ALLOWED_ACCOUNT_IDS", "live-1")
 
     live_gate_service, runtime_gate_service, _ = _build_service(monkeypatch)

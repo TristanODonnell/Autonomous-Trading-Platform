@@ -9,6 +9,9 @@ from autonomous_trading_platform.safety.services.order_idempotency_service impor
 from autonomous_trading_platform.safety.services.order_throttle_service import OrderThrottleService
 from autonomous_trading_platform.safety.services.pre_trade_risk_service import PreTradeRiskService
 from autonomous_trading_platform.safety.services.runtime_gate_service import RuntimeGateService
+from autonomous_trading_platform.safety.services.runtime_trading_guard_service import (
+    RuntimeTradingGuardService,
+)
 from autonomous_trading_platform.safety.services.shadow_mode_service import ShadowModeService
 
 
@@ -27,6 +30,12 @@ def build_safety_context(
         environment_policy=environment_policy,
         runtime_gate_service=runtime_gate_service,
         kill_switch_service=kill_switch_service,
+    )
+    runtime_trading_guard_service = RuntimeTradingGuardService(
+        settings=settings,
+        environment_policy=environment_policy,
+        runtime_gate_service=runtime_gate_service,
+        live_trading_gate_service=live_trading_gate_service,
     )
     order_idempotency_service = OrderIdempotencyService(
         settings=settings,
@@ -49,5 +58,6 @@ def build_safety_context(
         order_throttle_service=order_throttle_service,
         pre_trade_risk_service=pre_trade_risk_service,
         runtime_gate_service=runtime_gate_service,
+        runtime_trading_guard_service=runtime_trading_guard_service,
         shadow_mode_service=shadow_mode_service,
     )

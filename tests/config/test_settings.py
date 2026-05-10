@@ -38,6 +38,72 @@ def test_trading_environment_defaults_to_paper(monkeypatch):
     assert settings.trading_environment is TradingEnvironment.PAPER
 
 
+def test_broker_credentials_use_paper_values_in_paper_mode(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "local")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://ratp:ratp_password@localhost:5432/ratp",
+    )
+    monkeypatch.setenv("TRADING_ENVIRONMENT", "paper")
+    monkeypatch.setenv("PAPER_BROKER_API_KEY", "paper-key")
+    monkeypatch.setenv("PAPER_BROKER_API_SECRET", "paper-secret")
+    monkeypatch.setenv("LIVE_BROKER_API_KEY", "live-key")
+    monkeypatch.setenv("LIVE_BROKER_API_SECRET", "live-secret")
+
+    settings = Settings()
+
+    assert settings.broker_api_key == "paper-key"
+    assert settings.broker_api_secret == "paper-secret"
+    assert settings.alpaca_base_url == "https://paper-api.alpaca.markets"
+
+
+def test_broker_credentials_use_live_values_in_live_mode(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "local")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://ratp:ratp_password@localhost:5432/ratp",
+    )
+    monkeypatch.setenv("TRADING_ENVIRONMENT", "live")
+    monkeypatch.setenv("PAPER_BROKER_API_KEY", "paper-key")
+    monkeypatch.setenv("PAPER_BROKER_API_SECRET", "paper-secret")
+    monkeypatch.setenv("LIVE_BROKER_API_KEY", "live-key")
+    monkeypatch.setenv("LIVE_BROKER_API_SECRET", "live-secret")
+
+    settings = Settings()
+
+    assert settings.broker_api_key == "live-key"
+    assert settings.broker_api_secret == "live-secret"
+    assert settings.alpaca_base_url == "https://api.alpaca.markets"
+
+
+def test_missing_paper_broker_credentials_fail_closed(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "local")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://ratp:ratp_password@localhost:5432/ratp",
+    )
+    monkeypatch.setenv("TRADING_ENVIRONMENT", "paper")
+    monkeypatch.delenv("PAPER_BROKER_API_KEY", raising=False)
+    monkeypatch.delenv("PAPER_BROKER_API_SECRET", raising=False)
+
+    with pytest.raises(RuntimeError, match="PAPER_BROKER_API_KEY"):
+        Settings()
+
+
+def test_missing_live_broker_credentials_fail_closed(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "local")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://ratp:ratp_password@localhost:5432/ratp",
+    )
+    monkeypatch.setenv("TRADING_ENVIRONMENT", "live")
+    monkeypatch.delenv("LIVE_BROKER_API_KEY", raising=False)
+    monkeypatch.delenv("LIVE_BROKER_API_SECRET", raising=False)
+
+    with pytest.raises(RuntimeError, match="LIVE_BROKER_API_KEY"):
+        Settings()
+
+
 def test_allowed_account_ids_parse_as_list(monkeypatch):
     monkeypatch.setenv("APP_ENV", "local")
     monkeypatch.setenv(

@@ -2,6 +2,11 @@ import os
 
 from dotenv import load_dotenv
 
+from autonomous_trading_platform.config.broker_config_validator import (
+    expected_alpaca_base_url,
+    validate_alpaca_base_url,
+    validate_broker_environment,
+)
 from autonomous_trading_platform.config.enums import TradingEnvironment
 
 load_dotenv()
@@ -106,11 +111,42 @@ class Settings:
         self.max_net_exposure = self._get_float("MAX_NET_EXPOSURE", 50000.0)
         self.max_leverage = self._get_float("MAX_LEVERAGE", 2.0)
 
+        self.validate_broker_config = self._get_bool(
+            "VALIDATE_BROKER_CONFIG",
+            default=True,
+        )
+
+        # ----------------------------------------------------
+        # VALIDATE AFTER LOAD
+        # ----------------------------------------------------
+        if self.validate_broker_config:
+            validate_broker_environment(
+                trading_environment=self.trading_environment,
+                paper_broker_api_key=self.paper_broker_api_key,
+                paper_broker_api_secret=self.paper_broker_api_secret,
+                live_broker_api_key=self.live_broker_api_key,
+                live_broker_api_secret=self.live_broker_api_secret,
+            )
+            validate_alpaca_base_url(
+                trading_environment=self.trading_environment,
+                alpaca_base_url=self.alpaca_base_url,
+            )
+
+    @property
+    def broker_api_key(self) -> str | None:
+        if self.trading_environment == TradingEnvironment.PAPER:
+            return self.paper_broker_api_key
+        return self.live_broker_api_key
+
+    @property
+    def broker_api_secret(self) -> str | None:
+        if self.trading_environment == TradingEnvironment.PAPER:
+            return self.paper_broker_api_secret
+        return self.live_broker_api_secret
+
     @property
     def alpaca_base_url(self) -> str:
-        if self.trading_environment == TradingEnvironment.PAPER:
-            return "https://paper-api.alpaca.markets"
-        return "https://api.alpaca.markets"
+        return expected_alpaca_base_url(self.trading_environment)
 
     def _get_required(self, key: str) -> str:
         value = os.getenv(key)

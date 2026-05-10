@@ -12,6 +12,9 @@ from autonomous_trading_platform.execution.policy.order_type_resolver import Ord
 from autonomous_trading_platform.execution.policy.twap_slicer import TWAPSlicer
 from autonomous_trading_platform.execution.policy.vwap_lite_slicer import VWAPLiteSlicer
 from autonomous_trading_platform.execution.services.broker_adaptor import AlpacaBrokerAdapter
+from autonomous_trading_platform.execution.services.broker_startup_health_check_service import (
+    BrokerStartupHealthCheckService,
+)
 from autonomous_trading_platform.execution.services.cash_ledger_service import CashLedgerService
 from autonomous_trading_platform.execution.services.order_execution_service import (
     OrderExecutionService,
@@ -65,6 +68,7 @@ def build_execution_context(
     portfolio_engine: PortfolioEngine,
 ) -> ExecutionContext:
     broker_client = AlpacaBrokerClient(alpaca_settings)
+    BrokerStartupHealthCheckService().assert_broker_ready(broker_client)
     broker_adapter = AlpacaBrokerAdapter()
 
     order_execution_service = OrderExecutionService(
