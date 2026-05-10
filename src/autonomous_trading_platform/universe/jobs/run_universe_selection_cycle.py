@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from alpaca.trading.client import TradingClient
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.config.enums import TradingEnvironment
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.storage.sor.repositories.core.universe_snapshot_repository import (
@@ -48,8 +49,8 @@ def should_rebalance(now_utc: datetime, cadence: str) -> bool:
 
 def run_universe_selection_cycle(*, cycle_timestamp: datetime | None = None) -> None:
     settings = Settings()
-    api_key = settings.paper_broker_api_key
-    secret_key = settings.paper_broker_api_secret
+    api_key = settings.broker_api_key
+    secret_key = settings.broker_api_secret
     cadence = settings.universe_rebalance_cadence
 
     session: Session = get_session()
@@ -58,7 +59,11 @@ def run_universe_selection_cycle(*, cycle_timestamp: datetime | None = None) -> 
     if not should_rebalance(now_utc, cadence):
         return
 
-    trading_client = TradingClient(api_key, secret_key, paper=True)
+    trading_client = TradingClient(
+        api_key,
+        secret_key,
+        paper=settings.trading_environment == TradingEnvironment.PAPER,
+    )
     asset_source = AlpacaUniverseAssetSource(trading_client)
 
     selection_service = UniverseSelectionService(session, asset_source)

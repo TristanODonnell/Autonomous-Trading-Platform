@@ -15,6 +15,11 @@ def _base_env(monkeypatch):
     )
 
 
+def _live_credentials(monkeypatch):
+    monkeypatch.setenv("LIVE_BROKER_API_KEY", "live-key")
+    monkeypatch.setenv("LIVE_BROKER_API_SECRET", "live-secret")
+
+
 def test_paper_environment_is_allowed_by_default(monkeypatch):
     _base_env(monkeypatch)
     monkeypatch.setenv("TRADING_ENVIRONMENT", "paper")
@@ -31,6 +36,7 @@ def test_live_environment_blocked_when_no_live_trading_enabled(monkeypatch):
     monkeypatch.setenv("NO_LIVE_TRADING", "true")
     monkeypatch.setenv("ENABLE_LIVE_TRADING", "true")
     monkeypatch.setenv("INCLUDE_LIVE_MODULES", "true")
+    _live_credentials(monkeypatch)
 
     settings = Settings()
     policy = EnvironmentSafetyPolicy(settings)
@@ -45,6 +51,7 @@ def test_live_environment_blocked_when_live_not_explicitly_enabled(monkeypatch):
     monkeypatch.setenv("NO_LIVE_TRADING", "false")
     monkeypatch.setenv("ENABLE_LIVE_TRADING", "false")
     monkeypatch.setenv("INCLUDE_LIVE_MODULES", "true")
+    _live_credentials(monkeypatch)
 
     settings = Settings()
     policy = EnvironmentSafetyPolicy(settings)
@@ -59,6 +66,7 @@ def test_live_environment_blocked_when_live_modules_not_included(monkeypatch):
     monkeypatch.setenv("NO_LIVE_TRADING", "false")
     monkeypatch.setenv("ENABLE_LIVE_TRADING", "true")
     monkeypatch.setenv("INCLUDE_LIVE_MODULES", "false")
+    _live_credentials(monkeypatch)
 
     settings = Settings()
     policy = EnvironmentSafetyPolicy(settings)

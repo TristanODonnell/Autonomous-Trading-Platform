@@ -6,7 +6,6 @@ from autonomous_trading_platform.common.errors import (
     PersistentInfrastructureError,
     TransientInfrastructureError,
 )
-from autonomous_trading_platform.config.enums import TradingEnvironment
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
 from autonomous_trading_platform.contracts.runtime.runtime_job_run import RuntimeJobRun
 from autonomous_trading_platform.execution.errors import ExecutionError
@@ -202,6 +201,7 @@ def run_trading_cycle(now_utc: datetime | None = None):
         now_utc=now_utc,
         cycle_start=trading_cycle_window.cycle_start,
         cycle_end=trading_cycle_window.cycle_end,
+        trading_environment=settings.trading_environment,
     )
     manifest.status = "running"
     manifest.current_step = "starting"
@@ -362,10 +362,10 @@ def run_trading_cycle(now_utc: datetime | None = None):
                 metadata=base_metadata,
             )
 
-            if settings.trading_environment is TradingEnvironment.LIVE:
-                safety_context.live_trading_gate_service.assert_live_trading_allowed(
-                    manifest.broker_account_id
-                )
+            safety_context.runtime_trading_guard_service.assert_trading_mode_allowed(
+                account_id=manifest.broker_account_id,
+                run_type=manifest.run_type,
+            )
             # STEP 1: INGESTION READINESS
             step = "ingestion_readiness"
             manifest.current_step = "ingestion_readiness"

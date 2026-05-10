@@ -9,8 +9,8 @@ def fetch_corporate_actions(limit: int = 100):
 
     headers = {
         "accept": "application/json",
-        "APCA-API-KEY-ID": settings.paper_broker_api_key,
-        "APCA-API-SECRET-KEY": settings.paper_broker_api_secret,
+        "APCA-API-KEY-ID": settings.broker_api_key,
+        "APCA-API-SECRET-KEY": settings.broker_api_secret,
     }
 
     params = {"limit": limit, "sort": "asc"}

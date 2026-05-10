@@ -33,6 +33,9 @@ jobs:
         env:
           APP_ENV: test
           DATABASE_URL: postgresql+psycopg://ratp:ratp_password@localhost:5433/ratp
+          TRADING_ENVIRONMENT: paper
+          PAPER_BROKER_API_KEY: ci-paper-key
+          PAPER_BROKER_API_SECRET: ci-paper-secret
         run: python -m pytest
 
       - name: Tear down

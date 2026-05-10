@@ -4,19 +4,23 @@ from typing import Any, cast
 
 import httpx
 
+from autonomous_trading_platform.config.broker_config_validator import (
+    ALPACA_LIVE_BASE_URL,
+    ALPACA_PAPER_BASE_URL,
+)
 from autonomous_trading_platform.config.settings import Settings
 
 
 class AlpacaBrokerClient:
     def __init__(self, settings: Settings) -> None:
-        self.api_key = settings.paper_broker_api_key
-        self.secret_key = settings.paper_broker_api_secret
+        self.api_key = settings.broker_api_key
+        self.secret_key = settings.broker_api_secret
         self.base_url = settings.alpaca_base_url
 
         if not self.api_key or not self.secret_key:
-            raise ValueError(
-                "Missing Alpaca credentials. Set alpaca_api_key and alpaca_secret_key in settings."
-            )
+            raise ValueError("Missing Alpaca credentials for the configured trading environment.")
+        if self.base_url not in {ALPACA_PAPER_BASE_URL, ALPACA_LIVE_BASE_URL}:
+            raise ValueError(f"Invalid Alpaca base URL: {self.base_url}.")
 
         self.client = httpx.Client(
             base_url=self.base_url,

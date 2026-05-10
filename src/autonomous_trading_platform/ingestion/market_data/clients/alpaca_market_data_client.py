@@ -12,13 +12,13 @@ from autonomous_trading_platform.config.settings import Settings
 
 def _get_credentials() -> tuple[str, str]:
     settings = Settings()
-    api_key = settings.paper_broker_api_key
-    secret_key = settings.paper_broker_api_secret
+    api_key = settings.broker_api_key
+    secret_key = settings.broker_api_secret
 
     if not api_key or not secret_key:
         raise ValueError(
             "Missing Alpaca credentials. "
-            "Set ALPACA_API_KEY and ALPACA_SECRET_KEY in the environment."
+            "Set broker credentials for the configured trading environment."
         )
 
     return api_key, secret_key

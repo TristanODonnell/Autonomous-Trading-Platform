@@ -88,8 +88,8 @@ def handle_show_env(_args: argparse.Namespace) -> int:
         "ENV": deps.settings.app_env,
         "LOG_LEVEL": deps.settings.log_level,
         "DATABASE_URL": "<set>" if deps.settings.database_url else "<unset>",
-        "ALPACA_API_KEY": "<set>" if deps.settings.paper_broker_api_key else "<unset>",
-        "ALPACA_API_SECRET": "<set>" if deps.settings.paper_broker_api_secret else "<unset>",
+        "ALPACA_API_KEY": "<set>" if deps.settings.broker_api_key else "<unset>",
+        "ALPACA_API_SECRET": "<set>" if deps.settings.broker_api_secret else "<unset>",
     }
 
     print_kv_rows(data)

@@ -74,6 +74,11 @@ def run_order_submission_job(
     session = trading_cycle_dependencies.session
     shadow_mode_enabled = safety_context.shadow_mode_service.is_enabled()
 
+    safety_context.runtime_trading_guard_service.assert_trading_mode_allowed(
+        account_id=manifest.broker_account_id,
+        run_type=manifest.run_type,
+    )
+
     record_job_started(
         logger=logger,
         metrics=ORDER_SUBMISSION_JOB_METRICS,

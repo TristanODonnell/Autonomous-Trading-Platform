@@ -12,3 +12,11 @@ class InvalidStrategyTransitionError(ExecutionError):
 
 class OrderNotAllowedForSubmissionError(ExecutionError):
     """Raised when an order submission is blocked by pre-trade controls."""
+
+
+class BrokerStartupHealthCheckError(ExecutionError):
+    """Raised when broker startup health checks fail closed."""
+
+
+class InvalidBrokerCredentialsError(BrokerStartupHealthCheckError):
+    """Raised when broker credentials are rejected by the broker."""

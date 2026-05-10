@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.config.enums import TradingEnvironment
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
@@ -155,11 +156,13 @@ def build_trading_run_manifest(
     now_utc: datetime,
     cycle_start: datetime,
     cycle_end: datetime,
+    trading_environment: TradingEnvironment = TradingEnvironment.PAPER,
     created_at: datetime | None = None,
 ) -> RunManifest:
+    run_type = RunType.LIVE if trading_environment is TradingEnvironment.LIVE else RunType.PAPER
     return RunManifest(
         run_id=run_id,
-        run_type=RunType.PAPER,
+        run_type=run_type,
         created_at=created_at or datetime.now(UTC),
         environment="local",
         broker="alpaca",
