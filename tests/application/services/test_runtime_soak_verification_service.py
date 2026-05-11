@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -8,18 +9,42 @@ from sqlalchemy.orm import Session
 from autonomous_trading_platform.application.services.runtime_soak_verification_service import (
     RuntimeSoakVerificationService,
 )
+from autonomous_trading_platform.contracts.common.enums import (
+    OrderSource,
+    OrderStatus,
+    OrderType,
+    Side,
+    TimeInForce,
+)
 from autonomous_trading_platform.contracts.runtime.runtime_soak_verification import (
     RuntimeSoakCheckName,
+    RuntimeSoakSeverity,
     RuntimeSoakStatus,
     RuntimeSoakVerificationReport,
 )
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_run_manifest,
 )
+from autonomous_trading_platform.storage.sor.models.audit_logs import AuditLogRow
+from autonomous_trading_platform.storage.sor.models.broker_orders import BrokerOrder
+from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
+from autonomous_trading_platform.storage.sor.models.fills import Fill
+from autonomous_trading_platform.storage.sor.models.order_intents import OrderIntents
+from autonomous_trading_platform.storage.sor.models.position_snapshot_items import (
+    PositionSnapshotItem,
+)
+from autonomous_trading_platform.storage.sor.models.position_snapshots import PositionSnapshot
+from autonomous_trading_platform.storage.sor.models.risk_snapshots import RiskSnapshot
 from autonomous_trading_platform.storage.sor.models.run_manifests import RunManifestRow
+from autonomous_trading_platform.storage.sor.models.runtime_control_state import (
+    RuntimeControlState,
+)
 from autonomous_trading_platform.storage.sor.models.runtime_job_runs import RuntimeJobRuns
 from autonomous_trading_platform.storage.sor.repositories.core.run_manifests_repository import (
     RunManifestRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.queries.runtime_soak_verification_repository import (
+    DuplicateFillGroup,
 )
 
 
@@ -116,6 +141,244 @@ def _seed_healthy_runtime_window(db_session: Session) -> None:
     )
 
 
+def _seed_broker_order(
+    db_session: Session,
+    *,
+    submitted_at: datetime,
+    updated_at: datetime,
+    status: OrderStatus = OrderStatus.SUBMITTED,
+    filled_qty: Decimal = Decimal("0"),
+    raw_broker_payload: dict | None = None,
+    last_error: str | None = None,
+) -> BrokerOrder:
+    intent_id = uuid4()
+    run_id = uuid4()
+    row = BrokerOrder(
+        broker_order_id=str(uuid4()),
+        client_order_id=f"client-{uuid4()}",
+        intent_id=intent_id,
+        run_id=run_id,
+        broker="alpaca",
+        account_id="paper",
+        symbol="AAPL",
+        side=Side.BUY,
+        order_type=OrderType.MARKET,
+        time_in_force=TimeInForce.DAY,
+        extended_hours=False,
+        qty=Decimal("1"),
+        notional=None,
+        limit_price=None,
+        stop_price=None,
+        status=status,
+        submitted_at=submitted_at,
+        updated_at=updated_at,
+        filled_qty=filled_qty,
+        avg_fill_price=None,
+        last_error=last_error,
+        raw_broker_payload=raw_broker_payload,
+        requested_qty=Decimal("1"),
+    )
+    db_session.add(row)
+    db_session.flush()
+    return row
+
+
+def _seed_order_intent(
+    db_session: Session,
+    *,
+    run_id,
+    intent_id,
+    timestamp: datetime,
+    idempotency_key: str,
+) -> None:
+    db_session.add(
+        OrderIntents(
+            intent_id=intent_id,
+            idempotency_key=idempotency_key,
+            run_id=run_id,
+            strategy_id="test-strategy",
+            timestamp=timestamp,
+            bar_timestamp=timestamp,
+            symbol="AAPL",
+            side=Side.BUY,
+            qty=Decimal("1"),
+            notional=None,
+            order_type=OrderType.MARKET,
+            limit_price=None,
+            stop_price=None,
+            time_in_force=TimeInForce.DAY,
+            extended_hours=False,
+            client_order_id=f"client-{intent_id}",
+            meta=None,
+        )
+    )
+
+
+def _seed_fill(
+    db_session: Session,
+    *,
+    timestamp: datetime,
+    broker_order_id: str,
+    broker_fill_id: str,
+    execution_id: str,
+    idempotency_key: str,
+) -> Fill:
+    run_id = uuid4()
+    intent_id = uuid4()
+    _seed_order_intent(
+        db_session,
+        run_id=run_id,
+        intent_id=intent_id,
+        timestamp=timestamp,
+        idempotency_key=idempotency_key,
+    )
+    row = Fill(
+        fill_id=str(uuid4()),
+        broker_order_id=broker_order_id,
+        intent_id=intent_id,
+        run_id=run_id,
+        timestamp=timestamp,
+        symbol="AAPL",
+        side=Side.BUY,
+        quantity=Decimal("1"),
+        price=Decimal("100.00"),
+        fees=None,
+        liquidity=None,
+        venue=None,
+        meta={
+            "broker_fill_id": broker_fill_id,
+            "execution_id": execution_id,
+        },
+    )
+    db_session.add(row)
+    db_session.flush()
+    return row
+
+
+def _seed_cash_snapshot(
+    db_session: Session,
+    *,
+    timestamp: datetime,
+    source: OrderSource,
+    cash: Decimal,
+    equity: Decimal,
+) -> CashSnapshot:
+    row = CashSnapshot(
+        snapshot_id=uuid4(),
+        run_id=uuid4(),
+        timestamp=timestamp,
+        currency="USD",
+        cash=cash,
+        buying_power=cash,
+        reserved_cash=Decimal("0"),
+        equity=equity,
+        source=source,
+        capital_bucket=None,
+    )
+    db_session.add(row)
+    db_session.flush()
+    return row
+
+
+def _seed_position_snapshot(
+    db_session: Session,
+    *,
+    timestamp: datetime,
+    source: OrderSource,
+    positions: dict[str, Decimal],
+) -> PositionSnapshot:
+    snapshot_id = uuid4()
+    snapshot = PositionSnapshot(
+        snapshot_id=snapshot_id,
+        run_id=uuid4(),
+        timestamp=timestamp,
+        source=source,
+    )
+    snapshot.positions = [
+        PositionSnapshotItem(
+            snapshot_id=snapshot_id,
+            symbol=symbol,
+            quantity=quantity,
+            avg_cost=Decimal("100.00"),
+            market_price=Decimal("100.00"),
+            market_value=quantity * Decimal("100.00"),
+            unrealized_pnl=Decimal("0.00"),
+        )
+        for symbol, quantity in positions.items()
+    ]
+    db_session.add(snapshot)
+    db_session.flush()
+    return snapshot
+
+
+def _seed_failure_audit_event(
+    db_session: Session,
+    *,
+    event_timestamp: datetime,
+    event_type: str = "RUN_FAILED",
+) -> AuditLogRow:
+    row = AuditLogRow(
+        event_id=str(uuid4()),
+        run_id=str(uuid4()),
+        event_type=event_type,
+        component="runtime",
+        event_timestamp=event_timestamp,
+        message="failure detected",
+        event_metadata={"severity": "error"},
+    )
+    db_session.add(row)
+    db_session.flush()
+    return row
+
+
+def _seed_runtime_control_state(
+    db_session: Session,
+    *,
+    trading_enabled: bool = True,
+    trading_paused: bool = False,
+    kill_switch_enabled: bool = False,
+    reason: str | None = None,
+) -> RuntimeControlState:
+    row = RuntimeControlState(
+        control_id="global",
+        trading_enabled=trading_enabled,
+        trading_paused=trading_paused,
+        kill_switch_enabled=kill_switch_enabled,
+        trading_mode="paper",
+        reason=reason,
+        updated_by="tester",
+        created_at=datetime(2026, 5, 8, 12, 0, tzinfo=UTC),
+        updated_at=datetime(2026, 5, 8, 12, 5, tzinfo=UTC),
+    )
+    db_session.merge(row)
+    db_session.flush()
+    return row
+
+
+def _seed_risk_snapshot(
+    db_session: Session,
+    *,
+    timestamp: datetime,
+    is_blocked: bool,
+) -> RiskSnapshot:
+    row = RiskSnapshot(
+        snapshot_id=uuid4(),
+        run_id=uuid4(),
+        timestamp=timestamp,
+        gross_exposure=Decimal("1000"),
+        net_exposure=Decimal("500"),
+        leverage=1.5,
+        drawdown_pct=0.01,
+        limits={},
+        utilization={},
+        is_blocked=is_blocked,
+        block_reasons=["risk_limit"] if is_blocked else None,
+    )
+    db_session.add(row)
+    db_session.flush()
+    return row
+
+
 def test_verify_returns_runtime_soak_report(db_session: Session) -> None:
     service = _build_service(db_session)
     window_start, window_end = _window()
@@ -206,6 +469,14 @@ def test_warning_check_produces_warning_report_status(
             "Failure controls forced to pass for warning aggregation coverage.",
         ),
     )
+    monkeypatch.setattr(
+        service,
+        "_check_cash_position_equity_consistency",
+        lambda *, window_start, window_end: service._passed(
+            RuntimeSoakCheckName.CASH_POSITION_EQUITY_CONSISTENCY,
+            "Cash/equity consistency forced to pass for warning aggregation coverage.",
+        ),
+    )
 
     report = service.verify(
         window_start=window_start,
@@ -240,6 +511,14 @@ def test_all_passed_checks_produce_passed_report(
         lambda *, window_start, window_end: service._passed(
             RuntimeSoakCheckName.FAILURE_CONTROLS,
             "Failure controls forced to pass for passed-report coverage.",
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "_check_cash_position_equity_consistency",
+        lambda *, window_start, window_end: service._passed(
+            RuntimeSoakCheckName.CASH_POSITION_EQUITY_CONSISTENCY,
+            "Cash/equity consistency forced to pass for passed-report coverage.",
         ),
     )
 
@@ -340,3 +619,340 @@ def test_stale_running_job_fails_stale_running_state_check(
     assert check.status == RuntimeSoakStatus.FAILED
     assert check.check_name == RuntimeSoakCheckName.STALE_RUNNING_STATE
     assert check.metadata["stale_runtime_job_names"] == ["feature_pipeline_cycle"]
+
+
+def test_order_reconciliation_passes_when_no_issues_exist(db_session: Session) -> None:
+    service = _build_service(db_session)
+    window_start, window_end = _window()
+    _seed_broker_order(
+        db_session,
+        submitted_at=window_start + timedelta(minutes=5),
+        updated_at=window_start + timedelta(minutes=6),
+        status=OrderStatus.FILLED,
+        filled_qty=Decimal("1"),
+        raw_broker_payload={"status": "filled"},
+    )
+
+    check = service._check_order_reconciliation(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.PASSED
+    assert check.metadata["stale_unreconciled_order_count"] == 0
+    assert check.metadata["status_mismatch_order_count"] == 0
+
+
+def test_order_reconciliation_warns_when_broker_status_is_missing(
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    service = _build_service(db_session, stale_after=timedelta(minutes=15))
+    window_start, window_end = _window()
+    order = _seed_broker_order(
+        db_session,
+        submitted_at=window_end - timedelta(minutes=5),
+        updated_at=window_end - timedelta(minutes=4),
+        status=OrderStatus.SUBMITTED,
+        raw_broker_payload=None,
+    )
+    monkeypatch.setattr(
+        service._repository,
+        "list_orders_missing_broker_status",
+        lambda *, window_start, window_end: [order],
+    )
+
+    check = service._check_order_reconciliation(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.WARNING
+    assert check.metadata["orders_missing_broker_status_count"] == 1
+
+
+def test_order_reconciliation_fails_when_stale_unreconciled_orders_exist(
+    db_session: Session,
+) -> None:
+    service = _build_service(db_session, stale_after=timedelta(minutes=10))
+    window_start, window_end = _window()
+    order = _seed_broker_order(
+        db_session,
+        submitted_at=window_start + timedelta(minutes=1),
+        updated_at=window_start + timedelta(minutes=2),
+        status=OrderStatus.SUBMITTED,
+        raw_broker_payload={"status": "submitted"},
+    )
+
+    check = service._check_order_reconciliation(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.FAILED
+    assert check.metadata["stale_unreconciled_order_count"] == 1
+    assert (
+        check.metadata["stale_unreconciled_orders"][0]["broker_order_id"] == order.broker_order_id
+    )
+
+
+def test_duplicate_fill_protection_passes_when_no_duplicates_exist(
+    db_session: Session,
+) -> None:
+    service = _build_service(db_session)
+    window_start, window_end = _window()
+    _seed_fill(
+        db_session,
+        timestamp=window_start + timedelta(minutes=5),
+        broker_order_id="order-1",
+        broker_fill_id="fill-1",
+        execution_id="exec-1",
+        idempotency_key="idem-1",
+    )
+
+    check = service._check_duplicate_fill_protection(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.PASSED
+    assert check.metadata["duplicate_group_counts"]["broker_fill_id"] == 0
+
+
+def test_duplicate_fill_protection_warns_when_detector_metadata_is_incomplete(
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    service = _build_service(db_session)
+    window_start, window_end = _window()
+    monkeypatch.setattr(
+        service._repository,
+        "list_duplicate_fills_by_broker_fill_id",
+        lambda *, window_start, window_end: [
+            DuplicateFillGroup(group_key="broker-fill-1", fill_ids=[], count=2)
+        ],
+    )
+
+    check = service._check_duplicate_fill_protection(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.WARNING
+    assert check.metadata["incomplete_detectors"] == ["broker_fill_id"]
+
+
+def test_duplicate_fill_protection_fails_when_duplicates_are_detected(
+    db_session: Session,
+) -> None:
+    service = _build_service(db_session)
+    window_start, window_end = _window()
+    timestamp = window_start + timedelta(minutes=5)
+    _seed_fill(
+        db_session,
+        timestamp=timestamp,
+        broker_order_id="order-dup",
+        broker_fill_id="dup-fill",
+        execution_id="exec-dup-a",
+        idempotency_key="idem-dup-a",
+    )
+    _seed_fill(
+        db_session,
+        timestamp=timestamp + timedelta(seconds=1),
+        broker_order_id="order-dup-b",
+        broker_fill_id="dup-fill",
+        execution_id="exec-dup-b",
+        idempotency_key="idem-dup-b",
+    )
+
+    check = service._check_duplicate_fill_protection(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.FAILED
+    assert check.severity == RuntimeSoakSeverity.CRITICAL
+    assert check.metadata["duplicate_group_counts"]["broker_fill_id"] == 1
+
+
+def test_cash_position_equity_consistency_passes_when_within_tolerance(
+    db_session: Session,
+) -> None:
+    service = _build_service(db_session)
+    window_start, _window_end = _window()
+    timestamp = window_start + timedelta(minutes=10)
+    _seed_cash_snapshot(
+        db_session,
+        timestamp=timestamp,
+        source=OrderSource.LEDGER,
+        cash=Decimal("1000.00"),
+        equity=Decimal("1500.00"),
+    )
+    _seed_cash_snapshot(
+        db_session,
+        timestamp=timestamp,
+        source=OrderSource.BROKER_RECONCILED,
+        cash=Decimal("1000.50"),
+        equity=Decimal("1503.00"),
+    )
+    _seed_position_snapshot(
+        db_session,
+        timestamp=timestamp,
+        source=OrderSource.LEDGER,
+        positions={"AAPL": Decimal("5")},
+    )
+    _seed_position_snapshot(
+        db_session,
+        timestamp=timestamp,
+        source=OrderSource.BROKER_RECONCILED,
+        positions={"AAPL": Decimal("5.000000")},
+    )
+
+    check = service._check_cash_position_equity_consistency(
+        window_start=timestamp,
+        window_end=timestamp,
+    )
+
+    assert check.status == RuntimeSoakStatus.PASSED
+    assert check.metadata["cash_drift"] == "0.500000"
+
+
+def test_cash_position_equity_consistency_warns_when_snapshots_are_missing(
+    db_session: Session,
+) -> None:
+    service = _build_service(db_session)
+    timestamp = _window()[0] + timedelta(minutes=10)
+    _seed_cash_snapshot(
+        db_session,
+        timestamp=timestamp,
+        source=OrderSource.LEDGER,
+        cash=Decimal("1000.00"),
+        equity=Decimal("1500.00"),
+    )
+
+    check = service._check_cash_position_equity_consistency(
+        window_start=timestamp,
+        window_end=timestamp,
+    )
+
+    assert check.status == RuntimeSoakStatus.WARNING
+    assert "latest_broker_cash_snapshot" in check.metadata["missing_artifacts"]
+
+
+def test_cash_position_equity_consistency_fails_when_drift_exceeds_tolerance(
+    db_session: Session,
+) -> None:
+    service = _build_service(db_session)
+    timestamp = _window()[0] + timedelta(minutes=10)
+    _seed_cash_snapshot(
+        db_session,
+        timestamp=timestamp,
+        source=OrderSource.LEDGER,
+        cash=Decimal("1000.00"),
+        equity=Decimal("1500.00"),
+    )
+    _seed_cash_snapshot(
+        db_session,
+        timestamp=timestamp,
+        source=OrderSource.BROKER_RECONCILED,
+        cash=Decimal("1005.50"),
+        equity=Decimal("1515.00"),
+    )
+    _seed_position_snapshot(
+        db_session,
+        timestamp=timestamp,
+        source=OrderSource.LEDGER,
+        positions={"AAPL": Decimal("5")},
+    )
+    _seed_position_snapshot(
+        db_session,
+        timestamp=timestamp,
+        source=OrderSource.BROKER_RECONCILED,
+        positions={"AAPL": Decimal("7")},
+    )
+
+    check = service._check_cash_position_equity_consistency(
+        window_start=timestamp,
+        window_end=timestamp,
+    )
+
+    assert check.status == RuntimeSoakStatus.FAILED
+    assert check.metadata["exceeded_position_symbols"] == ["AAPL"]
+
+
+def test_failure_controls_pass_when_no_failed_runtime_jobs_exist(
+    db_session: Session,
+) -> None:
+    service = _build_service(db_session)
+    window_start, window_end = _window()
+
+    check = service._check_failure_controls(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.PASSED
+    assert check.metadata["failed_runtime_job_count"] == 0
+
+
+def test_failure_controls_warn_when_artifacts_exist_but_freeze_is_not_persisted(
+    db_session: Session,
+) -> None:
+    window_start, window_end = _window()
+    failed_at = window_start + timedelta(minutes=5)
+    _seed_runtime_job_run(
+        db_session,
+        job_name="trading_cycle",
+        status="failed",
+        started_at=failed_at,
+        completed_at=failed_at + timedelta(minutes=1),
+        duration_ms=60_000,
+        error_message="fatal error",
+    )
+    _seed_completed_trading_manifest(
+        db_session,
+        created_at=failed_at + timedelta(minutes=1),
+        last_successful_step="order_reconciliation",
+        status="failed",
+    )
+    _seed_failure_audit_event(db_session, event_timestamp=failed_at + timedelta(minutes=1))
+    _seed_runtime_control_state(
+        db_session,
+        trading_enabled=False,
+        trading_paused=True,
+        reason="runtime failure",
+    )
+
+    service = _build_service(db_session)
+    check = service._check_failure_controls(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.WARNING
+    assert check.metadata["trading_freeze_persisted"] is False
+
+
+def test_failure_controls_fail_when_failure_artifacts_are_missing(
+    db_session: Session,
+) -> None:
+    window_start, window_end = _window()
+    failed_at = window_start + timedelta(minutes=5)
+    _seed_runtime_job_run(
+        db_session,
+        job_name="trading_cycle",
+        status="failed",
+        started_at=failed_at,
+        completed_at=failed_at + timedelta(minutes=1),
+        duration_ms=60_000,
+        error_message="fatal error",
+    )
+
+    service = _build_service(db_session)
+    check = service._check_failure_controls(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.FAILED
+    assert "failed_manifest" in check.metadata["missing_failure_control_artifacts"]

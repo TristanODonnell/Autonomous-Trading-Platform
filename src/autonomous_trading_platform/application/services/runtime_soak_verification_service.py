@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -299,9 +300,52 @@ class RuntimeSoakVerificationService:
         window_start: datetime,
         window_end: datetime,
     ) -> RuntimeSoakCheckResult:
+        cutoff = window_end - self._stale_after
+        stale_orders = self._repository.list_stale_submitted_orders_missing_terminal_status(
+            cutoff=cutoff
+        )
+        orders_missing_broker_status = self._repository.list_orders_missing_broker_status(
+            window_start=window_start,
+            window_end=window_end,
+        )
+        orders_with_status_mismatch = self._repository.list_orders_with_status_mismatch(
+            window_start=window_start,
+            window_end=window_end,
+        )
+
+        metadata = {
+            "cutoff": cutoff.isoformat(),
+            "stale_after_seconds": int(self._stale_after.total_seconds()),
+            "stale_unreconciled_order_count": len(stale_orders),
+            "stale_unreconciled_orders": [_serialize_order(row) for row in stale_orders],
+            "orders_missing_broker_status_count": len(orders_missing_broker_status),
+            "orders_missing_broker_status": [
+                _serialize_order(row) for row in orders_missing_broker_status
+            ],
+            "status_mismatch_order_count": len(orders_with_status_mismatch),
+            "status_mismatch_orders": [
+                _serialize_order(row) for row in orders_with_status_mismatch
+            ],
+        }
+
+        if stale_orders or orders_with_status_mismatch:
+            return self._failed(
+                RuntimeSoakCheckName.ORDER_RECONCILIATION,
+                "Order reconciliation invariants were violated during the soak window.",
+                metadata,
+            )
+
+        if orders_missing_broker_status:
+            return self._warning(
+                RuntimeSoakCheckName.ORDER_RECONCILIATION,
+                "Order reconciliation could not be fully verified for all orders.",
+                metadata,
+            )
+
         return self._passed(
             RuntimeSoakCheckName.ORDER_RECONCILIATION,
-            "Order reconciliation check placeholder passed.",
+            "Order reconciliation checks passed for the soak window.",
+            metadata,
         )
 
     def _check_duplicate_fill_protection(
@@ -310,9 +354,77 @@ class RuntimeSoakVerificationService:
         window_start: datetime,
         window_end: datetime,
     ) -> RuntimeSoakCheckResult:
+        duplicate_groups_by_broker_fill_id = (
+            self._repository.list_duplicate_fills_by_broker_fill_id(
+                window_start=window_start,
+                window_end=window_end,
+            )
+        )
+        duplicate_groups_by_order_execution_id = (
+            self._repository.list_duplicate_fills_by_order_and_execution_id(
+                window_start=window_start,
+                window_end=window_end,
+            )
+        )
+        duplicate_groups_by_idempotency_key = (
+            self._repository.list_duplicate_fills_by_idempotency_key(
+                window_start=window_start,
+                window_end=window_end,
+            )
+        )
+
+        incomplete_detectors = [
+            detector_name
+            for detector_name, groups in (
+                ("broker_fill_id", duplicate_groups_by_broker_fill_id),
+                ("order_execution_id", duplicate_groups_by_order_execution_id),
+                ("idempotency_key", duplicate_groups_by_idempotency_key),
+            )
+            if any(not group.fill_ids or group.count < len(group.fill_ids) for group in groups)
+        ]
+
+        metadata = {
+            "duplicate_groups_by_broker_fill_id": [
+                _serialize_duplicate_group(group) for group in duplicate_groups_by_broker_fill_id
+            ],
+            "duplicate_groups_by_order_execution_id": [
+                _serialize_duplicate_group(group)
+                for group in duplicate_groups_by_order_execution_id
+            ],
+            "duplicate_groups_by_idempotency_key": [
+                _serialize_duplicate_group(group) for group in duplicate_groups_by_idempotency_key
+            ],
+            "duplicate_group_counts": {
+                "broker_fill_id": len(duplicate_groups_by_broker_fill_id),
+                "order_execution_id": len(duplicate_groups_by_order_execution_id),
+                "idempotency_key": len(duplicate_groups_by_idempotency_key),
+            },
+            "incomplete_detectors": incomplete_detectors,
+        }
+
+        if (
+            duplicate_groups_by_broker_fill_id
+            or duplicate_groups_by_order_execution_id
+            or duplicate_groups_by_idempotency_key
+        ) and not incomplete_detectors:
+            return self._failed(
+                RuntimeSoakCheckName.DUPLICATE_FILL_PROTECTION,
+                "Duplicate fills were detected during runtime soak verification.",
+                metadata,
+                severity=RuntimeSoakSeverity.CRITICAL,
+            )
+
+        if incomplete_detectors:
+            return self._warning(
+                RuntimeSoakCheckName.DUPLICATE_FILL_PROTECTION,
+                "Duplicate fill verification returned incomplete detector metadata.",
+                metadata,
+            )
+
         return self._passed(
             RuntimeSoakCheckName.DUPLICATE_FILL_PROTECTION,
-            "Duplicate fill protection check placeholder passed.",
+            "No duplicate fills were detected.",
+            metadata,
         )
 
     def _check_cash_position_equity_consistency(
@@ -321,14 +433,97 @@ class RuntimeSoakVerificationService:
         window_start: datetime,
         window_end: datetime,
     ) -> RuntimeSoakCheckResult:
+        latest_cash_snapshot = self._repository.get_latest_cash_snapshot()
+        latest_broker_cash_snapshot = self._repository.get_latest_broker_cash_snapshot()
+        latest_position_snapshots = self._repository.list_latest_position_snapshots()
+        latest_broker_position_snapshots = self._repository.list_latest_broker_position_snapshots()
+        latest_portfolio_equity_snapshot = self._repository.get_latest_portfolio_equity_snapshot()
+        latest_broker_equity_snapshot = self._repository.get_latest_broker_equity_snapshot()
+
+        ledger_position_snapshot = (
+            latest_position_snapshots[0] if latest_position_snapshots else None
+        )
+        broker_position_snapshot = (
+            latest_broker_position_snapshots[0] if latest_broker_position_snapshots else None
+        )
+
+        missing_artifacts: list[str] = []
+        if latest_cash_snapshot is None:
+            missing_artifacts.append("latest_cash_snapshot")
+        if latest_broker_cash_snapshot is None:
+            missing_artifacts.append("latest_broker_cash_snapshot")
+        if ledger_position_snapshot is None:
+            missing_artifacts.append("latest_position_snapshot")
+        if broker_position_snapshot is None:
+            missing_artifacts.append("latest_broker_position_snapshot")
+        if latest_portfolio_equity_snapshot is None:
+            missing_artifacts.append("latest_portfolio_equity_snapshot")
+        if latest_broker_equity_snapshot is None:
+            missing_artifacts.append("latest_broker_equity_snapshot")
+
+        cash_drift = _decimal_drift(
+            getattr(latest_cash_snapshot, "cash", None),
+            getattr(latest_broker_cash_snapshot, "cash", None),
+        )
+        equity_drift = _decimal_drift(
+            getattr(latest_portfolio_equity_snapshot, "equity", None),
+            getattr(latest_broker_equity_snapshot, "equity", None),
+        )
+        position_drift = _position_quantity_drifts(
+            ledger_position_snapshot,
+            broker_position_snapshot,
+        )
+        exceeded_position_symbols = [
+            symbol
+            for symbol, drift in position_drift.items()
+            if drift > self._position_quantity_tolerance
+        ]
+
+        metadata = {
+            "cash_drift_tolerance": str(self._cash_drift_tolerance),
+            "equity_drift_tolerance": str(self._equity_drift_tolerance),
+            "position_quantity_tolerance": str(self._position_quantity_tolerance),
+            "missing_artifacts": missing_artifacts,
+            "ledger_cash_snapshot": _serialize_snapshot_identity(latest_cash_snapshot),
+            "broker_cash_snapshot": _serialize_snapshot_identity(latest_broker_cash_snapshot),
+            "ledger_position_snapshot": _serialize_snapshot_identity(ledger_position_snapshot),
+            "broker_position_snapshot": _serialize_snapshot_identity(broker_position_snapshot),
+            "ledger_equity_snapshot": _serialize_snapshot_identity(
+                latest_portfolio_equity_snapshot
+            ),
+            "broker_equity_snapshot": _serialize_snapshot_identity(latest_broker_equity_snapshot),
+            "cash_drift": str(cash_drift) if cash_drift is not None else None,
+            "equity_drift": str(equity_drift) if equity_drift is not None else None,
+            "position_quantity_drift": {
+                symbol: str(drift) for symbol, drift in sorted(position_drift.items())
+            },
+            "exceeded_position_symbols": exceeded_position_symbols,
+        }
+
+        if missing_artifacts:
+            return self._warning(
+                RuntimeSoakCheckName.CASH_POSITION_EQUITY_CONSISTENCY,
+                "Cash, position, and equity consistency could not be fully verified.",
+                metadata,
+            )
+
+        if (
+            cash_drift is not None
+            and cash_drift > self._cash_drift_tolerance
+            or equity_drift is not None
+            and equity_drift > self._equity_drift_tolerance
+            or exceeded_position_symbols
+        ):
+            return self._failed(
+                RuntimeSoakCheckName.CASH_POSITION_EQUITY_CONSISTENCY,
+                "Cash, position, or equity drift exceeded configured tolerances.",
+                metadata,
+            )
+
         return self._passed(
             RuntimeSoakCheckName.CASH_POSITION_EQUITY_CONSISTENCY,
-            "Cash, position, and equity consistency check placeholder passed.",
-            {
-                "cash_drift_tolerance": str(self._cash_drift_tolerance),
-                "equity_drift_tolerance": str(self._equity_drift_tolerance),
-                "position_quantity_tolerance": str(self._position_quantity_tolerance),
-            },
+            "Cash, position, and equity snapshots reconciled within tolerance.",
+            metadata,
         )
 
     def _check_observability_signals(
@@ -348,7 +543,174 @@ class RuntimeSoakVerificationService:
         window_start: datetime,
         window_end: datetime,
     ) -> RuntimeSoakCheckResult:
-        return self._warning(
-            RuntimeSoakCheckName.FAILURE_CONTROLS,
-            "Failure control verification is not wired yet.",
+        failed_runtime_jobs = self._repository.list_failed_runtime_job_runs(
+            window_start=window_start,
+            window_end=window_end,
         )
+        failed_manifests = self._repository.list_failed_manifests(
+            window_start=window_start,
+            window_end=window_end,
+        )
+        failure_audit_events = self._repository.list_failure_audit_events(
+            window_start=window_start,
+            window_end=window_end,
+        )
+        runtime_control_state = self._repository.get_current_runtime_control_state()
+        latest_risk_snapshot = self._repository.get_latest_risk_snapshot()
+        trading_freeze_state = self._repository.get_current_trading_freeze_state()
+
+        runtime_control_evidence = bool(
+            runtime_control_state is not None
+            and (
+                runtime_control_state.kill_switch_enabled
+                or runtime_control_state.trading_paused
+                or not runtime_control_state.trading_enabled
+                or runtime_control_state.reason is not None
+            )
+        )
+        risk_block_evidence = bool(
+            latest_risk_snapshot is not None and latest_risk_snapshot.is_blocked
+        )
+
+        metadata = {
+            "failed_runtime_job_count": len(failed_runtime_jobs),
+            "failed_runtime_jobs": [
+                {
+                    "job_run_id": row.job_run_id,
+                    "job_name": row.job_name,
+                    "started_at": row.started_at.isoformat(),
+                    "error_message": row.error_message,
+                }
+                for row in failed_runtime_jobs
+            ],
+            "failed_manifest_count": len(failed_manifests),
+            "failed_manifest_run_ids": [str(row.run_id) for row in failed_manifests],
+            "failure_audit_event_count": len(failure_audit_events),
+            "failure_audit_event_types": [row.event_type for row in failure_audit_events],
+            "runtime_control_evidence": runtime_control_evidence,
+            "risk_block_evidence": risk_block_evidence,
+            "runtime_control_state": (
+                {
+                    "trading_enabled": runtime_control_state.trading_enabled,
+                    "trading_paused": runtime_control_state.trading_paused,
+                    "kill_switch_enabled": runtime_control_state.kill_switch_enabled,
+                    "reason": runtime_control_state.reason,
+                    "updated_at": runtime_control_state.updated_at.isoformat(),
+                }
+                if runtime_control_state is not None
+                else None
+            ),
+            "latest_risk_snapshot": (
+                {
+                    "snapshot_id": str(latest_risk_snapshot.snapshot_id),
+                    "timestamp": latest_risk_snapshot.timestamp.isoformat(),
+                    "is_blocked": latest_risk_snapshot.is_blocked,
+                    "block_reasons": latest_risk_snapshot.block_reasons,
+                }
+                if latest_risk_snapshot is not None
+                else None
+            ),
+            "trading_freeze_persisted": trading_freeze_state is not None,
+        }
+
+        if not failed_runtime_jobs:
+            return self._passed(
+                RuntimeSoakCheckName.FAILURE_CONTROLS,
+                "No failed runtime execution required failure-control escalation.",
+                metadata,
+            )
+
+        missing_artifacts: list[str] = []
+        if not failed_manifests:
+            missing_artifacts.append("failed_manifest")
+        if not failure_audit_events:
+            missing_artifacts.append("failure_audit_event")
+        if not runtime_control_evidence and not risk_block_evidence:
+            missing_artifacts.append("runtime_control_or_risk_block_evidence")
+
+        if missing_artifacts:
+            return self._failed(
+                RuntimeSoakCheckName.FAILURE_CONTROLS,
+                "Failed runtime execution did not leave the expected failure-control artifacts.",
+                {
+                    **metadata,
+                    "missing_failure_control_artifacts": missing_artifacts,
+                },
+            )
+
+        if trading_freeze_state is None:
+            return self._warning(
+                RuntimeSoakCheckName.FAILURE_CONTROLS,
+                "Failure controls were observed, but trading freeze persistence is not wired.",
+                {
+                    **metadata,
+                    "missing_failure_control_artifacts": ["trading_freeze_persistence"],
+                },
+            )
+
+        return self._passed(
+            RuntimeSoakCheckName.FAILURE_CONTROLS,
+            "Failed runtime execution left the expected failure-control artifacts.",
+            metadata,
+        )
+
+
+def _serialize_order(row: Any) -> dict[str, Any]:
+    return {
+        "broker_order_id": row.broker_order_id,
+        "client_order_id": row.client_order_id,
+        "status": str(row.status),
+        "submitted_at": row.submitted_at.isoformat() if row.submitted_at is not None else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at is not None else None,
+        "filled_qty": str(row.filled_qty),
+        "last_error": row.last_error,
+    }
+
+
+def _serialize_duplicate_group(group: Any) -> dict[str, Any]:
+    return {
+        "group_key": group.group_key,
+        "fill_ids": list(group.fill_ids),
+        "count": group.count,
+    }
+
+
+def _serialize_snapshot_identity(row: Any) -> dict[str, Any] | None:
+    if row is None:
+        return None
+
+    snapshot_id = getattr(row, "snapshot_id", None)
+    timestamp = getattr(row, "timestamp", None)
+    return {
+        "snapshot_id": str(snapshot_id) if snapshot_id is not None else None,
+        "timestamp": timestamp.isoformat() if timestamp is not None else None,
+    }
+
+
+def _decimal_drift(left: Decimal | None, right: Decimal | None) -> Decimal | None:
+    if left is None or right is None:
+        return None
+    return abs(Decimal(left) - Decimal(right))
+
+
+def _position_quantity_drifts(
+    ledger_snapshot: Any,
+    broker_snapshot: Any,
+) -> dict[str, Decimal]:
+    if ledger_snapshot is None or broker_snapshot is None:
+        return {}
+
+    ledger_positions = _position_quantities_by_symbol(ledger_snapshot)
+    broker_positions = _position_quantities_by_symbol(broker_snapshot)
+
+    drifts: dict[str, Decimal] = {}
+    for symbol in sorted(set(ledger_positions) | set(broker_positions)):
+        drifts[symbol] = abs(
+            ledger_positions.get(symbol, Decimal("0")) - broker_positions.get(symbol, Decimal("0"))
+        )
+    return drifts
+
+
+def _position_quantities_by_symbol(snapshot: Any) -> dict[str, Decimal]:
+    positions = getattr(snapshot, "positions", [])
+    return {item.symbol: Decimal(item.quantity) for item in positions}

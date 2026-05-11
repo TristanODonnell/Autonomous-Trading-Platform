@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, cast
 
 from sqlalchemy import asc, case, desc, func, or_, select
@@ -229,7 +230,7 @@ class RuntimeSoakVerificationRepository:
                 BrokerOrder.submitted_at >= window_start,
                 BrokerOrder.submitted_at <= window_end,
                 BrokerOrder.status == OrderStatus.PARTIALLY_FILLED,
-                BrokerOrder.filled_qty == 0,
+                BrokerOrder.filled_qty == Decimal("0"),
             )
             .order_by(BrokerOrder.submitted_at.asc())
         )
@@ -432,7 +433,7 @@ class RuntimeSoakVerificationRepository:
         )
         return cast(RuntimeControlState | None, self.session.scalars(stmt).one_or_none())
 
-    def get_current_trading_freeze_state(self) -> None:
+    def get_current_trading_freeze_state(self) -> Any | None:
         # No persisted trading freeze model exists yet.
         return None
 
