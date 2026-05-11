@@ -1,0 +1,1719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trading Platform — UI Screens</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #070B0F;
+    --surface: #0D1117;
+    --surface2: #111820;
+    --surface3: #161E28;
+    --border: #1C2532;
+    --border2: #243040;
+    --text: #C9D1D9;
+    --text2: #8B949E;
+    --text3: #4A5568;
+    --accent: #00E5A0;
+    --accent2: #00B37D;
+    --accent-dim: rgba(0,229,160,0.08);
+    --accent-dim2: rgba(0,229,160,0.15);
+    --red: #FF4D6D;
+    --red-dim: rgba(255,77,109,0.1);
+    --yellow: #E8A838;
+    --yellow-dim: rgba(232,168,56,0.1);
+    --blue: #3B9EFF;
+    --blue-dim: rgba(59,158,255,0.1);
+    --purple: #9B72FF;
+    --purple-dim: rgba(155,114,255,0.1);
+    --font-mono: 'IBM Plex Mono', monospace;
+    --font-sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* NAV */
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 0 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .nav-logo {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 14px 24px 14px 0;
+    border-right: 1px solid var(--border);
+    margin-right: 8px;
+  }
+
+  .nav-tab {
+    padding: 14px 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text2);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    user-select: none;
+  }
+  .nav-tab:hover { color: var(--text); }
+  .nav-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .nav-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .kill-switch {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: var(--red-dim);
+    border: 1px solid var(--red);
+    border-radius: 4px;
+    color: var(--red);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .kill-switch:hover { background: rgba(255,77,109,0.18); }
+  .kill-switch::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--red); }
+
+  .status-dot {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text2);
+    letter-spacing: 0.05em;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* SCREENS */
+  .screen { display: none; padding: 24px; }
+  .screen.active { display: block; }
+
+  /* GRID LAYOUTS */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; }
+  .grid-main { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+  .grid-main3 { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 16px; }
+
+  /* CARDS */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .card-sm { padding: 16px; }
+
+  .card-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    color: var(--text3);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .card-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text2);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .metric-value {
+    font-family: var(--font-mono);
+    font-size: 28px;
+    font-weight: 300;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .metric-value.large { font-size: 36px; }
+  .metric-value.accent { color: var(--accent); }
+  .metric-value.red { color: var(--red); }
+  .metric-value.yellow { color: var(--yellow); }
+
+  .metric-change {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text2);
+  }
+  .metric-change.up { color: var(--accent); }
+  .metric-change.down { color: var(--red); }
+
+  /* BADGES */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .badge-green { background: var(--accent-dim2); color: var(--accent); border: 1px solid rgba(0,229,160,0.3); }
+  .badge-red { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,77,109,0.3); }
+  .badge-yellow { background: var(--yellow-dim); color: var(--yellow); border: 1px solid rgba(232,168,56,0.3); }
+  .badge-blue { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(59,158,255,0.3); }
+  .badge-purple { background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(155,114,255,0.3); }
+  .badge-gray { background: rgba(139,148,158,0.1); color: var(--text2); border: 1px solid rgba(139,148,158,0.2); }
+
+  /* CHART AREAS */
+  .chart-area {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .chart-placeholder {
+    width: 100%;
+    display: block;
+  }
+
+  /* ROWS */
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .row:last-child { border-bottom: none; padding-bottom: 0; }
+  .row:first-child { padding-top: 0; }
+
+  .row-label { color: var(--text); font-size: 13px; }
+  .row-sub { color: var(--text2); font-size: 11px; font-family: var(--font-mono); margin-top: 2px; }
+  .row-value { font-family: var(--font-mono); font-size: 13px; color: var(--text); text-align: right; }
+  .row-value.accent { color: var(--accent); }
+  .row-value.red { color: var(--red); }
+
+  /* TOGGLE */
+  .toggle {
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .toggle-on { background: var(--accent); }
+  .toggle-off { background: var(--border2); }
+  .toggle-dot {
+    position: absolute;
+    top: 3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: white;
+    transition: left 0.2s;
+  }
+  .toggle-dot-on { left: 19px; }
+  .toggle-dot-off { left: 3px; }
+
+  /* ACTIVITY FEED */
+  .activity-item {
+    display: flex;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .activity-item:last-child { border-bottom: none; }
+  .activity-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+  .activity-text { color: var(--text); font-size: 12px; }
+  .activity-meta { color: var(--text2); font-family: var(--font-mono); font-size: 10px; margin-top: 2px; }
+
+  /* ALLOCATION BAR */
+  .alloc-bar-wrap { margin: 6px 0 2px; }
+  .alloc-bar-track {
+    height: 5px;
+    background: var(--border2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .alloc-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--accent);
+    transition: width 0.3s;
+  }
+  .alloc-bar-fill.red { background: var(--red); }
+  .alloc-bar-fill.blue { background: var(--blue); }
+  .alloc-bar-fill.purple { background: var(--purple); }
+  .alloc-bar-fill.yellow { background: var(--yellow); }
+
+  /* STRATEGY CARD */
+  .strat-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    transition: border-color 0.15s;
+  }
+  .strat-card:hover { border-color: var(--border2); }
+  .strat-card.selected { border-color: var(--accent); background: var(--accent-dim); }
+
+  .strat-name { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+  .strat-id { font-family: var(--font-mono); font-size: 10px; color: var(--text3); margin-bottom: 12px; }
+
+  .strat-metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .strat-metric-label { font-family: var(--font-mono); font-size: 9px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; }
+  .strat-metric-val { font-family: var(--font-mono); font-size: 14px; font-weight: 500; color: var(--text); margin-top: 2px; }
+  .strat-metric-val.green { color: var(--accent); }
+  .strat-metric-val.red { color: var(--red); }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    color: var(--text3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0 12px 10px 0;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 12px 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text);
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  .mono { font-family: var(--font-mono); }
+
+  /* RISK GAUGE */
+  .risk-indicator {
+    display: flex;
+    gap: 3px;
+    align-items: flex-end;
+  }
+  .risk-bar {
+    width: 6px;
+    border-radius: 2px;
+    background: var(--border2);
+  }
+
+  /* SECTION HEADER */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .section-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .section-action {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent);
+    cursor: pointer;
+    letter-spacing: 0.05em;
+  }
+  .section-action:hover { text-decoration: underline; }
+
+  /* BUTTONS */
+  .btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+  }
+  .btn-primary { background: var(--accent); color: #000; border-color: var(--accent); }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-ghost { background: transparent; color: var(--text2); border-color: var(--border2); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--text3); }
+  .btn-danger { background: var(--red-dim); color: var(--red); border-color: var(--red); }
+  .btn-danger:hover { background: rgba(255,77,109,0.2); }
+
+  /* SPARKLINE SVG */
+  .sparkline { width: 100%; height: 36px; }
+
+  /* SETTINGS */
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+    gap: 24px;
+  }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-label { font-size: 13px; color: var(--text); margin-bottom: 3px; }
+  .setting-desc { font-size: 11px; color: var(--text2); font-family: var(--font-mono); }
+
+  .slider-wrap { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border2);
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+  }
+  select {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  /* AUDIT ROW */
+  .audit-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .audit-row:last-child { border-bottom: none; }
+  .audit-time { font-family: var(--font-mono); font-size: 10px; color: var(--text3); width: 72px; flex-shrink: 0; padding-top: 1px; }
+  .audit-text { font-size: 12px; color: var(--text); flex: 1; }
+  .audit-actor { font-family: var(--font-mono); font-size: 10px; color: var(--text2); margin-top: 2px; }
+
+  /* STACKED BARS */
+  .stack-bar {
+    display: flex;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    gap: 2px;
+    margin: 8px 0;
+  }
+  .stack-seg { height: 100%; border-radius: 2px; }
+
+  /* REGIME INDICATORS */
+  .regime-row { display: flex; gap: 8px; margin-top: 8px; }
+  .regime-tag {
+    padding: 4px 10px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* SECTION DIVIDER */
+  .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+  /* SPACING */
+  .mt-4 { margin-top: 4px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .mt-16 { margin-top: 16px; }
+  .mb-4 { margin-bottom: 4px; }
+  .mb-8 { margin-bottom: 8px; }
+  .mb-12 { margin-bottom: 12px; }
+  .mb-16 { margin-bottom: 16px; }
+
+  .flex { display: flex; }
+  .flex-between { display: flex; justify-content: space-between; align-items: center; }
+  .flex-center { display: flex; align-items: center; }
+  .gap-8 { gap: 8px; }
+  .gap-12 { gap: 12px; }
+  .gap-16 { gap: 16px; }
+
+  /* PAGE HEADER */
+  .page-header { margin-bottom: 20px; }
+  .page-title { font-family: var(--font-mono); font-size: 16px; font-weight: 500; color: var(--text); letter-spacing: 0.05em; }
+  .page-sub { font-family: var(--font-mono); font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+  /* COMPARE TABLE HEADER */
+  .compare-metric { font-family: var(--font-mono); font-size: 11px; color: var(--text2); }
+  .compare-val { font-family: var(--font-mono); font-size: 13px; font-weight: 500; }
+
+  .full-width { grid-column: 1 / -1; }
+
+  .alert-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .alert-warn { background: var(--yellow-dim); border: 1px solid rgba(232,168,56,0.3); color: var(--yellow); }
+  .alert-danger { background: var(--red-dim); border: 1px solid rgba(255,77,109,0.3); color: var(--red); }
+  .alert-info { background: var(--blue-dim); border: 1px solid rgba(59,158,255,0.3); color: var(--blue); }
+
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-logo">◈ WeTrade</div>
+  <div class="nav-tab active" onclick="show('dashboard', this)">Dashboard</div>
+  <div class="nav-tab" onclick="show('portfolio', this)">Portfolio</div>
+  <div class="nav-tab" onclick="show('strategy', this)">Strategy Lab</div>
+  <div class="nav-tab" onclick="show('controls', this)">Controls</div>
+  <div class="nav-tab" onclick="show('settings', this)">Settings</div>
+  <div class="nav-right">
+    <div class="status-dot"><div class="dot"></div>Live · Paper Mode</div>
+    <div class="kill-switch">Kill Switch</div>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════
+     SCREEN 1 — DASHBOARD
+═══════════════════════════════════════ -->
+<div id="screen-dashboard" class="screen active">
+
+  <!-- Top stat row -->
+  <div class="grid-4 mb-16">
+    <div class="card card-sm">
+      <div class="card-label">Portfolio Value</div>
+      <div class="metric-value large">$247,832</div>
+      <div class="metric-change up">▲ +$1,204 today (+0.49%)</div>
+    </div>
+    <div class="card card-sm">
+      <div class="card-label">Total PnL</div>
+      <div class="metric-value accent">+$31,420</div>
+      <div class="metric-change">+14.5% all time</div>
+    </div>
+    <div class="card card-sm">
+      <div class="card-label">Active Strategies</div>
+      <div class="metric-value">6</div>
+      <div class="metric-change"><span style="color:var(--accent)">4 live</span> · 2 paper</div>
+    </div>
+    <div class="card card-sm">
+      <div class="card-label">Risk Status</div>
+      <div class="metric-value" style="font-size:20px;color:var(--accent);margin-top:4px;">● Healthy</div>
+      <div class="metric-change">All limits within range</div>
+    </div>
+  </div>
+
+  <div class="grid-main gap-16">
+
+    <!-- LEFT: Equity curve + strategies -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Equity Curve -->
+      <div class="card">
+        <div class="flex-between mb-16">
+          <div class="card-title" style="margin:0;border:none;padding:0">Equity Curve</div>
+          <div class="flex gap-8">
+            <div class="badge badge-gray" style="cursor:pointer">1W</div>
+            <div class="badge badge-gray" style="cursor:pointer">1M</div>
+            <div class="badge badge-green" style="cursor:pointer">3M</div>
+            <div class="badge badge-gray" style="cursor:pointer">1Y</div>
+          </div>
+        </div>
+        <div class="chart-area" style="padding:0;">
+          <svg class="chart-placeholder" viewBox="0 0 560 120" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="eq-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#00E5A0" stop-opacity="0.2"/>
+                <stop offset="100%" stop-color="#00E5A0" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M0 100 C30 98 50 95 80 90 C110 85 130 88 160 80 C190 72 200 75 230 65 C260 55 270 60 300 50 C330 40 340 45 370 35 C400 25 420 30 450 22 C480 14 510 18 540 12 L560 10 L560 120 L0 120 Z" fill="url(#eq-grad)"/>
+            <path d="M0 100 C30 98 50 95 80 90 C110 85 130 88 160 80 C190 72 200 75 230 65 C260 55 270 60 300 50 C330 40 340 45 370 35 C400 25 420 30 450 22 C480 14 510 18 540 12 L560 10" fill="none" stroke="#00E5A0" stroke-width="1.5"/>
+            <!-- x axis labels -->
+            <text x="0" y="118" fill="#4A5568" font-family="IBM Plex Mono" font-size="8">Feb</text>
+            <text x="140" y="118" fill="#4A5568" font-family="IBM Plex Mono" font-size="8">Mar</text>
+            <text x="280" y="118" fill="#4A5568" font-family="IBM Plex Mono" font-size="8">Apr</text>
+            <text x="420" y="118" fill="#4A5568" font-family="IBM Plex Mono" font-size="8">May</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Active Strategies table -->
+      <div class="card">
+        <div class="card-title">Active Strategies</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Strategy</th>
+                <th>Mode</th>
+                <th>Sharpe</th>
+                <th>PnL (30d)</th>
+                <th>Allocation</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><div style="font-weight:500">MA Crossover v3</div><div class="mono" style="font-size:10px;color:var(--text3)">STR-00142</div></td>
+                <td><span class="badge badge-green">Live</span></td>
+                <td class="mono" style="color:var(--accent)">1.82</td>
+                <td class="mono" style="color:var(--accent)">+$4,210</td>
+                <td class="mono">$48,000</td>
+                <td><div class="toggle toggle-on"><div class="toggle-dot toggle-dot-on"></div></div></td>
+              </tr>
+              <tr>
+                <td><div style="font-weight:500">Momentum Factor</div><div class="mono" style="font-size:10px;color:var(--text3)">STR-00098</div></td>
+                <td><span class="badge badge-green">Live</span></td>
+                <td class="mono" style="color:var(--accent)">1.54</td>
+                <td class="mono" style="color:var(--accent)">+$2,840</td>
+                <td class="mono">$36,000</td>
+                <td><div class="toggle toggle-on"><div class="toggle-dot toggle-dot-on"></div></div></td>
+              </tr>
+              <tr>
+                <td><div style="font-weight:500">Mean Reversion</div><div class="mono" style="font-size:10px;color:var(--text3)">STR-00201</div></td>
+                <td><span class="badge badge-green">Live</span></td>
+                <td class="mono" style="color:var(--yellow)">0.94</td>
+                <td class="mono" style="color:var(--red)">-$620</td>
+                <td class="mono">$24,000</td>
+                <td><div class="toggle toggle-on"><div class="toggle-dot toggle-dot-on"></div></div></td>
+              </tr>
+              <tr>
+                <td><div style="font-weight:500">Vol Breakout</div><div class="mono" style="font-size:10px;color:var(--text3)">STR-00187</div></td>
+                <td><span class="badge badge-blue">Paper</span></td>
+                <td class="mono" style="color:var(--accent)">2.11</td>
+                <td class="mono" style="color:var(--accent)">+$1,180</td>
+                <td class="mono">$20,000</td>
+                <td><div class="toggle toggle-on"><div class="toggle-dot toggle-dot-on"></div></div></td>
+              </tr>
+              <tr>
+                <td><div style="font-weight:500">RSI Divergence</div><div class="mono" style="font-size:10px;color:var(--text3)">STR-00154</div></td>
+                <td><span class="badge badge-blue">Paper</span></td>
+                <td class="mono" style="color:var(--text2)">0.71</td>
+                <td class="mono" style="color:var(--red)">-$290</td>
+                <td class="mono">$12,000</td>
+                <td><div class="toggle toggle-off"><div class="toggle-dot toggle-dot-off"></div></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Activity + Risk -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <!-- System Health -->
+      <div class="card card-sm">
+        <div class="card-title">System Health</div>
+        <div class="row">
+          <div class="row-label">Data Pipeline</div>
+          <span class="badge badge-green">● Healthy</span>
+        </div>
+        <div class="row">
+          <div class="row-label">Execution Engine</div>
+          <span class="badge badge-green">● Healthy</span>
+        </div>
+        <div class="row">
+          <div class="row-label">Feature Store</div>
+          <span class="badge badge-yellow">● Delayed</span>
+        </div>
+        <div class="row">
+          <div class="row-label">Governance</div>
+          <span class="badge badge-green">● Healthy</span>
+        </div>
+      </div>
+
+      <!-- Risk Snapshot -->
+      <div class="card card-sm">
+        <div class="card-title">Risk Snapshot</div>
+        <div class="row">
+          <div class="row-label">Max Drawdown</div>
+          <div class="row-value mono" style="color:var(--yellow)">-6.2%</div>
+        </div>
+        <div class="row">
+          <div class="row-label">Portfolio Volatility</div>
+          <div class="row-value mono">11.4% ann.</div>
+        </div>
+        <div class="row">
+          <div class="row-label">Sharpe (30d)</div>
+          <div class="row-value mono accent" style="color:var(--accent)">1.61</div>
+        </div>
+        <div class="row">
+          <div class="row-label">VaR (95%, 1d)</div>
+          <div class="row-value mono">$2,840</div>
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="card card-sm" style="flex:1">
+        <div class="card-title">Recent Activity</div>
+        <div class="activity-item">
+          <div class="activity-dot" style="background:var(--accent)"></div>
+          <div>
+            <div class="activity-text">MA Crossover v3 filled BUY AAPL ×120</div>
+            <div class="activity-meta">2 min ago · $187.40 avg · slippage 0.02%</div>
+          </div>
+        </div>
+        <div class="activity-item">
+          <div class="activity-dot" style="background:var(--blue)"></div>
+          <div>
+            <div class="activity-text">Vol Breakout paper trade: SELL MSFT ×80</div>
+            <div class="activity-meta">11 min ago · $412.20 avg</div>
+          </div>
+        </div>
+        <div class="activity-item">
+          <div class="activity-dot" style="background:var(--yellow)"></div>
+          <div>
+            <div class="activity-text">Feature pipeline delayed 4m 12s</div>
+            <div class="activity-meta">18 min ago · features_v43</div>
+          </div>
+        </div>
+        <div class="activity-item">
+          <div class="activity-dot" style="background:var(--accent)"></div>
+          <div>
+            <div class="activity-text">Momentum Factor filled SELL GOOGL ×45</div>
+            <div class="activity-meta">34 min ago · $171.10 avg</div>
+          </div>
+        </div>
+        <div class="activity-item">
+          <div class="activity-dot" style="background:var(--text3)"></div>
+          <div>
+            <div class="activity-text">adjusted_bars_v43 registered</div>
+            <div class="activity-meta">6:31 AM · CA pipeline complete</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════
+     SCREEN 2 — PORTFOLIO
+═══════════════════════════════════════ -->
+<div id="screen-portfolio" class="screen">
+
+  <div class="grid-4 mb-16">
+    <div class="card card-sm">
+      <div class="card-label">Total Value</div>
+      <div class="metric-value large">$247,832</div>
+      <div class="metric-change up">▲ +$1,204 today</div>
+    </div>
+    <div class="card card-sm">
+      <div class="card-label">Invested Capital</div>
+      <div class="metric-value">$216,412</div>
+      <div class="metric-change">87.3% deployed</div>
+    </div>
+    <div class="card card-sm">
+      <div class="card-label">Cash Reserve</div>
+      <div class="metric-value">$31,420</div>
+      <div class="metric-change">12.7% available</div>
+    </div>
+    <div class="card card-sm">
+      <div class="card-label">Open Positions</div>
+      <div class="metric-value">18</div>
+      <div class="metric-change">across 6 strategies</div>
+    </div>
+  </div>
+
+  <div class="grid-main gap-16">
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Equity + Drawdown charts -->
+      <div class="card">
+        <div class="flex-between mb-16">
+          <div class="card-title" style="margin:0;border:none;padding:0">Performance</div>
+          <div class="flex gap-8">
+            <div class="badge badge-gray">Equity</div>
+            <div class="badge badge-green">Drawdown</div>
+          </div>
+        </div>
+        <div class="chart-area" style="padding:0;">
+          <svg class="chart-placeholder" viewBox="0 0 560 100" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="eq2-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#00E5A0" stop-opacity="0.15"/>
+                <stop offset="100%" stop-color="#00E5A0" stop-opacity="0"/>
+              </linearGradient>
+              <linearGradient id="dd-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#FF4D6D" stop-opacity="0"/>
+                <stop offset="100%" stop-color="#FF4D6D" stop-opacity="0.2"/>
+              </linearGradient>
+            </defs>
+            <!-- equity curve -->
+            <path d="M0 90 C40 85 80 80 120 72 C160 64 180 68 220 58 C260 48 280 52 320 42 C360 32 380 38 420 28 C460 18 500 22 540 14 L560 12" fill="none" stroke="#00E5A0" stroke-width="1.5"/>
+            <!-- drawdown overlay -->
+            <path d="M0 10 C40 12 80 10 120 15 C160 20 180 14 220 12 C250 10 260 18 280 22 C300 26 320 15 360 12 C400 10 440 20 480 16 L560 10" fill="url(#dd-grad)" stroke="#FF4D6D" stroke-width="1" opacity="0.8"/>
+            <text x="0" y="98" fill="#4A5568" font-family="IBM Plex Mono" font-size="8">Feb</text>
+            <text x="140" y="98" fill="#4A5568" font-family="IBM Plex Mono" font-size="8">Mar</text>
+            <text x="280" y="98" fill="#4A5568" font-family="IBM Plex Mono" font-size="8">Apr</text>
+            <text x="420" y="98" fill="#4A5568" font-family="IBM Plex Mono" font-size="8">May</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Holdings table -->
+      <div class="card">
+        <div class="card-title">Holdings</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Qty</th>
+                <th>Avg Price</th>
+                <th>Current</th>
+                <th>Value</th>
+                <th>PnL</th>
+                <th>Strategy</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>AAPL</strong></td>
+                <td class="mono">120</td>
+                <td class="mono">$180.40</td>
+                <td class="mono">$187.40</td>
+                <td class="mono">$22,488</td>
+                <td class="mono" style="color:var(--accent)">+$840</td>
+                <td><span class="badge badge-gray">MA Cross v3</span></td>
+              </tr>
+              <tr>
+                <td><strong>MSFT</strong></td>
+                <td class="mono">55</td>
+                <td class="mono">$395.20</td>
+                <td class="mono">$412.20</td>
+                <td class="mono">$22,671</td>
+                <td class="mono" style="color:var(--accent)">+$935</td>
+                <td><span class="badge badge-gray">Momentum</span></td>
+              </tr>
+              <tr>
+                <td><strong>NVDA</strong></td>
+                <td class="mono">40</td>
+                <td class="mono">$890.00</td>
+                <td class="mono">$872.30</td>
+                <td class="mono">$34,892</td>
+                <td class="mono" style="color:var(--red)">-$708</td>
+                <td><span class="badge badge-gray">Momentum</span></td>
+              </tr>
+              <tr>
+                <td><strong>GOOGL</strong></td>
+                <td class="mono">80</td>
+                <td class="mono">$168.40</td>
+                <td class="mono">$171.10</td>
+                <td class="mono">$13,688</td>
+                <td class="mono" style="color:var(--accent)">+$216</td>
+                <td><span class="badge badge-gray">MA Cross v3</span></td>
+              </tr>
+              <tr>
+                <td><strong>META</strong></td>
+                <td class="mono">30</td>
+                <td class="mono">$502.10</td>
+                <td class="mono">$491.80</td>
+                <td class="mono">$14,754</td>
+                <td class="mono" style="color:var(--red)">-$309</td>
+                <td><span class="badge badge-gray">Mean Revert</span></td>
+              </tr>
+              <tr>
+                <td><strong>AMZN</strong></td>
+                <td class="mono">65</td>
+                <td class="mono">$191.20</td>
+                <td class="mono">$198.40</td>
+                <td class="mono">$12,896</td>
+                <td class="mono" style="color:var(--accent)">+$468</td>
+                <td><span class="badge badge-gray">Vol Breakout</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT sidebar -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Allocation by strategy -->
+      <div class="card card-sm">
+        <div class="card-title">Allocation by Strategy</div>
+        <div class="row">
+          <div>
+            <div class="row-label">MA Crossover v3</div>
+            <div class="alloc-bar-wrap"><div class="alloc-bar-track"><div class="alloc-bar-fill" style="width:29%"></div></div></div>
+          </div>
+          <div class="row-value mono">29%</div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="row-label">Momentum Factor</div>
+            <div class="alloc-bar-wrap"><div class="alloc-bar-track"><div class="alloc-bar-fill blue" style="width:22%"></div></div></div>
+          </div>
+          <div class="row-value mono">22%</div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="row-label">Mean Reversion</div>
+            <div class="alloc-bar-wrap"><div class="alloc-bar-track"><div class="alloc-bar-fill purple" style="width:15%"></div></div></div>
+          </div>
+          <div class="row-value mono">15%</div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="row-label">Vol Breakout</div>
+            <div class="alloc-bar-wrap"><div class="alloc-bar-track"><div class="alloc-bar-fill yellow" style="width:12%"></div></div></div>
+          </div>
+          <div class="row-value mono">12%</div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="row-label">Cash Reserve</div>
+            <div class="alloc-bar-wrap"><div class="alloc-bar-track"><div class="alloc-bar-fill" style="width:13%;background:var(--border2)"></div></div></div>
+          </div>
+          <div class="row-value mono">13%</div>
+        </div>
+      </div>
+
+      <!-- Risk metrics -->
+      <div class="card card-sm">
+        <div class="card-title">Risk Metrics</div>
+        <div class="row">
+          <div class="row-label">Sharpe Ratio</div>
+          <div class="row-value mono" style="color:var(--accent)">1.61</div>
+        </div>
+        <div class="row">
+          <div class="row-label">Sortino Ratio</div>
+          <div class="row-value mono" style="color:var(--accent)">2.14</div>
+        </div>
+        <div class="row">
+          <div class="row-label">Max Drawdown</div>
+          <div class="row-value mono" style="color:var(--yellow)">-6.2%</div>
+        </div>
+        <div class="row">
+          <div class="row-label">Volatility (ann.)</div>
+          <div class="row-value mono">11.4%</div>
+        </div>
+        <div class="row">
+          <div class="row-label">Beta (vs SPY)</div>
+          <div class="row-value mono">0.72</div>
+        </div>
+        <div class="row">
+          <div class="row-label">VaR 95% (1d)</div>
+          <div class="row-value mono">$2,840</div>
+        </div>
+      </div>
+
+      <!-- Sector exposure -->
+      <div class="card card-sm">
+        <div class="card-title">Sector Exposure</div>
+        <div class="row">
+          <div class="row-label">Technology</div>
+          <div class="row-value mono">61%</div>
+        </div>
+        <div class="row">
+          <div class="row-label">Consumer Disc.</div>
+          <div class="row-value mono">18%</div>
+        </div>
+        <div class="row">
+          <div class="row-label">Financials</div>
+          <div class="row-value mono">8%</div>
+        </div>
+        <div class="row">
+          <div class="row-label">Healthcare</div>
+          <div class="row-value mono">6%</div>
+        </div>
+        <div class="row" style="border:none">
+          <div class="row-label" style="color:var(--yellow)">⚠ Tech concentration</div>
+          <div class="row-value mono" style="font-size:10px;color:var(--yellow)">Limit: 60%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════
+     SCREEN 3 — STRATEGY LAB
+═══════════════════════════════════════ -->
+<div id="screen-strategy" class="screen">
+
+  <!-- Filter bar -->
+  <div class="flex-between mb-16">
+    <div class="flex gap-8">
+      <div class="badge badge-gray" style="padding:6px 12px;cursor:pointer">All</div>
+      <div class="badge badge-green" style="padding:6px 12px;cursor:pointer">● Live</div>
+      <div class="badge badge-blue" style="padding:6px 12px;cursor:pointer">Paper</div>
+      <div class="badge badge-purple" style="padding:6px 12px;cursor:pointer">Research</div>
+      <div class="badge badge-gray" style="padding:6px 12px;cursor:pointer">Retired</div>
+    </div>
+    <div class="flex gap-8">
+      <button class="btn btn-ghost">Compare Selected</button>
+      <button class="btn btn-primary">+ New Experiment</button>
+    </div>
+  </div>
+
+  <!-- Strategy grid -->
+  <div class="grid-3 mb-16">
+
+    <div class="strat-card selected">
+      <div class="flex-between mb-4">
+        <div class="strat-name">MA Crossover v3</div>
+        <span class="badge badge-green">Live</span>
+      </div>
+      <div class="strat-id">STR-00142 · MA(10,50) · Equity</div>
+      <div class="strat-metrics">
+        <div><div class="strat-metric-label">Sharpe</div><div class="strat-metric-val green">1.82</div></div>
+        <div><div class="strat-metric-label">CAGR</div><div class="strat-metric-val green">+22.4%</div></div>
+        <div><div class="strat-metric-label">Max DD</div><div class="strat-metric-val">-5.8%</div></div>
+      </div>
+      <div class="strat-metrics">
+        <div><div class="strat-metric-label">Win Rate</div><div class="strat-metric-val">58%</div></div>
+        <div><div class="strat-metric-label">Trades (30d)</div><div class="strat-metric-val">142</div></div>
+        <div><div class="strat-metric-label">Allocation</div><div class="strat-metric-val">$48k</div></div>
+      </div>
+      <svg class="sparkline" viewBox="0 0 200 36">
+        <defs><linearGradient id="sp1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00E5A0" stop-opacity="0.3"/><stop offset="100%" stop-color="#00E5A0" stop-opacity="0"/></linearGradient></defs>
+        <path d="M0 30 C20 28 40 24 60 20 C80 16 100 18 120 13 C140 8 160 10 180 6 L200 4 L200 36 L0 36 Z" fill="url(#sp1)"/>
+        <path d="M0 30 C20 28 40 24 60 20 C80 16 100 18 120 13 C140 8 160 10 180 6 L200 4" fill="none" stroke="#00E5A0" stroke-width="1.5"/>
+      </svg>
+      <div class="flex-between mt-8">
+        <span class="badge badge-green">Stage 4 Passed</span>
+        <div class="flex gap-8">
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:9px">Detail</button>
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:9px">Pause</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="strat-card">
+      <div class="flex-between mb-4">
+        <div class="strat-name">Momentum Factor</div>
+        <span class="badge badge-green">Live</span>
+      </div>
+      <div class="strat-id">STR-00098 · Cross-sectional · Equity</div>
+      <div class="strat-metrics">
+        <div><div class="strat-metric-label">Sharpe</div><div class="strat-metric-val green">1.54</div></div>
+        <div><div class="strat-metric-label">CAGR</div><div class="strat-metric-val green">+18.7%</div></div>
+        <div><div class="strat-metric-label">Max DD</div><div class="strat-metric-val">-8.1%</div></div>
+      </div>
+      <div class="strat-metrics">
+        <div><div class="strat-metric-label">Win Rate</div><div class="strat-metric-val">54%</div></div>
+        <div><div class="strat-metric-label">Trades (30d)</div><div class="strat-metric-val">89</div></div>
+        <div><div class="strat-metric-label">Allocation</div><div class="strat-metric-val">$36k</div></div>
+      </div>
+      <svg class="sparkline" viewBox="0 0 200 36">
+        <path d="M0 28 C20 26 40 22 60 24 C80 26 100 19 120 15 C140 11 160 14 180 9 L200 7" fill="none" stroke="#00E5A0" stroke-width="1.5"/>
+      </svg>
+      <div class="flex-between mt-8">
+        <span class="badge badge-green">Stage 4 Passed</span>
+        <div class="flex gap-8">
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:9px">Detail</button>
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:9px">Pause</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="strat-card">
+      <div class="flex-between mb-4">
+        <div class="strat-name">Vol Breakout</div>
+        <span class="badge badge-blue">Paper</span>
+      </div>
+      <div class="strat-id">STR-00187 · ATR Breakout · Equity</div>
+      <div class="strat-metrics">
+        <div><div class="strat-metric-label">Sharpe</div><div class="strat-metric-val green">2.11</div></div>
+        <div><div class="strat-metric-label">CAGR</div><div class="strat-metric-val green">+28.2%</div></div>
+        <div><div class="strat-metric-label">Max DD</div><div class="strat-metric-val" style="color:var(--yellow)">-12.4%</div></div>
+      </div>
+      <div class="strat-metrics">
+        <div><div class="strat-metric-label">Win Rate</div><div class="strat-metric-val">49%</div></div>
+        <div><div class="strat-metric-label">Trades (30d)</div><div class="strat-metric-val">204</div></div>
+        <div><div class="strat-metric-label">Allocation</div><div class="strat-metric-val">Paper</div></div>
+      </div>
+      <svg class="sparkline" viewBox="0 0 200 36">
+        <path d="M0 32 C15 28 25 30 40 22 C55 14 65 20 80 16 C95 12 105 18 120 10 C135 4 150 8 165 5 L200 3" fill="none" stroke="#3B9EFF" stroke-width="1.5"/>
+      </svg>
+      <div class="flex-between mt-8">
+        <span class="badge badge-blue">Paper 14d / 30d req.</span>
+        <div class="flex gap-8">
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:9px">Detail</button>
+          <button class="btn btn-primary" style="padding:4px 10px;font-size:9px">Promote</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="strat-card">
+      <div class="flex-between mb-4">
+        <div class="strat-name">Mean Reversion</div>
+        <span class="badge badge-yellow">Watch</span>
+      </div>
+      <div class="strat-id">STR-00201 · Z-Score · Equity</div>
+      <div class="strat-metrics">
+        <div><div class="strat-metric-label">Sharpe</div><div class="strat-metric-val" style="color:var(--yellow)">0.94</div></div>
+        <div><div class="strat-metric-label">CAGR</div><div class="strat-metric-val" style="color:var(--yellow)">+9.1%</div></div>
+        <div><div class="strat-metric-label">Max DD</div><div class="strat-metric-val red">-14.2%</div></div>
+      </div>
+      <div class="strat-metrics">
+        <div><div class="strat-metric-label">Win Rate</div><div class="strat-metric-val">47%</div></div>
+        <div><div class="strat-metric-label">Trades (30d)</div><div class="strat-metric-val">312</div></div>
+        <div><div class="strat-metric-label">Allocation</div><div class="strat-metric-val">$24k</div></div>
+      </div>
+      <svg class="sparkline" viewBox="0 0 200 36">
+        <path d="M0 18 C20 16 30 20 50 22 C70 24 80 18 100 20 C120 22 130 16 150 19 C165 21 180 18 200 20" fill="none" stroke="#E8A838" stroke-width="1.5"/>
+      </svg>
+      <div class="flex-between mt-8">
+        <span class="badge badge-yellow">⚠ Underperforming</span>
+        <div class="flex gap-8">
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:9px">Detail</button>
+          <button class="btn btn-danger" style="padding:4px 10px;font-size:9px">Demote</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="strat-card">
+      <div class="flex-between mb-4">
+        <div class="strat-name">RSI Divergence</div>
+        <span class="badge badge-purple">Research</span>
+      </div>
+      <div class="strat-id">STR-00154 · RSI(14) · Equity</div>
+      <div class="strat-metrics">
+        <div><div class="strat-metric-label">Sharpe</div><div class="strat-metric-val" style="color:var(--text2)">0.71</div></div>
+        <div><div class="strat-metric-label">CAGR</div><div class="strat-metric-val" style="color:var(--text2)">+6.4%</div></div>
+        <div><div class="strat-metric-label">Max DD</div><div class="strat-metric-val red">-18.0%</div></div>
+      </div>
+      <div class="strat-metrics">
+        <div><div class="strat-metric-label">Stage</div><div class="strat-metric-val" style="font-size:12px">Stage 2</div></div>
+        <div><div class="strat-metric-label">Runs</div><div class="strat-metric-val" style="font-size:12px">48</div></div>
+        <div><div class="strat-metric-label">Dataset</div><div class="strat-metric-val" style="font-size:12px">v43</div></div>
+      </div>
+      <svg class="sparkline" viewBox="0 0 200 36">
+        <path d="M0 20 C15 22 25 18 40 24 C55 30 70 20 85 26 C100 32 115 22 130 28 C145 32 160 24 180 28 L200 30" fill="none" stroke="#9B72FF" stroke-width="1.5"/>
+      </svg>
+      <div class="flex-between mt-8">
+        <span class="badge badge-purple">Simulation only</span>
+        <div class="flex gap-8">
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:9px">Detail</button>
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:9px">Reject</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add new -->
+    <div class="strat-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;border-style:dashed;cursor:pointer;opacity:0.5">
+      <div style="font-size:28px;color:var(--text3);margin-bottom:8px">+</div>
+      <div class="strat-id" style="text-align:center">Run New Experiment</div>
+    </div>
+  </div>
+
+  <!-- Compare panel -->
+  <div class="card">
+    <div class="card-title">Strategy Comparison — Selected: MA Crossover v3 vs Vol Breakout</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:160px">Metric</th>
+          <th>MA Crossover v3</th>
+          <th>Vol Breakout</th>
+          <th>Mean Reversion</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono" style="color:var(--text2);font-size:11px">Sharpe Ratio</td>
+          <td class="mono" style="color:var(--accent)">1.82</td>
+          <td class="mono" style="color:var(--accent)">2.11</td>
+          <td class="mono" style="color:var(--yellow)">0.94</td>
+        </tr>
+        <tr>
+          <td class="mono" style="color:var(--text2);font-size:11px">CAGR</td>
+          <td class="mono">+22.4%</td>
+          <td class="mono">+28.2%</td>
+          <td class="mono">+9.1%</td>
+        </tr>
+        <tr>
+          <td class="mono" style="color:var(--text2);font-size:11px">Max Drawdown</td>
+          <td class="mono">-5.8%</td>
+          <td class="mono" style="color:var(--yellow)">-12.4%</td>
+          <td class="mono" style="color:var(--red)">-14.2%</td>
+        </tr>
+        <tr>
+          <td class="mono" style="color:var(--text2);font-size:11px">Win Rate</td>
+          <td class="mono">58%</td>
+          <td class="mono">49%</td>
+          <td class="mono">47%</td>
+        </tr>
+        <tr>
+          <td class="mono" style="color:var(--text2);font-size:11px">Simulation Stage</td>
+          <td><span class="badge badge-green">Stage 4</span></td>
+          <td><span class="badge badge-blue">Paper</span></td>
+          <td><span class="badge badge-green">Stage 4</span></td>
+        </tr>
+        <tr>
+          <td class="mono" style="color:var(--text2);font-size:11px">Governance State</td>
+          <td><span class="badge badge-green">Live Approved</span></td>
+          <td><span class="badge badge-blue">Paper Approved</span></td>
+          <td><span class="badge badge-yellow">Under Review</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════
+     SCREEN 4 — CONTROLS
+═══════════════════════════════════════ -->
+<div id="screen-controls" class="screen">
+
+  <div class="alert-warn mb-16">
+    ⚠ &nbsp;Mean Reversion (STR-00201) has breached the -12% drawdown threshold. Review recommended.
+  </div>
+
+  <div class="grid-main3 gap-16">
+
+    <!-- Left: Kill switch + controls -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Global kill -->
+      <div class="card" style="border-color:rgba(255,77,109,0.3)">
+        <div class="card-title" style="color:var(--red)">Global Kill Switch</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:16px;font-family:var(--font-mono)">
+          Immediately halts all order submission across all strategies and environments. Positions are not liquidated — only new orders are blocked.
+        </div>
+        <div class="flex-between">
+          <div>
+            <div style="font-size:13px;color:var(--text);margin-bottom:2px">System Status</div>
+            <div class="flex-center gap-8"><div class="dot"></div><span class="mono" style="font-size:11px;color:var(--accent)">Active — Trading Enabled</span></div>
+          </div>
+          <button class="btn btn-danger" style="padding:10px 20px;font-size:11px">⬛ KILL ALL TRADING</button>
+        </div>
+      </div>
+
+      <!-- Per-strategy toggles -->
+      <div class="card">
+        <div class="card-title">Strategy Toggles</div>
+        <div class="row">
+          <div>
+            <div class="row-label">MA Crossover v3</div>
+            <div class="row-sub">Live · $48,000 allocated</div>
+          </div>
+          <div class="flex-center gap-12">
+            <span class="badge badge-green">Running</span>
+            <div class="toggle toggle-on"><div class="toggle-dot toggle-dot-on"></div></div>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="row-label">Momentum Factor</div>
+            <div class="row-sub">Live · $36,000 allocated</div>
+          </div>
+          <div class="flex-center gap-12">
+            <span class="badge badge-green">Running</span>
+            <div class="toggle toggle-on"><div class="toggle-dot toggle-dot-on"></div></div>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="row-label">Mean Reversion</div>
+            <div class="row-sub">Live · $24,000 allocated · ⚠ DD breach</div>
+          </div>
+          <div class="flex-center gap-12">
+            <span class="badge badge-yellow">Warning</span>
+            <div class="toggle toggle-on"><div class="toggle-dot toggle-dot-on"></div></div>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="row-label">Vol Breakout</div>
+            <div class="row-sub">Paper · $20,000 notional</div>
+          </div>
+          <div class="flex-center gap-12">
+            <span class="badge badge-blue">Paper</span>
+            <div class="toggle toggle-on"><div class="toggle-dot toggle-dot-on"></div></div>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="row-label">RSI Divergence</div>
+            <div class="row-sub">Paper · Paused by operator</div>
+          </div>
+          <div class="flex-center gap-12">
+            <span class="badge badge-gray">Paused</span>
+            <div class="toggle toggle-off"><div class="toggle-dot toggle-dot-off"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Environment -->
+      <div class="card card-sm">
+        <div class="card-title">Environment</div>
+        <div class="row">
+          <div class="row-label">Trading Mode</div>
+          <div class="flex gap-8">
+            <div class="badge badge-gray" style="cursor:pointer">Simulation</div>
+            <div class="badge badge-blue" style="cursor:pointer">Paper</div>
+            <div class="badge badge-green">Live ●</div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-label">Auto-promote enabled</div>
+          <div class="toggle toggle-off"><div class="toggle-dot toggle-dot-off"></div></div>
+        </div>
+        <div class="row">
+          <div class="row-label">Risk checks</div>
+          <div class="toggle toggle-on"><div class="toggle-dot toggle-dot-on"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Middle: Allocation overrides -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <div class="card">
+        <div class="card-title">Allocation Overrides</div>
+        <div style="font-size:11px;color:var(--text2);font-family:var(--font-mono);margin-bottom:14px">Manual overrides take precedence over policy-computed allocations. All changes are logged.</div>
+
+        <div class="row">
+          <div>
+            <div class="row-label">MA Crossover v3</div>
+            <div class="row-sub">Policy: $48,000</div>
+          </div>
+          <div class="flex-center gap-8">
+            <span class="badge badge-gray">No override</span>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="row-label">Momentum Factor</div>
+            <div class="row-sub">Policy: $36,000</div>
+          </div>
+          <div class="flex-center gap-8">
+            <span class="badge badge-gray">No override</span>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="row-label">Mean Reversion</div>
+            <div class="row-sub" style="color:var(--yellow)">Policy: $24,000 · Override active</div>
+          </div>
+          <div class="flex-center gap-8">
+            <span class="badge badge-yellow mono">$12,000</span>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="row-label">Vol Breakout</div>
+            <div class="row-sub">Policy: $20,000</div>
+          </div>
+          <div class="flex-center gap-8">
+            <span class="badge badge-gray">No override</span>
+          </div>
+        </div>
+
+        <div class="mt-16">
+          <button class="btn btn-ghost" style="width:100%">+ Add Override</button>
+        </div>
+      </div>
+
+      <!-- Alerts -->
+      <div class="card">
+        <div class="card-title">Alert Thresholds</div>
+        <div class="row">
+          <div>
+            <div class="row-label">Drawdown alert</div>
+            <div class="row-sub">Notify when portfolio DD &gt; 8%</div>
+          </div>
+          <span class="badge badge-green">Active</span>
+        </div>
+        <div class="row">
+          <div>
+            <div class="row-label">Sharpe degradation</div>
+            <div class="row-sub">Alert if Sharpe drops below 0.5</div>
+          </div>
+          <span class="badge badge-green">Active</span>
+        </div>
+        <div class="row">
+          <div>
+            <div class="row-label">VaR breach</div>
+            <div class="row-sub">Alert when daily VaR exceeds $5,000</div>
+          </div>
+          <span class="badge badge-yellow">Firing</span>
+        </div>
+        <div class="row">
+          <div>
+            <div class="row-label">Pipeline delay</div>
+            <div class="row-sub">Feature pipeline &gt; 5min late</div>
+          </div>
+          <span class="badge badge-green">Active</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Audit log -->
+    <div>
+      <div class="card" style="height:100%;">
+        <div class="card-title">Audit Log</div>
+        <div class="audit-row">
+          <div class="audit-time">09:42:11</div>
+          <div>
+            <div class="audit-text">Allocation override applied: Mean Reversion → $12,000</div>
+            <div class="audit-actor">operator: tristan · reason: DD breach watchlist</div>
+          </div>
+        </div>
+        <div class="audit-row">
+          <div class="audit-time">09:18:04</div>
+          <div>
+            <div class="audit-text">Strategy RSI Divergence paused</div>
+            <div class="audit-actor">operator: tristan</div>
+          </div>
+        </div>
+        <div class="audit-row">
+          <div class="audit-time">08:55:30</div>
+          <div>
+            <div class="audit-text">Vol Breakout approved for paper trading</div>
+            <div class="audit-actor">governance: auto-approved · Sharpe 2.11 ≥ 1.5</div>
+          </div>
+        </div>
+        <div class="audit-row">
+          <div class="audit-time">07:01:12</div>
+          <div>
+            <div class="audit-text">adjusted_bars_v43 registered — CA pipeline complete</div>
+            <div class="audit-actor">system</div>
+          </div>
+        </div>
+        <div class="audit-row">
+          <div class="audit-time">06:58:44</div>
+          <div>
+            <div class="audit-text">features_v43 written — feature pipeline complete</div>
+            <div class="audit-actor">system</div>
+          </div>
+        </div>
+        <div class="audit-row">
+          <div class="audit-time">Yesterday</div>
+          <div>
+            <div class="audit-text">Kill switch engaged — manual intervention</div>
+            <div class="audit-actor">operator: tristan · released 2m 14s later</div>
+          </div>
+        </div>
+        <div class="audit-row">
+          <div class="audit-time">Yesterday</div>
+          <div>
+            <div class="audit-text">MA Crossover v3 promoted to live trading</div>
+            <div class="audit-actor">governance: auto-promoted after 30d paper</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════
+     SCREEN 5 — SETTINGS
+═══════════════════════════════════════ -->
+<div id="screen-settings" class="screen">
+  <div class="grid-2 gap-16">
+
+    <!-- Risk settings -->
+    <div class="card">
+      <div class="card-title">Risk Parameters</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Max Portfolio Drawdown</div>
+          <div class="setting-desc">System pauses all trading if portfolio DD exceeds this</div>
+        </div>
+        <div class="slider-wrap">
+          <input type="range" min="5" max="30" value="10">
+          <span class="mono" style="font-size:12px;color:var(--accent);width:36px">10%</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Max Strategy Drawdown</div>
+          <div class="setting-desc">Per-strategy limit before it triggers a warning</div>
+        </div>
+        <div class="slider-wrap">
+          <input type="range" min="5" max="25" value="12">
+          <span class="mono" style="font-size:12px;color:var(--accent);width:36px">12%</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Risk Tolerance</div>
+          <div class="setting-desc">Affects position sizing and allocation aggressiveness</div>
+        </div>
+        <div class="slider-wrap">
+          <span class="mono" style="font-size:11px;color:var(--text2)">Low</span>
+          <input type="range" min="1" max="3" value="2">
+          <span class="mono" style="font-size:11px;color:var(--text2)">High</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Max Capital Per Strategy</div>
+          <div class="setting-desc">Hard cap on any single strategy allocation</div>
+        </div>
+        <div class="slider-wrap">
+          <input type="range" min="10" max="50" value="30">
+          <span class="mono" style="font-size:12px;color:var(--accent);width:36px">30%</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Target Portfolio Volatility</div>
+          <div class="setting-desc">Annualized volatility target for position sizing</div>
+        </div>
+        <div class="slider-wrap">
+          <input type="range" min="5" max="30" value="15">
+          <span class="mono" style="font-size:12px;color:var(--accent);width:36px">15%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Governance settings -->
+    <div class="card">
+      <div class="card-title">Governance & Promotion</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Auto-promote strategies</div>
+          <div class="setting-desc">Promote paper → live when all criteria are met</div>
+        </div>
+        <div class="toggle toggle-off"><div class="toggle-dot toggle-dot-off"></div></div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Minimum Sharpe for promotion</div>
+          <div class="setting-desc">Paper strategies must exceed this to be eligible</div>
+        </div>
+        <div class="slider-wrap">
+          <input type="range" min="0.5" max="3" step="0.1" value="1.5">
+          <span class="mono" style="font-size:12px;color:var(--accent);width:36px">1.5</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Min paper trading period</div>
+          <div class="setting-desc">Days of paper trading required before promotion</div>
+        </div>
+        <select>
+          <option>14 days</option>
+          <option selected>30 days</option>
+          <option>60 days</option>
+          <option>90 days</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Rebalance frequency</div>
+          <div class="setting-desc">How often portfolio allocations are rebalanced</div>
+        </div>
+        <select>
+          <option selected>Daily</option>
+          <option>Weekly</option>
+          <option>Monthly</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Auto-demote on breach</div>
+          <div class="setting-desc">Auto-demote live strategy to paper if DD limit exceeded</div>
+        </div>
+        <div class="toggle toggle-on"><div class="toggle-dot toggle-dot-on"></div></div>
+      </div>
+    </div>
+
+    <!-- Data settings -->
+    <div class="card">
+      <div class="card-title">Data & Simulation</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Active Dataset Version</div>
+          <div class="setting-desc">Currently loaded market data version</div>
+        </div>
+        <span class="badge badge-green mono">adjusted_bars_v43</span>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Feature Version</div>
+          <div class="setting-desc">Currently loaded feature dataset</div>
+        </div>
+        <span class="badge badge-green mono">features_v43</span>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Slippage Model</div>
+          <div class="setting-desc">Applied to all simulated fills</div>
+        </div>
+        <select>
+          <option selected>Fixed (0.02%)</option>
+          <option>Volume-based</option>
+          <option>Spread model</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Transaction Cost</div>
+          <div class="setting-desc">Per-trade cost applied in simulation and live</div>
+        </div>
+        <select>
+          <option selected>$0.005 / share</option>
+          <option>$1.00 / trade</option>
+          <option>0.1% notional</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Notification settings -->
+    <div class="card">
+      <div class="card-title">Notifications</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Drawdown alerts</div>
+          <div class="setting-desc">Notify when any drawdown threshold is hit</div>
+        </div>
+        <div class="toggle toggle-on"><div class="toggle-dot toggle-dot-on"></div></div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Strategy promotion events</div>
+          <div class="setting-desc">Notify on paper → live promotions</div>
+        </div>
+        <div class="toggle toggle-on"><div class="toggle-dot toggle-dot-on"></div></div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Pipeline failures</div>
+          <div class="setting-desc">Alert on data or feature pipeline errors</div>
+        </div>
+        <div class="toggle toggle-on"><div class="toggle-dot toggle-dot-on"></div></div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Kill switch events</div>
+          <div class="setting-desc">Always notify on global kill switch</div>
+        </div>
+        <div class="toggle toggle-on" style="opacity:0.6"><div class="toggle-dot toggle-dot-on"></div></div>
+      </div>
+      <div class="setting-row" style="border:none">
+        <div>
+          <div class="setting-label">Daily PnL summary</div>
+          <div class="setting-desc">End of day performance email</div>
+        </div>
+        <div class="toggle toggle-off"><div class="toggle-dot toggle-dot-off"></div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<script>
+  function show(id, el) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('screen-' + id).classList.add('active');
+    el.classList.add('active');
+  }
+
+  // Toggle interactivity
+  document.querySelectorAll('.toggle').forEach(t => {
+    t.addEventListener('click', () => {
+      const dot = t.querySelector('.toggle-dot');
+      if (t.classList.contains('toggle-on')) {
+        t.classList.remove('toggle-on'); t.classList.add('toggle-off');
+        dot.classList.remove('toggle-dot-on'); dot.classList.add('toggle-dot-off');
+      } else {
+        t.classList.remove('toggle-off'); t.classList.add('toggle-on');
+        dot.classList.remove('toggle-dot-off'); dot.classList.add('toggle-dot-on');
+      }
+    });
+  });
+
+  // Slider value display
+  document.querySelectorAll('input[type=range]').forEach(s => {
+    s.addEventListener('input', e => {
+      const span = e.target.nextElementSibling;
+      if (span && span.classList.contains('mono')) {
+        const val = parseFloat(e.target.value);
+        const min = parseFloat(e.target.min);
+        const max = parseFloat(e.target.max);
+        if (max <= 3) span.textContent = val.toFixed(1);
+        else if (max <= 30 && e.target.step !== '0.1') span.textContent = val + '%';
+        else span.textContent = val + '%';
+      }
+    });
+  });
+</script>
+
+</body>
+</html>
