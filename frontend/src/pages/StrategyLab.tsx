@@ -1,110 +1,108 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import StatusBadge from '../components/shared/StatusBadge'
 import type { BadgeVariant } from '../components/shared/StatusBadge'
 import { cn } from '../lib/utils'
-import { mockStrategies } from '../mock/data'
-import type { GovernanceState, Strategy } from '../types'
+import { fetchAllStrategies, type ApiStrategyListItem } from '../services'
+
+type ApiStatus = ApiStrategyListItem['status']
 
 // ── Value colour helpers ──────────────────────────────────────────────────────
 
-function sharpeColor(v: number, state: GovernanceState): string {
-  if (state === 'research' || state === 'proposed') return 'var(--text2)'
+function sharpeColor(v: number, status: ApiStatus): string {
+  if (status === 'research' || status === 'off') return 'var(--text2)'
   return v >= 1.5 ? 'var(--accent)' : 'var(--yellow)'
 }
 
-function cagrColor(v: number, state: GovernanceState): string {
-  if (state === 'research' || state === 'proposed') return 'var(--text2)'
-  return v >= 15 ? 'var(--accent)' : 'var(--yellow)'
+function returnColor(v: number, status: ApiStatus): string {
+  if (status === 'research' || status === 'off') return 'var(--text2)'
+  return v >= 0.15 ? 'var(--accent)' : 'var(--yellow)'
 }
 
-function maxDDColor(v: number): string {
-  const abs = Math.abs(v)
-  if (abs <= 10) return 'var(--text)'
-  if (abs <= 13) return 'var(--yellow)'
+// max_drawdown arrives as a fraction (e.g. -0.12 = -12%)
+function maxDDColor(fraction: number): string {
+  const pct = Math.abs(fraction) * 100
+  if (pct <= 10) return 'var(--text)'
+  if (pct <= 13) return 'var(--yellow)'
   return 'var(--red)'
 }
 
 // ── Per-card derived display ──────────────────────────────────────────────────
 
-function isUnderperforming(s: Strategy) {
-  return s.governanceState === 'live' && s.sharpe < 1.0
+function isUnderperforming(s: ApiStrategyListItem): boolean {
+  return s.status === 'live' && s.sharpe_ratio < 1.0
 }
 
-function headerBadge(s: Strategy): { variant: BadgeVariant; label: string } {
-  if (s.governanceState === 'live') {
+function headerBadge(s: ApiStrategyListItem): { variant: BadgeVariant; label: string } {
+  if (s.status === 'live') {
     return isUnderperforming(s)
       ? { variant: 'yellow', label: 'Watch' }
-      : { variant: 'green', label: 'Live' }
+      : { variant: 'green',  label: 'Live' }
   }
-  const MAP: Record<GovernanceState, { variant: BadgeVariant; label: string }> = {
-    paper:    { variant: 'blue',   label: 'Paper' },
+  const MAP: Record<ApiStatus, { variant: BadgeVariant; label: string }> = {
+    paper:    { variant: 'blue',   label: 'Paper'    },
     research: { variant: 'purple', label: 'Research' },
-    proposed: { variant: 'gray',   label: 'Proposed' },
-    rejected: { variant: 'red',    label: 'Rejected' },
-    retired:  { variant: 'gray',   label: 'Retired' },
-    live:     { variant: 'green',  label: 'Live' },
+    off:      { variant: 'gray',   label: 'Off'      },
+    live:     { variant: 'green',  label: 'Live'     },
   }
-  return MAP[s.governanceState]
+  return MAP[s.status]
 }
 
-function sparklineColor(s: Strategy): string {
-  if (s.governanceState === 'live')     return isUnderperforming(s) ? 'var(--yellow)' : 'var(--accent)'
-  if (s.governanceState === 'paper')    return 'var(--blue)'
-  if (s.governanceState === 'research') return 'var(--purple)'
-  return 'var(--text3)'
-}
-
-function sparklineHex(s: Strategy): string {
-  if (s.governanceState === 'live')     return isUnderperforming(s) ? '#E8A838' : '#00E5A0'
-  if (s.governanceState === 'paper')    return '#3B9EFF'
-  if (s.governanceState === 'research') return '#9B72FF'
+function sparklineHex(s: ApiStrategyListItem): string {
+  if (s.status === 'live')     return isUnderperforming(s) ? '#E8A838' : '#00E5A0'
+  if (s.status === 'paper')    return '#3B9EFF'
+  if (s.status === 'research') return '#9B72FF'
   return '#4A5568'
 }
 
-function bottomBadge(s: Strategy): { variant: BadgeVariant; label: string } {
-  if (s.governanceState === 'live') {
+function bottomBadge(s: ApiStrategyListItem): { variant: BadgeVariant; label: string } {
+  if (s.status === 'live') {
     return isUnderperforming(s)
       ? { variant: 'yellow', label: '⚠ Underperforming' }
-      : { variant: 'green',  label: `Stage ${s.stage} Passed` }
+      // TODO: no simulation stage field on GET /strategies — showing generic label
+      : { variant: 'green',  label: 'Live Approved' }
   }
-  if (s.governanceState === 'paper')    return { variant: 'blue',   label: 'Paper / 30d req.' }
-  if (s.governanceState === 'research') return { variant: 'purple', label: 'Simulation only' }
-  if (s.governanceState === 'proposed') return { variant: 'gray',   label: 'Proposed' }
-  return { variant: 'gray', label: s.governanceState }
+  if (s.status === 'paper')    return { variant: 'blue',   label: 'Paper / 30d req.' }
+  if (s.status === 'research') return { variant: 'purple', label: 'Simulation only'  }
+  return { variant: 'gray', label: 'Off' }
 }
 
 type BtnStyle = 'ghost' | 'primary' | 'danger'
-function actionButtons(s: Strategy): { label: string; style: BtnStyle }[] {
+
+function actionButtons(s: ApiStrategyListItem): { label: string; style: BtnStyle }[] {
   const detail = { label: 'Detail', style: 'ghost' as BtnStyle }
-  if (s.governanceState === 'live') {
+  if (s.status === 'live') {
     return isUnderperforming(s)
       ? [detail, { label: 'Demote',  style: 'danger'  }]
       : [detail, { label: 'Pause',   style: 'ghost'   }]
   }
-  if (s.governanceState === 'paper')    return [detail, { label: 'Promote', style: 'primary' }]
-  if (s.governanceState === 'research') return [detail, { label: 'Reject',  style: 'ghost'   }]
+  if (s.status === 'paper')    return [detail, { label: 'Promote', style: 'primary' }]
+  if (s.status === 'research') return [detail, { label: 'Reject',  style: 'ghost'   }]
   return [detail]
-}
-
-function allocLabel(s: Strategy): string {
-  if (s.allocation == null) return 'Paper'
-  return `$${(s.allocation / 1000).toFixed(0)}k`
 }
 
 // ── Sparkline SVG ─────────────────────────────────────────────────────────────
 
-function SparklineChart({ strategy, selected }: { strategy: Strategy; selected: boolean }) {
-  const data = strategy.sparkline
+// TODO: no sparkline/equity-history endpoint for individual strategies — showing flat placeholder
+const FLAT_SPARKLINE = Array.from<number>({ length: 12 }, () => 18)
+
+function SparklineChart({
+  strategy,
+  selected,
+}: {
+  strategy: ApiStrategyListItem
+  selected: boolean
+}) {
+  const data = FLAT_SPARKLINE
   const W = 200
   const H = 36
   const n = data.length
   const step = W / (n - 1)
   const hex = sparklineHex(strategy)
-  const gradId = `sp-${strategy.id}`
+  const gradId = `sp-${strategy.strategy_id}`
 
   const linePts = data.map((y, i) => `${(i * step).toFixed(1)},${y}`).join(' L')
   const linePath = `M${linePts}`
-  // fill: close path to bottom-left corner
   const fillPath = `${linePath} L${W},${H} L0,${H} Z`
 
   return (
@@ -112,8 +110,8 @@ function SparklineChart({ strategy, selected }: { strategy: Strategy; selected: 
       {selected && (
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={hex} stopOpacity={0.3} />
-            <stop offset="100%" stopColor={hex} stopOpacity={0} />
+            <stop offset="0%"   stopColor={hex} stopOpacity={0.3} />
+            <stop offset="100%" stopColor={hex} stopOpacity={0}   />
           </linearGradient>
         </defs>
       )}
@@ -141,31 +139,50 @@ function StrategyCard({
   selected,
   onToggle,
 }: {
-  strategy: Strategy
+  strategy: ApiStrategyListItem
   selected: boolean
   onToggle: (id: string) => void
 }) {
-  const hb    = headerBadge(s)
-  const bb    = bottomBadge(s)
-  const btns  = actionButtons(s)
-  const isRes = s.governanceState === 'research' || s.governanceState === 'proposed'
+  const hb   = headerBadge(s)
+  const bb   = bottomBadge(s)
+  const btns = actionButtons(s)
+  const isResearch = s.status === 'research'
+
+  const returnPct  = Number(s.current_return) * 100
+  const maxDDPct   = Math.abs(Number(s.max_drawdown)) * 100
+  const winRatePct = Math.round(Number(s.win_rate) * 100)
 
   const row1 = [
-    { label: 'Sharpe',  value: s.sharpe.toFixed(2),    color: sharpeColor(s.sharpe, s.governanceState) },
-    { label: 'CAGR',    value: `+${s.cagr}%`,          color: cagrColor(s.cagr, s.governanceState) },
-    { label: 'Max DD',  value: `${s.maxDrawdown}%`,    color: maxDDColor(s.maxDrawdown) },
+    {
+      label: 'Sharpe',
+      value: Number(s.sharpe_ratio).toFixed(2),
+      color: sharpeColor(Number(s.sharpe_ratio), s.status),
+    },
+    {
+      label: 'Return',
+      value: `${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(1)}%`,
+      color: returnColor(Number(s.current_return), s.status),
+    },
+    {
+      label: 'Max DD',
+      value: `-${maxDDPct.toFixed(1)}%`,
+      color: maxDDColor(Number(s.max_drawdown)),
+    },
   ]
 
-  const row2 = isRes
+  const row2 = isResearch
     ? [
-        { label: 'Stage',   value: `Stage ${s.stage}` },
-        { label: 'Runs',    value: String(s.trades30d) },
-        { label: 'Dataset', value: 'v43' },
+        // TODO: no simulation stage field on GET /strategies
+        { label: 'Stage',   value: '—'                    },
+        { label: 'Runs',    value: String(s.trade_count)  },
+        // TODO: no active dataset version from GET /strategies
+        { label: 'Dataset', value: '—'                    },
       ]
     : [
-        { label: 'Win Rate',    value: `${s.winRate}%` },
-        { label: 'Trades (30d)', value: String(s.trades30d) },
-        { label: 'Allocation',  value: allocLabel(s) },
+        { label: 'Win Rate',     value: `${winRatePct}%`          },
+        { label: 'Trades (30d)', value: String(s.trade_count)      },
+        // TODO: no allocation field on GET /strategies (only available on GET /strategies/active)
+        { label: 'Allocation',   value: '—'                        },
       ]
 
   return (
@@ -176,23 +193,23 @@ function StrategyCard({
         border:       `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
         borderRadius: 6,
       }}
-      onMouseEnter={(e) => {
+      onMouseEnter={e => {
         if (!selected) (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border2)'
       }}
-      onMouseLeave={(e) => {
+      onMouseLeave={e => {
         if (!selected) (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'
       }}
-      onClick={() => onToggle(s.id)}
+      onClick={() => onToggle(s.strategy_id)}
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[13px] font-medium text-[var(--text)]">{s.name}</span>
+        <span className="text-[13px] font-medium text-[var(--text)]">{s.display_name}</span>
         <StatusBadge variant={hb.variant}>{hb.label}</StatusBadge>
       </div>
 
       {/* ID + type */}
       <div className="font-mono text-[10px] text-[var(--text3)] mb-3">
-        {s.id} · {s.type} · Equity
+        {s.strategy_id} · {s.strategy_type} · Equity
       </div>
 
       {/* Metrics row 1 */}
@@ -214,7 +231,7 @@ function StrategyCard({
             <div className="font-mono text-[9px] text-[var(--text3)] uppercase tracking-[0.1em]">{label}</div>
             <div
               className="font-mono font-medium mt-0.5 text-[var(--text)]"
-              style={{ fontSize: isRes ? 12 : 14 }}
+              style={{ fontSize: isResearch ? 12 : 14 }}
             >
               {value}
             </div>
@@ -228,7 +245,7 @@ function StrategyCard({
       {/* Bottom row */}
       <div className="flex items-center justify-between mt-2">
         <StatusBadge variant={bb.variant}>{bb.label}</StatusBadge>
-        <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex gap-2" onClick={e => e.stopPropagation()}>
           {btns.map(({ label, style }) => (
             <button key={label} className={cn(BTN_BASE, BTN_STYLES[style])}>
               {label}
@@ -240,32 +257,68 @@ function StrategyCard({
   )
 }
 
+// ── Skeleton card ─────────────────────────────────────────────────────────────
+
+function SkeletonCard() {
+  return (
+    <div
+      className="rounded-md p-4 animate-pulse"
+      style={{ background: 'var(--surface2)', border: '1px solid var(--border)', minHeight: 220 }}
+    >
+      <div className="flex justify-between items-center mb-1">
+        <div className="h-4 rounded w-1/2" style={{ background: 'var(--border2)' }} />
+        <div className="h-4 rounded w-12" style={{ background: 'var(--border2)' }} />
+      </div>
+      <div className="h-3 rounded w-1/3 mb-4" style={{ background: 'var(--border2)' }} />
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="h-8 rounded" style={{ background: 'var(--border)' }} />
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="h-8 rounded" style={{ background: 'var(--border)' }} />
+        ))}
+      </div>
+      <div className="h-9 rounded mb-2" style={{ background: 'var(--border)' }} />
+      <div className="flex justify-between">
+        <div className="h-5 rounded w-20" style={{ background: 'var(--border2)' }} />
+        <div className="h-5 rounded w-24" style={{ background: 'var(--border2)' }} />
+      </div>
+    </div>
+  )
+}
+
 // ── Comparison table ──────────────────────────────────────────────────────────
 
-function govLabel(s: Strategy): { variant: BadgeVariant; label: string } {
-  if (s.governanceState === 'live') {
+function govLabel(s: ApiStrategyListItem): { variant: BadgeVariant; label: string } {
+  if (s.status === 'live') {
     return isUnderperforming(s)
-      ? { variant: 'yellow', label: 'Under Review' }
-      : { variant: 'green',  label: 'Live Approved' }
+      ? { variant: 'yellow', label: 'Under Review'   }
+      : { variant: 'green',  label: 'Live Approved'  }
   }
-  if (s.governanceState === 'paper')    return { variant: 'blue',   label: 'Paper Approved' }
-  if (s.governanceState === 'research') return { variant: 'purple', label: 'Research' }
-  return { variant: 'gray', label: s.governanceState }
+  if (s.status === 'paper')    return { variant: 'blue',   label: 'Paper Approved' }
+  if (s.status === 'research') return { variant: 'purple', label: 'Research'       }
+  return { variant: 'gray', label: 'Off' }
 }
 
-function stageLabel(s: Strategy): { variant: BadgeVariant; label: string } {
-  if (s.governanceState === 'paper') return { variant: 'blue',  label: 'Paper' }
-  return { variant: 'green', label: `Stage ${s.stage}` }
-}
+function ComparisonTable({
+  strategies,
+  selectedIds,
+}: {
+  strategies: ApiStrategyListItem[]
+  selectedIds: Set<string>
+}) {
+  const selected = strategies.filter(s => selectedIds.has(s.strategy_id))
 
-function ComparisonTable({ selectedIds }: { selectedIds: Set<string> }) {
-  const selected = mockStrategies.filter(s => selectedIds.has(s.id))
+  const title =
+    selected.length === 0
+      ? 'Strategy Comparison'
+      : selected.length === 1
+      ? `Strategy Comparison — ${selected[0].display_name}`
+      : `Strategy Comparison — ${selected.map(s => s.display_name).join(' vs ')}`
 
-  const title = selected.length === 0
-    ? 'Strategy Comparison'
-    : selected.length === 1
-    ? `Strategy Comparison — ${selected[0].name}`
-    : `Strategy Comparison — Selected: ${selected.map(s => s.name).join(' vs ')}`
+  const tdBorder: React.CSSProperties = { borderBottom: '1px solid var(--border)' }
 
   return (
     <div
@@ -290,17 +343,17 @@ function ComparisonTable({ selectedIds }: { selectedIds: Set<string> }) {
               <tr>
                 <th
                   className="font-mono text-[9px] font-medium text-[var(--text3)] uppercase tracking-[0.1em] text-left pb-2.5 pr-4"
-                  style={{ width: 160, borderBottom: '1px solid var(--border)' }}
+                  style={{ width: 160, ...tdBorder }}
                 >
                   Metric
                 </th>
                 {selected.map(s => (
                   <th
-                    key={s.id}
+                    key={s.strategy_id}
                     className="font-mono text-[9px] font-medium text-[var(--text3)] uppercase tracking-[0.1em] text-left pb-2.5 pr-4"
-                    style={{ borderBottom: '1px solid var(--border)' }}
+                    style={tdBorder}
                   >
-                    {s.name}
+                    {s.display_name}
                   </th>
                 ))}
               </tr>
@@ -308,73 +361,88 @@ function ComparisonTable({ selectedIds }: { selectedIds: Set<string> }) {
             <tbody>
               {/* Sharpe */}
               <tr>
-                <td className="font-mono text-[11px] text-[var(--text2)] py-2.5 pr-4" style={{ borderBottom: '1px solid var(--border)' }}>
+                <td className="font-mono text-[11px] text-[var(--text2)] py-2.5 pr-4" style={tdBorder}>
                   Sharpe Ratio
                 </td>
-                {selected.map((s, i, arr) => (
-                  <td
-                    key={s.id}
-                    className="font-mono text-[13px] py-2.5 pr-4"
-                    style={{
-                      color: sharpeColor(s.sharpe, s.governanceState),
-                      borderBottom: '1px solid var(--border)',
-                    }}
-                  >
-                    {s.sharpe.toFixed(2)}
-                  </td>
-                ))}
-              </tr>
-              {/* CAGR */}
-              <tr>
-                <td className="font-mono text-[11px] text-[var(--text2)] py-2.5 pr-4" style={{ borderBottom: '1px solid var(--border)' }}>
-                  CAGR
-                </td>
-                {selected.map(s => (
-                  <td key={s.id} className="font-mono text-[13px] text-[var(--text)] py-2.5 pr-4" style={{ borderBottom: '1px solid var(--border)' }}>
-                    +{s.cagr}%
-                  </td>
-                ))}
-              </tr>
-              {/* Max Drawdown */}
-              <tr>
-                <td className="font-mono text-[11px] text-[var(--text2)] py-2.5 pr-4" style={{ borderBottom: '1px solid var(--border)' }}>
-                  Max Drawdown
-                </td>
                 {selected.map(s => (
                   <td
-                    key={s.id}
+                    key={s.strategy_id}
                     className="font-mono text-[13px] py-2.5 pr-4"
-                    style={{ color: maxDDColor(s.maxDrawdown), borderBottom: '1px solid var(--border)' }}
+                    style={{ color: sharpeColor(Number(s.sharpe_ratio), s.status), ...tdBorder }}
                   >
-                    {s.maxDrawdown}%
+                    {Number(s.sharpe_ratio).toFixed(2)}
                   </td>
                 ))}
               </tr>
-              {/* Win Rate */}
+
+              {/* Return — replaces CAGR; GET /strategies has current_return, not annualised CAGR */}
               <tr>
-                <td className="font-mono text-[11px] text-[var(--text2)] py-2.5 pr-4" style={{ borderBottom: '1px solid var(--border)' }}>
-                  Win Rate
-                </td>
-                {selected.map(s => (
-                  <td key={s.id} className="font-mono text-[13px] text-[var(--text)] py-2.5 pr-4" style={{ borderBottom: '1px solid var(--border)' }}>
-                    {s.winRate}%
-                  </td>
-                ))}
-              </tr>
-              {/* Simulation Stage */}
-              <tr>
-                <td className="font-mono text-[11px] text-[var(--text2)] py-2.5 pr-4" style={{ borderBottom: '1px solid var(--border)' }}>
-                  Simulation Stage
+                <td className="font-mono text-[11px] text-[var(--text2)] py-2.5 pr-4" style={tdBorder}>
+                  Return
                 </td>
                 {selected.map(s => {
-                  const sl = stageLabel(s)
+                  const pct = Number(s.current_return) * 100
                   return (
-                    <td key={s.id} className="py-2.5 pr-4" style={{ borderBottom: '1px solid var(--border)' }}>
-                      <StatusBadge variant={sl.variant}>{sl.label}</StatusBadge>
+                    <td
+                      key={s.strategy_id}
+                      className="font-mono text-[13px] py-2.5 pr-4"
+                      style={{ color: returnColor(Number(s.current_return), s.status), ...tdBorder }}
+                    >
+                      {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%
                     </td>
                   )
                 })}
               </tr>
+
+              {/* Max Drawdown */}
+              <tr>
+                <td className="font-mono text-[11px] text-[var(--text2)] py-2.5 pr-4" style={tdBorder}>
+                  Max Drawdown
+                </td>
+                {selected.map(s => (
+                  <td
+                    key={s.strategy_id}
+                    className="font-mono text-[13px] py-2.5 pr-4"
+                    style={{ color: maxDDColor(Number(s.max_drawdown)), ...tdBorder }}
+                  >
+                    -{(Math.abs(Number(s.max_drawdown)) * 100).toFixed(1)}%
+                  </td>
+                ))}
+              </tr>
+
+              {/* Win Rate */}
+              <tr>
+                <td className="font-mono text-[11px] text-[var(--text2)] py-2.5 pr-4" style={tdBorder}>
+                  Win Rate
+                </td>
+                {selected.map(s => (
+                  <td
+                    key={s.strategy_id}
+                    className="font-mono text-[13px] text-[var(--text)] py-2.5 pr-4"
+                    style={tdBorder}
+                  >
+                    {Math.round(Number(s.win_rate) * 100)}%
+                  </td>
+                ))}
+              </tr>
+
+              {/* Simulation Stage — deferred */}
+              <tr>
+                <td className="font-mono text-[11px] text-[var(--text2)] py-2.5 pr-4" style={tdBorder}>
+                  Simulation Stage
+                </td>
+                {selected.map(s => (
+                  // TODO: no simulation stage field on GET /strategies
+                  <td
+                    key={s.strategy_id}
+                    className="font-mono text-[13px] text-[var(--text3)] py-2.5 pr-4"
+                    style={tdBorder}
+                  >
+                    —
+                  </td>
+                ))}
+              </tr>
+
               {/* Governance State */}
               <tr>
                 <td className="font-mono text-[11px] text-[var(--text2)] py-2.5 pr-4">
@@ -383,7 +451,7 @@ function ComparisonTable({ selectedIds }: { selectedIds: Set<string> }) {
                 {selected.map(s => {
                   const gl = govLabel(s)
                   return (
-                    <td key={s.id} className="py-2.5 pr-4">
+                    <td key={s.strategy_id} className="py-2.5 pr-4">
                       <StatusBadge variant={gl.variant}>{gl.label}</StatusBadge>
                     </td>
                   )
@@ -399,21 +467,26 @@ function ComparisonTable({ selectedIds }: { selectedIds: Set<string> }) {
 
 // ── Filter config ─────────────────────────────────────────────────────────────
 
-type FilterKey = 'all' | 'live' | 'paper' | 'research' | 'retired'
+type FilterKey = 'all' | ApiStatus
 
 const FILTERS: { key: FilterKey; label: string; variant: BadgeVariant; dot?: boolean }[] = [
-  { key: 'all',      label: 'All',      variant: 'gray'   },
+  { key: 'all',      label: 'All',      variant: 'gray'             },
   { key: 'live',     label: 'Live',     variant: 'green', dot: true },
-  { key: 'paper',    label: 'Paper',    variant: 'blue'   },
-  { key: 'research', label: 'Research', variant: 'purple' },
-  { key: 'retired',  label: 'Retired',  variant: 'gray'   },
+  { key: 'paper',    label: 'Paper',    variant: 'blue'             },
+  { key: 'research', label: 'Research', variant: 'purple'           },
+  { key: 'off',      label: 'Off',      variant: 'gray'             },
 ]
 
 // ── StrategyLab ───────────────────────────────────────────────────────────────
 
 export default function StrategyLab() {
   const [filter,   setFilter]   = useState<FilterKey>('all')
-  const [selected, setSelected] = useState<Set<string>>(new Set(['STR-00142']))
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  const { data: strategies = [], isLoading, isError } = useQuery({
+    queryKey: ['strategies'],
+    queryFn: fetchAllStrategies,
+  })
 
   function toggleSelected(id: string) {
     setSelected(prev => {
@@ -424,8 +497,8 @@ export default function StrategyLab() {
   }
 
   const visible = filter === 'all'
-    ? mockStrategies
-    : mockStrategies.filter(s => s.governanceState === filter)
+    ? strategies
+    : strategies.filter(s => s.status === filter)
 
   return (
     <div className="p-6">
@@ -470,23 +543,43 @@ export default function StrategyLab() {
 
       {/* Strategy grid */}
       <div className="grid grid-cols-3 gap-4 mb-4">
-        {visible.map(s => (
+        {isLoading && [...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
+
+        {isError && (
+          <div
+            className="col-span-3 font-mono text-[11px] p-6 text-center rounded-lg"
+            style={{ color: 'var(--red)', background: 'var(--surface)', border: '1px solid var(--border)' }}
+          >
+            Failed to load strategies. Check backend connection.
+          </div>
+        )}
+
+        {!isLoading && !isError && visible.length === 0 && (
+          <div
+            className="col-span-3 font-mono text-[11px] p-6 text-center rounded-lg"
+            style={{ color: 'var(--text3)', background: 'var(--surface)', border: '1px solid var(--border)' }}
+          >
+            No strategies match this filter.
+          </div>
+        )}
+
+        {!isLoading && !isError && visible.map(s => (
           <StrategyCard
-            key={s.id}
+            key={s.strategy_id}
             strategy={s}
-            selected={selected.has(s.id)}
+            selected={selected.has(s.strategy_id)}
             onToggle={toggleSelected}
           />
         ))}
 
-        {/* Placeholder card — only shown when filter is 'all' */}
-        {filter === 'all' && (
+        {/* Placeholder card — only shown when filter is 'all' and data loaded */}
+        {!isLoading && !isError && filter === 'all' && (
           <div
             className="flex flex-col items-center justify-center rounded-md p-4 cursor-pointer opacity-50"
             style={{
               minHeight: 200,
-              background: 'var(--surface2)',
-              border: '1px dashed var(--border)',
+              background:   'var(--surface2)',
+              border:       '1px dashed var(--border)',
               borderRadius: 6,
             }}
           >
@@ -497,7 +590,9 @@ export default function StrategyLab() {
       </div>
 
       {/* Comparison table */}
-      <ComparisonTable selectedIds={selected} />
+      {!isLoading && !isError && (
+        <ComparisonTable strategies={strategies} selectedIds={selected} />
+      )}
     </div>
   )
 }
