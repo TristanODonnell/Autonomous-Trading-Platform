@@ -39,11 +39,17 @@ from autonomous_trading_platform.interfaces.rest.routes.strategies_routes import
 from autonomous_trading_platform.interfaces.rest.routes.system_routes import (
     router as system_router,
 )
-
+from fastapi.middleware.cors import CORSMiddleware
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Autonomous Trading Platform", version="1.0.0")
-
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     # last add_middleware = outermost layer = first to run on each request
     # order: RequestID → Logging → JWT → Deprecation → route handler
     app.add_middleware(DeprecationMiddleware)
