@@ -108,6 +108,7 @@ class StrategyAllocationService:
             },
         )
         self._session.flush()
+        self._session.commit()
 
         return StrategyAllocationUpdateResult(
             strategy_id=strategy_id,
