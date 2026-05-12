@@ -252,14 +252,97 @@ class RuntimeSoakVerificationService:
         window_start: datetime,
         window_end: datetime,
     ) -> RuntimeSoakCheckResult:
+        latest_raw_bars_dataset = self._repository.get_latest_raw_bars_dataset()
+        latest_feature_dataset = self._repository.get_latest_feature_dataset()
+        latest_trading_manifest = self._repository.get_latest_trading_manifest()
+
+        threshold_seconds = int(self._freshness_lag_threshold.total_seconds())
+        raw_bars_lag_seconds = _lag_seconds(
+            getattr(latest_raw_bars_dataset, "created_at", None),
+            reference_time=window_end,
+        )
+        feature_dataset_lag_seconds = _lag_seconds(
+            getattr(latest_feature_dataset, "created_at", None),
+            reference_time=window_end,
+        )
+        trading_manifest_lag_seconds = _lag_seconds(
+            getattr(latest_trading_manifest, "created_at", None),
+            reference_time=window_end,
+        )
+
+        missing_artifacts: list[str] = []
+        stale_artifacts: list[str] = []
+
+        if latest_raw_bars_dataset is None:
+            missing_artifacts.append("raw_bars_dataset")
+        elif raw_bars_lag_seconds is not None and raw_bars_lag_seconds > threshold_seconds:
+            stale_artifacts.append("raw_bars_dataset")
+
+        if latest_feature_dataset is None:
+            missing_artifacts.append("feature_dataset")
+        elif (
+            feature_dataset_lag_seconds is not None
+            and feature_dataset_lag_seconds > threshold_seconds
+        ):
+            stale_artifacts.append("feature_dataset")
+
+        if latest_trading_manifest is None:
+            missing_artifacts.append("trading_manifest")
+        elif (
+            trading_manifest_lag_seconds is not None
+            and trading_manifest_lag_seconds > threshold_seconds
+        ):
+            stale_artifacts.append("trading_manifest")
+
+        metadata = {
+            "reference_time": window_end.isoformat(),
+            "freshness_lag_threshold_seconds": threshold_seconds,
+            "missing_artifacts": missing_artifacts,
+            "stale_artifacts": stale_artifacts,
+            "raw_bars_dataset": (
+                {
+                    "dataset_version_id": latest_raw_bars_dataset.dataset_version_id,
+                    "created_at": latest_raw_bars_dataset.created_at.isoformat(),
+                    "validation_status": latest_raw_bars_dataset.validation_status,
+                    "lag_seconds": raw_bars_lag_seconds,
+                }
+                if latest_raw_bars_dataset is not None
+                else None
+            ),
+            "feature_dataset": (
+                {
+                    "dataset_version_id": latest_feature_dataset.dataset_version_id,
+                    "created_at": latest_feature_dataset.created_at.isoformat(),
+                    "validation_status": latest_feature_dataset.validation_status,
+                    "lag_seconds": feature_dataset_lag_seconds,
+                }
+                if latest_feature_dataset is not None
+                else None
+            ),
+            "trading_manifest": (
+                {
+                    "run_id": str(latest_trading_manifest.run_id),
+                    "created_at": latest_trading_manifest.created_at.isoformat(),
+                    "status": latest_trading_manifest.status,
+                    "last_successful_step": latest_trading_manifest.last_successful_step,
+                    "lag_seconds": trading_manifest_lag_seconds,
+                }
+                if latest_trading_manifest is not None
+                else None
+            ),
+        }
+
+        if missing_artifacts or stale_artifacts:
+            return self._failed(
+                RuntimeSoakCheckName.DATA_FRESHNESS,
+                "Runtime soak verification found missing or stale runtime data artifacts.",
+                metadata,
+            )
+
         return self._passed(
             RuntimeSoakCheckName.DATA_FRESHNESS,
-            "Data freshness check placeholder passed.",
-            {
-                "freshness_lag_threshold_seconds": int(
-                    self._freshness_lag_threshold.total_seconds()
-                ),
-            },
+            "Latest bars, features, and trading manifests are fresh enough for soak verification.",
+            metadata,
         )
 
     def _check_stale_running_state(
@@ -714,3 +797,13 @@ def _position_quantity_drifts(
 def _position_quantities_by_symbol(snapshot: Any) -> dict[str, Decimal]:
     positions = getattr(snapshot, "positions", [])
     return {item.symbol: Decimal(item.quantity) for item in positions}
+
+
+def _lag_seconds(
+    artifact_time: datetime | None,
+    *,
+    reference_time: datetime,
+) -> int | None:
+    if artifact_time is None:
+        return None
+    return max(0, int((reference_time - artifact_time).total_seconds()))

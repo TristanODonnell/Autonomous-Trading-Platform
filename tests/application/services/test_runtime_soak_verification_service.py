@@ -10,9 +10,11 @@ from autonomous_trading_platform.application.services.runtime_soak_verification_
     RuntimeSoakVerificationService,
 )
 from autonomous_trading_platform.contracts.common.enums import (
+    BarInterval,
     OrderSource,
     OrderStatus,
     OrderType,
+    PriceBasis,
     Side,
     TimeInForce,
 )
@@ -28,6 +30,10 @@ from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
 from autonomous_trading_platform.storage.sor.models.audit_logs import AuditLogRow
 from autonomous_trading_platform.storage.sor.models.broker_orders import BrokerOrder
 from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
+from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from autonomous_trading_platform.storage.sor.models.feature_dataset_versions import (
+    FeatureDatasetVersions,
+)
 from autonomous_trading_platform.storage.sor.models.fills import Fill
 from autonomous_trading_platform.storage.sor.models.order_intents import OrderIntents
 from autonomous_trading_platform.storage.sor.models.position_snapshot_items import (
@@ -280,6 +286,67 @@ def _seed_cash_snapshot(
     return row
 
 
+def _seed_raw_bars_dataset(
+    db_session: Session,
+    *,
+    created_at: datetime,
+    dataset_version_id: str = "raw-bars-v1",
+) -> DatasetVersions:
+    persisted_created_at = _sqlite_round_trip_utc(created_at)
+    row = DatasetVersions(
+        dataset_version_id=dataset_version_id,
+        dataset_name="market_bars",
+        created_at=persisted_created_at,
+        source="alpaca",
+        price_basis=PriceBasis.RAW,
+        interval=BarInterval.FIVE_MIN,
+        schema_version="v1",
+        symbol_coverage=1,
+        date_coverage_start=created_at.date(),
+        date_coverage_end=created_at.date(),
+        validation_status="validated",
+        checksum="checksum",
+        source_dataset_version=None,
+        source_manifest={},
+        metadata_json=None,
+    )
+    db_session.add(row)
+    db_session.flush()
+    return row
+
+
+def _seed_feature_dataset(
+    db_session: Session,
+    *,
+    created_at: datetime,
+    dataset_version_id: str = "feature-v1",
+    source_dataset_version: str = "raw-bars-v1",
+) -> FeatureDatasetVersions:
+    persisted_created_at = _sqlite_round_trip_utc(created_at)
+    row = FeatureDatasetVersions(
+        dataset_version_id=dataset_version_id,
+        feature_name="returns",
+        dataset_name="feature_dataset",
+        created_at=persisted_created_at,
+        schema_version="v1",
+        source_dataset_version=source_dataset_version,
+        underlying_price_basis=PriceBasis.RAW,
+        computation_parameters={},
+        storage_path="/tmp/features",
+        symbol_coverage=1,
+        date_coverage_start=created_at.date(),
+        date_coverage_end=created_at.date(),
+        validation_status="validated",
+        checksum="checksum",
+        source_manifest={},
+        metadata_json=None,
+        computation_code_version="dev",
+    )
+    db_session.add(row)
+    db_session.flush()
+    return row
+
+
 def _seed_position_snapshot(
     db_session: Session,
     *,
@@ -377,6 +444,11 @@ def _seed_risk_snapshot(
     db_session.add(row)
     db_session.flush()
     return row
+
+
+def _sqlite_round_trip_utc(timestamp: datetime) -> datetime:
+    local_offset = timestamp.astimezone().utcoffset() or timedelta(0)
+    return timestamp + local_offset
 
 
 def test_verify_returns_runtime_soak_report(db_session: Session) -> None:
@@ -521,6 +593,14 @@ def test_all_passed_checks_produce_passed_report(
             "Cash/equity consistency forced to pass for passed-report coverage.",
         ),
     )
+    monkeypatch.setattr(
+        service,
+        "_check_data_freshness",
+        lambda *, window_start, window_end: service._passed(
+            RuntimeSoakCheckName.DATA_FRESHNESS,
+            "Data freshness forced to pass for passed-report coverage.",
+        ),
+    )
 
     report = service.verify(
         window_start=window_start,
@@ -619,6 +699,89 @@ def test_stale_running_job_fails_stale_running_state_check(
     assert check.status == RuntimeSoakStatus.FAILED
     assert check.check_name == RuntimeSoakCheckName.STALE_RUNNING_STATE
     assert check.metadata["stale_runtime_job_names"] == ["feature_pipeline_cycle"]
+
+
+def test_data_freshness_passes_when_all_artifacts_are_recent(
+    db_session: Session,
+) -> None:
+    service = _build_service(db_session)
+    window_start, window_end = _window()
+    recent_created_at = window_end - timedelta(minutes=5)
+    _seed_raw_bars_dataset(db_session, created_at=recent_created_at)
+    _seed_feature_dataset(db_session, created_at=recent_created_at)
+    _seed_completed_trading_manifest(db_session, created_at=recent_created_at)
+
+    check = service._check_data_freshness(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.PASSED
+    assert check.metadata["missing_artifacts"] == []
+    assert check.metadata["stale_artifacts"] == []
+
+
+def test_data_freshness_fails_when_raw_bars_dataset_is_missing(
+    db_session: Session,
+) -> None:
+    service = _build_service(db_session)
+    window_start, window_end = _window()
+    recent_created_at = window_end - timedelta(minutes=5)
+    _seed_feature_dataset(db_session, created_at=recent_created_at)
+    _seed_completed_trading_manifest(db_session, created_at=recent_created_at)
+
+    check = service._check_data_freshness(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.FAILED
+    assert "raw_bars_dataset" in check.metadata["missing_artifacts"]
+
+
+def test_data_freshness_fails_when_feature_dataset_is_stale(
+    db_session: Session,
+) -> None:
+    service = _build_service(db_session)
+    window_start, window_end = _window()
+    _seed_raw_bars_dataset(db_session, created_at=window_end - timedelta(minutes=5))
+    _seed_feature_dataset(db_session, created_at=window_end - timedelta(minutes=30))
+    _seed_completed_trading_manifest(db_session, created_at=window_end - timedelta(minutes=5))
+
+    check = service._check_data_freshness(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.FAILED
+    assert "feature_dataset" in check.metadata["stale_artifacts"]
+
+
+def test_data_freshness_fails_when_trading_manifest_is_stale(
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    service = _build_service(db_session)
+    window_start, window_end = _window()
+    _seed_raw_bars_dataset(db_session, created_at=window_end - timedelta(minutes=5))
+    _seed_feature_dataset(db_session, created_at=window_end - timedelta(minutes=5))
+    stale_manifest = _seed_completed_trading_manifest(
+        db_session,
+        created_at=window_end - timedelta(minutes=30),
+    )
+    monkeypatch.setattr(
+        service._repository,
+        "get_latest_trading_manifest",
+        lambda: stale_manifest,
+    )
+
+    check = service._check_data_freshness(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.FAILED
+    assert "trading_manifest" in check.metadata["stale_artifacts"]
 
 
 def test_order_reconciliation_passes_when_no_issues_exist(db_session: Session) -> None:
