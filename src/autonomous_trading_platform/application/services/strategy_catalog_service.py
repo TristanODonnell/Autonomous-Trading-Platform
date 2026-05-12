@@ -302,7 +302,7 @@ _EXPERIMENT_STATUS_NORMALISE = {
     "complete": "completed",
     "RUNNING": "running",
     "COMPLETED": "completed",
-    "ACTIVE": "running",
+    "ACTIVE": "completed",
     "FAILED": "failed",
     "CANCELLED": "cancelled",
     "PENDING": "pending",
