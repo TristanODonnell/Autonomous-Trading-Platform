@@ -12,9 +12,11 @@ from autonomous_trading_platform.storage.sor.repositories.core.operator_settings
 class OperatorSettingsDTO:
     risk_tolerance: str
     max_drawdown_limit: float
+    max_strategy_drawdown: float
     rebalance_frequency: str
     auto_promote_enabled: bool
     per_strategy_cap: float
+    target_portfolio_volatility: float
     slippage_model: str
     transaction_cost_model: str
 
@@ -102,9 +104,11 @@ class OperatorSettingsService:
         return OperatorSettingsDTO(
             risk_tolerance=row.risk_tolerance,
             max_drawdown_limit=float(row.max_drawdown_limit),
+            max_strategy_drawdown=float(row.max_strategy_drawdown),
             rebalance_frequency=row.rebalance_frequency,
             auto_promote_enabled=row.auto_promote_enabled,
             per_strategy_cap=float(row.per_strategy_cap),
+            target_portfolio_volatility=float(row.target_portfolio_volatility),
             slippage_model=row.slippage_model or "fixed",
             transaction_cost_model=row.transaction_cost_model or "per_share",
         )

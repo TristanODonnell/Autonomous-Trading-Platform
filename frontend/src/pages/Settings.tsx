@@ -216,28 +216,32 @@ function RiskParametersCard() {
     queryFn: fetchOperatorSettings,
   })
 
-  // API-backed — GET/PUT /settings: max_drawdown_limit, per_strategy_cap, risk_tolerance
+  // API-backed — GET/PUT /settings: drawdown limits, capital cap, target volatility, risk tolerance
   const [portfolioDD,   setPortfolioDD]   = useState(10)
+  const [strategyDD,    setStrategyDD]    = useState(12)
   const [maxCapital,    setMaxCapital]    = useState(30)
+  const [targetVol,     setTargetVol]     = useState(15)
   const [riskTolerance, setRiskTolerance] = useState(2)
-
-  // TODO: no max_strategy_drawdown or target_volatility fields on GET/PUT /settings — local only, does not persist
-  const [strategyDD, setStrategyDD] = useState(12)
-  const [targetVol,  setTargetVol]  = useState(15)
 
   useEffect(() => {
     if (!data) return
     setPortfolioDD(Math.round(Number(data.max_drawdown_limit) * 100))
+    setStrategyDD(Math.round(Number(data.max_strategy_drawdown) * 100))
     setMaxCapital(Math.round(Number(data.per_strategy_cap) * 100))
+    setTargetVol(Math.round(Number(data.target_portfolio_volatility) * 100))
     setRiskTolerance(RISK_TO_NUM[data.risk_tolerance])
   }, [data])
 
   const apiPortfolioDD   = data ? Math.round(Number(data.max_drawdown_limit) * 100) : 10
+  const apiStrategyDD    = data ? Math.round(Number(data.max_strategy_drawdown) * 100) : 12
   const apiMaxCapital    = data ? Math.round(Number(data.per_strategy_cap) * 100) : 30
+  const apiTargetVol     = data ? Math.round(Number(data.target_portfolio_volatility) * 100) : 15
   const apiRiskTolerance = data ? RISK_TO_NUM[data.risk_tolerance] : 2
   const isDirty =
     portfolioDD   !== apiPortfolioDD   ||
+    strategyDD    !== apiStrategyDD    ||
     maxCapital    !== apiMaxCapital    ||
+    targetVol     !== apiTargetVol     ||
     riskTolerance !== apiRiskTolerance
 
   const mutation = useMutation({
@@ -247,9 +251,11 @@ function RiskParametersCard() {
 
   function handleSave() {
     mutation.mutate({
-      max_drawdown_limit: portfolioDD / 100,
-      per_strategy_cap:   maxCapital / 100,
-      risk_tolerance:     NUM_TO_RISK[riskTolerance],
+      max_drawdown_limit:          portfolioDD / 100,
+      max_strategy_drawdown:       strategyDD / 100,
+      per_strategy_cap:            maxCapital / 100,
+      target_portfolio_volatility: targetVol / 100,
+      risk_tolerance:              NUM_TO_RISK[riskTolerance],
     })
   }
 
@@ -267,7 +273,6 @@ function RiskParametersCard() {
       </SettingRow>
 
       <SettingRow label="Max Strategy Drawdown" desc="Per-strategy limit before it triggers a warning">
-        {/* TODO: no per-strategy drawdown limit on GET/PUT /settings; value is local-only and does not persist */}
         <Slider min={5} max={25} value={strategyDD} onChange={setStrategyDD} format={v => `${v}%`} />
       </SettingRow>
 
@@ -288,7 +293,6 @@ function RiskParametersCard() {
       </SettingRow>
 
       <SettingRow label="Target Portfolio Volatility" desc="Annualized volatility target for position sizing" last>
-        {/* TODO: no target_volatility field on GET/PUT /settings; value is local-only and does not persist */}
         <Slider min={5} max={30} value={targetVol} onChange={setTargetVol} format={v => `${v}%`} />
       </SettingRow>
     </Card>

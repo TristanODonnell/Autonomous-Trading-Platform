@@ -15,9 +15,11 @@ class OperatorSettingsRow(Base):
 
     risk_tolerance: Mapped[str] = mapped_column(String(16), nullable=False)
     max_drawdown_limit: Mapped[float] = mapped_column(Numeric(6, 4), nullable=False)
+    max_strategy_drawdown: Mapped[float] = mapped_column(Numeric(6, 4), nullable=False)
     rebalance_frequency: Mapped[str] = mapped_column(String(16), nullable=False)
     auto_promote_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
     per_strategy_cap: Mapped[float] = mapped_column(Numeric(6, 4), nullable=False)
+    target_portfolio_volatility: Mapped[float] = mapped_column(Numeric(6, 4), nullable=False)
     slippage_model: Mapped[str | None] = mapped_column(String(32), nullable=True, default="fixed")
     transaction_cost_model: Mapped[str | None] = mapped_column(
         String(32), nullable=True, default="per_share"

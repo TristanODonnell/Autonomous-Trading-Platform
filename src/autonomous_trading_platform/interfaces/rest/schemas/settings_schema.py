@@ -16,9 +16,11 @@ TransactionCostModel = Literal["per_share", "per_trade", "notional_pct"]
 class OperatorSettingsResponse(BaseModel):
     risk_tolerance: RiskTolerance
     max_drawdown_limit: Decimal
+    max_strategy_drawdown: Decimal
     rebalance_frequency: RebalanceFrequency
     auto_promote_enabled: bool
     per_strategy_cap: Decimal
+    target_portfolio_volatility: Decimal
     slippage_model: SlippageModel
     transaction_cost_model: TransactionCostModel
 
@@ -26,9 +28,13 @@ class OperatorSettingsResponse(BaseModel):
 class OperatorSettingsUpdateRequest(BaseModel):
     risk_tolerance: RiskTolerance | None = None
     max_drawdown_limit: Decimal | None = Field(default=None, ge=Decimal("0"), le=Decimal("1"))
+    max_strategy_drawdown: Decimal | None = Field(default=None, ge=Decimal("0"), le=Decimal("1"))
     rebalance_frequency: RebalanceFrequency | None = None
     auto_promote_enabled: bool | None = None
     per_strategy_cap: Decimal | None = Field(default=None, gt=Decimal("0"), le=Decimal("1"))
+    target_portfolio_volatility: Decimal | None = Field(
+        default=None, gt=Decimal("0"), le=Decimal("1")
+    )
     slippage_model: SlippageModel | None = None
     transaction_cost_model: TransactionCostModel | None = None
     reason: str | None = Field(default=None, max_length=500)

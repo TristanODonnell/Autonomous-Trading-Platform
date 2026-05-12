@@ -30,9 +30,11 @@ class OperatorSettingsRepository:
             settings_id=DEFAULT_OPERATOR_SETTINGS_ID,
             risk_tolerance="medium",
             max_drawdown_limit=0.10,
+            max_strategy_drawdown=0.12,
             rebalance_frequency="weekly",
             auto_promote_enabled=False,
             per_strategy_cap=0.25,
+            target_portfolio_volatility=0.15,
             slippage_model="fixed",
             transaction_cost_model="per_share",
         )

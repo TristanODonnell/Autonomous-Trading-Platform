@@ -6,9 +6,11 @@ export type TransactionCostModel = 'per_share' | 'per_trade' | 'notional_pct'
 export interface ApiOperatorSettings {
   risk_tolerance: 'low' | 'medium' | 'high'
   max_drawdown_limit: number
+  max_strategy_drawdown: number
   rebalance_frequency: 'daily' | 'weekly' | 'monthly'
   auto_promote_enabled: boolean
   per_strategy_cap: number
+  target_portfolio_volatility: number
   slippage_model: SlippageModel
   transaction_cost_model: TransactionCostModel
 }
@@ -16,9 +18,11 @@ export interface ApiOperatorSettings {
 export interface ApiOperatorSettingsUpdate {
   risk_tolerance?: 'low' | 'medium' | 'high'
   max_drawdown_limit?: number
+  max_strategy_drawdown?: number
   rebalance_frequency?: 'daily' | 'weekly' | 'monthly'
   auto_promote_enabled?: boolean
   per_strategy_cap?: number
+  target_portfolio_volatility?: number
   slippage_model?: SlippageModel
   transaction_cost_model?: TransactionCostModel
   reason?: string
