@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from autonomous_trading_platform.cli.commands import operations
 from autonomous_trading_platform.cli.main import build_parser
 from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
 from autonomous_trading_platform.contracts.runtime.runtime_soak_verification import (
     RuntimeSoakCheckName,
     RuntimeSoakCheckResult,
@@ -19,6 +20,10 @@ from autonomous_trading_platform.contracts.runtime.runtime_soak_verification imp
 )
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_run_manifest,
+)
+from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from autonomous_trading_platform.storage.sor.models.feature_dataset_versions import (
+    FeatureDatasetVersions,
 )
 from autonomous_trading_platform.storage.sor.models.runtime_job_runs import RuntimeJobRuns
 from autonomous_trading_platform.storage.sor.repositories.core.run_manifests_repository import (
@@ -50,6 +55,7 @@ def _extract_json(output: str) -> dict[str, Any]:
 def _seed_healthy_runtime_window(db_session: Session) -> None:
     window_start = datetime(2026, 5, 8, 12, 0, tzinfo=UTC)
     window_end = datetime(2026, 5, 8, 12, 30, tzinfo=UTC)
+    dataset_created_at = _sqlite_round_trip_utc(window_end - timedelta(minutes=5))
 
     for index, job_name in enumerate(
         (
@@ -87,7 +93,52 @@ def _seed_healthy_runtime_window(db_session: Session) -> None:
     manifest.current_step = "risk_snapshot"
     manifest.last_successful_step = "risk_snapshot"
     RunManifestRepository(db_session).add(manifest)
+    db_session.add(
+        DatasetVersions(
+            dataset_version_id="raw-bars-v1",
+            dataset_name="market_bars",
+            created_at=dataset_created_at,
+            source="alpaca",
+            price_basis=PriceBasis.RAW,
+            interval=BarInterval.FIVE_MIN,
+            schema_version="v1",
+            symbol_coverage=1,
+            date_coverage_start=window_end.date(),
+            date_coverage_end=window_end.date(),
+            validation_status="validated",
+            checksum="checksum",
+            source_dataset_version=None,
+            source_manifest={},
+            metadata_json=None,
+        )
+    )
+    db_session.add(
+        FeatureDatasetVersions(
+            dataset_version_id="feature-v1",
+            feature_name="returns",
+            dataset_name="feature_dataset",
+            created_at=dataset_created_at,
+            schema_version="v1",
+            source_dataset_version="raw-bars-v1",
+            underlying_price_basis=PriceBasis.RAW,
+            computation_parameters={},
+            storage_path="/tmp/features",
+            symbol_coverage=1,
+            date_coverage_start=window_end.date(),
+            date_coverage_end=window_end.date(),
+            validation_status="validated",
+            checksum="checksum",
+            source_manifest={},
+            metadata_json=None,
+            computation_code_version="dev",
+        )
+    )
     db_session.flush()
+
+
+def _sqlite_round_trip_utc(timestamp: datetime) -> datetime:
+    local_offset = timestamp.astimezone().utcoffset() or timedelta(0)
+    return timestamp + local_offset
 
 
 def test_operations_verify_runtime_soak_command_is_registered() -> None:
