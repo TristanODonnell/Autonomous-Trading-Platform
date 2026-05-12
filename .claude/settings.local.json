@@ -43,7 +43,12 @@
       "Bash(python -m alembic upgrade head)",
       "Bash(python -m alembic -c infra/db/alembic.ini upgrade head)",
       "Bash(node_modules/.bin/tsc --noEmit)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(grep -E \"\\(main|app\\)\\\\.py$\")",
+      "Bash(python -c \"from autonomous_trading_platform.contracts.runtime.runtime_snapshot import RuntimeSnapshot; from autonomous_trading_platform.application.services.runtime_snapshot_service import RuntimeSnapshotService; from autonomous_trading_platform.cli.commands.diagnostics import register; print\\('imports OK'\\)\")",
+      "Bash(python -m autonomous_trading_platform.cli.main diagnostics snapshot --help)"
     ]
   }
 }
