@@ -502,7 +502,8 @@ function EnvironmentCard() {
     },
   })
 
-  const currentMode = (controlsState?.trading_mode ?? 'paper') as Environment
+  const rawMode = controlsState?.trading_mode ?? 'paper'
+  const currentMode = (rawMode === 'simulation' ? 'backtesting' : rawMode) as Environment
 
   function selectMode(mode: Environment) {
     if (mode === currentMode) return

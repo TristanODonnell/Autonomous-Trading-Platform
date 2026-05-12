@@ -14,8 +14,10 @@ export async function fetchSystemHealth(): Promise<ApiSystemHealth> {
 
 // Requires operator or admin role. PUT /api/v1/system/trading-mode
 export async function updateTradingMode(
-  mode: 'simulation' | 'paper' | 'live',
+  mode: string,
   rationale?: string,
 ): Promise<void> {
-  await http.put('/api/v1/system/trading-mode', { mode, rationale })
+  // Frontend uses 'backtesting' as the UI label; backend expects 'simulation'
+  const apiMode = mode === 'backtesting' ? 'simulation' : mode
+  await http.put('/api/v1/system/trading-mode', { mode: apiMode, rationale })
 }
