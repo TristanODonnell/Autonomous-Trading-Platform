@@ -173,6 +173,28 @@ def _print_snapshot(snap: RuntimeSnapshot) -> None:
             ver = entry.version_id if entry.version_id else "N/A"
             print(f"  {entry.dataset_name:<18}  {ver}")
 
+    # --- Experiments ---
+    n_exp = len(snap.experiments)
+    print(f"\nEXPERIMENTS (recent {n_exp})")
+    if not snap.experiments:
+        print("  (none)")
+    else:
+        status_counts: dict[str, int] = {}
+        for exp in snap.experiments:
+            status_counts[exp.status] = status_counts.get(exp.status, 0) + 1
+        summary = "  | ".join(f"{s}: {c}" for s, c in sorted(status_counts.items()))
+        print(f"  Summary:  {summary}")
+        print()
+        for exp in snap.experiments:
+            created = exp.created_at.strftime("%Y-%m-%d %H:%M")
+            duration = ""
+            if exp.start_time and exp.end_time:
+                secs = int((exp.end_time - exp.start_time).total_seconds())
+                duration = f"  [{secs}s]"
+            elif exp.start_time:
+                duration = "  [running]"
+            print(f"  {exp.status:<12}  {created}  {exp.experiment_name}{duration}")
+
     # --- Recent Activity ---
     n_activity = len(snap.recent_activity)
     print(f"\nRECENT ACTIVITY (last {n_activity})")

@@ -18,6 +18,7 @@ from autonomous_trading_platform.application.services.strategy_allocation_servic
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.contracts.runtime.runtime_snapshot import (
     DatasetVersionEntry,
+    ExperimentEntry,
     OperatorControlsSnapshot,
     OperatorSettingsSnapshot,
     RecentActivityEntry,
@@ -33,6 +34,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_reposi
 )
 from autonomous_trading_platform.storage.sor.repositories.core.dataset_versions_repository import (
     DatasetVersionsRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.experiments_repository import (
+    ExperimentsRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
     OperatorSettingsRepository,
@@ -55,6 +59,7 @@ class RuntimeSnapshotService:
             strategy_allocations=self._capture_allocations(),
             datasets=self._capture_datasets(),
             recent_activity=self._capture_recent_activity(),
+            experiments=self._capture_experiments(),
         )
 
     def _capture_controls_and_strategies(
@@ -171,6 +176,24 @@ class RuntimeSnapshotService:
                     details=event.description,
                 )
                 for event in result.events
+            ]
+        except Exception:
+            return []
+
+    def _capture_experiments(self) -> list[ExperimentEntry]:
+        try:
+            repo = ExperimentsRepository(self._session)
+            rows = repo.list_recent(limit=10)
+            return [
+                ExperimentEntry(
+                    experiment_id=row.experiment_id,
+                    experiment_name=row.experiment_name,
+                    status=row.status,
+                    created_at=row.created_at,
+                    start_time=row.start_time,
+                    end_time=row.end_time,
+                )
+                for row in rows
             ]
         except Exception:
             return []

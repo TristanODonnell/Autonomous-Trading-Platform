@@ -57,6 +57,15 @@ class RecentActivityEntry(BaseModel):
     details: str | None = None
 
 
+class ExperimentEntry(BaseModel):
+    experiment_id: str
+    experiment_name: str
+    status: str
+    created_at: datetime
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+
+
 class RuntimeSnapshot(BaseModel):
     snapshot_timestamp: datetime
     operator_controls: OperatorControlsSnapshot | None = None
@@ -65,3 +74,4 @@ class RuntimeSnapshot(BaseModel):
     strategy_allocations: list[StrategyAllocationEntry] = []
     datasets: list[DatasetVersionEntry] = []
     recent_activity: list[RecentActivityEntry] = []
+    experiments: list[ExperimentEntry] = []
