@@ -92,6 +92,7 @@ class SimulationRunRequest:
     strict_data_loading: bool = True
     shuffle_timestamp: bool = False
     window_role: str | None = None
+    stage_name: str | None = None
 
 
 @dataclass(slots=True)
@@ -379,6 +380,7 @@ class SimulationRunner:
                     "end_date": str(request.end_date),
                     "initial_cash": request.initial_cash,
                     "strict_data_loading": request.strict_data_loading,
+                    "stage_name": request.stage_name,
                     "resolved_dataset_metadata": resolved_dataset_metadata,
                 },
                 status="RUNNING",

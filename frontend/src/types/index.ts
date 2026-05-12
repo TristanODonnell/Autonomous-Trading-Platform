@@ -24,7 +24,7 @@ export interface ExperimentStrategy {
   sharpe_ratio: number
   total_return: number
   max_drawdown: number
-  simulation_stage: number | null
+  simulation_stage: string | null
   governance_state: string
   composite_score: number
   status: string

@@ -415,7 +415,13 @@ class ExperimentCatalogService:
         if experiment is None:
             raise LookupError(f"Experiment not found: {experiment_id}")
         runs = self._runs_for_experiment(experiment_id)
-        results = [self._strategy_row_for_run(run) for run in runs]
+        # One row per strategy: keep the latest run (deepest pipeline stage reached)
+        latest: dict[str, SimulationRuns] = {}
+        for run in runs:
+            existing = latest.get(run.strategy_id)
+            if existing is None or run.start_time > existing.start_time:
+                latest[run.strategy_id] = run
+        results = [self._strategy_row_for_run(run) for run in latest.values()]
         return sorted(results, key=lambda row: row["composite_score"], reverse=True)
 
     def _experiment_summary(self, row: Experiments) -> dict[str, Any]:
@@ -475,13 +481,22 @@ class ExperimentCatalogService:
         payload = catalog._metrics_payload(metrics)
         score = catalog._composite_score(payload)
         governance = catalog._latest_governance(run.strategy_id)
+        stage_name = (run.execution_config or {}).get("stage_name")
+
+        if run.status == "FAILED":
+            derived_status = "failed"
+        elif governance is None:
+            derived_status = "filtered"
+        else:
+            derived_status = "passed"
+
         return {
             "strategy_id": run.strategy_id,
             "sharpe_ratio": payload["sharpe_ratio"],
             "total_return": payload["total_return"],
             "max_drawdown": payload["max_drawdown"],
-            "simulation_stage": None,
-            "governance_state": governance.current_state if governance else "unknown",
+            "simulation_stage": stage_name,
+            "governance_state": governance.current_state if governance else "filtered",
             "composite_score": score,
-            "status": run.status,
+            "status": derived_status,
         }

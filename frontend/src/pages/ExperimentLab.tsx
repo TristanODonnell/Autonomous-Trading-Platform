@@ -43,10 +43,11 @@ const BTN: Record<'ghost' | 'primary' | 'danger' | 'outline', string> = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function govBadge(state: string): { variant: BadgeVariant; label: string } {
-  if (state.includes('live'))   return { variant: 'green',  label: 'Live'     }
-  if (state.includes('paper'))  return { variant: 'blue',   label: 'Paper'    }
-  if (state === 'research')     return { variant: 'purple', label: 'Research' }
-  if (state === 'rejected')     return { variant: 'red',    label: 'Rejected' }
+  if (state.includes('live'))     return { variant: 'green',  label: 'Live'     }
+  if (state.includes('paper'))    return { variant: 'blue',   label: 'Paper'    }
+  if (state.includes('research')) return { variant: 'purple', label: 'Research' }
+  if (state === 'filtered')       return { variant: 'yellow', label: 'Filtered' }
+  if (state === 'rejected')       return { variant: 'red',    label: 'Rejected' }
   return { variant: 'gray', label: state || '—' }
 }
 
@@ -325,7 +326,7 @@ function StrategiesPanel({
                       {fmtPct(s.max_drawdown)}
                     </td>
                     <td className="font-mono text-[11px] text-[var(--text2)] py-2.5 pr-4" style={tdBorder}>
-                      {s.simulation_stage != null ? `Stage ${s.simulation_stage}` : '—'}
+                      {s.simulation_stage ?? '—'}
                     </td>
                     <td className="py-2.5 pr-4" style={tdBorder}>
                       <StatusBadge variant={gov.variant}>{gov.label}</StatusBadge>
@@ -593,7 +594,6 @@ const FILTERS: { key: FilterKey; label: string; variant: BadgeVariant }[] = [
   { key: 'running',   label: 'Running',   variant: 'blue'   },
   { key: 'completed', label: 'Completed', variant: 'green'  },
   { key: 'failed',    label: 'Failed',    variant: 'red'    },
-  { key: 'pending',   label: 'Pending',   variant: 'gray'   },
 ]
 
 const SORTS: { key: SortKey; label: string }[] = [

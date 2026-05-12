@@ -209,7 +209,7 @@ class ExperimentStrategyItemResponse(BaseModel):
     sharpe_ratio: float
     total_return: float
     max_drawdown: float
-    simulation_stage: int | None
+    simulation_stage: str | None
     governance_state: str
     composite_score: float
     status: str
