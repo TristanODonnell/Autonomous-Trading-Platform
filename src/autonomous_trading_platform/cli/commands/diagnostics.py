@@ -92,7 +92,7 @@ def _print_snapshot(snap: RuntimeSnapshot) -> None:
 
         # Resolve feature dataset version from the datasets list
         feature_ver = next(
-            (d.version_id for d in snap.datasets if d.dataset_name == "features"),
+            (d.version_id for d in snap.datasets if d.dataset_name == "feature_version"),
             None,
         )
 

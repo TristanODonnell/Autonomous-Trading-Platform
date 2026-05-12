@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.application.services.audit_log_service import AuditLogService
@@ -23,6 +24,9 @@ from autonomous_trading_platform.contracts.runtime.runtime_snapshot import (
     RuntimeSnapshot,
     StrategyAllocationEntry,
     StrategyControlEntry,
+)
+from autonomous_trading_platform.storage.sor.models.feature_dataset_versions import (
+    FeatureDatasetVersions,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
     AuditLogRepository,
@@ -136,6 +140,20 @@ class RuntimeSnapshotService:
                         version_id=row.dataset_version_id if row else None,
                     )
                 )
+
+            # Feature dataset versions live in a separate table
+            feature_row = self._session.scalars(
+                select(FeatureDatasetVersions)
+                .order_by(FeatureDatasetVersions.created_at.desc())
+                .limit(1)
+            ).first()
+            results.append(
+                DatasetVersionEntry(
+                    dataset_name="feature_version",
+                    version_id=feature_row.dataset_version_id if feature_row else None,
+                )
+            )
+
             return results
         except Exception:
             return []
