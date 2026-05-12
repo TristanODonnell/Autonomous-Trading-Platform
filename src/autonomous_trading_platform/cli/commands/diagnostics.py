@@ -64,6 +64,10 @@ def handle_snapshot(args: argparse.Namespace) -> int:
         deps.session.close()
 
 
+def _yn(value: bool) -> str:
+    return "yes" if value else "no"
+
+
 def _print_snapshot(snap: RuntimeSnapshot) -> None:
     ts = snap.snapshot_timestamp.strftime("%Y-%m-%d %H:%M:%S")
     print("\n=== RUNTIME SNAPSHOT ===")
@@ -75,8 +79,8 @@ def _print_snapshot(snap: RuntimeSnapshot) -> None:
         print("  N/A")
     else:
         c = snap.operator_controls
-        print(f"  Trading Paused:  {str(c.global_trading_paused).lower()}")
-        print(f"  Kill Switch:     {str(c.kill_switch_active).lower()}")
+        print(f"  Trading Paused:  {_yn(c.global_trading_paused)}")
+        print(f"  Kill Switch:     {_yn(c.kill_switch_active)}")
         print(f"  Trading Mode:    {c.trading_mode}")
 
     # --- Operator Settings ---
@@ -85,17 +89,33 @@ def _print_snapshot(snap: RuntimeSnapshot) -> None:
         print("  N/A")
     else:
         s = snap.operator_settings
-        print(f"  Max Portfolio DD:  {s.max_portfolio_drawdown * 100:.1f}%")
-        print(f"  Max Strategy DD:   {s.max_strategy_drawdown * 100:.1f}%")
-        print(f"  Risk Tolerance:    {s.risk_tolerance}")
-        print(f"  Per-Strategy Cap:  {s.per_strategy_cap * 100:.1f}%")
-        print(f"  Target Vol:        {s.target_portfolio_volatility * 100:.1f}%")
-        print(f"  Min Sharpe:        {s.min_sharpe_for_promotion:.2f}")
-        print(f"  Min Paper Days:    {s.min_paper_trading_period_days}")
-        print(f"  Rebalance:         {s.rebalance_frequency}")
-        print(f"  Auto-Demote:       {str(s.auto_demote_on_breach).lower()}")
-        print(f"  Slippage Model:    {s.slippage_model}")
-        print(f"  Cost Model:        {s.transaction_cost_model}")
+
+        # Resolve feature dataset version from the datasets list
+        feature_ver = next(
+            (d.version_id for d in snap.datasets if d.dataset_name == "features"),
+            None,
+        )
+
+        # Risk & sizing
+        print(f"  Max Portfolio DD:    {s.max_portfolio_drawdown * 100:.1f}%")
+        print(f"  Max Strategy DD:     {s.max_strategy_drawdown * 100:.1f}%")
+        print(f"  Risk Tolerance:      {s.risk_tolerance}")
+        print(f"  Per-Strategy Cap:    {s.per_strategy_cap * 100:.1f}%")
+        print(f"  Target Vol:          {s.target_portfolio_volatility * 100:.1f}%")
+        print(f"  Min Sharpe:          {s.min_sharpe_for_promotion:.2f}")
+        print(f"  Min Paper Days:      {s.min_paper_trading_period_days}")
+        print(f"  Rebalance:           {s.rebalance_frequency}")
+        # Models
+        print(f"  Slippage Model:      {s.slippage_model}")
+        print(f"  Transaction Cost:    {s.transaction_cost_model}")
+        print(f"  Feature Version:     {feature_ver or 'N/A'}")
+        # Governance switches
+        print(f"  Auto-Promote:        {_yn(s.auto_promote_enabled)}")
+        print(f"  Auto-Demote:         {_yn(s.auto_demote_on_breach)}")
+        # Alert flags
+        print(f"  Drawdown Alerts:     {_yn(s.notify_drawdown_alerts)}")
+        print(f"  Promotion Alerts:    {_yn(s.notify_strategy_promotion_events)}")
+        print(f"  Pipeline Alerts:     {_yn(s.notify_pipeline_failures)}")
 
     # --- Strategy Controls ---
     n = len(snap.strategy_controls)

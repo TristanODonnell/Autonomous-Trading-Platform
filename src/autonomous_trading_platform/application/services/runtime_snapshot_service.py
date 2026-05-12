@@ -93,8 +93,12 @@ class RuntimeSnapshotService:
                 min_paper_trading_period_days=s.min_paper_trading_period_days,
                 rebalance_frequency=s.rebalance_frequency,
                 auto_demote_on_breach=s.auto_demote_on_breach,
+                auto_promote_enabled=s.auto_promote_enabled,
                 slippage_model=s.slippage_model,
                 transaction_cost_model=s.transaction_cost_model,
+                notify_drawdown_alerts=s.notify_drawdown_alerts,
+                notify_strategy_promotion_events=s.notify_strategy_promotion_events,
+                notify_pipeline_failures=s.notify_pipeline_failures,
             )
         except Exception:
             return None

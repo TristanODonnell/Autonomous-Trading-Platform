@@ -22,8 +22,12 @@ class OperatorSettingsSnapshot(BaseModel):
     min_paper_trading_period_days: int
     rebalance_frequency: str
     auto_demote_on_breach: bool
+    auto_promote_enabled: bool
     slippage_model: str
     transaction_cost_model: str
+    notify_drawdown_alerts: bool
+    notify_strategy_promotion_events: bool
+    notify_pipeline_failures: bool
 
 
 class StrategyControlEntry(BaseModel):
