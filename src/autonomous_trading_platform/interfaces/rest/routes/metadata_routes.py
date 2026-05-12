@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.application.services.dataset_version_command_service import (
     DatasetVersionCommandService,
@@ -19,7 +21,13 @@ from autonomous_trading_platform.interfaces.rest.schemas.feature_dataset_version
 from autonomous_trading_platform.interfaces.rest.schemas.ingestion_run_schemas import (
     CreateIngestionRunRequest,
     FailIngestionRunRequest,
+    LatestDatasetVersionResponse,
+    LatestFeatureVersionResponse,
     MetadataActionResponse,
+)
+from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from autonomous_trading_platform.storage.sor.models.feature_dataset_versions import (
+    FeatureDatasetVersions,
 )
 
 router = APIRouter(prefix="/metadata", tags=["metadata"])
@@ -120,3 +128,51 @@ def create_feature_dataset_version(
         created_at=payload.created_at,
     )
     return MetadataActionResponse(message=f"Feature dataset version created: {dataset_version_id}")
+
+
+@router.get("/dataset-versions/latest", response_model=LatestDatasetVersionResponse | None)
+def get_latest_dataset_version(
+    session: Session = Depends(get_session),
+) -> LatestDatasetVersionResponse | None:
+    row = session.scalars(
+        select(DatasetVersions).order_by(DatasetVersions.created_at.desc()).limit(1)
+    ).first()
+    if row is None:
+        return None
+    return LatestDatasetVersionResponse(
+        dataset_version_id=row.dataset_version_id,
+        dataset_name=row.dataset_name,
+        created_at=row.created_at,
+        source=row.source,
+        price_basis=row.price_basis.value,
+        interval=row.interval.value,
+        schema_version=row.schema_version,
+        symbol_coverage=row.symbol_coverage,
+        date_coverage_start=row.date_coverage_start,
+        date_coverage_end=row.date_coverage_end,
+        validation_status=row.validation_status,
+    )
+
+
+@router.get("/feature-dataset-versions/latest", response_model=LatestFeatureVersionResponse | None)
+def get_latest_feature_version(
+    session: Session = Depends(get_session),
+) -> LatestFeatureVersionResponse | None:
+    row = session.scalars(
+        select(FeatureDatasetVersions).order_by(FeatureDatasetVersions.created_at.desc()).limit(1)
+    ).first()
+    if row is None:
+        return None
+    return LatestFeatureVersionResponse(
+        dataset_version_id=row.dataset_version_id,
+        feature_name=row.feature_name,
+        dataset_name=row.dataset_name,
+        created_at=row.created_at,
+        schema_version=row.schema_version,
+        source_dataset_version=row.source_dataset_version,
+        underlying_price_basis=row.underlying_price_basis.value,
+        symbol_coverage=row.symbol_coverage,
+        date_coverage_start=row.date_coverage_start,
+        date_coverage_end=row.date_coverage_end,
+        validation_status=row.validation_status,
+    )

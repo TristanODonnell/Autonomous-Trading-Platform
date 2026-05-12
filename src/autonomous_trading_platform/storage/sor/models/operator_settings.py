@@ -18,6 +18,10 @@ class OperatorSettingsRow(Base):
     rebalance_frequency: Mapped[str] = mapped_column(String(16), nullable=False)
     auto_promote_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
     per_strategy_cap: Mapped[float] = mapped_column(Numeric(6, 4), nullable=False)
+    slippage_model: Mapped[str | None] = mapped_column(String(32), nullable=True, default="fixed")
+    transaction_cost_model: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, default="per_share"
+    )
 
     updated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 

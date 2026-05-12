@@ -6,8 +6,12 @@ import StatusBadge from '../components/shared/StatusBadge'
 import {
   fetchOperatorSettings,
   updateOperatorSettings,
+  fetchLatestDatasetVersion,
+  fetchLatestFeatureVersion,
   type ApiOperatorSettings,
   type ApiOperatorSettingsUpdate,
+  type SlippageModel,
+  type TransactionCostModel,
 } from '../services'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -383,29 +387,97 @@ function GovernanceCard() {
   )
 }
 
+// ── Slippage / cost model maps ────────────────────────────────────────────────
+
+const SLIPPAGE_TO_UI: Record<SlippageModel, string> = {
+  fixed:        'Fixed (0.02%)',
+  volume_based: 'Volume-based',
+  spread:       'Spread model',
+}
+const UI_TO_SLIPPAGE: Record<string, SlippageModel> = {
+  'Fixed (0.02%)': 'fixed',
+  'Volume-based':  'volume_based',
+  'Spread model':  'spread',
+}
+const TX_TO_UI: Record<TransactionCostModel, string> = {
+  per_share:    '$0.005 / share',
+  per_trade:    '$1.00 / trade',
+  notional_pct: '0.1% notional',
+}
+const UI_TO_TX: Record<string, TransactionCostModel> = {
+  '$0.005 / share': 'per_share',
+  '$1.00 / trade':  'per_trade',
+  '0.1% notional':  'notional_pct',
+}
+
 // ── Data & Simulation card ────────────────────────────────────────────────────
 
 function DataSimulationCard() {
-  // TODO: no GET endpoint returns the active dataset/feature version — metadata routes (/metadata/datasets, /metadata/features) are POST-only (create new versions)
-  // TODO: slippage model and transaction cost selects have no configurable PUT endpoint; cost_model_configuration in GET /settings/advanced is read-only
+  const qc = useQueryClient()
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['settings'],
+    queryFn: fetchOperatorSettings,
+  })
+  const { data: datasetVersion } = useQuery({
+    queryKey: ['metadata', 'dataset-version-latest'],
+    queryFn: fetchLatestDatasetVersion,
+  })
+  const { data: featureVersion } = useQuery({
+    queryKey: ['metadata', 'feature-version-latest'],
+    queryFn: fetchLatestFeatureVersion,
+  })
+
   const [slippage, setSlippage] = useState('Fixed (0.02%)')
   const [txCost,   setTxCost]   = useState('$0.005 / share')
 
+  useEffect(() => {
+    if (!data) return
+    setSlippage(SLIPPAGE_TO_UI[data.slippage_model] ?? 'Fixed (0.02%)')
+    setTxCost(TX_TO_UI[data.transaction_cost_model] ?? '$0.005 / share')
+  }, [data])
+
+  const apiSlippage = data ? SLIPPAGE_TO_UI[data.slippage_model] : 'Fixed (0.02%)'
+  const apiTxCost   = data ? TX_TO_UI[data.transaction_cost_model] : '$0.005 / share'
+  const isDirty = slippage !== apiSlippage || txCost !== apiTxCost
+
+  const mutation = useMutation({
+    mutationFn: (updates: ApiOperatorSettingsUpdate) => updateOperatorSettings(updates),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  })
+
+  function handleSave() {
+    mutation.mutate({
+      slippage_model:        UI_TO_SLIPPAGE[slippage],
+      transaction_cost_model: UI_TO_TX[txCost],
+    })
+  }
+
+  if (isLoading || !data) return <CardSkeleton />
+  if (isError)            return <CardError message="Failed to load data & simulation settings" />
+
   return (
     <Card>
-      <CardTitle>Data & Simulation</CardTitle>
+      <CardTitle action={isDirty ? <SaveButton onClick={handleSave} isPending={mutation.isPending} /> : undefined}>
+        Data & Simulation
+      </CardTitle>
 
-      {/* TODO: active dataset version not available from any GET endpoint */}
-      <SettingRow label="Active Dataset Version" desc="Currently loaded market data version">
-        <StatusBadge variant="green" className="font-mono">—</StatusBadge>
+      <SettingRow label="Active Dataset Version" desc="Most recently registered market data version">
+        {datasetVersion ? (
+          <StatusBadge variant="green" className="font-mono">{datasetVersion.dataset_version_id}</StatusBadge>
+        ) : (
+          <StatusBadge variant="gray" className="font-mono">—</StatusBadge>
+        )}
       </SettingRow>
 
-      {/* TODO: active feature version not available from any GET endpoint */}
-      <SettingRow label="Feature Version" desc="Currently loaded feature dataset">
-        <StatusBadge variant="green" className="font-mono">—</StatusBadge>
+      <SettingRow label="Feature Version" desc="Most recently registered feature dataset">
+        {featureVersion ? (
+          <StatusBadge variant="blue" className="font-mono">{featureVersion.dataset_version_id}</StatusBadge>
+        ) : (
+          <StatusBadge variant="gray" className="font-mono">—</StatusBadge>
+        )}
       </SettingRow>
 
-      {/* TODO: slippage model is not configurable via API — local only, does not persist */}
       <SettingRow label="Slippage Model" desc="Applied to all simulated fills">
         <Select
           options={['Fixed (0.02%)', 'Volume-based', 'Spread model']}
@@ -414,7 +486,6 @@ function DataSimulationCard() {
         />
       </SettingRow>
 
-      {/* TODO: transaction cost is not configurable via API — local only, does not persist */}
       <SettingRow label="Transaction Cost" desc="Per-trade cost applied in simulation and live" last>
         <Select
           options={['$0.005 / share', '$1.00 / trade', '0.1% notional']}

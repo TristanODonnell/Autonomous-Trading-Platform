@@ -33,9 +33,12 @@ class OperatorSettingsRepository:
             rebalance_frequency="weekly",
             auto_promote_enabled=False,
             per_strategy_cap=0.25,
+            slippage_model="fixed",
+            transaction_cost_model="per_share",
         )
         self._session.add(row)
         self._session.flush()
+        self._session.commit()
         return row
 
     def update_current(self, values: dict, updated_by: str | None) -> OperatorSettingsRow:
@@ -48,4 +51,5 @@ class OperatorSettingsRepository:
 
         self._session.add(row)
         self._session.flush()
+        self._session.commit()
         return row

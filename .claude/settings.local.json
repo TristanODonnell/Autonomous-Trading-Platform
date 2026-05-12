@@ -41,7 +41,9 @@
       "Bash(Select-Object Name, FullName)",
       "Bash(python3 -c ' *)",
       "Bash(python -m alembic upgrade head)",
-      "Bash(python -m alembic -c infra/db/alembic.ini upgrade head)"
+      "Bash(python -m alembic -c infra/db/alembic.ini upgrade head)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(npm run *)"
     ]
   }
 }

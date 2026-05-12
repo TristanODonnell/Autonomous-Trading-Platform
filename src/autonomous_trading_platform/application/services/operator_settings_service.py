@@ -15,6 +15,8 @@ class OperatorSettingsDTO:
     rebalance_frequency: str
     auto_promote_enabled: bool
     per_strategy_cap: float
+    slippage_model: str
+    transaction_cost_model: str
 
 
 class OperatorSettingsService:
@@ -103,4 +105,6 @@ class OperatorSettingsService:
             rebalance_frequency=row.rebalance_frequency,
             auto_promote_enabled=row.auto_promote_enabled,
             per_strategy_cap=float(row.per_strategy_cap),
+            slippage_model=row.slippage_model or "fixed",
+            transaction_cost_model=row.transaction_cost_model or "per_share",
         )
