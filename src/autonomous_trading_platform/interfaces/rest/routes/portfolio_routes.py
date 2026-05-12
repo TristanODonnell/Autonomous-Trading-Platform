@@ -6,8 +6,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from autonomous_trading_platform.api.dependencies import get_request_id
+from autonomous_trading_platform.api.dependencies import (
+    get_alpaca_broker_client,
+    get_request_id,
+    get_settings,
+)
 from autonomous_trading_platform.api.envelope import SuccessEnvelope, success_response
+from autonomous_trading_platform.application.services.alpaca_portfolio_service import (
+    AlpacaPortfolioService,
+)
 from autonomous_trading_platform.application.services.portfolio_analytics_service import (
     PortfolioAnalyticsService,
 )
@@ -18,6 +25,7 @@ from autonomous_trading_platform.application.services.portfolio_summary_service 
     PortfolioSummaryService,
 )
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.execution.clients.alpaca_broker_client import AlpacaBrokerClient
 from autonomous_trading_platform.interfaces.rest.schemas.portfolio_schemas import (
     PortfolioAllocationResponse,
     PortfolioEquityCurvePeriod,
@@ -32,16 +40,38 @@ from autonomous_trading_platform.interfaces.rest.schemas.portfolio_schemas impor
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 _request_id_dependency = Depends(get_request_id)
 _session_dependency = Depends(get_session)
+_alpaca_dependency = Depends(get_alpaca_broker_client)
+
+
+def _alpaca_service(client: AlpacaBrokerClient | None) -> AlpacaPortfolioService | None:
+    if client is None:
+        return None
+    try:
+        settings = get_settings()
+        return AlpacaPortfolioService(client=client, initial_capital=settings.initial_capital)
+    except Exception:
+        return None
 
 
 @router.get("/summary", response_model=SuccessEnvelope[PortfolioSummaryResponse])
 def get_portfolio_summary(
     request_id: str = _request_id_dependency,
     session: Session = _session_dependency,
+    alpaca_client: AlpacaBrokerClient | None = _alpaca_dependency,
 ) -> SuccessEnvelope[PortfolioSummaryResponse]:
+    alpaca = _alpaca_service(alpaca_client)
+    if alpaca is not None:
+        try:
+            result = alpaca.get_summary()
+            return success_response(
+                data=PortfolioSummaryResponse(**result),
+                request_id=request_id,
+            )
+        except Exception:
+            pass
+
     service = PortfolioSummaryService(session=session)
     result = service.get_summary()
-
     return success_response(
         data=PortfolioSummaryResponse(**result),
         request_id=request_id,
@@ -83,10 +113,21 @@ def get_portfolio_performance(
 def get_portfolio_holdings(
     request_id: str = _request_id_dependency,
     session: Session = _session_dependency,
+    alpaca_client: AlpacaBrokerClient | None = _alpaca_dependency,
 ) -> SuccessEnvelope[PortfolioHoldingsResponse]:
+    alpaca = _alpaca_service(alpaca_client)
+    if alpaca is not None:
+        try:
+            result = alpaca.get_holdings()
+            return success_response(
+                data=PortfolioHoldingsResponse(**result),
+                request_id=request_id,
+            )
+        except Exception:
+            pass
+
     service = PortfolioAnalyticsService(session=session)
     result = service.get_holdings()
-
     return success_response(
         data=PortfolioHoldingsResponse(**result),
         request_id=request_id,
