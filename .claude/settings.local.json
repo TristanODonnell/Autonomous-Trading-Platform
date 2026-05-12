@@ -35,7 +35,8 @@
       "Bash(node -e \"console.log\\(require\\('./node_modules/tailwindcss/package.json'\\).version\\)\")",
       "Bash(curl -s http://localhost:5174/)",
       "Bash(python -m alembic -c infra/db/alembic.ini heads)",
-      "Bash(xargs grep -l \"corporate_action\\\\|corporate_actions\")"
+      "Bash(xargs grep -l \"corporate_action\\\\|corporate_actions\")",
+      "Bash(xargs grep -l \"controls\\\\|kill.switch\\\\|audit.log\\\\|trading.mode\")"
     ]
   }
 }

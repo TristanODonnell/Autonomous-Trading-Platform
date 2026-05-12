@@ -353,21 +353,22 @@ function StrategyTogglesCard() {
   if (isLoading) return <CardSkeleton title="Strategy Toggles" />
   if (controlsError) return <CardError title="Strategy Toggles" message={(controlsError as Error).message} />
 
-  // Build control-state map for O(1) lookup
-  const controlMap = new Map<string, ApiStrategyControlState>(
-    (controlsState?.strategies ?? []).map((s) => [s.strategy_id, s])
+  // Build catalog map for O(1) display-name lookup
+  const catalogMap = new Map<string, ApiStrategyListItem>(
+    catalog.map((c) => [c.strategy_id, c])
   )
 
-  // Merge catalog names with control states
-  // Catalog is the authoritative list; control state provides runtime enabled/status
-  const merged = catalog.map((c) => {
-    const ctrl = controlMap.get(c.strategy_id)
+  // Only show strategies that are in active governance (paper/live).
+  // Controls state is the authoritative list — strategies not in it have no
+  // governance row and cannot be enabled/disabled by the API (would 404).
+  const merged = (controlsState?.strategies ?? []).map((s) => {
+    const cat = catalogMap.get(s.strategy_id)
     return {
-      strategy_id:  c.strategy_id,
-      display_name: c.display_name,
-      enabled:      ctrl?.enabled ?? c.status !== 'off',
-      status:       (ctrl?.status ?? (c.status === 'research' ? 'off' : c.status)) as ApiStrategyControlState['status'],
-      reason:       ctrl?.reason ?? null,
+      strategy_id:  s.strategy_id,
+      display_name: cat?.display_name ?? s.strategy_id,
+      enabled:      s.enabled,
+      status:       s.status,
+      reason:       s.reason,
     }
   })
 

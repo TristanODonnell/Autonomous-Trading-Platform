@@ -87,6 +87,13 @@ class RuntimeControlStateWriter(Protocol):
         triggered_at: datetime,
     ) -> None: ...
 
+    def release_kill_switch(
+        self,
+        *,
+        reason: str | None,
+        updated_by: str,
+    ): ...
+
     def set_trading_paused(
         self,
         *,
@@ -236,11 +243,19 @@ class RuntimeControlService:
         rationale: str,
     ) -> ControlActionResult:
         updated_at = datetime.now(UTC)
-        state = self.runtime_control_repo.set_trading_paused(
-            paused=False,
-            reason=rationale,
-            updated_by=updated_by,
-        )
+        current = self.runtime_control_repo.get_or_create_global_state()
+
+        if current.kill_switch_enabled:
+            state = self.runtime_control_repo.release_kill_switch(
+                reason=rationale,
+                updated_by=updated_by,
+            )
+        else:
+            state = self.runtime_control_repo.set_trading_paused(
+                paused=False,
+                reason=rationale,
+                updated_by=updated_by,
+            )
 
         self.audit_log_repo.record_operator_action(
             action="TRADING_RESUMED",
