@@ -28,6 +28,15 @@ const FREQ_TO_UI: Record<ApiOperatorSettings['rebalance_frequency'], string> = {
 const UI_TO_FREQ: Record<string, ApiOperatorSettings['rebalance_frequency']> = {
   Daily: 'daily', Weekly: 'weekly', Monthly: 'monthly',
 }
+const PAPER_PERIOD_TO_UI: Record<number, string> = {
+  14: '14 days', 30: '30 days', 60: '60 days', 90: '90 days',
+}
+const UI_TO_PAPER_PERIOD: Record<string, number> = {
+  '14 days': 14, '30 days': 30, '60 days': 60, '90 days': 90,
+}
+function paperPeriodDays(value: string): number {
+  return UI_TO_PAPER_PERIOD[value] ?? Number.parseInt(value, 10)
+}
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
@@ -312,7 +321,6 @@ function GovernanceCard() {
   const [autoPromote,   setAutoPromote]   = useState(false)
   const [rebalanceFreq, setRebalanceFreq] = useState('Daily')
 
-  // TODO: min_sharpe_for_promotion, min_paper_period, auto_demote_on_breach fields not on GET/PUT /settings — local only
   const [minSharpe,   setMinSharpe]   = useState(1.5)
   const [paperPeriod, setPaperPeriod] = useState('30 days')
   const [autoDemote,  setAutoDemote]  = useState(true)
@@ -321,13 +329,28 @@ function GovernanceCard() {
     if (!data) return
     setAutoPromote(data.auto_promote_enabled)
     setRebalanceFreq(FREQ_TO_UI[data.rebalance_frequency])
+    setMinSharpe(Number(data.min_sharpe_for_promotion))
+    setPaperPeriod(
+      PAPER_PERIOD_TO_UI[data.min_paper_trading_period_days] ??
+        `${data.min_paper_trading_period_days} days`,
+    )
+    setAutoDemote(data.auto_demote_on_breach)
   }, [data])
 
   const apiAutoPromote   = data?.auto_promote_enabled ?? false
   const apiRebalanceFreq = data ? FREQ_TO_UI[data.rebalance_frequency] : 'Daily'
+  const apiMinSharpe     = data ? Number(data.min_sharpe_for_promotion) : 1.5
+  const apiPaperPeriod   = data
+    ? (PAPER_PERIOD_TO_UI[data.min_paper_trading_period_days] ??
+      `${data.min_paper_trading_period_days} days`)
+    : '30 days'
+  const apiAutoDemote    = data?.auto_demote_on_breach ?? true
   const isDirty =
     autoPromote   !== apiAutoPromote   ||
-    rebalanceFreq !== apiRebalanceFreq
+    rebalanceFreq !== apiRebalanceFreq ||
+    minSharpe     !== apiMinSharpe     ||
+    paperPeriod   !== apiPaperPeriod   ||
+    autoDemote    !== apiAutoDemote
 
   const mutation = useMutation({
     mutationFn: (updates: ApiOperatorSettingsUpdate) => updateOperatorSettings(updates),
@@ -338,6 +361,9 @@ function GovernanceCard() {
     mutation.mutate({
       auto_promote_enabled: autoPromote,
       rebalance_frequency:  UI_TO_FREQ[rebalanceFreq],
+      min_sharpe_for_promotion: minSharpe,
+      min_paper_trading_period_days: paperPeriodDays(paperPeriod),
+      auto_demote_on_breach: autoDemote,
     })
   }
 
@@ -355,7 +381,6 @@ function GovernanceCard() {
       </SettingRow>
 
       <SettingRow label="Minimum Sharpe for promotion" desc="Paper strategies must exceed this to be eligible">
-        {/* TODO: no min_sharpe_for_promotion field on GET/PUT /settings; value is local-only and does not persist */}
         <Slider
           min={0.5}
           max={3}
@@ -367,7 +392,6 @@ function GovernanceCard() {
       </SettingRow>
 
       <SettingRow label="Min paper trading period" desc="Days of paper trading required before promotion">
-        {/* TODO: no min_paper_period field on GET/PUT /settings; value is local-only and does not persist */}
         <Select
           options={['14 days', '30 days', '60 days', '90 days']}
           value={paperPeriod}
@@ -384,7 +408,6 @@ function GovernanceCard() {
       </SettingRow>
 
       <SettingRow label="Auto-demote on breach" desc="Auto-demote live strategy to paper if DD limit exceeded" last>
-        {/* TODO: no auto_demote_on_breach field on GET/PUT /settings; value is local-only and does not persist */}
         <Toggle on={autoDemote} onChange={setAutoDemote} />
       </SettingRow>
     </Card>
@@ -504,15 +527,52 @@ function DataSimulationCard() {
 // ── Notifications card ────────────────────────────────────────────────────────
 
 function NotificationsCard() {
-  // TODO: no notifications endpoint on any route — all toggles are local-only and do not persist
+  const qc = useQueryClient()
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['settings'],
+    queryFn: fetchOperatorSettings,
+  })
+
   const [drawdown,  setDrawdown]  = useState(true)
   const [promotion, setPromotion] = useState(true)
   const [pipeline,  setPipeline]  = useState(true)
-  const [dailyPnl,  setDailyPnl]  = useState(false)
+
+  useEffect(() => {
+    if (!data) return
+    setDrawdown(data.notify_drawdown_alerts)
+    setPromotion(data.notify_strategy_promotion_events)
+    setPipeline(data.notify_pipeline_failures)
+  }, [data])
+
+  const apiDrawdown  = data?.notify_drawdown_alerts ?? true
+  const apiPromotion = data?.notify_strategy_promotion_events ?? true
+  const apiPipeline  = data?.notify_pipeline_failures ?? true
+  const isDirty =
+    drawdown  !== apiDrawdown  ||
+    promotion !== apiPromotion ||
+    pipeline  !== apiPipeline
+
+  const mutation = useMutation({
+    mutationFn: (updates: ApiOperatorSettingsUpdate) => updateOperatorSettings(updates),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  })
+
+  function handleSave() {
+    mutation.mutate({
+      notify_drawdown_alerts: drawdown,
+      notify_strategy_promotion_events: promotion,
+      notify_pipeline_failures: pipeline,
+    })
+  }
+
+  if (isLoading || !data) return <CardSkeleton />
+  if (isError)            return <CardError message="Failed to load notification settings" />
 
   return (
     <Card>
-      <CardTitle>Notifications</CardTitle>
+      <CardTitle action={isDirty ? <SaveButton onClick={handleSave} isPending={mutation.isPending} /> : undefined}>
+        Notifications
+      </CardTitle>
 
       <SettingRow label="Drawdown alerts" desc="Notify when any drawdown threshold is hit">
         <Toggle on={drawdown} onChange={setDrawdown} />
@@ -532,8 +592,10 @@ function NotificationsCard() {
         </div>
       </SettingRow>
 
-      <SettingRow label="Daily PnL summary" desc="End of day performance email" last>
-        <Toggle on={dailyPnl} onChange={setDailyPnl} />
+      <SettingRow label="Daily PnL summary" desc="Stubbed until email/report delivery exists" last>
+        <div style={{ opacity: 0.6 }}>
+          <Toggle on={false} disabled />
+        </div>
       </SettingRow>
     </Card>
   )

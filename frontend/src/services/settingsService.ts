@@ -9,6 +9,12 @@ export interface ApiOperatorSettings {
   max_strategy_drawdown: number
   rebalance_frequency: 'daily' | 'weekly' | 'monthly'
   auto_promote_enabled: boolean
+  min_sharpe_for_promotion: number
+  min_paper_trading_period_days: number
+  auto_demote_on_breach: boolean
+  notify_drawdown_alerts: boolean
+  notify_strategy_promotion_events: boolean
+  notify_pipeline_failures: boolean
   per_strategy_cap: number
   target_portfolio_volatility: number
   slippage_model: SlippageModel
@@ -21,6 +27,12 @@ export interface ApiOperatorSettingsUpdate {
   max_strategy_drawdown?: number
   rebalance_frequency?: 'daily' | 'weekly' | 'monthly'
   auto_promote_enabled?: boolean
+  min_sharpe_for_promotion?: number
+  min_paper_trading_period_days?: number
+  auto_demote_on_breach?: boolean
+  notify_drawdown_alerts?: boolean
+  notify_strategy_promotion_events?: boolean
+  notify_pipeline_failures?: boolean
   per_strategy_cap?: number
   target_portfolio_volatility?: number
   slippage_model?: SlippageModel
