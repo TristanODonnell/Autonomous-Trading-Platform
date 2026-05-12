@@ -12,6 +12,7 @@ from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.storage.sor.models.allocation_overrides import (
     AllocationOverrides,
 )
+from autonomous_trading_platform.storage.sor.models.strategy_configs import StrategyConfigs
 from autonomous_trading_platform.storage.sor.models.strategy_governance import (
     StrategyGovernance,
 )
@@ -116,6 +117,52 @@ class StrategyAllocationService:
             updated_by=updated_by,
             updated_at=now,
         )
+
+    def get_allocations_for_active_strategies(self) -> list[dict]:
+        _ACTIVE_STATES = {"approved_for_paper_trading", "approved_for_live_trading"}
+        total_capital = self._resolve_total_portfolio_capital()
+
+        governance_rows = list(
+            self._session.scalars(
+                select(StrategyGovernance).where(
+                    StrategyGovernance.current_state.in_(_ACTIVE_STATES)
+                )
+            ).all()
+        )
+
+        seen: set[str] = set()
+        results: list[dict] = []
+        for gov in governance_rows:
+            if gov.strategy_id in seen:
+                continue
+            seen.add(gov.strategy_id)
+
+            config = self._session.get(StrategyConfigs, gov.strategy_id)
+            display_name = (
+                ((config.metadata_json or {}).get("display_name") or gov.strategy_id)
+                if config
+                else gov.strategy_id
+            )
+
+            override = self._allocation_overrides_repo.get_active_override(gov.strategy_id)
+            results.append(
+                {
+                    "strategy_id": gov.strategy_id,
+                    "display_name": str(display_name),
+                    "allocated_capital": (
+                        Decimal(str(override.max_position_size_usd))
+                        if override and override.max_position_size_usd is not None
+                        else None
+                    ),
+                    "total_portfolio_capital": total_capital,
+                    "is_overridden": override is not None,
+                    "overridden_by": override.overridden_by if override else None,
+                    "reason": override.override_reason if override else None,
+                    "updated_at": override.created_at if override else None,
+                }
+            )
+
+        return results
 
     def _strategy_exists(self, strategy_id: str) -> bool:
         stmt = select(StrategyGovernance.strategy_id).where(

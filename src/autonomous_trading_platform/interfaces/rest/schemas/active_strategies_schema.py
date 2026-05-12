@@ -34,6 +34,21 @@ class StrategyAllocationUpdateResponse(BaseModel):
     updated_at: datetime
 
 
+class StrategyAllocationStateResponse(BaseModel):
+    strategy_id: str
+    display_name: str
+    allocated_capital: Decimal | None
+    total_portfolio_capital: Decimal
+    is_overridden: bool
+    overridden_by: str | None
+    reason: str | None
+    updated_at: datetime | None
+
+
+class StrategyAllocationsListResponse(BaseModel):
+    strategies: list[StrategyAllocationStateResponse]
+
+
 class StrategyEnabledUpdateRequest(BaseModel):
     enabled: bool
     reason: str = Field(min_length=1, max_length=500)

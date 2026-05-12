@@ -38,6 +38,8 @@ from autonomous_trading_platform.interfaces.rest.schemas.active_strategies_schem
     ExperimentDetailResponse,
     ExperimentListResponse,
     ExperimentStrategiesResponse,
+    StrategyAllocationsListResponse,
+    StrategyAllocationStateResponse,
     StrategyAllocationUpdateRequest,
     StrategyAllocationUpdateResponse,
     StrategyCompareRequest,
@@ -115,6 +117,25 @@ def get_active_strategies(
 
     return success_response(
         data=ActiveStrategiesResponse(strategies=result),
+        request_id=request_id,
+    )
+
+
+@router.get(
+    "/allocations",
+    response_model=SuccessEnvelope[StrategyAllocationsListResponse],
+)
+def get_strategy_allocations(
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+    actor: str = Depends(require_operator_or_admin),
+) -> SuccessEnvelope[StrategyAllocationsListResponse]:
+    service = StrategyAllocationService(session=session)
+    rows = service.get_allocations_for_active_strategies()
+    return success_response(
+        data=StrategyAllocationsListResponse(
+            strategies=[StrategyAllocationStateResponse(**r) for r in rows]
+        ),
         request_id=request_id,
     )
 

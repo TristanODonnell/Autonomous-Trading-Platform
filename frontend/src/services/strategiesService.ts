@@ -13,8 +13,9 @@ export interface ApiStrategyListItem {
   composite_score: number
 }
 
-export async function fetchAllStrategies(): Promise<ApiStrategyListItem[]> {
-  const res = await http.get<{ data: { strategies: ApiStrategyListItem[] } }>('/api/v1/strategies')
+export async function fetchAllStrategies(status?: string): Promise<ApiStrategyListItem[]> {
+  const params = status ? { status } : {}
+  const res = await http.get<{ data: { strategies: ApiStrategyListItem[] } }>('/api/v1/strategies', { params })
   return res.data.data.strategies
 }
 
@@ -24,6 +25,46 @@ export async function updateStrategyEnabled(
   reason: string,
 ): Promise<void> {
   await http.put(`/api/v1/strategies/${strategyId}/enabled`, { enabled, reason })
+}
+
+export async function transitionStrategyGovernance(
+  strategyId: string,
+  toState: string,
+  reason: string,
+): Promise<void> {
+  await http.post(`/api/v1/strategies/${strategyId}/governance/transition`, {
+    to_state: toState,
+    reason,
+  })
+}
+
+export interface ApiStrategyAllocationState {
+  strategy_id: string
+  display_name: string
+  allocated_capital: number | null
+  total_portfolio_capital: number
+  is_overridden: boolean
+  overridden_by: string | null
+  reason: string | null
+  updated_at: string | null
+}
+
+export async function fetchStrategyAllocations(): Promise<ApiStrategyAllocationState[]> {
+  const res = await http.get<{ data: { strategies: ApiStrategyAllocationState[] } }>(
+    '/api/v1/strategies/allocations',
+  )
+  return res.data.data.strategies
+}
+
+export async function updateStrategyAllocation(
+  strategyId: string,
+  allocatedCapital: number,
+  reason: string,
+): Promise<void> {
+  await http.put(`/api/v1/strategies/${strategyId}/allocation`, {
+    allocated_capital: allocatedCapital,
+    reason,
+  })
 }
 
 export interface ApiActiveStrategy {
