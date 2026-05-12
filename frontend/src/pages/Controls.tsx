@@ -463,7 +463,7 @@ function StrategyTogglesCard() {
 // ── Environment card ──────────────────────────────────────────────────────────
 
 const ENV_MODES: { key: Environment; label: string; variant: BadgeVariant; suffix?: string }[] = [
-  { key: 'simulation', label: 'Simulation', variant: 'gray'  },
+  { key: 'backtesting', label: 'Backtesting', variant: 'gray'  },
   { key: 'paper',      label: 'Paper',      variant: 'blue'  },
   { key: 'live',       label: 'Live',       variant: 'green', suffix: ' ●' },
 ]

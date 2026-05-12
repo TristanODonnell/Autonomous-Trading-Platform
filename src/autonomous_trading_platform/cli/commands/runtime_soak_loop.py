@@ -361,6 +361,54 @@ class _ResearchSoakRunner:
 
 
 def register_soak_loop_commands(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    backtest_parser = subparsers.add_parser(
+        "backtest",
+        help="Backtest replay: walk historical bars and write fills/snapshots to DB",
+    )
+    backtest_parser.add_argument(
+        "--symbols",
+        required=True,
+        help="Comma-separated list of symbols, e.g. SPY,QQQ",
+    )
+    backtest_parser.add_argument(
+        "--start",
+        required=True,
+        help="Start date (ISO8601), e.g. 2024-01-01",
+    )
+    backtest_parser.add_argument(
+        "--end",
+        required=True,
+        help="End date (ISO8601), e.g. 2024-12-31",
+    )
+    backtest_parser.add_argument(
+        "--initial-capital",
+        dest="initial_capital",
+        type=float,
+        default=100_000.0,
+        help="Starting portfolio capital in USD (default: 100000)",
+    )
+    backtest_parser.add_argument(
+        "--strategy-id",
+        dest="strategy_id",
+        default="baseline_strategy",
+        help="Strategy ID to tag fills and positions with",
+    )
+    backtest_parser.add_argument(
+        "--short-window",
+        dest="short_window",
+        type=int,
+        default=5,
+        help="Fast MA window in bars (default: 5)",
+    )
+    backtest_parser.add_argument(
+        "--long-window",
+        dest="long_window",
+        type=int,
+        default=20,
+        help="Slow MA window in bars (default: 20)",
+    )
+    backtest_parser.set_defaults(func=handle_soak_loop_backtest)
+
     paper_parser = subparsers.add_parser(
         "paper",
         help="Paper trading soak loop (market-hours aware, real Alpaca API)",
@@ -404,6 +452,60 @@ def register_soak_loop_commands(subparsers: argparse._SubParsersAction) -> None:
         help="Path to experiment plan YAML file (optional, same format as atp research run-experiment --config)",
     )
     research_parser.set_defaults(func=handle_soak_loop_research)
+
+
+def handle_soak_loop_backtest(args: argparse.Namespace) -> int:
+    from decimal import Decimal
+
+    from autonomous_trading_platform.scheduler.backtest.backtest_config import BacktestConfig
+    from autonomous_trading_platform.scheduler.backtest.backtest_replay_orchestrator import (
+        BacktestReplayOrchestrator,
+    )
+
+    symbols = _parse_symbols(args.symbols)
+    start = parse_datetime(args.start).date()
+    end = parse_datetime(args.end).date()
+
+    cfg = BacktestConfig(
+        symbols=symbols,
+        start_date=start,
+        end_date=end,
+        initial_capital=Decimal(str(args.initial_capital)),
+        strategy_id=args.strategy_id,
+        short_window=args.short_window,
+        long_window=args.long_window,
+    )
+
+    print_header("Backtest Replay")
+    print(f"[Backtest] Symbols:         {', '.join(symbols)}")
+    print(f"[Backtest] Period:          {start} to {end}")
+    print(f"[Backtest] Initial capital: ${float(cfg.initial_capital):,.2f}")
+    print(f"[Backtest] Strategy ID:     {cfg.strategy_id}")
+    print(f"[Backtest] Signal:          MA({cfg.short_window}) x MA({cfg.long_window}) crossover")
+    print()
+
+    session = get_session()
+    try:
+        orchestrator = BacktestReplayOrchestrator(session=session, config=cfg)
+        result = orchestrator.run(progress=True)
+    except Exception as exc:
+        print_error(f"Backtest failed: {exc}")
+        return 1
+    finally:
+        session.close()
+
+    print()
+    print(f"[Backtest] Run ID:          {result.run_id}")
+    print(f"[Backtest] Bars processed:  {result.bars_processed:,}")
+    print(f"[Backtest] Fills created:   {result.fills_created:,}")
+    print(f"[Backtest] Snapshots:       {result.snapshots_written:,}")
+    print(f"[Backtest] Final equity:    ${float(result.final_equity):>12,.2f}")
+    print(f"[Backtest] Final cash:      ${float(result.final_cash):>12,.2f}")
+    pnl = result.final_equity - cfg.initial_capital
+    pnl_pct = float(pnl) / float(cfg.initial_capital) * 100
+    sign = "+" if pnl >= 0 else ""
+    print(f"[Backtest] Total PnL:       {sign}${float(pnl):,.2f}  ({sign}{pnl_pct:.2f}%)")
+    return 0
 
 
 def handle_soak_loop_paper(args: argparse.Namespace) -> int:

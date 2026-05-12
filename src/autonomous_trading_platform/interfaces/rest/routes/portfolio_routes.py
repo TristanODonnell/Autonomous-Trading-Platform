@@ -24,6 +24,9 @@ from autonomous_trading_platform.application.services.portfolio_equity_curve_ser
 from autonomous_trading_platform.application.services.portfolio_summary_service import (
     PortfolioSummaryService,
 )
+from autonomous_trading_platform.application.services.strategy_allocation_service import (
+    StrategyAllocationService,
+)
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.execution.clients.alpaca_broker_client import AlpacaBrokerClient
 from autonomous_trading_platform.interfaces.rest.schemas.portfolio_schemas import (
@@ -144,19 +147,41 @@ def get_portfolio_allocation(
     if alpaca is not None:
         try:
             result = alpaca.get_allocation()
-            return success_response(
-                data=PortfolioAllocationResponse(**result),
-                request_id=request_id,
-            )
+            if result["by_strategy"]:
+                return success_response(
+                    data=PortfolioAllocationResponse(**result),
+                    request_id=request_id,
+                )
         except Exception:
             pass
 
     service = PortfolioAnalyticsService(session=session)
     result = service.get_allocation()
+
+    # No live positions — fall back to configured strategy allocation percentages
+    # so the chart shows what operators have set, not just an empty state.
+    if not result["by_strategy"]:
+        result = _allocation_from_strategy_config(session=session)
+
     return success_response(
         data=PortfolioAllocationResponse(**result),
         request_id=request_id,
     )
+
+
+def _allocation_from_strategy_config(*, session: Session) -> dict:
+    from decimal import Decimal
+
+    rows = StrategyAllocationService(session=session).get_allocations_for_active_strategies()
+    by_strategy = [
+        {
+            "name": row["display_name"],
+            "allocated_capital": row["allocated_capital"] or Decimal("0"),
+            "percent_of_portfolio": row["allocation_pct"] or Decimal("0"),
+        }
+        for row in rows
+    ]
+    return {"by_strategy": by_strategy, "by_asset": []}
 
 
 @router.get("/risk", response_model=SuccessEnvelope[PortfolioRiskResponse])

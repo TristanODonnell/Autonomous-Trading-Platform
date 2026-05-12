@@ -29,7 +29,7 @@ export interface ExperimentStrategy {
   composite_score: number
   status: string
 }
-export type Environment = 'simulation' | 'paper' | 'live'
+export type Environment = 'backtesting' | 'paper' | 'live'
 export type SimulationStage = 1 | 2 | 3 | 4
 
 export interface Strategy {

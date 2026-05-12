@@ -285,8 +285,32 @@ class RuntimeSnapshotService:
             alpaca = self._alpaca_portfolio_service()
             if alpaca is not None:
                 raw = alpaca.get_allocation()
-            else:
-                raw = PortfolioAnalyticsService(session=self._session).get_allocation()
+                if raw["by_strategy"]:
+                    return [
+                        PortfolioAllocationItem(
+                            name=item["name"],
+                            percent_of_portfolio=Decimal(str(item["percent_of_portfolio"])),
+                            allocated_capital=Decimal(str(item["allocated_capital"])),
+                        )
+                        for item in raw["by_strategy"]
+                    ]
+
+            raw = PortfolioAnalyticsService(session=self._session).get_allocation()
+            items = raw["by_strategy"]
+
+            # No live positions — fall back to configured strategy allocation percentages
+            if not items:
+                rows = StrategyAllocationService(
+                    session=self._session
+                ).get_allocations_for_active_strategies()
+                return [
+                    PortfolioAllocationItem(
+                        name=row["display_name"],
+                        percent_of_portfolio=Decimal(str(row["allocation_pct"] or 0)),
+                        allocated_capital=Decimal(str(row["allocated_capital"] or 0)),
+                    )
+                    for row in rows
+                ]
 
             return [
                 PortfolioAllocationItem(
@@ -294,7 +318,7 @@ class RuntimeSnapshotService:
                     percent_of_portfolio=Decimal(str(item["percent_of_portfolio"])),
                     allocated_capital=Decimal(str(item["allocated_capital"])),
                 )
-                for item in raw["by_strategy"]
+                for item in items
             ]
         except Exception:
             return []
