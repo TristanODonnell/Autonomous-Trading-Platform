@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 
+from autonomous_trading_platform.cli.commands.runtime_soak_loop import register_soak_loop_commands
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_cycle_dependencies,
@@ -34,6 +35,13 @@ def register(subparsers) -> None:
     )
     inspect_audit_parser.add_argument("--run-id", required=True)
     inspect_audit_parser.set_defaults(func=handle_inspect_audit)
+
+    soak_loop_parser = runtime_subparsers.add_parser(
+        "soak-loop",
+        help="Soak testing loop for paper trading or historical research",
+    )
+    soak_loop_subparsers = soak_loop_parser.add_subparsers(dest="soak_command", required=True)
+    register_soak_loop_commands(soak_loop_subparsers)
 
 
 def handle_run_cycle(args: argparse.Namespace) -> int:

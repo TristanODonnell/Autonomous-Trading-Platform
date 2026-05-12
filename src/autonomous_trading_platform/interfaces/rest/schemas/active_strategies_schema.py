@@ -147,13 +147,20 @@ class StrategyEquityCurveResponse(BaseModel):
 StrategyType = Literal["momentum", "mean_reversion", "breakout", "pairs"]
 RiskLevel = Literal["low", "medium", "high"]
 TimeHorizon = Literal["1w", "1m", "3m", "1y"]
-ExperimentStatus = Literal["queued", "running", "complete", "failed"]
+
+ExperimentType = Literal["backtest", "parameter_sweep", "ab_comparison", "rolling_window"]
+ExperimentStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
 
 
 class ExperimentCreateRequest(BaseModel):
-    strategy_type: StrategyType
-    risk_level: RiskLevel
-    time_horizon: TimeHorizon
+    name: str = Field(min_length=1, max_length=128)
+    experiment_type: ExperimentType
+    symbols: list[str] = Field(min_length=1, max_length=50)
+    start_date: str
+    end_date: str
+    price_basis: Literal["RAW", "ADJUSTED"] = "RAW"
+    strategy_count: int = Field(default=100, ge=1, le=10000)
+    parameter_ranges: dict[str, Any] = Field(default_factory=dict)
 
 
 class ExperimentCreateResponse(BaseModel):
@@ -163,28 +170,42 @@ class ExperimentCreateResponse(BaseModel):
 
 class ExperimentListItemResponse(BaseModel):
     experiment_id: str
-    created_at: datetime
+    experiment_name: str
+    experiment_type: ExperimentType
     status: ExperimentStatus
-    strategy_type: str
-    risk_level: str
-    time_horizon: str
-    result_summary: dict[str, Any] | None
+    created_at: datetime
+    symbols: list[str]
+    start_date: str | None
+    end_date: str | None
+    dataset_version: str | None
+    total_strategies: int
+    strategies_passed_filters: int
+    best_sharpe: float | None
+    best_return: float | None
+    progress: int | None
 
 
 class ExperimentListResponse(BaseModel):
     experiments: list[ExperimentListItemResponse]
 
 
-class ExperimentRunResultResponse(BaseModel):
-    run_id: str
+class ExperimentStrategyItemResponse(BaseModel):
     strategy_id: str
-    status: str
-    metrics: StrategyMetricsResponse
+    sharpe_ratio: float
+    total_return: float
+    max_drawdown: float
+    simulation_stage: int | None
+    governance_state: str
     composite_score: float
+    status: str
+
+
+class ExperimentStrategiesResponse(BaseModel):
+    experiment_id: str
+    strategies: list[ExperimentStrategyItemResponse]
 
 
 class ExperimentDetailResponse(ExperimentListItemResponse):
-    mapping: dict[str, Any] | None
-    simulation_results: list[ExperimentRunResultResponse]
-    ranked_strategy_outputs: list[ExperimentRunResultResponse]
-    filtering_summary: dict[str, int]
+    strategies: list[ExperimentStrategyItemResponse]
+    parameter_ranges: dict[str, Any] | None
+    price_basis: str | None

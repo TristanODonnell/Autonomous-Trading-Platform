@@ -37,6 +37,7 @@ from autonomous_trading_platform.interfaces.rest.schemas.active_strategies_schem
     ExperimentCreateResponse,
     ExperimentDetailResponse,
     ExperimentListResponse,
+    ExperimentStrategiesResponse,
     StrategyAllocationUpdateRequest,
     StrategyAllocationUpdateResponse,
     StrategyCompareRequest,
@@ -344,9 +345,14 @@ def create_experiment(
     service = ExperimentCatalogService(session=session)
     try:
         result = service.create_experiment(
-            strategy_type=payload.strategy_type,
-            risk_level=payload.risk_level,
-            time_horizon=payload.time_horizon,
+            name=payload.name,
+            experiment_type=payload.experiment_type,
+            symbols=payload.symbols,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            price_basis=payload.price_basis,
+            strategy_count=payload.strategy_count,
+            parameter_ranges=payload.parameter_ranges,
             actor=actor,
         )
     except ValueError as exc:
@@ -372,6 +378,64 @@ def get_experiments(
     service = ExperimentCatalogService(session=session)
     return success_response(
         data=ExperimentListResponse(experiments=service.list_experiments()),
+        request_id=request_id,
+    )
+
+
+@experiments_router.post(
+    "/{experiment_id}/cancel",
+    response_model=SuccessEnvelope[ExperimentCreateResponse],
+    status_code=status.HTTP_200_OK,
+)
+def cancel_experiment(
+    experiment_id: str,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+    actor: str = Depends(require_operator_or_admin),
+) -> SuccessEnvelope[ExperimentCreateResponse]:
+    service = ExperimentCatalogService(session=session)
+    try:
+        service.cancel_experiment(experiment_id=experiment_id)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    return success_response(
+        data=ExperimentCreateResponse(experiment_id=experiment_id, status="cancelled"),
+        request_id=request_id,
+    )
+
+
+@experiments_router.get(
+    "/{experiment_id}/strategies",
+    response_model=SuccessEnvelope[ExperimentStrategiesResponse],
+)
+def get_experiment_strategies(
+    experiment_id: str,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[ExperimentStrategiesResponse]:
+    service = ExperimentCatalogService(session=session)
+    try:
+        strategies = service.get_experiment_strategies(experiment_id=experiment_id)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return success_response(
+        data=ExperimentStrategiesResponse(
+            experiment_id=experiment_id,
+            strategies=strategies,
+        ),
         request_id=request_id,
     )
 

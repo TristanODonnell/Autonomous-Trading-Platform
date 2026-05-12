@@ -39,7 +39,7 @@ export default function TopNav() {
         Portfolio
       </Link>
       <Link to="/strategy" className={TAB_BASE} activeProps={{ className: TAB_ACTIVE }}>
-        Strategy Lab
+        Experiment Lab
       </Link>
       <Link to="/controls" className={TAB_BASE} activeProps={{ className: TAB_ACTIVE }}>
         Controls
