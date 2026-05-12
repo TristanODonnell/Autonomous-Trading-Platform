@@ -212,7 +212,7 @@ def update_strategy_allocation(
     try:
         result = service.override_allocation(
             strategy_id=strategy_id,
-            allocated_capital=payload.allocated_capital,
+            allocation_pct=payload.allocation_pct,
             reason=reason,
             updated_by=actor,
         )
@@ -230,6 +230,7 @@ def update_strategy_allocation(
     return success_response(
         data=StrategyAllocationUpdateResponse(
             strategy_id=result.strategy_id,
+            allocation_pct=result.allocation_pct,
             allocated_capital=result.allocated_capital,
             total_portfolio_capital=result.total_portfolio_capital,
             reason=result.reason,

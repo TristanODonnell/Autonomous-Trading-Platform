@@ -41,6 +41,7 @@ export async function transitionStrategyGovernance(
 export interface ApiStrategyAllocationState {
   strategy_id: string
   display_name: string
+  allocation_pct: number | null
   allocated_capital: number | null
   total_portfolio_capital: number
   is_overridden: boolean
@@ -58,11 +59,11 @@ export async function fetchStrategyAllocations(): Promise<ApiStrategyAllocationS
 
 export async function updateStrategyAllocation(
   strategyId: string,
-  allocatedCapital: number,
+  allocationPct: number,
   reason: string,
 ): Promise<void> {
   await http.put(`/api/v1/strategies/${strategyId}/allocation`, {
-    allocated_capital: allocatedCapital,
+    allocation_pct: allocationPct,
     reason,
   })
 }

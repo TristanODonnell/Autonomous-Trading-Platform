@@ -21,12 +21,13 @@ class ActiveStrategiesResponse(BaseModel):
 
 
 class StrategyAllocationUpdateRequest(BaseModel):
-    allocated_capital: Decimal = Field(ge=0)
+    allocation_pct: Decimal = Field(ge=0, le=100)
     reason: str = Field(min_length=1, max_length=500)
 
 
 class StrategyAllocationUpdateResponse(BaseModel):
     strategy_id: str
+    allocation_pct: Decimal
     allocated_capital: Decimal
     total_portfolio_capital: Decimal
     reason: str
@@ -37,6 +38,7 @@ class StrategyAllocationUpdateResponse(BaseModel):
 class StrategyAllocationStateResponse(BaseModel):
     strategy_id: str
     display_name: str
+    allocation_pct: Decimal | None
     allocated_capital: Decimal | None
     total_portfolio_capital: Decimal
     is_overridden: bool

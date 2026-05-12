@@ -138,10 +138,21 @@ def get_portfolio_holdings(
 def get_portfolio_allocation(
     request_id: str = _request_id_dependency,
     session: Session = _session_dependency,
+    alpaca_client: AlpacaBrokerClient | None = _alpaca_dependency,
 ) -> SuccessEnvelope[PortfolioAllocationResponse]:
+    alpaca = _alpaca_service(alpaca_client)
+    if alpaca is not None:
+        try:
+            result = alpaca.get_allocation()
+            return success_response(
+                data=PortfolioAllocationResponse(**result),
+                request_id=request_id,
+            )
+        except Exception:
+            pass
+
     service = PortfolioAnalyticsService(session=session)
     result = service.get_allocation()
-
     return success_response(
         data=PortfolioAllocationResponse(**result),
         request_id=request_id,

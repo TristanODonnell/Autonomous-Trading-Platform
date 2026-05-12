@@ -30,6 +30,7 @@ from autonomous_trading_platform.storage.sor.repositories.core.cash_snapshot_rep
 @dataclass(frozen=True)
 class StrategyAllocationUpdateResult:
     strategy_id: str
+    allocation_pct: Decimal
     allocated_capital: Decimal
     total_portfolio_capital: Decimal
     reason: str
@@ -59,22 +60,18 @@ class StrategyAllocationService:
         self,
         *,
         strategy_id: str,
-        allocated_capital: Decimal,
+        allocation_pct: Decimal,
         reason: str,
         updated_by: str,
     ) -> StrategyAllocationUpdateResult:
-        if allocated_capital < Decimal("0"):
-            raise ValueError("allocated_capital must be non-negative.")
+        if allocation_pct < Decimal("0") or allocation_pct > Decimal("100"):
+            raise ValueError("allocation_pct must be between 0 and 100.")
 
         if not self._strategy_exists(strategy_id):
             raise LookupError(f"Strategy not found: {strategy_id}")
 
         total_portfolio_capital = self._resolve_total_portfolio_capital()
-        if allocated_capital > total_portfolio_capital:
-            raise ValueError(
-                "allocated_capital cannot exceed total portfolio capital "
-                f"({total_portfolio_capital})."
-            )
+        allocated_capital = allocation_pct / Decimal("100") * total_portfolio_capital
 
         now = datetime.now(UTC)
 
@@ -86,8 +83,8 @@ class StrategyAllocationService:
                 strategy_id=strategy_id,
                 overridden_by=updated_by,
                 override_reason=reason,
-                max_pct_of_capital=None,
-                max_position_size_usd=float(allocated_capital),
+                max_pct_of_capital=float(allocation_pct / Decimal("100")),
+                max_position_size_usd=None,
                 max_drawdown_allowed=None,
                 is_active=True,
                 created_at=now,
@@ -103,6 +100,7 @@ class StrategyAllocationService:
             component="strategies",
             metadata={
                 "strategy_id": strategy_id,
+                "allocation_pct": str(allocation_pct),
                 "allocated_capital": str(allocated_capital),
                 "total_portfolio_capital": str(total_portfolio_capital),
             },
@@ -112,6 +110,7 @@ class StrategyAllocationService:
 
         return StrategyAllocationUpdateResult(
             strategy_id=strategy_id,
+            allocation_pct=allocation_pct,
             allocated_capital=allocated_capital,
             total_portfolio_capital=total_portfolio_capital,
             reason=reason,
@@ -146,15 +145,22 @@ class StrategyAllocationService:
             )
 
             override = self._allocation_overrides_repo.get_active_override(gov.strategy_id)
+            allocation_pct = (
+                Decimal(str(override.max_pct_of_capital)) * Decimal("100")
+                if override and override.max_pct_of_capital is not None
+                else None
+            )
+            allocated_capital = (
+                allocation_pct / Decimal("100") * total_capital
+                if allocation_pct is not None
+                else None
+            )
             results.append(
                 {
                     "strategy_id": gov.strategy_id,
                     "display_name": str(display_name),
-                    "allocated_capital": (
-                        Decimal(str(override.max_position_size_usd))
-                        if override and override.max_position_size_usd is not None
-                        else None
-                    ),
+                    "allocation_pct": allocation_pct,
+                    "allocated_capital": allocated_capital,
                     "total_portfolio_capital": total_capital,
                     "is_overridden": override is not None,
                     "overridden_by": override.overridden_by if override else None,

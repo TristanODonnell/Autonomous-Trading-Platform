@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 
 from autonomous_trading_platform.execution.clients.alpaca_broker_client import AlpacaBrokerClient
@@ -64,3 +65,27 @@ class AlpacaPortfolioService:
                 }
             )
         return {"holdings": holdings}
+
+    def get_allocation(self) -> dict:
+        holdings = self.get_holdings()["holdings"]
+        total = sum((h["market_value"] for h in holdings), Decimal("0"))
+        if total == Decimal("0"):
+            return {"by_strategy": [], "by_asset": []}
+
+        strategy_totals: defaultdict[str, Decimal] = defaultdict(Decimal)
+        asset_totals: defaultdict[str, Decimal] = defaultdict(Decimal)
+        for h in holdings:
+            strategy_totals[h["strategy_id"]] += h["market_value"]
+            asset_totals[h["symbol"]] += h["market_value"]
+
+        def _rows(totals: dict[str, Decimal]) -> list[dict]:
+            return [
+                {
+                    "name": name,
+                    "allocated_capital": val,
+                    "percent_of_portfolio": val / total * Decimal("100"),
+                }
+                for name, val in sorted(totals.items())
+            ]
+
+        return {"by_strategy": _rows(strategy_totals), "by_asset": _rows(asset_totals)}

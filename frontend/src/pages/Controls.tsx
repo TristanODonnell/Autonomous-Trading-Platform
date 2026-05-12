@@ -606,8 +606,8 @@ function EnvironmentCard() {
 
 function AllocationOverridesCard() {
   const queryClient = useQueryClient()
-  const [editing, setEditing] = useState<{ id: string; current: number | null } | null>(null)
-  const [amount, setAmount] = useState('')
+  const [editing, setEditing] = useState<{ id: string } | null>(null)
+  const [pct, setPct] = useState('')
   const [reason, setReason] = useState('')
 
   const { data: allocations = [], isLoading, error } = useQuery({
@@ -617,39 +617,38 @@ function AllocationOverridesCard() {
   })
 
   const overrideMutation = useMutation({
-    mutationFn: ({ id, amt, rsn }: { id: string; amt: number; rsn: string }) =>
-      updateStrategyAllocation(id, amt, rsn),
+    mutationFn: ({ id, allocationPct, rsn }: { id: string; allocationPct: number; rsn: string }) =>
+      updateStrategyAllocation(id, allocationPct, rsn),
     onSuccess: () => {
       setEditing(null)
-      setAmount('')
+      setPct('')
       setReason('')
       void queryClient.invalidateQueries({ queryKey: ['strategies', 'allocations'] })
+      void queryClient.invalidateQueries({ queryKey: ['portfolio', 'allocation'] })
     },
   })
 
   function startEdit(s: ApiStrategyAllocationState) {
-    setEditing({ id: s.strategy_id, current: s.allocated_capital })
-    setAmount(s.allocated_capital != null ? String(s.allocated_capital) : '')
+    setEditing({ id: s.strategy_id })
+    setPct(s.allocation_pct != null ? Number(s.allocation_pct).toFixed(1) : '')
     setReason('')
   }
 
   function confirmEdit() {
     if (!editing || !reason.trim()) return
-    const parsed = parseFloat(amount)
-    if (isNaN(parsed) || parsed < 0) return
-    overrideMutation.mutate({ id: editing.id, amt: parsed, rsn: reason })
+    const parsed = parseFloat(pct)
+    if (isNaN(parsed) || parsed < 0 || parsed > 100) return
+    overrideMutation.mutate({ id: editing.id, allocationPct: parsed, rsn: reason })
   }
 
   if (isLoading) return <CardSkeleton title="Allocation Overrides" />
   if (error) return <CardError title="Allocation Overrides" message={(error as Error).message} />
 
-  const totalCapital = allocations[0]?.total_portfolio_capital ?? 0
-
   return (
     <Card>
       <CardTitle>Allocation Overrides</CardTitle>
       <p className="font-mono text-[11px] mb-3" style={{ color: 'var(--text2)' }}>
-        Manual overrides take precedence over policy allocations. All changes are logged.
+        Set each strategy's share of total capital (0–100%). Overrides take precedence over policy. All changes are logged.
       </p>
 
       {allocations.length === 0 ? (
@@ -660,6 +659,8 @@ function AllocationOverridesCard() {
         allocations.map((s, i) => {
           const isLast = i === allocations.length - 1
           const isEditing = editing?.id === s.strategy_id
+          const pctValue = s.allocation_pct != null ? Number(s.allocation_pct) : null
+          const dollarValue = s.allocated_capital != null ? Number(s.allocated_capital) : null
 
           if (isEditing) {
             return (
@@ -669,22 +670,27 @@ function AllocationOverridesCard() {
                 style={{ borderBottom: isLast ? 'none' : '1px solid var(--border)' }}
               >
                 <div className="text-[13px]" style={{ color: 'var(--text)' }}>{s.display_name}</div>
-                <input
-                  autoFocus
-                  type="number"
-                  min="0"
-                  className="w-full px-3 py-1.5 rounded font-mono text-[11px] outline-none"
-                  style={{
-                    background: 'var(--surface2)',
-                    border: '1px solid var(--border2)',
-                    color: 'var(--text)',
-                  }}
-                  placeholder={`Amount USD (portfolio: $${totalCapital.toLocaleString()})`}
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
-                  onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border2)')}
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    autoFocus
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    className="flex-1 px-3 py-1.5 rounded font-mono text-[11px] outline-none"
+                    style={{
+                      background: 'var(--surface2)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--text)',
+                    }}
+                    placeholder="e.g. 25.0"
+                    value={pct}
+                    onChange={(e) => setPct(e.target.value)}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border2)')}
+                  />
+                  <span className="font-mono text-[13px]" style={{ color: 'var(--text2)' }}>%</span>
+                </div>
                 <ReasonInput value={reason} onChange={setReason} placeholder="Reason (required)" />
                 {overrideMutation.error && (
                   <p className="font-mono text-[10px]" style={{ color: 'var(--red)' }}>
@@ -693,12 +699,19 @@ function AllocationOverridesCard() {
                 )}
                 <div className="flex gap-2">
                   <ConfirmButton
-                    disabled={!reason.trim() || !amount || isNaN(parseFloat(amount)) || overrideMutation.isPending}
+                    disabled={
+                      !reason.trim() ||
+                      !pct ||
+                      isNaN(parseFloat(pct)) ||
+                      parseFloat(pct) < 0 ||
+                      parseFloat(pct) > 100 ||
+                      overrideMutation.isPending
+                    }
                     onClick={confirmEdit}
                   >
                     {overrideMutation.isPending ? 'Saving…' : 'Apply'}
                   </ConfirmButton>
-                  <CancelButton onClick={() => { setEditing(null); setAmount(''); setReason('') }} />
+                  <CancelButton onClick={() => { setEditing(null); setPct(''); setReason('') }} />
                 </div>
               </div>
             )
@@ -709,8 +722,8 @@ function AllocationOverridesCard() {
               <div>
                 <div className="text-[13px]" style={{ color: 'var(--text)' }}>{s.display_name}</div>
                 <div className="font-mono text-[11px] mt-0.5" style={{ color: 'var(--text2)' }}>
-                  {s.is_overridden
-                    ? `Override: $${Number(s.allocated_capital).toLocaleString()}`
+                  {s.is_overridden && pctValue != null
+                    ? `Override: ${pctValue.toFixed(1)}%${dollarValue != null ? ` · $${dollarValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : ''}`
                     : 'Policy allocation'}
                 </div>
               </div>
