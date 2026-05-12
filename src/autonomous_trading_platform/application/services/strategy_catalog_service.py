@@ -429,6 +429,13 @@ class ExperimentCatalogService:
         raw_status = row.status or "pending"
         status = _EXPERIMENT_STATUS_NORMALISE.get(raw_status, raw_status.lower())
 
+        # Recover stale "running" experiments: if the DB says running but no
+        # simulation run is still in-flight, derive the real status from the runs.
+        if status == "running" and runs:
+            active_run_statuses = {(r.status or "").upper() for r in runs}
+            if "RUNNING" not in active_run_statuses:
+                status = "failed" if "FAILED" in active_run_statuses else "completed"
+
         raw_type = metadata.get("experiment_type", "backtest") or "backtest"
         experiment_type = _EXPERIMENT_TYPE_NORMALISE.get(str(raw_type), str(raw_type))
 
