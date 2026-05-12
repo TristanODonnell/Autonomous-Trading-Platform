@@ -16,7 +16,7 @@ class AllocationOverrides(Base):
 
     __table_args__ = (Index("ix_alloc_override_strategy_active", "strategy_id", "is_active"),)
     override_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    strategy_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    strategy_id: Mapped[str] = mapped_column(String(128), nullable=False)
     overridden_by: Mapped[str] = mapped_column(String(128), nullable=False)
     override_reason: Mapped[str] = mapped_column(String(512), nullable=False)
     max_pct_of_capital: Mapped[float | None] = mapped_column(Float, nullable=True)

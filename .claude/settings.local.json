@@ -39,7 +39,9 @@
       "Bash(xargs grep -l \"controls\\\\|kill.switch\\\\|audit.log\\\\|trading.mode\")",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\frontend\" -Filter \".env*\" -Force)",
       "Bash(Select-Object Name, FullName)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(python -m alembic upgrade head)",
+      "Bash(python -m alembic -c infra/db/alembic.ini upgrade head)"
     ]
   }
 }
