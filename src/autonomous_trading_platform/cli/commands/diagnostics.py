@@ -187,13 +187,12 @@ def _print_snapshot(snap: RuntimeSnapshot) -> None:
         print()
         for exp in snap.experiments:
             created = exp.created_at.strftime("%Y-%m-%d %H:%M")
-            duration = ""
-            if exp.start_time and exp.end_time:
-                secs = int((exp.end_time - exp.start_time).total_seconds())
-                duration = f"  [{secs}s]"
-            elif exp.start_time:
-                duration = "  [running]"
-            print(f"  {exp.status:<12}  {created}  {exp.experiment_name}{duration}")
+            strats = (
+                f"{exp.strategies_passed_filters}/{exp.total_strategies} passed"
+                if exp.total_strategies
+                else "no runs"
+            )
+            print(f"  {exp.status:<12}  {created}  {exp.experiment_name:<50}  {strats}")
 
     # --- Recent Activity ---
     n_activity = len(snap.recent_activity)

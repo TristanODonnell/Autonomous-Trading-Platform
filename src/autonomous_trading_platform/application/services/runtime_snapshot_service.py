@@ -15,6 +15,9 @@ from autonomous_trading_platform.application.services.runtime_control_service im
 from autonomous_trading_platform.application.services.strategy_allocation_service import (
     StrategyAllocationService,
 )
+from autonomous_trading_platform.application.services.strategy_catalog_service import (
+    ExperimentCatalogService,
+)
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.contracts.runtime.runtime_snapshot import (
     DatasetVersionEntry,
@@ -34,9 +37,6 @@ from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_reposi
 )
 from autonomous_trading_platform.storage.sor.repositories.core.dataset_versions_repository import (
     DatasetVersionsRepository,
-)
-from autonomous_trading_platform.storage.sor.repositories.core.experiments_repository import (
-    ExperimentsRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
     OperatorSettingsRepository,
@@ -182,18 +182,18 @@ class RuntimeSnapshotService:
 
     def _capture_experiments(self) -> list[ExperimentEntry]:
         try:
-            repo = ExperimentsRepository(self._session)
-            rows = repo.list_recent(limit=10)
+            svc = ExperimentCatalogService(session=self._session)
+            rows = svc.list_experiments()
             return [
                 ExperimentEntry(
-                    experiment_id=row.experiment_id,
-                    experiment_name=row.experiment_name,
-                    status=row.status,
-                    created_at=row.created_at,
-                    start_time=row.start_time,
-                    end_time=row.end_time,
+                    experiment_id=row["experiment_id"],
+                    experiment_name=row["experiment_name"],
+                    status=row["status"],
+                    created_at=row["created_at"],
+                    total_strategies=row["total_strategies"],
+                    strategies_passed_filters=row["strategies_passed_filters"],
                 )
-                for row in rows
+                for row in rows[:10]
             ]
         except Exception:
             return []

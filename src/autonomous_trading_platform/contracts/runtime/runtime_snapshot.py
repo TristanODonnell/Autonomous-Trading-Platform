@@ -62,8 +62,8 @@ class ExperimentEntry(BaseModel):
     experiment_name: str
     status: str
     created_at: datetime
-    start_time: datetime | None = None
-    end_time: datetime | None = None
+    total_strategies: int = 0
+    strategies_passed_filters: int = 0
 
 
 class RuntimeSnapshot(BaseModel):
