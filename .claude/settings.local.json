@@ -48,7 +48,8 @@
       "Bash(Select-Object Name)",
       "Bash(grep -E \"\\(main|app\\)\\\\.py$\")",
       "Bash(python -c \"from autonomous_trading_platform.contracts.runtime.runtime_snapshot import RuntimeSnapshot; from autonomous_trading_platform.application.services.runtime_snapshot_service import RuntimeSnapshotService; from autonomous_trading_platform.cli.commands.diagnostics import register; print\\('imports OK'\\)\")",
-      "Bash(python -m autonomous_trading_platform.cli.main diagnostics snapshot --help)"
+      "Bash(python -m autonomous_trading_platform.cli.main diagnostics snapshot --help)",
+      "Bash(python -c \"from autonomous_trading_platform.scheduler.backtest.backtest_trading_cycle_orchestrator import BacktestTradingCycleOrchestrator; print\\('OK'\\)\")"
     ]
   }
 }

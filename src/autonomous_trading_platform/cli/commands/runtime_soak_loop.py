@@ -393,20 +393,6 @@ def register_soak_loop_commands(subparsers: argparse._SubParsersAction) -> None:
         default="baseline_strategy",
         help="Strategy ID to tag fills and positions with",
     )
-    backtest_parser.add_argument(
-        "--short-window",
-        dest="short_window",
-        type=int,
-        default=5,
-        help="Fast MA window in bars (default: 5)",
-    )
-    backtest_parser.add_argument(
-        "--long-window",
-        dest="long_window",
-        type=int,
-        default=20,
-        help="Slow MA window in bars (default: 20)",
-    )
     backtest_parser.set_defaults(func=handle_soak_loop_backtest)
 
     paper_parser = subparsers.add_parser(
@@ -458,8 +444,8 @@ def handle_soak_loop_backtest(args: argparse.Namespace) -> int:
     from decimal import Decimal
 
     from autonomous_trading_platform.scheduler.backtest.backtest_config import BacktestConfig
-    from autonomous_trading_platform.scheduler.backtest.backtest_replay_orchestrator import (
-        BacktestReplayOrchestrator,
+    from autonomous_trading_platform.scheduler.backtest.backtest_trading_cycle_orchestrator import (
+        BacktestTradingCycleOrchestrator,
     )
 
     symbols = _parse_symbols(args.symbols)
@@ -472,27 +458,24 @@ def handle_soak_loop_backtest(args: argparse.Namespace) -> int:
         end_date=end,
         initial_capital=Decimal(str(args.initial_capital)),
         strategy_id=args.strategy_id,
-        short_window=args.short_window,
-        long_window=args.long_window,
     )
 
-    print_header("Backtest Replay")
+    print_header("Backtest Trading Cycle")
     print(f"[Backtest] Symbols:         {', '.join(symbols)}")
     print(f"[Backtest] Period:          {start} to {end}")
     print(f"[Backtest] Initial capital: ${float(cfg.initial_capital):,.2f}")
     print(f"[Backtest] Strategy ID:     {cfg.strategy_id}")
-    print(f"[Backtest] Signal:          MA({cfg.short_window}) x MA({cfg.long_window}) crossover")
+    print(
+        "[Backtest] Pipeline:        backfill → features → evaluation → simulated fills → snapshots"
+    )
     print()
 
-    session = get_session()
     try:
-        orchestrator = BacktestReplayOrchestrator(session=session, config=cfg)
+        orchestrator = BacktestTradingCycleOrchestrator(config=cfg)
         result = orchestrator.run(progress=True)
     except Exception as exc:
         print_error(f"Backtest failed: {exc}")
         return 1
-    finally:
-        session.close()
 
     print()
     print(f"[Backtest] Run ID:          {result.run_id}")

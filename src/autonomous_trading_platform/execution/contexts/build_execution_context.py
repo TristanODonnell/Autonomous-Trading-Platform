@@ -66,9 +66,11 @@ def build_execution_context(
     audit_log_repository,
     alpaca_settings,
     portfolio_engine: PortfolioEngine,
+    broker_client=None,
 ) -> ExecutionContext:
-    broker_client = AlpacaBrokerClient(alpaca_settings)
-    BrokerStartupHealthCheckService().assert_broker_ready(broker_client)
+    if broker_client is None:
+        broker_client = AlpacaBrokerClient(alpaca_settings)
+        BrokerStartupHealthCheckService().assert_broker_ready(broker_client)
     broker_adapter = AlpacaBrokerAdapter()
 
     order_execution_service = OrderExecutionService(
