@@ -191,22 +191,6 @@ def run_corporate_action_ingestion_cycle(
             "manifest_run_type": manifest.run_type.value,
         }
 
-        ingestion_run_contract = IngestionRun(
-            ingestion_run_id=str(ingestion_run_id),
-            created_at=now_utc,
-            run_timestamp=cycle_end,
-            run_type=RunType.INGESTION,
-            source="alpaca",
-            dataset_version=str(dataset_version_id),
-            status="running",
-            started_at=now_utc,
-            completed_at=None,
-            error_message=None,
-            row_count=None,
-            file_count=None,
-        )
-        ingestion_run = ingestion_run_registration_service.register(ingestion_run_contract)
-
         if source_raw_bars_dataset_version_id is not None:
             _resolved_raw_bars_version_id = source_raw_bars_dataset_version_id
         else:
@@ -247,6 +231,22 @@ def run_corporate_action_ingestion_cycle(
             },
         )
         dataset_version = dataset_registration_service.register(dataset_version_contract)
+
+        ingestion_run_contract = IngestionRun(
+            ingestion_run_id=str(ingestion_run_id),
+            created_at=now_utc,
+            run_timestamp=cycle_end,
+            run_type=RunType.INGESTION,
+            source="alpaca",
+            dataset_version=str(dataset_version_id),
+            status="running",
+            started_at=now_utc,
+            completed_at=None,
+            error_message=None,
+            row_count=None,
+            file_count=None,
+        )
+        ingestion_run = ingestion_run_registration_service.register(ingestion_run_contract)
 
         with start_span(
             "corporate_action_ingestion_cycle.run", timespan=SpanTimespan.CYCLE

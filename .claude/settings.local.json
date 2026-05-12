@@ -34,7 +34,8 @@
       "Bash(node -e \"const p = require\\('./package.json'\\); const keys = [...Object.keys\\(p.dependencies||{}\\), ...Object.keys\\(p.devDependencies||{}\\)]; keys.filter\\(k => k.includes\\('tailwind'\\) || k.includes\\('vite'\\) || k.includes\\('react'\\)\\).forEach\\(k => { const v = \\(p.dependencies||{}\\)[k] || \\(p.devDependencies||{}\\)[k]; console.log\\(k, v\\); }\\)\")",
       "Bash(node -e \"console.log\\(require\\('./node_modules/tailwindcss/package.json'\\).version\\)\")",
       "Bash(curl -s http://localhost:5174/)",
-      "Bash(python -m alembic -c infra/db/alembic.ini heads)"
+      "Bash(python -m alembic -c infra/db/alembic.ini heads)",
+      "Bash(xargs grep -l \"corporate_action\\\\|corporate_actions\")"
     ]
   }
 }
