@@ -300,6 +300,18 @@ class StrategyCatalogService:
 _EXPERIMENT_STATUS_NORMALISE = {
     "queued": "pending",
     "complete": "completed",
+    "RUNNING": "running",
+    "COMPLETED": "completed",
+    "ACTIVE": "running",
+    "FAILED": "failed",
+    "CANCELLED": "cancelled",
+    "PENDING": "pending",
+}
+
+_EXPERIMENT_TYPE_NORMALISE = {
+    "sweep": "parameter_sweep",
+    "ab": "ab_comparison",
+    "rolling": "rolling_window",
 }
 
 
@@ -415,12 +427,15 @@ class ExperimentCatalogService:
         passed = len([r for r in strategy_results if r["sharpe_ratio"] > 0])
 
         raw_status = row.status or "pending"
-        status = _EXPERIMENT_STATUS_NORMALISE.get(raw_status, raw_status)
+        status = _EXPERIMENT_STATUS_NORMALISE.get(raw_status, raw_status.lower())
+
+        raw_type = metadata.get("experiment_type", "backtest") or "backtest"
+        experiment_type = _EXPERIMENT_TYPE_NORMALISE.get(str(raw_type), str(raw_type))
 
         return {
             "experiment_id": row.experiment_id,
             "experiment_name": row.experiment_name,
-            "experiment_type": metadata.get("experiment_type", "backtest"),
+            "experiment_type": experiment_type,
             "status": status,
             "created_at": row.created_at,
             "symbols": metadata.get("symbols") or [],
