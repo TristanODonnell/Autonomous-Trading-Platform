@@ -79,8 +79,25 @@ def _print_snapshot(snap: RuntimeSnapshot) -> None:
         print("  N/A")
     else:
         c = snap.operator_controls
-        print(f"  Trading Paused:  {_yn(c.global_trading_paused)}")
+
+        # Derive a single human-readable status from the three independent flags.
+        # kill_switch and trading_paused are set by separate API calls;
+        # either alone is sufficient to block order submission.
+        if c.kill_switch_active:
+            trading_status = "HALTED  ← kill switch active"
+        elif c.trading_paused:
+            trading_status = "PAUSED  ← soft pause active"
+        elif not c.trading_enabled:
+            trading_status = "DISABLED  ← trading_enabled=false"
+        else:
+            trading_status = "Active"
+
+        print(f"  Trading Status:  {trading_status}")
         print(f"  Kill Switch:     {_yn(c.kill_switch_active)}")
+        print(
+            f"  Trading Paused:  {_yn(c.trading_paused)}  (set via POST /controls/pause, independent of kill switch)"
+        )
+        print(f"  Trading Enabled: {_yn(c.trading_enabled)}")
         print(f"  Trading Mode:    {c.trading_mode}")
 
     # --- Operator Settings ---

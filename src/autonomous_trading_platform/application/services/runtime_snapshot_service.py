@@ -64,7 +64,8 @@ class RuntimeSnapshotService:
             svc = RuntimeControlService(session=self._session)
             state = svc.get_controls_state()
             controls = OperatorControlsSnapshot(
-                global_trading_paused=state.trading_paused,
+                trading_enabled=state.trading_enabled,
+                trading_paused=state.trading_paused,
                 kill_switch_active=state.kill_switch_active,
                 trading_mode=state.trading_mode,
             )

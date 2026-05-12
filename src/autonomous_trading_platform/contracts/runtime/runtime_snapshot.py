@@ -7,7 +7,8 @@ from pydantic import BaseModel
 
 
 class OperatorControlsSnapshot(BaseModel):
-    global_trading_paused: bool
+    trading_enabled: bool
+    trading_paused: bool
     kill_switch_active: bool
     trading_mode: str
 
