@@ -2,20 +2,21 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import json
 import signal
 import time
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from autonomous_trading_platform.cli.commands.research import _load_experiment_from_yaml
 from autonomous_trading_platform.cli.formatters import print_error, print_header
 from autonomous_trading_platform.cli.helpers import parse_datetime
-from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.research.experiments.models.experiment_plan import (
     ExperimentDefinition,
-    ExperimentType,
+)
+from autonomous_trading_platform.research.simulation.contexts.build_simulation_context import (
+    build_simulation_context,
 )
 from autonomous_trading_platform.scheduler.orchestration.historical_research_golden_path_orchestrator import (
     HistoricalResearchGoldenPathOrchestrator,
@@ -94,16 +95,8 @@ def _fmt_duration(total_seconds: int) -> str:
     return " ".join(parts)
 
 
-def _load_experiment_plan(path: Path) -> ExperimentDefinition:
-    with path.open() as f:
-        raw: dict[str, object] = json.load(f)
-    raw["experiment_type"] = ExperimentType(str(raw["experiment_type"]))
-    raw["price_basis"] = PriceBasis(str(raw["price_basis"]))
-    raw["start_date"] = date.fromisoformat(str(raw["start_date"]))
-    raw["end_date"] = date.fromisoformat(str(raw["end_date"]))
-    # staged_pipeline_config cannot be deserialized from plain JSON
-    raw.pop("staged_pipeline_config", None)
-    return ExperimentDefinition(**raw)  # type: ignore[arg-type]
+def _load_experiment_plan(path: Path, simulation_context: object) -> ExperimentDefinition:
+    return _load_experiment_from_yaml(str(path), simulation_context)
 
 
 class _PaperTradingSoakRunner:
@@ -408,7 +401,7 @@ def register_soak_loop_commands(subparsers: argparse._SubParsersAction) -> None:
         "--experiment-plan",
         dest="experiment_plan",
         metavar="FILE",
-        help="Path to experiment plan JSON file (optional)",
+        help="Path to experiment plan YAML file (optional, same format as atp research run-experiment --config)",
     )
     research_parser.set_defaults(func=handle_soak_loop_research)
 
@@ -428,11 +421,15 @@ def handle_soak_loop_research(args: argparse.Namespace) -> int:
         if not plan_path.exists():
             print_error(f"Experiment plan file not found: {plan_path}")
             return 1
+        session = get_session()
         try:
-            experiment_plan = _load_experiment_plan(plan_path)
+            ctx = build_simulation_context(session=session)
+            experiment_plan = _load_experiment_plan(plan_path, ctx)
         except Exception as exc:
             print_error(f"Failed to load experiment plan: {exc}")
             return 1
+        finally:
+            session.close()
 
     return _ResearchSoakRunner(
         symbols=symbols,
