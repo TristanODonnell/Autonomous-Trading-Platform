@@ -64,6 +64,8 @@ from autonomous_trading_platform.scheduler.jobs.run_risk_snapshot_job import run
 from autonomous_trading_platform.scheduler.jobs.run_trading_evaluation_job import (
     run_trading_evaluation_job,
 )
+from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
+from autonomous_trading_platform.storage.parquet.reader import HistoricalBarDatasetReader
 from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
 from autonomous_trading_platform.storage.sor.models.fills import Fill
@@ -79,9 +81,6 @@ from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_reposi
 )
 from autonomous_trading_platform.storage.sor.repositories.core.capital_allocation_policies_repository import (
     CapitalAllocationPoliciesRepository,
-)
-from autonomous_trading_platform.storage.sor.repositories.core.market_bar_repository import (
-    MarketBarRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_repository import (
     PromotionRulesRepository,
@@ -227,14 +226,25 @@ class BacktestTradingCycleOrchestrator:
             if progress:
                 print("[Backtest] Phase 3/3: Replaying trading cycle bar-by-bar")
 
-            repo = MarketBarRepository(session)
-            bars = repo.get_bars_for_symbols_between(
-                symbols=cfg.symbols,
-                start_ts=start_dt,
-                end_ts=end_dt,
-            )
+            bar_reader = HistoricalBarDatasetReader(session=session, base_path="data")
+            bars_by_ts: dict[datetime, dict[str, Decimal]] = defaultdict(dict)
+            for sym in cfg.symbols:
+                table = bar_reader.read(
+                    dataset=RAW_BARS_DATASET,
+                    dataset_version=str(raw_dataset.dataset_version_id),
+                    symbol=sym,
+                    start_date=cfg.start_date,
+                    end_date=cfg.end_date,
+                )
+                for row in table.to_pylist():
+                    ts_val = row["timestamp"]
+                    if not isinstance(ts_val, datetime):
+                        ts_val = datetime.fromisoformat(str(ts_val)).replace(tzinfo=UTC)
+                    elif ts_val.tzinfo is None:
+                        ts_val = ts_val.replace(tzinfo=UTC)
+                    bars_by_ts[ts_val][sym] = Decimal(str(row["close"]))
 
-            if not bars:
+            if not bars_by_ts:
                 print("  No bars found after backfill — check symbols/dates")
                 return BacktestTradingCycleResult(
                     run_id=str(run_id),
@@ -244,11 +254,6 @@ class BacktestTradingCycleOrchestrator:
                     final_equity=cfg.initial_capital,
                     final_cash=cfg.initial_capital,
                 )
-
-            # Group by timestamp
-            bars_by_ts: dict[datetime, dict[str, Decimal]] = defaultdict(dict)
-            for bar in bars:
-                bars_by_ts[bar.timestamp][bar.symbol] = Decimal(str(bar.close))
 
             sorted_timestamps = sorted(bars_by_ts.keys())
 
@@ -424,7 +429,7 @@ class BacktestTradingCycleOrchestrator:
             snapshot_id=uuid.uuid4(),
             run_id=run_id,
             timestamp=ts,
-            source=OrderSource.SIMULATION,
+            source=OrderSource.BACKTEST,
         )
         session.add(pos_snapshot)
         session.flush()
@@ -458,7 +463,7 @@ class BacktestTradingCycleOrchestrator:
                 buying_power=broker_client.cash,
                 reserved_cash=Decimal("0"),
                 equity=equity,
-                source=OrderSource.SIMULATION,
+                source=OrderSource.BACKTEST,
                 capital_bucket=self._config.initial_capital,
             )
         )

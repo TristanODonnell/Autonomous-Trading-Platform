@@ -24,6 +24,7 @@ class OrderSource(enum.StrEnum):
     LEDGER = "ledger"
     BROKER_RECONCILED = "broker_reconciled"
     SIMULATION = "simulation"
+    BACKTEST = "backtest"
 
 
 class OrderStatus(enum.StrEnum):
