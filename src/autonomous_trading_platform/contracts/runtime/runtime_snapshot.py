@@ -6,6 +6,63 @@ from decimal import Decimal
 from pydantic import BaseModel
 
 
+class PortfolioSummarySnapshot(BaseModel):
+    current_portfolio_value: Decimal
+    cash_balance: Decimal
+    invested_capital: Decimal
+    open_positions: int
+    todays_pnl_amount: Decimal
+    todays_pnl_percent: Decimal
+    total_pnl_amount: Decimal
+    total_pnl_percent: Decimal
+
+
+class PortfolioHoldingEntry(BaseModel):
+    symbol: str
+    quantity: Decimal
+    average_entry_price: Decimal
+    current_price: Decimal
+    market_value: Decimal
+    unrealized_pnl: Decimal
+    strategy_id: str
+
+
+class PortfolioAllocationItem(BaseModel):
+    name: str
+    percent_of_portfolio: Decimal
+    allocated_capital: Decimal
+
+
+class PortfolioPeriodReturn(BaseModel):
+    period: str
+    return_percent: Decimal
+
+
+class PortfolioPerformanceSnapshot(BaseModel):
+    total_return: Decimal
+    sharpe_ratio: Decimal
+    sortino_ratio: Decimal
+    max_drawdown: Decimal
+    volatility: Decimal
+    by_period: list[PortfolioPeriodReturn] = []
+
+
+class PortfolioRiskSnapshot(BaseModel):
+    portfolio_volatility: Decimal
+    beta: Decimal
+    value_at_risk_1d_95: Decimal
+    current_drawdown: Decimal
+    average_pairwise_correlation: Decimal
+
+
+class PortfolioSnapshot(BaseModel):
+    summary: PortfolioSummarySnapshot | None = None
+    holdings: list[PortfolioHoldingEntry] = []
+    allocation_by_strategy: list[PortfolioAllocationItem] = []
+    performance: PortfolioPerformanceSnapshot | None = None
+    risk: PortfolioRiskSnapshot | None = None
+
+
 class OperatorControlsSnapshot(BaseModel):
     trading_enabled: bool
     trading_paused: bool
@@ -75,3 +132,4 @@ class RuntimeSnapshot(BaseModel):
     datasets: list[DatasetVersionEntry] = []
     recent_activity: list[RecentActivityEntry] = []
     experiments: list[ExperimentEntry] = []
+    portfolio: PortfolioSnapshot | None = None

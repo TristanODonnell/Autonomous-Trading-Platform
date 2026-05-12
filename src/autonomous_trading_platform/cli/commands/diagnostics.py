@@ -68,6 +68,99 @@ def _yn(value: bool) -> str:
     return "yes" if value else "no"
 
 
+def _pct(value: Decimal) -> str:
+    return f"{float(value) * 100:+.2f}%"
+
+
+def _print_portfolio(snap: RuntimeSnapshot) -> None:
+    pf = snap.portfolio
+    print("\nPORTFOLIO")
+    if pf is None:
+        print("  N/A")
+        return
+
+    # --- Summary ---
+    s = pf.summary
+    if s is None:
+        print("  Summary:  N/A")
+    else:
+        total = float(s.current_portfolio_value)
+        invested = float(s.invested_capital)
+        cash = float(s.cash_balance)
+        pct_deployed = (invested / total * 100) if total else 0.0
+        pct_cash = (cash / total * 100) if total else 0.0
+        today_sign = "▲" if s.todays_pnl_amount >= 0 else "▼"
+        total_pnl_sign = "▲" if s.total_pnl_amount >= 0 else "▼"
+
+        print(
+            f"  Total Value:      ${total:>14,.2f}    {today_sign} ${abs(float(s.todays_pnl_amount)):,.2f} today ({_pct(s.todays_pnl_percent)})"
+        )
+        print(f"  Invested Capital: ${invested:>14,.2f}    {pct_deployed:.1f}% deployed")
+        print(f"  Cash Reserve:     ${cash:>14,.2f}    {pct_cash:.1f}% available")
+        print(f"  Open Positions:   {s.open_positions}")
+        print(
+            f"  Total PnL:        {total_pnl_sign} ${abs(float(s.total_pnl_amount)):,.2f}  ({_pct(s.total_pnl_percent)} all-time)"
+        )
+
+    # --- Holdings ---
+    print(f"\n  HOLDINGS ({len(pf.holdings)})")
+    if not pf.holdings:
+        print("    (none)")
+    else:
+        for h in pf.holdings:
+            pnl = float(h.unrealized_pnl)
+            pnl_str = f"{'+' if pnl >= 0 else '-'}${abs(pnl):,.2f}"
+            print(
+                f"    {h.symbol:<6}  qty={float(h.quantity):.4g}"
+                f"  avg=${float(h.average_entry_price):.2f}"
+                f"  cur=${float(h.current_price):.2f}"
+                f"  val=${float(h.market_value):,.2f}"
+                f"  pnl={pnl_str}"
+                f"  [{h.strategy_id}]"
+            )
+
+    # --- Allocation by Strategy ---
+    print(f"\n  ALLOCATION BY STRATEGY ({len(pf.allocation_by_strategy)})")
+    if not pf.allocation_by_strategy:
+        print("    (none)")
+    else:
+        for item in pf.allocation_by_strategy:
+            bar_width = max(1, int(float(item.percent_of_portfolio) / 2))
+            bar = "█" * bar_width
+            print(
+                f"    {item.name:<30}  {float(item.percent_of_portfolio):5.1f}%  {bar}  ${float(item.allocated_capital):,.0f}"
+            )
+
+    # --- Performance ---
+    print("\n  PERFORMANCE")
+    perf = pf.performance
+    if perf is None:
+        print("    N/A")
+    else:
+        print(f"    Total Return:   {_pct(perf.total_return)}")
+        print(f"    Sharpe:         {float(perf.sharpe_ratio):.2f}")
+        print(f"    Sortino:        {float(perf.sortino_ratio):.2f}")
+        print(f"    Max Drawdown:   {_pct(perf.max_drawdown)}")
+        print(f"    Volatility:     {_pct(perf.volatility)}")
+        if perf.by_period:
+            by_period_str = "  ".join(
+                f"{p.period}: {_pct(p.return_percent)}" for p in perf.by_period
+            )
+            print(f"    By Period:      {by_period_str}")
+
+    # --- Risk ---
+    print("\n  RISK METRICS")
+    risk = pf.risk
+    if risk is None:
+        print("    N/A")
+    else:
+        print(f"    Volatility (ann):  {_pct(risk.portfolio_volatility)}")
+        print(f"    Beta (vs SPY):     {float(risk.beta):.2f}")
+        print(f"    VaR 95% (1d):      ${float(risk.value_at_risk_1d_95):,.2f}")
+        print(f"    Current Drawdown:  {_pct(risk.current_drawdown)}")
+        print(f"    Avg Correlation:   {float(risk.average_pairwise_correlation):.3f}")
+
+
 def _print_snapshot(snap: RuntimeSnapshot) -> None:
     ts = snap.snapshot_timestamp.strftime("%Y-%m-%d %H:%M:%S")
     print("\n=== RUNTIME SNAPSHOT ===")
@@ -133,6 +226,9 @@ def _print_snapshot(snap: RuntimeSnapshot) -> None:
         print(f"  Drawdown Alerts:     {_yn(s.notify_drawdown_alerts)}")
         print(f"  Promotion Alerts:    {_yn(s.notify_strategy_promotion_events)}")
         print(f"  Pipeline Alerts:     {_yn(s.notify_pipeline_failures)}")
+
+    # --- Portfolio ---
+    _print_portfolio(snap)
 
     # --- Strategy Controls ---
     n = len(snap.strategy_controls)

@@ -1,13 +1,23 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.alpaca_portfolio_service import (
+    AlpacaPortfolioService,
+)
 from autonomous_trading_platform.application.services.audit_log_service import AuditLogService
 from autonomous_trading_platform.application.services.operator_settings_service import (
     OperatorSettingsService,
+)
+from autonomous_trading_platform.application.services.portfolio_analytics_service import (
+    PortfolioAnalyticsService,
+)
+from autonomous_trading_platform.application.services.portfolio_summary_service import (
+    PortfolioSummaryService,
 )
 from autonomous_trading_platform.application.services.runtime_control_service import (
     RuntimeControlService,
@@ -24,6 +34,13 @@ from autonomous_trading_platform.contracts.runtime.runtime_snapshot import (
     ExperimentEntry,
     OperatorControlsSnapshot,
     OperatorSettingsSnapshot,
+    PortfolioAllocationItem,
+    PortfolioHoldingEntry,
+    PortfolioPerformanceSnapshot,
+    PortfolioPeriodReturn,
+    PortfolioRiskSnapshot,
+    PortfolioSnapshot,
+    PortfolioSummarySnapshot,
     RecentActivityEntry,
     RuntimeSnapshot,
     StrategyAllocationEntry,
@@ -60,6 +77,7 @@ class RuntimeSnapshotService:
             datasets=self._capture_datasets(),
             recent_activity=self._capture_recent_activity(),
             experiments=self._capture_experiments(),
+            portfolio=self._capture_portfolio(),
         )
 
     def _capture_controls_and_strategies(
@@ -179,6 +197,142 @@ class RuntimeSnapshotService:
             ]
         except Exception:
             return []
+
+    def _alpaca_portfolio_service(self) -> AlpacaPortfolioService | None:
+        try:
+            from autonomous_trading_platform.config.settings import Settings
+            from autonomous_trading_platform.execution.clients.alpaca_broker_client import (
+                AlpacaBrokerClient,
+            )
+
+            settings = Settings()
+            client = AlpacaBrokerClient(settings=settings)
+            return AlpacaPortfolioService(client=client, initial_capital=settings.initial_capital)
+        except Exception:
+            return None
+
+    def _capture_portfolio(self) -> PortfolioSnapshot | None:
+        try:
+            holdings = self._capture_portfolio_holdings()
+            summary = self._capture_portfolio_summary()
+            if summary is not None:
+                summary = summary.model_copy(update={"open_positions": len(holdings)})
+            return PortfolioSnapshot(
+                summary=summary,
+                holdings=holdings,
+                allocation_by_strategy=self._capture_portfolio_allocation(),
+                performance=self._capture_portfolio_performance(),
+                risk=self._capture_portfolio_risk(),
+            )
+        except Exception:
+            return None
+
+    def _capture_portfolio_summary(self) -> PortfolioSummarySnapshot | None:
+        try:
+            alpaca = self._alpaca_portfolio_service()
+            if alpaca is not None:
+                raw = alpaca.get_summary()
+            else:
+                raw = PortfolioSummaryService(session=self._session).get_summary()
+
+            total = raw["current_portfolio_value"]
+            cash = raw["cash_balance"]
+            invested = total - cash
+            # holdings count filled in separately; set to 0 here
+            return PortfolioSummarySnapshot(
+                current_portfolio_value=total,
+                cash_balance=cash,
+                invested_capital=invested,
+                open_positions=0,  # patched after holdings captured
+                todays_pnl_amount=raw["todays_pnl_amount"],
+                todays_pnl_percent=raw["todays_pnl_percent"],
+                total_pnl_amount=raw["total_pnl_amount"],
+                total_pnl_percent=raw["total_pnl_percent"],
+            )
+        except Exception:
+            return None
+
+    def _capture_portfolio_holdings(self) -> list[PortfolioHoldingEntry]:
+        try:
+            alpaca = self._alpaca_portfolio_service()
+            if alpaca is not None:
+                raw = alpaca.get_holdings()
+            else:
+                raw = PortfolioAnalyticsService(session=self._session).get_holdings()
+
+            entries = []
+            for h in raw["holdings"]:
+                qty = Decimal(str(h["quantity"]))
+                avg = Decimal(str(h["average_entry_price"]))
+                mv = Decimal(str(h["market_value"]))
+                entries.append(
+                    PortfolioHoldingEntry(
+                        symbol=h["symbol"],
+                        quantity=qty,
+                        average_entry_price=avg,
+                        current_price=Decimal(str(h["current_price"])),
+                        market_value=mv,
+                        unrealized_pnl=mv - (avg * qty),
+                        strategy_id=h["strategy_id"],
+                    )
+                )
+            return entries
+        except Exception:
+            return []
+
+    def _capture_portfolio_allocation(self) -> list[PortfolioAllocationItem]:
+        try:
+            alpaca = self._alpaca_portfolio_service()
+            if alpaca is not None:
+                raw = alpaca.get_allocation()
+            else:
+                raw = PortfolioAnalyticsService(session=self._session).get_allocation()
+
+            return [
+                PortfolioAllocationItem(
+                    name=item["name"],
+                    percent_of_portfolio=Decimal(str(item["percent_of_portfolio"])),
+                    allocated_capital=Decimal(str(item["allocated_capital"])),
+                )
+                for item in raw["by_strategy"]
+            ]
+        except Exception:
+            return []
+
+    def _capture_portfolio_performance(self) -> PortfolioPerformanceSnapshot | None:
+        try:
+            svc = PortfolioAnalyticsService(session=self._session)
+            perf = svc.get_performance()
+            by_period_raw = svc.get_performance_by_period()
+            return PortfolioPerformanceSnapshot(
+                total_return=Decimal(str(perf["total_return"])),
+                sharpe_ratio=Decimal(str(perf["sharpe_ratio"])),
+                sortino_ratio=Decimal(str(perf["sortino_ratio"])),
+                max_drawdown=Decimal(str(perf["max_drawdown"])),
+                volatility=Decimal(str(perf["volatility"])),
+                by_period=[
+                    PortfolioPeriodReturn(
+                        period=row["period"],
+                        return_percent=Decimal(str(row["return_percent"])),
+                    )
+                    for row in by_period_raw["periods"]
+                ],
+            )
+        except Exception:
+            return None
+
+    def _capture_portfolio_risk(self) -> PortfolioRiskSnapshot | None:
+        try:
+            raw = PortfolioAnalyticsService(session=self._session).get_risk()
+            return PortfolioRiskSnapshot(
+                portfolio_volatility=Decimal(str(raw["portfolio_volatility"])),
+                beta=Decimal(str(raw["beta"])),
+                value_at_risk_1d_95=Decimal(str(raw["value_at_risk_1d_95"])),
+                current_drawdown=Decimal(str(raw["current_drawdown"])),
+                average_pairwise_correlation=Decimal(str(raw["average_pairwise_correlation"])),
+            )
+        except Exception:
+            return None
 
     def _capture_experiments(self) -> list[ExperimentEntry]:
         try:
