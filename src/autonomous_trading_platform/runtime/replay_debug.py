@@ -965,8 +965,11 @@ def _write_risk_snapshot(
 ) -> None:
     equity = _mark_to_market(ctx.state, ctx.state.current_prices)
     gross_exposure = sum(
-        qty * ctx.state.current_prices.get(symbol, Decimal("0"))
-        for symbol, qty in ctx.state.positions.items()
+        (
+            qty * ctx.state.current_prices.get(symbol, Decimal("0"))
+            for symbol, qty in ctx.state.positions.items()
+        ),
+        Decimal("0"),
     )
     ctx.session.add(
         RiskSnapshot(
