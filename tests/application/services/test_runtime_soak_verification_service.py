@@ -1119,3 +1119,57 @@ def test_failure_controls_fail_when_failure_artifacts_are_missing(
 
     assert check.status == RuntimeSoakStatus.FAILED
     assert "failed_manifest" in check.metadata["missing_failure_control_artifacts"]
+
+
+def test_concurrent_running_jobs_passes_when_no_duplicates_exist(
+    db_session: Session,
+) -> None:
+    window_start, window_end = _window()
+    _seed_runtime_job_run(
+        db_session,
+        job_name="market_ingestion_cycle",
+        status="running",
+        started_at=window_start + timedelta(minutes=1),
+    )
+
+    service = _build_service(db_session)
+    check = service._check_concurrent_running_jobs(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.PASSED
+    assert check.metadata["concurrent_job_names"] == []
+
+
+def test_concurrent_running_jobs_fails_when_same_job_has_two_running_records(
+    db_session: Session,
+) -> None:
+    """Two RUNNING records for the same job name indicate lock protection failed."""
+    from autonomous_trading_platform.contracts.runtime.runtime_soak_verification import (
+        RuntimeSoakSeverity,
+    )
+
+    window_start, window_end = _window()
+    _seed_runtime_job_run(
+        db_session,
+        job_name="trading_cycle",
+        status="running",
+        started_at=window_start + timedelta(minutes=1),
+    )
+    _seed_runtime_job_run(
+        db_session,
+        job_name="trading_cycle",
+        status="running",
+        started_at=window_start + timedelta(minutes=2),
+    )
+
+    service = _build_service(db_session)
+    check = service._check_concurrent_running_jobs(
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    assert check.status == RuntimeSoakStatus.FAILED
+    assert check.severity == RuntimeSoakSeverity.CRITICAL
+    assert "trading_cycle" in check.metadata["concurrent_job_names"]

@@ -24,6 +24,7 @@ class RuntimeSoakCheckName(StrEnum):
     RUNTIME_JOB_HEALTH = "runtime_job_health"
     DATA_FRESHNESS = "data_freshness"
     STALE_RUNNING_STATE = "stale_running_state"
+    CONCURRENT_RUNNING_JOBS = "concurrent_running_jobs"
     ORDER_RECONCILIATION = "order_reconciliation"
     DUPLICATE_FILL_PROTECTION = "duplicate_fill_protection"
     CASH_POSITION_EQUITY_CONSISTENCY = "cash_position_equity_consistency"

@@ -58,6 +58,7 @@ class RuntimeSoakVerificationService:
             self._check_runtime_job_health(window_start=window_start, window_end=window_end),
             self._check_data_freshness(window_start=window_start, window_end=window_end),
             self._check_stale_running_state(window_start=window_start, window_end=window_end),
+            self._check_concurrent_running_jobs(window_start=window_start, window_end=window_end),
             self._check_order_reconciliation(window_start=window_start, window_end=window_end),
             self._check_duplicate_fill_protection(window_start=window_start, window_end=window_end),
             self._check_cash_position_equity_consistency(
@@ -374,6 +375,33 @@ class RuntimeSoakVerificationService:
         return self._passed(
             RuntimeSoakCheckName.STALE_RUNNING_STATE,
             "No stale running jobs or manifests were found.",
+            metadata,
+        )
+
+    def _check_concurrent_running_jobs(
+        self,
+        *,
+        window_start: datetime,
+        window_end: datetime,
+    ) -> RuntimeSoakCheckResult:
+        concurrent_names = self._repository.list_concurrent_running_job_names()
+
+        metadata: dict = {
+            "concurrent_job_names": sorted(concurrent_names),
+        }
+
+        if concurrent_names:
+            return self._failed(
+                RuntimeSoakCheckName.CONCURRENT_RUNNING_JOBS,
+                "Multiple RUNNING records detected for the same job name — "
+                "the no-overlap lock may not have prevented concurrent execution.",
+                metadata,
+                severity=RuntimeSoakSeverity.CRITICAL,
+            )
+
+        return self._passed(
+            RuntimeSoakCheckName.CONCURRENT_RUNNING_JOBS,
+            "No concurrent RUNNING job records detected.",
             metadata,
         )
 
