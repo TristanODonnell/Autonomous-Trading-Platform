@@ -1,0 +1,36 @@
+controls:
+  trading_enabled: true
+  trading_paused: false
+  kill_switch_enabled: false
+  trading_mode: simulation   # "simulation" maps to "Backtesting" in the frontend
+
+strategies:
+  # ── Strategy Toggles + Allocation Overrides (paper/live governance) ─────────
+
+  - type: moving_average_crossover
+    display_name: "MA Crossover (10/50)"
+    enabled: true
+    governance_state: approved_for_live_trading   # shows as "Running" in toggles
+    allocation_pct: 0.60
+    parameters:
+      fast_period: 10
+      slow_period: 50
+
+  - type: momentum
+    display_name: "Momentum Factor"
+    enabled: true
+    governance_state: approved_for_paper_trading  # shows as "Paper" in toggles
+    allocation_pct: 0.30
+    parameters:
+      lookback_period: 20
+
+  # ── Governance — Pending Promotion (research governance) ───────────────────
+
+  - type: mean_reversion
+    display_name: "Mean Reversion (Z-Score)"
+    enabled: false
+    governance_state: approved_research           # shows in Pending Promotion card
+    allocation_pct: null
+    parameters:
+      lookback_period: 20
+      z_score_threshold: 2.0
