@@ -1,5 +1,5 @@
 {
-  "replay_id": "c439b9e6-9fbd-49da-a078-ef4ead21de69",
+  "replay_id": "5c88c358-2aed-40fa-9d84-0494bd08c37e",
   "inputs": {
     "date_range": {
       "start": "2024-01-01",
@@ -24,7 +24,7 @@
     "max_ticks": null
   },
   "loaded_settings": {
-    "loaded_at": "2026-05-13T01:15:53.719180+00:00",
+    "loaded_at": "2026-05-13T01:35:58.182442+00:00",
     "environment": {
       "app_env": "dev",
       "trading_environment": "paper",
@@ -42,9 +42,9 @@
     "operator_settings": {
       "settings_id": "default",
       "source": "operator_settings",
-      "risk_tolerance": "low",
-      "max_drawdown_limit": 0.05,
-      "max_strategy_drawdown": 0.05,
+      "risk_tolerance": "high",
+      "max_drawdown_limit": 0.3,
+      "max_strategy_drawdown": 0.25,
       "rebalance_frequency": "daily",
       "auto_promote_enabled": false,
       "min_sharpe_for_promotion": 0.5,
@@ -58,7 +58,7 @@
       "slippage_model": "spread",
       "transaction_cost_model": "per_share",
       "updated_by": "local-dev-operator",
-      "updated_at": "2026-05-12T21:39:12.606885+00:00"
+      "updated_at": "2026-05-13T01:35:48.974587+00:00"
     },
     "runtime_control": {
       "control_id": "global",
@@ -99,7 +99,7 @@
       }
     ]
   },
-  "settings_snapshot_hash": "910658807167",
+  "settings_snapshot_hash": "a3e77f1be4e4",
   "execution": {
     "trading_days_processed": 23,
     "cycle_invocations": {
@@ -115,9 +115,9 @@
   "trading": {
     "signals_generated": 92,
     "orders_attempted": 92,
-    "orders_submitted": 8,
-    "orders_blocked_by_risk": 84,
-    "fills_created": 8
+    "orders_submitted": 28,
+    "orders_blocked_by_risk": 54,
+    "fills_created": 28
   },
   "rebalancing": {
     "rebalance_checks": 46,
@@ -129,17 +129,17 @@
   },
   "portfolio": {
     "starting_equity": 100000.0,
-    "ending_equity": 2528.79875874,
-    "cash": 0.00821106,
+    "ending_equity": 2768.15965374,
+    "cash": 0.00033566,
     "positions": {
-      "SPY": 517.9295,
-      "QQQ": 492.0862
+      "SPY": 622.7086,
+      "QQQ": 525.0222
     },
-    "total_return_pct": -97.47120124126,
+    "total_return_pct": -97.23184034626,
     "portfolio_snapshots": 46
   },
   "risk_metrics": {
-    "max_drawdown_observed": -0.9747120124126,
+    "max_drawdown_observed": -0.9723184034626,
     "peak_equity": 100000.0
   },
   "market_data": {
