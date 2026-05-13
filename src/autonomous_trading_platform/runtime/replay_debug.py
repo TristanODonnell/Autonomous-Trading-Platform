@@ -29,11 +29,23 @@ from autonomous_trading_platform.contracts.common.enums import (
 )
 from autonomous_trading_platform.contracts.runtime.runtime_job_run import RuntimeJobRun
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.risk.portfolio_vol_targeting_service import (
+    PortfolioVolTargetingService,
+)
+from autonomous_trading_platform.risk.risk_alert_service import (
+    RiskAlert,
+    RiskAlertService,
+    RiskThresholds,
+)
+from autonomous_trading_platform.risk.risk_engine import PortfolioExposureSnapshot
 from autonomous_trading_platform.runtime.clock import (
     HistoricalMarketCalendar,
     HistoricalTradingClock,
     MarketCalendar,
     TradingClock,
+)
+from autonomous_trading_platform.runtime.services.pipeline_failure_notification_service import (
+    PipelineFailureNotificationService,
 )
 from autonomous_trading_platform.runtime.services.runtime_job_runner import RuntimeJobRunner
 from autonomous_trading_platform.storage.sor.models.audit_logs import AuditLogRow
@@ -67,6 +79,18 @@ from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_r
 
 DEBUG_REPLAY_SOURCE = "runtime_replay_debug"
 DEBUG_REPLAY_RUN_TYPE = "DEBUG_REPLAY"
+
+# low/medium/high map to a deterministic multiplier applied to per_strategy_cap.
+# Stays within (0, 1] after being combined with the cap so total exposure is bounded.
+_RISK_TOLERANCE_MULTIPLIERS: dict[str, Decimal] = {
+    "low": Decimal("0.5"),
+    "medium": Decimal("1.0"),
+    "high": Decimal("1.5"),
+}
+
+# Minimum equity-curve bars before vol targeting activates.
+# Set to 3 so we get 2 returns (ddof=1 std defined); production would want 20+.
+_VOL_HISTORY_MIN_BARS = 3
 SUPPORTED_CYCLES = {
     "market_backfill",
     "market_ingestion",
@@ -172,6 +196,13 @@ class ReplayExecutionState:
     latest_equity: Decimal = Decimal("0")
     last_rebalance_date: date | None = None
     tick_index: int = 0
+    # equity history for portfolio vol targeting (one entry per trading tick)
+    equity_history: list[float] = field(default_factory=list)
+    # per-strategy fill P&L: negative for buys (cash out), positive for sells (cash in)
+    strategy_fill_pnl: dict[str, Decimal] = field(default_factory=dict)
+    # per-strategy peak equity for drawdown tracking
+    strategy_peak_equity: dict[str, Decimal] = field(default_factory=dict)
+    drawdown_alerted: bool = False
 
 
 @dataclass
@@ -309,7 +340,10 @@ class RuntimeReplayDebugRunner:
     def _run_cycle(self, cycle: str, ctx: ReplayCycleContext) -> None:
         handler = self.cycle_handlers.get(cycle) or DEFAULT_CYCLE_HANDLERS[cycle]
         repository = _SessionRuntimeJobRunRepository(ctx.session)
-        runner = RuntimeJobRunner(repository=repository)
+        runner = RuntimeJobRunner(
+            repository=repository,
+            failure_notifier=PipelineFailureNotificationService(ctx.session),
+        )
         input_summary: dict[str, object] = {
             "run_type": DEBUG_REPLAY_RUN_TYPE,
             "source": DEBUG_REPLAY_SOURCE,
@@ -592,19 +626,53 @@ def _run_trading(ctx: ReplayCycleContext) -> dict[str, Any]:
         return {"status": "skipped", "skip_reason": reason}
 
     strategy_ids = _active_strategy_ids(ctx.settings_snapshot)
+    n_strategies = max(1, len(strategy_ids))
 
     prices = _prices_for_tick(ctx)
     equity = _mark_to_market(ctx.state, prices)
     ctx.state.latest_equity = equity
     ctx.state.peak_equity = max(ctx.state.peak_equity, equity)
+
+    # Append to equity history before computing this tick's orders so the
+    # vol scalar reflects the portfolio state the orders will trade into.
+    ctx.state.equity_history.append(float(equity))
+
+    # --- Portfolio-level drawdown gate (existing) ---
     drawdown = _drawdown(ctx.state)
     max_drawdown_limit = Decimal(
         str(ctx.settings_snapshot["operator_settings"]["max_drawdown_limit"])
     )
     risk_blocked = abs(drawdown) >= max_drawdown_limit
     block_reasons: list[str] = []
+    drawdown_alerts: list[RiskAlert] = []
     if risk_blocked:
         block_reasons.append("max_drawdown_limit")
+        if _drawdown_alerting_enabled(ctx) and not ctx.state.drawdown_alerted:
+            drawdown_alerts = _evaluate_drawdown_breach_alerts(ctx, max_drawdown_limit)
+            if drawdown_alerts:
+                ctx.state.drawdown_alerted = True
+
+    # --- Layer 1: risk_tolerance sizing multiplier ---
+    risk_tolerance = str(
+        ctx.settings_snapshot["operator_settings"].get("risk_tolerance", "medium")
+    ).lower()
+    risk_tolerance_mult = _RISK_TOLERANCE_MULTIPLIERS.get(risk_tolerance, Decimal("1"))
+
+    # --- Layer 2: portfolio vol scalar ---
+    _vol_svc = PortfolioVolTargetingService(
+        target_annual_vol=float(
+            ctx.settings_snapshot["operator_settings"].get("target_portfolio_volatility", 0.20)
+        ),
+        min_bars=_VOL_HISTORY_MIN_BARS,
+    )
+    vol_scalar = _vol_svc.compute_scalar(ctx.state.equity_history) or Decimal("1")
+
+    # --- Layer 3: per-strategy drawdown ---
+    max_strategy_dd = Decimal(
+        str(ctx.settings_snapshot["operator_settings"]["max_strategy_drawdown"])
+    )
+    initial_per_strategy = ctx.inputs.starting_cash / Decimal(n_strategies)
+    per_strategy_breaches: dict[str, dict[str, float]] = {}
 
     fills_created = 0
     orders_submitted = 0
@@ -613,7 +681,7 @@ def _run_trading(ctx: ReplayCycleContext) -> dict[str, Any]:
     orders_blocked = 0
 
     for idx, symbol in enumerate(ctx.inputs.symbols):
-        strategy_id = strategy_ids[idx % len(strategy_ids)]
+        strategy_id = strategy_ids[idx % n_strategies]
         price = prices[symbol]
         side = _decision_for(ctx, symbol)
         signal_id = uuid.uuid5(
@@ -641,11 +709,46 @@ def _run_trading(ctx: ReplayCycleContext) -> dict[str, Any]:
             orders_blocked += 1
             continue
 
-        qty = _quantity_for_order(ctx, symbol, side, price, strategy_id)
+        # Per-strategy drawdown check.
+        # Strategy equity = initial allocation + realized cash flows + unrealized position value.
+        strategy_fill_pnl = ctx.state.strategy_fill_pnl.get(strategy_id, Decimal("0"))
+        strategy_position_value = sum(
+            ctx.state.positions.get(sym, Decimal("0")) * prices.get(sym, Decimal("0"))
+            for i, sym in enumerate(ctx.inputs.symbols)
+            if strategy_ids[i % n_strategies] == strategy_id
+        )
+        strategy_equity = initial_per_strategy + strategy_fill_pnl + strategy_position_value
+        strategy_peak = ctx.state.strategy_peak_equity.get(strategy_id, strategy_equity)
+        ctx.state.strategy_peak_equity[strategy_id] = max(strategy_peak, strategy_equity)
+        strategy_drawdown = (
+            (strategy_equity - ctx.state.strategy_peak_equity[strategy_id])
+            / ctx.state.strategy_peak_equity[strategy_id]
+            if ctx.state.strategy_peak_equity[strategy_id] > 0
+            else Decimal("0")
+        )
+        if abs(strategy_drawdown) >= max_strategy_dd:
+            per_strategy_breaches[strategy_id] = {
+                "drawdown": float(strategy_drawdown),
+                "peak_equity": float(ctx.state.strategy_peak_equity[strategy_id]),
+                "current_equity": float(strategy_equity),
+                "limit": float(max_strategy_dd),
+            }
+            orders_blocked += 1
+            continue
+
+        qty = _quantity_for_order(
+            ctx,
+            symbol,
+            side,
+            price,
+            strategy_id,
+            risk_tolerance_mult=risk_tolerance_mult,
+            vol_scalar=vol_scalar,
+        )
         if qty <= 0:
             continue
 
-        _apply_fill(ctx.state, symbol, side, qty, price)
+        _apply_fill(ctx.state, symbol, side, qty, price, strategy_id=strategy_id)
         _write_order_and_fill(
             ctx, symbol=symbol, side=side, qty=qty, price=price, strategy_id=strategy_id
         )
@@ -654,7 +757,13 @@ def _run_trading(ctx: ReplayCycleContext) -> dict[str, Any]:
 
     ctx.state.latest_equity = _mark_to_market(ctx.state, prices)
     ctx.state.peak_equity = max(ctx.state.peak_equity, ctx.state.latest_equity)
-    _write_risk_snapshot(ctx, is_blocked=risk_blocked, reasons=block_reasons)
+    _write_risk_snapshot(
+        ctx,
+        is_blocked=risk_blocked or bool(per_strategy_breaches),
+        reasons=block_reasons + (["max_strategy_drawdown"] if per_strategy_breaches else []),
+        per_strategy_breaches=per_strategy_breaches or None,
+        risk_alerts=drawdown_alerts,
+    )
 
     ctx.counters.signals_generated += signals_generated
     ctx.counters.orders_attempted += orders_attempted
@@ -668,6 +777,8 @@ def _run_trading(ctx: ReplayCycleContext) -> dict[str, Any]:
         "orders_blocked_by_risk": orders_blocked,
         "fills_created": fills_created,
         "drawdown": float(drawdown),
+        "vol_scalar": float(vol_scalar),
+        "risk_tolerance_mult": float(risk_tolerance_mult),
     }
 
 
@@ -789,12 +900,17 @@ def _quantity_for_order(
     side: Side,
     price: Decimal,
     strategy_id: str,
+    *,
+    risk_tolerance_mult: Decimal = Decimal("1"),
+    vol_scalar: Decimal = Decimal("1"),
 ) -> Decimal:
     if side == Side.SELL:
         return ctx.state.positions.get(symbol, Decimal("0"))
 
     equity = max(ctx.state.latest_equity, ctx.inputs.starting_cash)
     cap = Decimal(str(ctx.settings_snapshot["operator_settings"]["per_strategy_cap"]))
+    # Layer 1: risk_tolerance multiplier scales the effective cap; clamp at 1.0
+    cap = min(cap * risk_tolerance_mult, Decimal("1"))
     override = _allocation_override(ctx.settings_snapshot, strategy_id)
     if override and override.get("max_pct_of_capital") is not None:
         cap = min(cap, Decimal(str(override["max_pct_of_capital"])))
@@ -802,6 +918,8 @@ def _quantity_for_order(
     notional = (equity * cap) / Decimal(max(1, len(ctx.inputs.symbols)))
     if override and override.get("max_position_size_usd") is not None:
         notional = min(notional, Decimal(str(override["max_position_size_usd"])))
+    # Layer 2: vol scalar shrinks notional when portfolio vol runs hot
+    notional = notional * vol_scalar
     notional = min(notional, ctx.state.cash)
     return (notional / price).quantize(Decimal("0.0001"))
 
@@ -812,6 +930,8 @@ def _apply_fill(
     side: Side,
     qty: Decimal,
     price: Decimal,
+    *,
+    strategy_id: str | None = None,
 ) -> None:
     if side == Side.BUY:
         total = qty * price
@@ -821,17 +941,26 @@ def _apply_fill(
         state.positions[symbol] = new_qty
         state.avg_costs[symbol] = (previous_cost + total) / new_qty
         state.cash -= total
+        if strategy_id is not None:
+            state.strategy_fill_pnl[strategy_id] = (
+                state.strategy_fill_pnl.get(strategy_id, Decimal("0")) - total
+            )
         return
 
     held = state.positions.get(symbol, Decimal("0"))
     sell_qty = min(qty, held)
-    state.cash += sell_qty * price
+    proceeds = sell_qty * price
+    state.cash += proceeds
     remaining = held - sell_qty
     if remaining <= 0:
         state.positions.pop(symbol, None)
         state.avg_costs.pop(symbol, None)
     else:
         state.positions[symbol] = remaining
+    if strategy_id is not None:
+        state.strategy_fill_pnl[strategy_id] = (
+            state.strategy_fill_pnl.get(strategy_id, Decimal("0")) + proceeds
+        )
 
 
 def _write_order_and_fill(
@@ -967,6 +1096,8 @@ def _write_risk_snapshot(
     *,
     is_blocked: bool,
     reasons: list[str],
+    per_strategy_breaches: dict[str, dict[str, float]] | None = None,
+    risk_alerts: list[RiskAlert] | None = None,
 ) -> None:
     equity = _mark_to_market(ctx.state, ctx.state.current_prices)
     gross_exposure = sum(
@@ -976,6 +1107,20 @@ def _write_risk_snapshot(
         ),
         Decimal("0"),
     )
+    limits: dict[str, Any] = {
+        **_debug_metadata(ctx),
+        "max_drawdown_limit": ctx.settings_snapshot["operator_settings"]["max_drawdown_limit"],
+        "max_strategy_drawdown": ctx.settings_snapshot["operator_settings"][
+            "max_strategy_drawdown"
+        ],
+        "notify_drawdown_alerts": ctx.settings_snapshot["operator_settings"][
+            "notify_drawdown_alerts"
+        ],
+        "block_reasons": reasons,
+        "risk_alerts": [_serialize_risk_alert(alert) for alert in risk_alerts or []],
+    }
+    if per_strategy_breaches:
+        limits["per_strategy_breaches"] = per_strategy_breaches
     ctx.session.add(
         RiskSnapshot(
             snapshot_id=uuid.uuid4(),
@@ -985,18 +1130,54 @@ def _write_risk_snapshot(
             net_exposure=gross_exposure,
             leverage=float(gross_exposure / equity) if equity else 0.0,
             drawdown_pct=float(_drawdown(ctx.state)),
-            limits={
-                **_debug_metadata(ctx),
-                "max_drawdown_limit": ctx.settings_snapshot["operator_settings"][
-                    "max_drawdown_limit"
-                ],
-                "block_reasons": reasons,
-            },
+            limits=limits,
             utilization={"equity": float(equity), "gross_exposure": float(gross_exposure)},
             is_blocked=is_blocked,
             block_reasons=None,
         )
     )
+
+
+def _drawdown_alerting_enabled(ctx: ReplayCycleContext) -> bool:
+    return bool(ctx.settings_snapshot["operator_settings"].get("notify_drawdown_alerts", True))
+
+
+def _evaluate_drawdown_breach_alerts(
+    ctx: ReplayCycleContext,
+    max_drawdown_limit: Decimal,
+) -> list[RiskAlert]:
+    zero = Decimal("0")
+    empty_exposure_snapshot = PortfolioExposureSnapshot(
+        total_gross_exposure_usd=zero,
+        total_net_exposure_usd=zero,
+        total_long_usd=zero,
+        total_short_usd=zero,
+        by_strategy={},
+        by_sector={},
+        max_strategy_weight=zero,
+        strategy_hhi=zero,
+    )
+    limit = float(max_drawdown_limit)
+    alert_service = RiskAlertService(
+        thresholds=RiskThresholds(
+            max_drawdown_warning=limit,
+            max_drawdown_critical=limit,
+        )
+    )
+    return alert_service.evaluate(
+        snapshot=empty_exposure_snapshot,
+        total_capital=float(ctx.state.latest_equity),
+        equity_curve=ctx.state.equity_history,
+    )
+
+
+def _serialize_risk_alert(alert: RiskAlert) -> dict[str, Any]:
+    return {
+        "alert_type": alert.alert_type.value,
+        "severity": alert.severity.value,
+        "message": alert.message,
+        "context": alert.context,
+    }
 
 
 def _mark_to_market(state: ReplayExecutionState, prices: dict[str, Decimal]) -> Decimal:

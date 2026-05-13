@@ -47,7 +47,7 @@ class LoggingRiskNotifier:
             alert.alert_type,
             extra={
                 "severity": alert.severity,
-                "message": alert.message,
+                "alert_message": alert.message,
                 **alert.context,
             },
         )

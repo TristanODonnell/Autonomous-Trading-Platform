@@ -18,6 +18,9 @@ class OperatorSettingsRow(Base):
     max_strategy_drawdown: Mapped[float] = mapped_column(Numeric(6, 4), nullable=False)
     rebalance_frequency: Mapped[str] = mapped_column(String(16), nullable=False)
     auto_promote_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    auto_rebalance_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Deprecated compatibility fields. PromotionRules is the source of truth for
+    # governance eligibility thresholds.
     min_sharpe_for_promotion: Mapped[float] = mapped_column(Numeric(6, 3), nullable=False)
     min_paper_trading_period_days: Mapped[int] = mapped_column(Integer, nullable=False)
     auto_demote_on_breach: Mapped[bool] = mapped_column(Boolean, nullable=False)

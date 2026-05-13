@@ -8,12 +8,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
+from autonomous_trading_platform.storage.sor.models.operator_settings import (
+    OperatorSettingsRow,
+)
 from autonomous_trading_platform.storage.sor.models.simulation_runs import SimulationRuns
 from autonomous_trading_platform.storage.sor.models.strategy_governance import (
     StrategyGovernance,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
     AuditLogRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
+    DEFAULT_OPERATOR_SETTINGS_ID,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_repository import (
     PromotionRulesRepository,
@@ -51,6 +57,8 @@ _TARGET_STATE_ROLES = {
     "approved_for_live_trading": {"admin"},
     "retired": {"operator", "risk_manager", "admin"},
 }
+
+_PROMOTION_TARGET_STATES = {"approved_for_paper_trading", "approved_for_live_trading"}
 
 
 @dataclass(frozen=True)
@@ -117,6 +125,20 @@ class StrategyGovernanceService:
                 "to_state": target_state,
             },
         )
+        if self._should_notify_strategy_promotion(target_state):
+            self._audit_log_repo.record_operator_action(
+                action="STRATEGY_PROMOTION_EVENT",
+                actor=updated_by,
+                reason=reason,
+                occurred_at=now,
+                component="notifications",
+                metadata={
+                    "channel": "notify_strategy_promotion_events",
+                    "strategy_id": strategy_id,
+                    "from_state": previous_state,
+                    "to_state": target_state,
+                },
+            )
         self._session.flush()
         self._session.commit()
 
@@ -143,6 +165,16 @@ class StrategyGovernanceService:
         if normalized is None:
             raise ValueError(f"Unsupported governance state: {state}")
         return normalized
+
+    def _should_notify_strategy_promotion(self, target_state: str) -> bool:
+        if target_state not in _PROMOTION_TARGET_STATES:
+            return False
+
+        settings = self._session.get(OperatorSettingsRow, DEFAULT_OPERATOR_SETTINGS_ID)
+        if settings is None:
+            return True
+
+        return bool(settings.notify_strategy_promotion_events)
 
     def _assert_role_allowed(self, *, target_state: str, actor_role: str) -> None:
         allowed_roles = _TARGET_STATE_ROLES[target_state]

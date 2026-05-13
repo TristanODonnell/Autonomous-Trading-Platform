@@ -7,6 +7,9 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
+from autonomous_trading_platform.runtime.services.pipeline_failure_notification_service import (
+    PipelineFailureNotificationService,
+)
 from autonomous_trading_platform.runtime.services.runtime_job_runner import RuntimeJobRunner
 from autonomous_trading_platform.scheduler.cycles.run_corporate_action_ingestion_cycle import (
     run_corporate_action_ingestion_cycle,
@@ -39,6 +42,7 @@ class PaperTradingGoldenPathOrchestrator:
         self.session = session
         self.runner = RuntimeJobRunner(
             repository=RuntimeJobRunRepository(session),
+            failure_notifier=PipelineFailureNotificationService(session),
         )
 
     def _get_active_daily_raw_bars_dataset(self, *, now_utc: datetime) -> DatasetVersions | None:

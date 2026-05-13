@@ -10,6 +10,9 @@ from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.research.experiments.models.experiment_plan import (
     ExperimentDefinition,
 )
+from autonomous_trading_platform.runtime.services.pipeline_failure_notification_service import (
+    PipelineFailureNotificationService,
+)
 from autonomous_trading_platform.runtime.services.runtime_job_runner import RuntimeJobRunner
 from autonomous_trading_platform.scheduler.cycles.run_corporate_action_ingestion_cycle import (
     run_corporate_action_ingestion_cycle,
@@ -48,6 +51,7 @@ class HistoricalResearchGoldenPathOrchestrator:
         self.session = session
         self.runner = RuntimeJobRunner(
             repository=RuntimeJobRunRepository(session),
+            failure_notifier=PipelineFailureNotificationService(session),
         )
 
     def _latest_backfill_raw_dataset(self) -> DatasetVersions:

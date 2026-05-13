@@ -1,0 +1,56 @@
+{
+  "run_id": "e3b38e8d-0573-4be2-853c-12f0a99219ba",
+  "results": [
+    {
+      "channel": "notify_drawdown_alerts",
+      "status": "FIRES_AND_FLAG_RESPECTED",
+      "flag_respected": true,
+      "evidence": {
+        "enabled_orders_blocked": 8,
+        "disabled_orders_blocked": 8,
+        "enabled_risk_snapshots_blocked": 4,
+        "disabled_risk_snapshots_blocked": 4,
+        "enabled_drawdown_alerts": 1,
+        "disabled_drawdown_alerts": 0,
+        "risk_alert_service_wired_to_loop": true,
+        "note": "max_drawdown_limit blocks new orders in both branches. notify_drawdown_alerts controls whether the loop persists a drawdown_breach risk alert on the first breached tick."
+      }
+    },
+    {
+      "channel": "kill_switch_events",
+      "status": "FIRES_UNCONDITIONALLY",
+      "flag_respected": null,
+      "evidence": {
+        "audit_log_entries": 10,
+        "canceled_orders": 0,
+        "note": "No notify_kill_switch flag. RuntimeControlService.activate_kill_switch() always writes KILL_SWITCH_ACTIVATED to audit_logs. Mandatory, not configurable."
+      }
+    },
+    {
+      "channel": "notify_strategy_promotion_events",
+      "status": "FIRES_AND_FLAG_RESPECTED",
+      "flag_respected": true,
+      "evidence": {
+        "flag_stored_in_db": true,
+        "notification_code_exists": true,
+        "enabled_promotion_events": 1,
+        "disabled_promotion_events": 0,
+        "governance_audit_entries": 2,
+        "note": "StrategyGovernanceService.transition() always writes the governance audit trail, and notify_strategy_promotion_events controls the additional STRATEGY_PROMOTION_EVENT notification audit entry."
+      }
+    },
+    {
+      "channel": "notify_pipeline_failures",
+      "status": "FIRES_AND_FLAG_RESPECTED",
+      "flag_respected": true,
+      "evidence": {
+        "flag_stored_in_db": true,
+        "failure_hooks_exist": true,
+        "enabled_failure_events": 1,
+        "disabled_failure_events": 0,
+        "failed_runtime_job_records": 2,
+        "note": "RuntimeJobRunner records failed jobs regardless of notification settings. PipelineFailureNotificationService reads notify_pipeline_failures and emits PIPELINE_FAILURE_EVENT only when the flag is enabled."
+      }
+    }
+  ]
+}

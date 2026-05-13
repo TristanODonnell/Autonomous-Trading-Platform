@@ -49,6 +49,65 @@ def _service(session: Session) -> OperatorSettingsService:
     )
 
 
+def _settings_response(result) -> OperatorSettingsResponse:
+    payload = dict(result.__dict__)
+    payload["metadata"] = {
+        "source_of_truth": {
+            "automation_controls_source": "settings",
+            "promotion_thresholds_source": "promotion_rules",
+            "allocation_targets_source": ("capital_allocation_policies + allocation_overrides"),
+        },
+        "automation_controls": {
+            "auto_promote_enabled": {
+                "value": result.auto_promote_enabled,
+                "label": "Auto Promote",
+                "description": (
+                    "Allows eligible strategies to be promoted automatically based "
+                    "on active Promotion Rules."
+                ),
+                "source": "settings",
+            },
+            "auto_demote_on_breach": {
+                "value": result.auto_demote_on_breach,
+                "label": "Auto Demote",
+                "description": (
+                    "Allows strategies to be demoted automatically when active rules are breached."
+                ),
+                "source": "settings",
+            },
+            "auto_rebalance_enabled": {
+                "value": result.auto_rebalance_enabled,
+                "label": "Auto Rebalance",
+                "description": (
+                    "Allows allocation changes based on strategy quality and risk signals."
+                ),
+                "source": "settings",
+            },
+            "rebalance_frequency": {
+                "value": result.rebalance_frequency,
+                "label": "Rebalance Frequency",
+                "description": ("How often the automated allocation review should run."),
+                "source": "settings",
+            },
+        },
+        "deprecated_or_ignored_settings": {
+            "min_sharpe_for_promotion": {
+                "value": result.min_sharpe_for_promotion,
+                "status": "deprecated_persisted_only",
+                "ignored_for": "manual_promotion_eligibility",
+                "active_source": "promotion_rules.min_sharpe",
+            },
+            "min_paper_trading_period_days": {
+                "value": result.min_paper_trading_period_days,
+                "status": "deprecated_persisted_only",
+                "ignored_for": "manual_promotion_eligibility",
+                "active_source": "promotion_rules.min_days_tested",
+            },
+        },
+    }
+    return OperatorSettingsResponse(**payload)
+
+
 @router.get(
     "",
     response_model=SuccessEnvelope[OperatorSettingsResponse],
@@ -60,7 +119,7 @@ def get_settings(
 ) -> SuccessEnvelope[OperatorSettingsResponse]:
     result = _service(session).get_settings()
     return success_response(
-        data=OperatorSettingsResponse(**result.__dict__),
+        data=_settings_response(result),
         request_id=request_id,
     )
 
@@ -82,7 +141,7 @@ def update_settings(
         reason=payload.reason,
     )
     return success_response(
-        data=OperatorSettingsResponse(**result.__dict__),
+        data=_settings_response(result),
         request_id=request_id,
     )
 

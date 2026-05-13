@@ -23,7 +23,6 @@ import {
   type ApiStrategyAllocationState,
 } from '../services/strategiesService'
 import { fetchAuditLog, type ApiAuditLogEvent } from '../services/auditLogService'
-import { fetchOperatorSettings, updateOperatorSettings } from '../services/settingsService'
 import type { Environment } from '../types'
 
 // ── Card primitives (unchanged from original) ─────────────────────────────────
@@ -98,6 +97,32 @@ function CardError({ title, message, color }: { title?: string; message: string;
         Failed to load: {message}
       </span>
     </Card>
+  )
+}
+
+function CardNote({
+  children,
+  tone = 'neutral',
+}: {
+  children: React.ReactNode
+  tone?: 'neutral' | 'warning'
+}) {
+  const styles = tone === 'warning'
+    ? {
+        background: 'var(--yellow-dim)',
+        border: '1px solid rgba(232,168,56,0.25)',
+        color: 'var(--yellow)',
+      }
+    : {
+        background: 'var(--surface2)',
+        border: '1px solid var(--border)',
+        color: 'var(--text2)',
+      }
+
+  return (
+    <div className="rounded-md px-3 py-2 font-mono text-[11px]" style={styles}>
+      {children}
+    </div>
   )
 }
 
@@ -479,11 +504,6 @@ function EnvironmentCard() {
     queryFn: fetchControlsState,
   })
 
-  const { data: settings, isLoading: settingsLoading } = useQuery({
-    queryKey: ['settings'],
-    queryFn: fetchOperatorSettings,
-  })
-
   const modeMutation = useMutation({
     mutationFn: ({ mode, rationale }: { mode: Environment; rationale: string }) =>
       updateTradingMode(mode, rationale),
@@ -492,13 +512,6 @@ function EnvironmentCard() {
       setPendingMode(null)
       setModeReason('')
       void queryClient.invalidateQueries({ queryKey: ['controls', 'state'] })
-    },
-  })
-
-  const autoPromoteMutation = useMutation({
-    mutationFn: (enabled: boolean) => updateOperatorSettings({ auto_promote_enabled: enabled }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['settings'] })
     },
   })
 
@@ -520,7 +533,6 @@ function EnvironmentCard() {
     <Card className="p-4">
       <CardTitle>Environment</CardTitle>
 
-      {/* Trading Mode */}
       <Row>
         <span className="text-[13px] text-[var(--text)]">Trading Mode</span>
         <div className="flex gap-2">
@@ -545,7 +557,6 @@ function EnvironmentCard() {
         </div>
       </Row>
 
-      {/* Inline mode-change confirm */}
       {pendingMode && pendingMode !== currentMode && (
         <div className="py-2 space-y-2" style={{ borderBottom: '1px solid var(--border)' }}>
           <p className="font-mono text-[11px] text-[var(--text2)]">
@@ -567,43 +578,27 @@ function EnvironmentCard() {
               disabled={!modeReason.trim() || modeMutation.isPending}
               onClick={confirmMode}
             >
-              {modeMutation.isPending ? 'Switching…' : 'Confirm'}
+              {modeMutation.isPending ? 'Switching...' : 'Confirm'}
             </ConfirmButton>
             <CancelButton onClick={() => { setPendingMode(null); setModeReason('') }} />
           </div>
         </div>
       )}
 
-      {/* Auto-promote */}
-      <Row>
-        <span className="text-[13px] text-[var(--text)]">Auto-promote enabled</span>
-        {settingsLoading ? (
-          <div className="w-9 h-5 rounded-[10px] animate-pulse" style={{ background: 'var(--border2)' }} />
-        ) : (
-          <Toggle
-            on={settings?.auto_promote_enabled ?? false}
-            disabled={autoPromoteMutation.isPending}
-            onChange={(on) => autoPromoteMutation.mutate(on)}
-          />
-        )}
-      </Row>
-
-      {/* Risk checks — deferred */}
       <Row last>
         <div>
-          <span className="text-[13px] text-[var(--text)]">Risk checks</span>
-          {/* TODO: No backend support for risk_checks_enabled.
-              OperatorSettingsResponse does not expose a risk-checks toggle.
-              Backend dependency: add risk_checks_enabled field to operator_settings table,
-              OperatorSettingsResponse, and OperatorSettingsUpdateRequest. */}
+          <span className="text-[13px] text-[var(--text)]">Automation settings moved</span>
+          <div className="font-mono text-[11px] text-[var(--text2)] mt-0.5">
+            Auto-promote, auto-rebalance, and auto-demote flags live on the Settings page.
+          </div>
         </div>
-        <Toggle on disabled />
+        <StatusBadge variant="gray">Settings</StatusBadge>
       </Row>
     </Card>
   )
 }
 
-// ── Allocation Overrides card ─────────────────────────────────────────────────
+// Allocation Overrides card ─────────────────────────────────────────────────
 
 function AllocationOverridesCard() {
   const queryClient = useQueryClient()
@@ -648,9 +643,14 @@ function AllocationOverridesCard() {
   return (
     <Card>
       <CardTitle>Allocation Overrides</CardTitle>
-      <p className="font-mono text-[11px] mb-3" style={{ color: 'var(--text2)' }}>
-        Set each strategy's share of total capital (0–100%). Overrides take precedence over policy. All changes are logged.
-      </p>
+      <div className="mb-3 space-y-2">
+        <CardNote>
+          This page manages manual allocation overrides only. Baseline allocation comes from capital allocation policies plus any active override.
+        </CardNote>
+        <CardNote tone="warning">
+          Automatic quality-based reallocation is not wired yet, even if the Settings flag is enabled.
+        </CardNote>
+      </div>
 
       {allocations.length === 0 ? (
         <p className="font-mono text-[11px] text-center py-4" style={{ color: 'var(--text3)' }}>
@@ -773,6 +773,14 @@ function GovernancePendingCard() {
   return (
     <Card>
       <CardTitle>Governance — Pending Promotion</CardTitle>
+      <div className="mb-3 space-y-2">
+        <CardNote>
+          Promotions here are manual governance transitions. Eligibility is enforced from active promotion rules, not the legacy settings thresholds.
+        </CardNote>
+        <CardNote tone="warning">
+          Auto-promote is not wired to a runner yet. Enabling the flag in Settings will not move strategies automatically.
+        </CardNote>
+      </div>
 
       {researchStrategies.length === 0 ? (
         <p className="font-mono text-[11px] text-center py-4" style={{ color: 'var(--text3)' }}>

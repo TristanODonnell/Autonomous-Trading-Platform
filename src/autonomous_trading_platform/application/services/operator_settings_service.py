@@ -15,6 +15,7 @@ class OperatorSettingsDTO:
     max_strategy_drawdown: float
     rebalance_frequency: str
     auto_promote_enabled: bool
+    auto_rebalance_enabled: bool
     min_sharpe_for_promotion: float
     min_paper_trading_period_days: int
     auto_demote_on_breach: bool
@@ -113,6 +114,7 @@ class OperatorSettingsService:
             max_strategy_drawdown=float(row.max_strategy_drawdown),
             rebalance_frequency=row.rebalance_frequency,
             auto_promote_enabled=row.auto_promote_enabled,
+            auto_rebalance_enabled=getattr(row, "auto_rebalance_enabled", False),
             min_sharpe_for_promotion=float(row.min_sharpe_for_promotion),
             min_paper_trading_period_days=int(row.min_paper_trading_period_days),
             auto_demote_on_breach=row.auto_demote_on_breach,

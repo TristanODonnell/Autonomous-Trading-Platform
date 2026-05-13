@@ -25,6 +25,7 @@ def test_get_settings_returns_default_operator_settings(client: TestClient) -> N
         "max_strategy_drawdown": "0.12",
         "rebalance_frequency": "weekly",
         "auto_promote_enabled": False,
+        "auto_rebalance_enabled": False,
         "min_sharpe_for_promotion": "1.5",
         "min_paper_trading_period_days": 30,
         "auto_demote_on_breach": True,
@@ -35,6 +36,61 @@ def test_get_settings_returns_default_operator_settings(client: TestClient) -> N
         "target_portfolio_volatility": "0.15",
         "slippage_model": "fixed",
         "transaction_cost_model": "per_share",
+        "metadata": {
+            "source_of_truth": {
+                "automation_controls_source": "settings",
+                "promotion_thresholds_source": "promotion_rules",
+                "allocation_targets_source": ("capital_allocation_policies + allocation_overrides"),
+            },
+            "automation_controls": {
+                "auto_promote_enabled": {
+                    "value": False,
+                    "label": "Auto Promote",
+                    "description": (
+                        "Allows eligible strategies to be promoted automatically based "
+                        "on active Promotion Rules."
+                    ),
+                    "source": "settings",
+                },
+                "auto_demote_on_breach": {
+                    "value": True,
+                    "label": "Auto Demote",
+                    "description": (
+                        "Allows strategies to be demoted automatically when active "
+                        "rules are breached."
+                    ),
+                    "source": "settings",
+                },
+                "auto_rebalance_enabled": {
+                    "value": False,
+                    "label": "Auto Rebalance",
+                    "description": (
+                        "Allows allocation changes based on strategy quality and risk signals."
+                    ),
+                    "source": "settings",
+                },
+                "rebalance_frequency": {
+                    "value": "weekly",
+                    "label": "Rebalance Frequency",
+                    "description": ("How often the automated allocation review should run."),
+                    "source": "settings",
+                },
+            },
+            "deprecated_or_ignored_settings": {
+                "min_sharpe_for_promotion": {
+                    "value": 1.5,
+                    "status": "deprecated_persisted_only",
+                    "ignored_for": "manual_promotion_eligibility",
+                    "active_source": "promotion_rules.min_sharpe",
+                },
+                "min_paper_trading_period_days": {
+                    "value": 30,
+                    "status": "deprecated_persisted_only",
+                    "ignored_for": "manual_promotion_eligibility",
+                    "active_source": "promotion_rules.min_days_tested",
+                },
+            },
+        },
     }
 
 
@@ -76,6 +132,7 @@ def test_put_settings_persists_changes_and_records_audit_log(
             "max_strategy_drawdown": "0.18",
             "rebalance_frequency": "daily",
             "auto_promote_enabled": True,
+            "auto_rebalance_enabled": True,
             "min_sharpe_for_promotion": "1.8",
             "min_paper_trading_period_days": 60,
             "auto_demote_on_breach": False,
@@ -96,7 +153,15 @@ def test_put_settings_persists_changes_and_records_audit_log(
     assert Decimal(str(data["max_strategy_drawdown"])) == Decimal("0.18")
     assert data["rebalance_frequency"] == "daily"
     assert data["auto_promote_enabled"] is True
+    assert data["auto_rebalance_enabled"] is True
     assert Decimal(str(data["min_sharpe_for_promotion"])) == Decimal("1.8")
+    assert data["metadata"]["source_of_truth"]["promotion_thresholds_source"] == "promotion_rules"
+    assert (
+        data["metadata"]["deprecated_or_ignored_settings"]["min_sharpe_for_promotion"][
+            "active_source"
+        ]
+        == "promotion_rules.min_sharpe"
+    )
     assert data["min_paper_trading_period_days"] == 60
     assert data["auto_demote_on_breach"] is False
     assert data["notify_drawdown_alerts"] is False
@@ -111,6 +176,7 @@ def test_put_settings_persists_changes_and_records_audit_log(
     assert row.risk_tolerance == "high"
     assert Decimal(str(row.min_sharpe_for_promotion)) == Decimal("1.8")
     assert row.min_paper_trading_period_days == 60
+    assert row.auto_rebalance_enabled is True
     assert row.auto_demote_on_breach is False
     assert row.notify_drawdown_alerts is False
     assert row.notify_strategy_promotion_events is False

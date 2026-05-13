@@ -25,6 +25,9 @@ from autonomous_trading_platform.storage.sor.models.strategy_control_states impo
 from autonomous_trading_platform.storage.sor.models.strategy_governance import (
     StrategyGovernance,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
+    OperatorSettingsRepository,
+)
 from tests.conftest import auth_headers, seed_strategy_governance
 
 
@@ -556,7 +559,11 @@ def test_strategy_governance_transition_promotes_research_to_paper_and_audits(
     db_session.refresh(governance)
     assert governance.current_state == "approved_for_paper_trading"
 
-    audit_log = db_session.query(AuditLogRow).one()
+    audit_log = (
+        db_session.query(AuditLogRow)
+        .filter(AuditLogRow.event_type == "STRATEGY_GOVERNANCE_TRANSITIONED")
+        .one()
+    )
     assert audit_log.event_type == "STRATEGY_GOVERNANCE_TRANSITIONED"
     assert audit_log.component == "strategies"
     assert audit_log.event_metadata is not None
@@ -565,6 +572,86 @@ def test_strategy_governance_transition_promotes_research_to_paper_and_audits(
     assert audit_log.event_metadata["strategy_id"] == "momentum_v1"
     assert audit_log.event_metadata["from_state"] == "approved_research"
     assert audit_log.event_metadata["to_state"] == "approved_for_paper_trading"
+
+    promotion_event = (
+        db_session.query(AuditLogRow)
+        .filter(AuditLogRow.event_type == "STRATEGY_PROMOTION_EVENT")
+        .one()
+    )
+    assert promotion_event.component == "notifications"
+    assert promotion_event.event_metadata is not None
+    assert promotion_event.event_metadata["channel"] == "notify_strategy_promotion_events"
+    assert promotion_event.event_metadata["strategy_id"] == "momentum_v1"
+    assert promotion_event.event_metadata["from_state"] == "approved_research"
+    assert promotion_event.event_metadata["to_state"] == "approved_for_paper_trading"
+
+
+def test_strategy_promotion_notification_flag_false_suppresses_notification_event(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    OperatorSettingsRepository(db_session).update_current(
+        {"notify_strategy_promotion_events": False},
+        updated_by="test",
+    )
+    governance = seed_strategy_governance(
+        db_session,
+        strategy_id="paper_candidate_v1",
+        state="approved_research",
+    )
+
+    response = client.post(
+        "/api/v1/strategies/paper_candidate_v1/governance/transition",
+        json={"to_state": "paper", "reason": "manual approval"},
+        headers=auth_headers(role="risk_manager"),
+    )
+
+    assert response.status_code == 200
+    db_session.refresh(governance)
+    assert governance.current_state == "approved_for_paper_trading"
+
+    audit_events = {
+        row.event_type
+        for row in db_session.query(AuditLogRow).order_by(AuditLogRow.event_timestamp.asc()).all()
+    }
+    assert "STRATEGY_GOVERNANCE_TRANSITIONED" in audit_events
+    assert "STRATEGY_PROMOTION_EVENT" not in audit_events
+
+
+def test_strategy_promotion_notification_flag_true_emits_live_promotion_event(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    OperatorSettingsRepository(db_session).update_current(
+        {"notify_strategy_promotion_events": True},
+        updated_by="test",
+    )
+    governance = seed_strategy_governance(
+        db_session,
+        strategy_id="live_candidate_v1",
+        state="approved_for_paper_trading",
+    )
+
+    response = client.post(
+        "/api/v1/strategies/live_candidate_v1/governance/transition",
+        json={"to_state": "live", "reason": "live criteria approved"},
+        headers=auth_headers(role="admin"),
+    )
+
+    assert response.status_code == 200
+    db_session.refresh(governance)
+    assert governance.current_state == "approved_for_live_trading"
+
+    promotion_event = (
+        db_session.query(AuditLogRow)
+        .filter(AuditLogRow.event_type == "STRATEGY_PROMOTION_EVENT")
+        .one()
+    )
+    assert promotion_event.event_metadata is not None
+    assert promotion_event.event_metadata["channel"] == "notify_strategy_promotion_events"
+    assert promotion_event.event_metadata["strategy_id"] == "live_candidate_v1"
+    assert promotion_event.event_metadata["from_state"] == "approved_for_paper_trading"
+    assert promotion_event.event_metadata["to_state"] == "approved_for_live_trading"
 
 
 def test_strategy_governance_transition_requires_target_state_role(
