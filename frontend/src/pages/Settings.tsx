@@ -28,15 +28,6 @@ const FREQ_TO_UI: Record<ApiOperatorSettings['rebalance_frequency'], string> = {
 const UI_TO_FREQ: Record<string, ApiOperatorSettings['rebalance_frequency']> = {
   Daily: 'daily', Weekly: 'weekly', Monthly: 'monthly',
 }
-const PAPER_PERIOD_TO_UI: Record<number, string> = {
-  14: '14 days', 30: '30 days', 60: '60 days', 90: '90 days',
-}
-const UI_TO_PAPER_PERIOD: Record<string, number> = {
-  '14 days': 14, '30 days': 30, '60 days': 60, '90 days': 90,
-}
-function paperPeriodDays(value: string): number {
-  return UI_TO_PAPER_PERIOD[value] ?? Number.parseInt(value, 10)
-}
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
@@ -196,6 +187,32 @@ function CardError({ message }: { message: string }) {
   )
 }
 
+function InlineNote({
+  children,
+  tone = 'neutral',
+}: {
+  children: React.ReactNode
+  tone?: 'neutral' | 'warning'
+}) {
+  const styles = tone === 'warning'
+    ? {
+        background: 'var(--yellow-dim)',
+        border: '1px solid rgba(232,168,56,0.25)',
+        color: 'var(--yellow)',
+      }
+    : {
+        background: 'var(--surface2)',
+        border: '1px solid var(--border)',
+        color: 'var(--text2)',
+      }
+
+  return (
+    <div className="rounded-md px-3 py-2 font-mono text-[11px]" style={styles}>
+      {children}
+    </div>
+  )
+}
+
 // ── SaveButton ────────────────────────────────────────────────────────────────
 
 function SaveButton({ onClick, isPending }: { onClick: () => void; isPending: boolean }) {
@@ -317,40 +334,31 @@ function GovernanceCard() {
     queryFn: fetchOperatorSettings,
   })
 
-  // API-backed — GET/PUT /settings: auto_promote_enabled, rebalance_frequency
-  const [autoPromote,   setAutoPromote]   = useState(false)
+  const [autoPromote, setAutoPromote] = useState(false)
+  const [autoRebalance, setAutoRebalance] = useState(false)
   const [rebalanceFreq, setRebalanceFreq] = useState('Daily')
-
-  const [minSharpe,   setMinSharpe]   = useState(1.5)
-  const [paperPeriod, setPaperPeriod] = useState('30 days')
-  const [autoDemote,  setAutoDemote]  = useState(true)
+  const [autoDemote, setAutoDemote] = useState(true)
 
   useEffect(() => {
     if (!data) return
     setAutoPromote(data.auto_promote_enabled)
+    setAutoRebalance(data.auto_rebalance_enabled)
     setRebalanceFreq(FREQ_TO_UI[data.rebalance_frequency])
-    setMinSharpe(Number(data.min_sharpe_for_promotion))
-    setPaperPeriod(
-      PAPER_PERIOD_TO_UI[data.min_paper_trading_period_days] ??
-        `${data.min_paper_trading_period_days} days`,
-    )
     setAutoDemote(data.auto_demote_on_breach)
   }, [data])
 
-  const apiAutoPromote   = data?.auto_promote_enabled ?? false
+  const apiAutoPromote = data?.auto_promote_enabled ?? false
+  const apiAutoRebalance = data?.auto_rebalance_enabled ?? false
   const apiRebalanceFreq = data ? FREQ_TO_UI[data.rebalance_frequency] : 'Daily'
-  const apiMinSharpe     = data ? Number(data.min_sharpe_for_promotion) : 1.5
-  const apiPaperPeriod   = data
-    ? (PAPER_PERIOD_TO_UI[data.min_paper_trading_period_days] ??
-      `${data.min_paper_trading_period_days} days`)
-    : '30 days'
-  const apiAutoDemote    = data?.auto_demote_on_breach ?? true
+  const apiAutoDemote = data?.auto_demote_on_breach ?? true
+  const automationSource = data?.metadata?.source_of_truth?.automation_controls_source ?? 'settings'
+  const promotionSource = data?.metadata?.source_of_truth?.promotion_thresholds_source ?? 'promotion_rules'
+  const allocationSource = data?.metadata?.source_of_truth?.allocation_targets_source ?? 'capital_allocation_policies + allocation_overrides'
   const isDirty =
-    autoPromote   !== apiAutoPromote   ||
+    autoPromote !== apiAutoPromote ||
+    autoRebalance !== apiAutoRebalance ||
     rebalanceFreq !== apiRebalanceFreq ||
-    minSharpe     !== apiMinSharpe     ||
-    paperPeriod   !== apiPaperPeriod   ||
-    autoDemote    !== apiAutoDemote
+    autoDemote !== apiAutoDemote
 
   const mutation = useMutation({
     mutationFn: (updates: ApiOperatorSettingsUpdate) => updateOperatorSettings(updates),
@@ -360,46 +368,39 @@ function GovernanceCard() {
   function handleSave() {
     mutation.mutate({
       auto_promote_enabled: autoPromote,
-      rebalance_frequency:  UI_TO_FREQ[rebalanceFreq],
-      min_sharpe_for_promotion: minSharpe,
-      min_paper_trading_period_days: paperPeriodDays(paperPeriod),
+      auto_rebalance_enabled: autoRebalance,
+      rebalance_frequency: UI_TO_FREQ[rebalanceFreq],
       auto_demote_on_breach: autoDemote,
     })
   }
 
   if (isLoading || !data) return <CardSkeleton />
-  if (isError)            return <CardError message="Failed to load governance settings" />
+  if (isError) return <CardError message="Failed to load governance settings" />
 
   return (
     <Card>
       <CardTitle action={isDirty ? <SaveButton onClick={handleSave} isPending={mutation.isPending} /> : undefined}>
-        Governance & Promotion
+        Governance & Allocation Automation
       </CardTitle>
 
-      <SettingRow label="Auto-promote strategies" desc="Promote paper → live when all criteria are met">
+      <div className="mb-4 space-y-2">
+        <InlineNote tone="warning">
+          Manual promotion eligibility now reads active {promotionSource}. The legacy threshold fields in operator settings are compatibility-only.
+        </InlineNote>
+        <InlineNote>
+          Automation flags are stored in {automationSource}. Allocation targets come from {allocationSource}.
+        </InlineNote>
+      </div>
+
+      <SettingRow label="Auto-promote strategies" desc="Stores the automation flag. No automatic promotion runner is wired yet.">
         <Toggle on={autoPromote} onChange={setAutoPromote} />
       </SettingRow>
 
-      <SettingRow label="Minimum Sharpe for promotion" desc="Paper strategies must exceed this to be eligible">
-        <Slider
-          min={0.5}
-          max={3}
-          step={0.1}
-          value={minSharpe}
-          onChange={setMinSharpe}
-          format={v => v.toFixed(1)}
-        />
+      <SettingRow label="Auto-rebalance allocation" desc="Stores the automation flag. Quality-based reallocation is not wired yet.">
+        <Toggle on={autoRebalance} onChange={setAutoRebalance} />
       </SettingRow>
 
-      <SettingRow label="Min paper trading period" desc="Days of paper trading required before promotion">
-        <Select
-          options={['14 days', '30 days', '60 days', '90 days']}
-          value={paperPeriod}
-          onChange={setPaperPeriod}
-        />
-      </SettingRow>
-
-      <SettingRow label="Rebalance frequency" desc="How often portfolio allocations are rebalanced">
+      <SettingRow label="Rebalance frequency" desc="Stored cadence for future automated allocation review.">
         <Select
           options={['Daily', 'Weekly', 'Monthly']}
           value={rebalanceFreq}
@@ -407,14 +408,27 @@ function GovernanceCard() {
         />
       </SettingRow>
 
-      <SettingRow label="Auto-demote on breach" desc="Auto-demote live strategy to paper if DD limit exceeded" last>
+      <SettingRow label="Legacy promotion thresholds" desc="Kept for compatibility. These values do not drive current promotion decisions.">
+        <StatusBadge variant="yellow" className="font-mono">Deprecated</StatusBadge>
+      </SettingRow>
+
+      <SettingRow label="Auto-demote on breach" desc="Stores the automation flag. No automatic demotion service is wired yet." last>
         <Toggle on={autoDemote} onChange={setAutoDemote} />
       </SettingRow>
+
+      <div className="mt-4 space-y-2">
+        <InlineNote>
+          Stored only: min_sharpe_for_promotion = {Number(data.min_sharpe_for_promotion).toFixed(1)}, min_paper_trading_period_days = {data.min_paper_trading_period_days}.
+        </InlineNote>
+        <InlineNote>
+          Use promotion rules for threshold changes and the Controls page for manual governance transitions.
+        </InlineNote>
+      </div>
     </Card>
   )
 }
 
-// ── Slippage / cost model maps ────────────────────────────────────────────────
+// Slippage / cost model maps ────────────────────────────────────────────────
 
 const SLIPPAGE_TO_UI: Record<SlippageModel, string> = {
   fixed:        'Fixed (0.02%)',

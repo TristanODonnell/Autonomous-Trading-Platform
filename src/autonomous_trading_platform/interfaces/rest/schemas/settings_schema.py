@@ -19,8 +19,21 @@ class OperatorSettingsResponse(BaseModel):
     max_strategy_drawdown: Decimal
     rebalance_frequency: RebalanceFrequency
     auto_promote_enabled: bool
-    min_sharpe_for_promotion: Decimal
-    min_paper_trading_period_days: int
+    auto_rebalance_enabled: bool = False
+    min_sharpe_for_promotion: Decimal = Field(
+        description=(
+            "Deprecated compatibility field. PromotionRules.min_sharpe is the "
+            "source of truth for governance eligibility."
+        ),
+        json_schema_extra={"deprecated": True},
+    )
+    min_paper_trading_period_days: int = Field(
+        description=(
+            "Deprecated compatibility field. PromotionRules.min_days_tested is the "
+            "source of truth for governance eligibility."
+        ),
+        json_schema_extra={"deprecated": True},
+    )
     auto_demote_on_breach: bool
     notify_drawdown_alerts: bool
     notify_strategy_promotion_events: bool
@@ -29,6 +42,7 @@ class OperatorSettingsResponse(BaseModel):
     target_portfolio_volatility: Decimal
     slippage_model: SlippageModel
     transaction_cost_model: TransactionCostModel
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class OperatorSettingsUpdateRequest(BaseModel):
@@ -37,10 +51,27 @@ class OperatorSettingsUpdateRequest(BaseModel):
     max_strategy_drawdown: Decimal | None = Field(default=None, ge=Decimal("0"), le=Decimal("1"))
     rebalance_frequency: RebalanceFrequency | None = None
     auto_promote_enabled: bool | None = None
+    auto_rebalance_enabled: bool | None = None
     min_sharpe_for_promotion: Decimal | None = Field(
-        default=None, ge=Decimal("0"), le=Decimal("10")
+        default=None,
+        ge=Decimal("0"),
+        le=Decimal("10"),
+        description=(
+            "Deprecated compatibility field. Write PromotionRules instead for "
+            "governance eligibility thresholds."
+        ),
+        json_schema_extra={"deprecated": True},
     )
-    min_paper_trading_period_days: int | None = Field(default=None, ge=1, le=365)
+    min_paper_trading_period_days: int | None = Field(
+        default=None,
+        ge=1,
+        le=365,
+        description=(
+            "Deprecated compatibility field. Write PromotionRules instead for "
+            "governance eligibility thresholds."
+        ),
+        json_schema_extra={"deprecated": True},
+    )
     auto_demote_on_breach: bool | None = None
     notify_drawdown_alerts: bool | None = None
     notify_strategy_promotion_events: bool | None = None

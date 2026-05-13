@@ -1,0 +1,47 @@
+{
+  "run_id": "5a70119f-93de-48df-abcf-5b61f381ebfa",
+  "results": [
+    {
+      "channel": "notify_drawdown_alerts",
+      "status": "FIRES_UNCONDITIONALLY",
+      "flag_respected": false,
+      "evidence": {
+        "orders_blocked_in_replay": 8,
+        "risk_snapshots_blocked": 4,
+        "risk_alert_service_fires_standalone": true,
+        "risk_alert_service_wired_to_loop": false,
+        "note": "RiskSnapshot.is_blocked fires whenever max_drawdown_limit is breached, regardless of notify_drawdown_alerts. The flag is loaded into settings_snapshot but never read by _run_trading. RiskAlertService.evaluate() works in isolation but is not called from the trading loop."
+      }
+    },
+    {
+      "channel": "kill_switch_events",
+      "status": "FIRES_UNCONDITIONALLY",
+      "flag_respected": null,
+      "evidence": {
+        "audit_log_entries": 7,
+        "canceled_orders": 0,
+        "note": "No notify_kill_switch flag. RuntimeControlService.activate_kill_switch() always writes KILL_SWITCH_ACTIVATED to audit_logs. Mandatory, not configurable."
+      }
+    },
+    {
+      "channel": "notify_strategy_promotion_events",
+      "status": "FLAG_NOT_WIRED",
+      "flag_respected": false,
+      "evidence": {
+        "flag_stored_in_db": true,
+        "notification_code_exists": false,
+        "note": "notify_strategy_promotion_events is persisted to operator_settings but no code reads it. Governance state changes (research -> paper -> live) do not trigger any notification."
+      }
+    },
+    {
+      "channel": "notify_pipeline_failures",
+      "status": "NOT_IMPLEMENTED",
+      "flag_respected": false,
+      "evidence": {
+        "flag_stored_in_db": true,
+        "failure_hooks_exist": false,
+        "note": "notify_pipeline_failures flag exists in operator_settings but no pipeline failure hooks, notifiers, or event handlers have been implemented."
+      }
+    }
+  ]
+}

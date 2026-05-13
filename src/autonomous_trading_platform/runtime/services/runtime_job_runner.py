@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Protocol, TypeVar
@@ -8,15 +9,25 @@ from uuid import uuid4
 from autonomous_trading_platform.contracts.runtime.runtime_job_run import RuntimeJobRun
 
 T = TypeVar("T")
+logger = logging.getLogger(__name__)
 
 
 class RuntimeJobRunWriter(Protocol):
     def save(self, contract: RuntimeJobRun) -> RuntimeJobRun: ...
 
 
+class RuntimeJobFailureNotifier(Protocol):
+    def notify_failure(self, failed_run: RuntimeJobRun) -> None: ...
+
+
 class RuntimeJobRunner:
-    def __init__(self, repository: RuntimeJobRunWriter) -> None:
+    def __init__(
+        self,
+        repository: RuntimeJobRunWriter,
+        failure_notifier: RuntimeJobFailureNotifier | None = None,
+    ) -> None:
         self.repository = repository
+        self.failure_notifier = failure_notifier
 
     def run(
         self,
@@ -78,7 +89,7 @@ class RuntimeJobRunner:
             completed_at = datetime.now(UTC)
             duration_ms = int((completed_at - started_at).total_seconds() * 1000)
 
-            self.repository.save(
+            failed_run = self.repository.save(
                 RuntimeJobRun(
                     job_run_id=job_run_id,
                     job_name=job_name,
@@ -94,6 +105,7 @@ class RuntimeJobRunner:
                     output_summary_json=None,
                 )
             )
+            self._notify_failure(failed_run)
 
             raise
 
@@ -118,3 +130,19 @@ class RuntimeJobRunner:
         )
 
         return result
+
+    def _notify_failure(self, failed_run: RuntimeJobRun) -> None:
+        if self.failure_notifier is None:
+            return
+
+        try:
+            self.failure_notifier.notify_failure(failed_run)
+        except Exception:
+            logger.warning(
+                "runtime_job.failure_notification_failed",
+                extra={
+                    "job_run_id": failed_run.job_run_id,
+                    "job_name": failed_run.job_name,
+                },
+                exc_info=True,
+            )

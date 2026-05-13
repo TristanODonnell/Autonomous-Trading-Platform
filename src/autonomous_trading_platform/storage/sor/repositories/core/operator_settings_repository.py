@@ -33,6 +33,7 @@ class OperatorSettingsRepository:
             max_strategy_drawdown=0.12,
             rebalance_frequency="weekly",
             auto_promote_enabled=False,
+            auto_rebalance_enabled=False,
             min_sharpe_for_promotion=1.5,
             min_paper_trading_period_days=30,
             auto_demote_on_breach=True,

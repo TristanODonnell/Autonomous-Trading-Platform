@@ -8,6 +8,7 @@ settings:
 
   # ── Governance & Promotion ────────────────────────────────────────────────
   auto_promote_enabled: false         # promote paper → live automatically
+  auto_rebalance_enabled: false       # allow automated allocation reviews
   min_sharpe_for_promotion: 1.5       # minimum Sharpe ratio for promotion
   min_paper_trading_period_days: 30   # 14 | 30 | 60 | 90
   rebalance_frequency: daily          # daily | weekly | monthly
