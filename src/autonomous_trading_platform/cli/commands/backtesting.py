@@ -102,6 +102,24 @@ def register(subparsers) -> None:
     )
     seed_parser.set_defaults(func=handle_seed_fixture)
 
+    seed_settings_parser = backtesting_subparsers.add_parser(
+        "seed-settings",
+        help="Write operator settings to the DB from a YAML config file.",
+    )
+    seed_settings_parser.add_argument(
+        "--config",
+        required=True,
+        type=Path,
+        help="Path to the settings YAML file (e.g. fixtures/settings.yaml)",
+    )
+    seed_settings_parser.set_defaults(func=handle_seed_settings)
+
+    read_settings_parser = backtesting_subparsers.add_parser(
+        "read-settings",
+        help="Print the current operator settings from the DB.",
+    )
+    read_settings_parser.set_defaults(func=handle_read_settings)
+
 
 def handle_run(args: argparse.Namespace) -> int:
     print_header("Backtesting Run")
@@ -286,6 +304,88 @@ def handle_seed_fixture(args: argparse.Namespace) -> int:
         session.close()
 
     print("\n  Seed complete. Run replay-debug with --reset-sim-state to start a clean backtest.")
+    return 0
+
+
+def handle_seed_settings(args: argparse.Namespace) -> int:
+    config_path: Path = args.config
+    if not config_path.exists():
+        print_error(f"Config file not found: {config_path}")
+        return 1
+
+    try:
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        print_error(f"Failed to parse settings YAML: {exc}")
+        return 1
+
+    patch: dict[str, Any] = raw.get(
+        "settings", raw
+    )  # accept bare dict or wrapped under 'settings:'
+
+    unknown = set(patch) - _VALID_SETTINGS_KEYS
+    if unknown:
+        for key in sorted(unknown):
+            print_error(
+                f"Unknown settings key: '{key}'. Valid keys: {sorted(_VALID_SETTINGS_KEYS)}"
+            )
+        return 1
+
+    if not patch:
+        print_error("No settings fields found in config file.")
+        return 1
+
+    print_header("Seed Settings")
+    print_json({"writing": patch})
+
+    session = get_session()
+    try:
+        OperatorSettingsRepository(session).update_current(values=patch, updated_by=_FIXTURE_ACTOR)
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        print_error(f"Seed failed — rolled back: {exc}")
+        return 1
+    finally:
+        session.close()
+
+    print("\n  Done. Refresh the Settings page in the frontend to verify.")
+    return 0
+
+
+def handle_read_settings(args: argparse.Namespace) -> int:
+    print_header("Current Operator Settings (DB)")
+    session = get_session()
+    try:
+        row = OperatorSettingsRepository(session).get_current()
+    finally:
+        session.close()
+
+    if row is None:
+        print_json({"status": "no settings row found — run seed-settings first"})
+        return 0
+
+    print_json(
+        {
+            "risk_tolerance": row.risk_tolerance,
+            "max_drawdown_limit": float(row.max_drawdown_limit),
+            "max_strategy_drawdown": float(row.max_strategy_drawdown),
+            "per_strategy_cap": float(row.per_strategy_cap),
+            "target_portfolio_volatility": float(row.target_portfolio_volatility),
+            "rebalance_frequency": row.rebalance_frequency,
+            "auto_promote_enabled": row.auto_promote_enabled,
+            "min_sharpe_for_promotion": float(row.min_sharpe_for_promotion),
+            "min_paper_trading_period_days": row.min_paper_trading_period_days,
+            "auto_demote_on_breach": row.auto_demote_on_breach,
+            "slippage_model": row.slippage_model,
+            "transaction_cost_model": row.transaction_cost_model,
+            "notify_drawdown_alerts": row.notify_drawdown_alerts,
+            "notify_strategy_promotion_events": row.notify_strategy_promotion_events,
+            "notify_pipeline_failures": row.notify_pipeline_failures,
+            "updated_by": row.updated_by,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
+    )
     return 0
 
 

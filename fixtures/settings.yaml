@@ -1,0 +1,23 @@
+settings:
+  # ── Risk Parameters ───────────────────────────────────────────────────────
+  risk_tolerance: high                # low | medium | high
+  max_drawdown_limit: 0.20            # 20% — system pauses all trading if hit
+  max_strategy_drawdown: 0.15         # 15% — per-strategy warning threshold
+  per_strategy_cap: 0.40              # 40% — hard cap on any single strategy
+  target_portfolio_volatility: 0.20   # 20% annualized volatility target
+
+  # ── Governance & Promotion ────────────────────────────────────────────────
+  auto_promote_enabled: false         # promote paper → live automatically
+  min_sharpe_for_promotion: 1.5       # minimum Sharpe ratio for promotion
+  min_paper_trading_period_days: 30   # 14 | 30 | 60 | 90
+  rebalance_frequency: daily          # daily | weekly | monthly
+  auto_demote_on_breach: true         # demote live → paper if DD limit hit
+
+  # ── Data & Simulation ─────────────────────────────────────────────────────
+  slippage_model: spread              # fixed | volume_based | spread
+  transaction_cost_model: per_share   # per_share | per_trade | notional_pct
+
+  # ── Notifications ─────────────────────────────────────────────────────────
+  notify_drawdown_alerts: true
+  notify_strategy_promotion_events: true
+  notify_pipeline_failures: true
