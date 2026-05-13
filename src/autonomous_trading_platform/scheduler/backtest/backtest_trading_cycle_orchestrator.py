@@ -120,15 +120,20 @@ def _build_backtest_dependencies(
     session: Session,
     settings: Settings,
     broker_client: BacktestBrokerClient,
+    raw_dataset_version_id: str,
+    run_id: uuid.UUID,
 ) -> TradingCycleDependencies:
     audit_logger = AuditLoggingService(session)
     audit_log_repository = AuditLogRepository(session)
     manifest_service = RunManifestService(session)
 
     environment_safety_policy = EnvironmentSafetyPolicy(settings=settings)
+    # Use a run-scoped strategy_id so stale checkpoints from prior runs don't block evaluation
     strategy_context = build_strategy_runtime_context(
         session=session,
-        strategy=StubStrategy(),
+        strategy=StubStrategy(strategy_id=f"backtest_{run_id}"),
+        fallback_dataset=RAW_BARS_DATASET,
+        fallback_dataset_version=raw_dataset_version_id,
     )
 
     safety_context = build_safety_context(
@@ -276,6 +281,8 @@ class BacktestTradingCycleOrchestrator:
                     session=session,
                     settings=settings,
                     broker_client=broker_client,
+                    raw_dataset_version_id=str(raw_dataset.dataset_version_id),
+                    run_id=run_id,
                 )
 
                 manifest = build_trading_run_manifest(

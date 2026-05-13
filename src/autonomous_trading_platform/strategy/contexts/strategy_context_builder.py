@@ -24,12 +24,16 @@ class StrategyContextBuilder:
         lookback_bars: int = 300,
         lookahead_guard_service: LookaheadGuardService | None = None,
         dataset_version: str = "v1",
+        fallback_dataset: ParquetDataset | None = None,
+        fallback_dataset_version: str | None = None,
     ) -> None:
         self.market_bar_reader = market_bar_reader
         self.bars_dataset = bars_dataset
         self.lookback_bars = lookback_bars
         self.lookahead_guard_service = lookahead_guard_service or LookaheadGuardService()
         self.dataset_version = dataset_version
+        self.fallback_dataset = fallback_dataset
+        self.fallback_dataset_version = fallback_dataset_version
 
     def build(
         self,
@@ -68,6 +72,15 @@ class StrategyContextBuilder:
             start_date=start_date,
             end_date=end_date,
         )
+
+        if table.num_rows == 0 and self.fallback_dataset is not None:
+            table = self.market_bar_reader.read(
+                dataset=self.fallback_dataset,
+                dataset_version=self.fallback_dataset_version or self.dataset_version,
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+            )
 
         if table.num_rows == 0:
             return None
