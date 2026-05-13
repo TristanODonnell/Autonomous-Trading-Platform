@@ -223,7 +223,7 @@ def test_active_strategies_returns_dashboard_schema(
 def test_strategy_allocation_requires_risk_manager_or_admin(client: TestClient) -> None:
     response = client.put(
         "/api/v1/strategies/momentum_v1/allocation",
-        json={"allocated_capital": "25000", "reason": "risk rebalance"},
+        json={"allocation_pct": "25", "reason": "risk rebalance"},
         headers=auth_headers(role="operator"),
     )
 
@@ -280,13 +280,14 @@ def test_strategy_allocation_override_updates_active_strategy_and_audit_log(
 
     response = client.put(
         "/api/v1/strategies/momentum_v1/allocation",
-        json={"allocated_capital": "25000", "reason": "risk rebalance"},
+        json={"allocation_pct": "25", "reason": "risk rebalance"},
         headers=auth_headers(role="risk_manager"),
     )
 
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["strategy_id"] == "momentum_v1"
+    assert Decimal(str(data["allocation_pct"])) == Decimal("25")
     assert Decimal(str(data["allocated_capital"])) == Decimal("25000")
     assert Decimal(str(data["total_portfolio_capital"])) == Decimal("100000.000000")
     assert data["reason"] == "risk rebalance"
@@ -300,7 +301,8 @@ def test_strategy_allocation_override_updates_active_strategy_and_audit_log(
     )
     assert len(active_overrides) == 1
     assert active_overrides[0].override_reason == "risk rebalance"
-    assert active_overrides[0].max_position_size_usd == 25000.0
+    assert active_overrides[0].max_position_size_usd is None
+    assert active_overrides[0].max_pct_of_capital == 0.25
 
     audit_log = db_session.query(AuditLogRow).one()
     assert audit_log.event_type == "STRATEGY_ALLOCATION_OVERRIDDEN"
@@ -343,11 +345,11 @@ def test_strategy_allocation_rejects_override_above_total_portfolio_capital(
 
     response = client.put(
         "/api/v1/strategies/momentum_v1/allocation",
-        json={"allocated_capital": "50001", "reason": "too large"},
+        json={"allocation_pct": "100.01", "reason": "too large"},
         headers=auth_headers(role="admin"),
     )
 
-    assert response.status_code == 409
+    assert response.status_code == 422
     assert db_session.query(AllocationOverrides).all() == []
     assert db_session.query(AuditLogRow).all() == []
 
@@ -777,9 +779,13 @@ def test_experiment_creation_queues_job_and_returns_experiment_id(
     response = client.post(
         "/api/v1/experiments",
         json={
-            "strategy_type": "momentum",
-            "risk_level": "medium",
-            "time_horizon": "3m",
+            "name": "Momentum medium risk smoke",
+            "experiment_type": "parameter_sweep",
+            "symbols": ["SPY", "QQQ"],
+            "start_date": "2026-01-01",
+            "end_date": "2026-03-31",
+            "strategy_count": 50,
+            "parameter_ranges": {"lookback": [20, 50]},
         },
         headers=auth_headers(role="operator"),
     )
@@ -787,13 +793,17 @@ def test_experiment_creation_queues_job_and_returns_experiment_id(
     assert response.status_code == 201
     data = response.json()["data"]
     assert data["experiment_id"]
-    assert data["status"] == "queued"
+    assert data["status"] == "pending"
 
     experiment = db_session.get(Experiments, data["experiment_id"])
     assert experiment is not None
-    assert experiment.status == "queued"
+    assert experiment.status == "pending"
     assert experiment.metadata_json is not None
-    assert experiment.metadata_json["mapping"]["mapping_version"] == "story-57.v1"
+    assert experiment.metadata_json["created_by"] == "test-user"
+    assert experiment.metadata_json["experiment_type"] == "parameter_sweep"
+    assert experiment.metadata_json["symbols"] == ["SPY", "QQQ"]
+    assert experiment.metadata_json["strategy_count"] == 50
+    assert experiment.metadata_json["parameter_ranges"] == {"lookback": [20, 50]}
 
     job = (
         db_session.query(RuntimeJobRuns)
@@ -811,9 +821,11 @@ def test_experiment_list_and_detail_return_valid_shapes(
     response = client.post(
         "/api/v1/experiments",
         json={
-            "strategy_type": "breakout",
-            "risk_level": "low",
-            "time_horizon": "1m",
+            "name": "Breakout low risk smoke",
+            "experiment_type": "backtest",
+            "symbols": ["SPY"],
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-31",
         },
         headers=auth_headers(role="admin"),
     )
@@ -827,11 +839,10 @@ def test_experiment_list_and_detail_return_valid_shapes(
     assert detail_response.status_code == 200
     detail = detail_response.json()["data"]
     assert detail["experiment_id"] == experiment_id
-    assert detail["mapping"]["mapping_version"] == "story-57.v1"
-    assert detail["simulation_results"] == []
-    assert detail["filtering_summary"] == {
-        "submitted": 0,
-        "positive_return": 0,
-        "positive_sharpe": 0,
-        "ranked": 0,
-    }
+    assert detail["experiment_name"] == "Breakout low risk smoke"
+    assert detail["experiment_type"] == "backtest"
+    assert detail["status"] == "pending"
+    assert detail["symbols"] == ["SPY"]
+    assert detail["strategies"] == []
+    assert detail["parameter_ranges"] == {}
+    assert detail["price_basis"] == "RAW"

@@ -294,18 +294,6 @@ def run_feature_pipeline_cycle(
         )
         validation_service = FeatureValidationService()
 
-        source_dataset = (
-            dataset_registration_service.get_by_dataset_version_id(dataset_version_id)
-            if dataset_version_id is not None
-            else None
-        )
-
-        print("DEBUG DATASET:", source_dataset)
-        print(
-            "DEBUG SOURCE DATASET VERSION:",
-            source_dataset.source_dataset_version if source_dataset is not None else None,
-        )
-
         _validate_feature_pipeline_lineage(
             dataset_version_id=dataset_version_id,
             price_basis=price_basis,
