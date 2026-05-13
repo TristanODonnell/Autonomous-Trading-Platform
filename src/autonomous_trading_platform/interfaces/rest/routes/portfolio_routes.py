@@ -39,6 +39,9 @@ from autonomous_trading_platform.interfaces.rest.schemas.portfolio_schemas impor
     PortfolioRiskResponse,
     PortfolioSummaryResponse,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.runtime_control_state_repository import (
+    RuntimeControlStateRepository,
+)
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 _request_id_dependency = Depends(get_request_id)
@@ -46,9 +49,20 @@ _session_dependency = Depends(get_session)
 _alpaca_dependency = Depends(get_alpaca_broker_client)
 
 
-def _alpaca_service(client: AlpacaBrokerClient | None) -> AlpacaPortfolioService | None:
+def _alpaca_service(
+    client: AlpacaBrokerClient | None,
+    session: Session,
+) -> AlpacaPortfolioService | None:
     if client is None:
         return None
+    # In simulation/backtesting mode always read from DB so the frontend
+    # reflects backtest results rather than the live broker account.
+    try:
+        ctrl = RuntimeControlStateRepository(session).get_global_state()
+        if ctrl is not None and ctrl.trading_mode == "simulation":
+            return None
+    except Exception:
+        pass
     try:
         settings = get_settings()
         return AlpacaPortfolioService(client=client, initial_capital=settings.initial_capital)
@@ -62,7 +76,7 @@ def get_portfolio_summary(
     session: Session = _session_dependency,
     alpaca_client: AlpacaBrokerClient | None = _alpaca_dependency,
 ) -> SuccessEnvelope[PortfolioSummaryResponse]:
-    alpaca = _alpaca_service(alpaca_client)
+    alpaca = _alpaca_service(alpaca_client, session)
     if alpaca is not None:
         try:
             result = alpaca.get_summary()
@@ -118,7 +132,7 @@ def get_portfolio_holdings(
     session: Session = _session_dependency,
     alpaca_client: AlpacaBrokerClient | None = _alpaca_dependency,
 ) -> SuccessEnvelope[PortfolioHoldingsResponse]:
-    alpaca = _alpaca_service(alpaca_client)
+    alpaca = _alpaca_service(alpaca_client, session)
     if alpaca is not None:
         try:
             result = alpaca.get_holdings()
@@ -143,7 +157,7 @@ def get_portfolio_allocation(
     session: Session = _session_dependency,
     alpaca_client: AlpacaBrokerClient | None = _alpaca_dependency,
 ) -> SuccessEnvelope[PortfolioAllocationResponse]:
-    alpaca = _alpaca_service(alpaca_client)
+    alpaca = _alpaca_service(alpaca_client, session)
     if alpaca is not None:
         try:
             result = alpaca.get_allocation()

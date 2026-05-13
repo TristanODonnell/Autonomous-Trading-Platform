@@ -590,8 +590,8 @@ def _run_trading(ctx: ReplayCycleContext) -> dict[str, Any]:
         ctx.counters.orders_blocked_by_risk += len(ctx.inputs.symbols)
         _write_risk_snapshot(ctx, is_blocked=True, reasons=[reason])
         return {"status": "skipped", "skip_reason": reason}
-    if not _strategy_enabled(ctx.settings_snapshot, DEFAULT_STRATEGY_ID):
-        return {"status": "skipped", "skip_reason": "strategy_disabled"}
+
+    strategy_ids = _active_strategy_ids(ctx.settings_snapshot)
 
     prices = _prices_for_tick(ctx)
     equity = _mark_to_market(ctx.state, prices)
@@ -612,7 +612,8 @@ def _run_trading(ctx: ReplayCycleContext) -> dict[str, Any]:
     orders_attempted = 0
     orders_blocked = 0
 
-    for symbol in ctx.inputs.symbols:
+    for idx, symbol in enumerate(ctx.inputs.symbols):
+        strategy_id = strategy_ids[idx % len(strategy_ids)]
         price = prices[symbol]
         side = _decision_for(ctx, symbol)
         signal_id = uuid.uuid5(
@@ -625,7 +626,7 @@ def _run_trading(ctx: ReplayCycleContext) -> dict[str, Any]:
                 run_id=ctx.replay_uuid,
                 timestamp=ctx.clock.now(),
                 bar_timestamp=ctx.clock.now(),
-                strategy_id=DEFAULT_STRATEGY_ID,
+                strategy_id=strategy_id,
                 symbol=symbol,
                 direction=SignalDirection.BUY if side == Side.BUY else SignalDirection.SELL,
                 confidence=0.75,
@@ -640,12 +641,14 @@ def _run_trading(ctx: ReplayCycleContext) -> dict[str, Any]:
             orders_blocked += 1
             continue
 
-        qty = _quantity_for_order(ctx, symbol, side, price)
+        qty = _quantity_for_order(ctx, symbol, side, price, strategy_id)
         if qty <= 0:
             continue
 
         _apply_fill(ctx.state, symbol, side, qty, price)
-        _write_order_and_fill(ctx, symbol=symbol, side=side, qty=qty, price=price)
+        _write_order_and_fill(
+            ctx, symbol=symbol, side=side, qty=qty, price=price, strategy_id=strategy_id
+        )
         orders_submitted += 1
         fills_created += 1
 
@@ -785,13 +788,14 @@ def _quantity_for_order(
     symbol: str,
     side: Side,
     price: Decimal,
+    strategy_id: str,
 ) -> Decimal:
     if side == Side.SELL:
         return ctx.state.positions.get(symbol, Decimal("0"))
 
     equity = max(ctx.state.latest_equity, ctx.inputs.starting_cash)
     cap = Decimal(str(ctx.settings_snapshot["operator_settings"]["per_strategy_cap"]))
-    override = _allocation_override(ctx.settings_snapshot, DEFAULT_STRATEGY_ID)
+    override = _allocation_override(ctx.settings_snapshot, strategy_id)
     if override and override.get("max_pct_of_capital") is not None:
         cap = min(cap, Decimal(str(override["max_pct_of_capital"])))
 
@@ -837,6 +841,7 @@ def _write_order_and_fill(
     side: Side,
     qty: Decimal,
     price: Decimal,
+    strategy_id: str,
 ) -> None:
     now = ctx.clock.now()
     intent_id = uuid.uuid5(ctx.replay_uuid, f"intent:{now.isoformat()}:{symbol}:{side.value}")
@@ -849,7 +854,7 @@ def _write_order_and_fill(
             intent_id=intent_id,
             idempotency_key=f"{ctx.replay_id}:{now.isoformat()}:{symbol}:{side.value}",
             run_id=ctx.replay_uuid,
-            strategy_id=DEFAULT_STRATEGY_ID,
+            strategy_id=strategy_id,
             timestamp=now,
             bar_timestamp=now,
             symbol=symbol,
@@ -1007,11 +1012,10 @@ def _drawdown(state: ReplayExecutionState) -> Decimal:
     return (state.latest_equity - state.peak_equity) / state.peak_equity
 
 
-def _strategy_enabled(snapshot: dict[str, Any], strategy_id: str) -> bool:
-    for row in snapshot["strategy_control_states"]:
-        if row["strategy_id"] == strategy_id:
-            return bool(row["enabled"])
-    return True
+def _active_strategy_ids(snapshot: dict[str, Any]) -> list[str]:
+    """Return enabled strategy IDs from seeded controls, falling back to baseline."""
+    enabled = [row["strategy_id"] for row in snapshot["strategy_control_states"] if row["enabled"]]
+    return enabled if enabled else [DEFAULT_STRATEGY_ID]
 
 
 def _allocation_override(snapshot: dict[str, Any], strategy_id: str) -> dict[str, Any] | None:
