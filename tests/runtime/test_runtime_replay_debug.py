@@ -247,6 +247,50 @@ def test_tighter_max_drawdown_causes_more_risk_blocks(db_session: Session) -> No
     assert tight["trading"]["orders_blocked_by_risk"] > loose["trading"]["orders_blocked_by_risk"]
 
 
+def test_dispatched_ticks_are_all_unique(db_session: Session) -> None:
+    """Every tick the handler is called with a distinct clock timestamp."""
+    dispatched: list[datetime] = []
+
+    def record_tick(ctx):
+        dispatched.append(ctx.clock.now())
+        return None
+
+    summary = RuntimeReplayDebugRunner(
+        inputs=_inputs(cycles=["runtime_checks"], max_ticks=4),
+        settings=_settings(),
+        session_factory=lambda: db_session,
+        close_session=False,
+        cycle_handlers={"runtime_checks": record_tick},
+    ).run()
+
+    assert summary["execution"]["ticks_dispatched"] == 4
+    assert len(dispatched) == 4
+    assert len(set(dispatched)) == 4
+
+
+def test_ticks_dispatched_counter_matches_handler_invocation_count(
+    db_session: Session,
+) -> None:
+    """ticks_dispatched in the summary equals the number of times the handler was called."""
+    call_count = 0
+
+    def counting_handler(ctx):
+        nonlocal call_count
+        call_count += 1
+        return None
+
+    summary = RuntimeReplayDebugRunner(
+        inputs=_inputs(cycles=["runtime_checks"], max_ticks=6),
+        settings=_settings(),
+        session_factory=lambda: db_session,
+        close_session=False,
+        cycle_handlers={"runtime_checks": counting_handler},
+    ).run()
+
+    assert summary["execution"]["ticks_dispatched"] == call_count
+    assert call_count == 6
+
+
 def test_output_json_is_comparison_friendly(db_session: Session, tmp_path: Path) -> None:
     output = tmp_path / "latest.json"
 

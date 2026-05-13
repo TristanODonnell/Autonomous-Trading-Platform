@@ -172,6 +172,7 @@ class ReplayCounters:
     cycle_invocations: Counter[str] = field(default_factory=Counter)
     runtime_jobs_completed: int = 0
     runtime_jobs_failed: int = 0
+    ticks_dispatched: int = 0
     trading_days_processed: set[date] = field(default_factory=set)
     signals_generated: int = 0
     orders_attempted: int = 0
@@ -217,6 +218,8 @@ class ReplayCycleContext:
     counters: ReplayCounters
     state: ReplayExecutionState
     warnings: list[str]
+    cycles: list[str] = field(default_factory=list)
+    seen_ticks: set[datetime] = field(default_factory=set)
 
 
 class _SessionRuntimeJobRunRepository:
@@ -289,21 +292,11 @@ class RuntimeReplayDebugRunner:
                 counters=counters,
                 state=state,
                 warnings=warnings,
+                cycles=cycles,
             )
 
             _write_cash_snapshot(ctx)
-
-            for tick in self.calendar.scheduled_times(
-                self.inputs.start_date,
-                self.inputs.end_date,
-                timedelta(minutes=self.inputs.cadence_minutes),
-                max_ticks=self.inputs.max_ticks,
-            ):
-                clock.advance_to(tick)
-                state.tick_index += 1
-                counters.trading_days_processed.add(tick.date())
-                for cycle in cycles:
-                    self._run_cycle(cycle, ctx)
+            self._run_replay(ctx)
 
             summary = build_summary(
                 inputs=self.inputs,
@@ -322,6 +315,35 @@ class RuntimeReplayDebugRunner:
         finally:
             if self.close_session:
                 session.close()
+
+    def _run_replay(self, ctx: ReplayCycleContext) -> None:
+        interval = timedelta(minutes=ctx.inputs.cadence_minutes)
+        for day in self.calendar.trading_days(ctx.inputs.start_date, ctx.inputs.end_date):
+            if (
+                ctx.inputs.max_ticks is not None
+                and ctx.counters.ticks_dispatched >= ctx.inputs.max_ticks
+            ):
+                break
+            self._run_day(day, interval, ctx)
+
+    def _run_day(self, day: date, interval: timedelta, ctx: ReplayCycleContext) -> None:
+        session_start, session_end = self.calendar.session_times(day)
+        tick = session_start
+        while tick <= session_end:
+            if (
+                ctx.inputs.max_ticks is not None
+                and ctx.counters.ticks_dispatched >= ctx.inputs.max_ticks
+            ):
+                return
+            if tick not in ctx.seen_ticks:
+                ctx.clock.advance_to(tick)
+                ctx.state.tick_index += 1
+                ctx.counters.ticks_dispatched += 1
+                ctx.seen_ticks.add(tick)
+                ctx.counters.trading_days_processed.add(day)
+                for cycle in ctx.cycles:
+                    self._run_cycle(cycle, ctx)
+            tick += interval
 
     def _assert_local_safe(self) -> None:
         if self.settings.trading_environment is TradingEnvironment.LIVE:
@@ -1275,6 +1297,7 @@ def build_summary(
         "settings_snapshot_hash": settings_snapshot_hash,
         "execution": {
             "trading_days_processed": len(counters.trading_days_processed),
+            "ticks_dispatched": counters.ticks_dispatched,
             "cycle_invocations": dict(counters.cycle_invocations),
             "runtime_jobs_completed": counters.runtime_jobs_completed,
             "runtime_jobs_failed": counters.runtime_jobs_failed,
@@ -1351,6 +1374,7 @@ def format_text_summary(summary: dict[str, Any]) -> str:
         "",
         "Execution:",
         f"- trading_days_processed: {execution['trading_days_processed']}",
+        f"- ticks_dispatched: {execution['ticks_dispatched']}",
         f"- cycle_invocations: {execution['cycle_invocations']}",
         f"- runtime_jobs_completed: {execution['runtime_jobs_completed']}",
         f"- runtime_jobs_failed: {execution['runtime_jobs_failed']}",

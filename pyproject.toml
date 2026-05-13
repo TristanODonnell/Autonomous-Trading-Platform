@@ -47,6 +47,7 @@ dependencies = [
 
   # external APIs
   "alpaca-py",
+  "exchange_calendars>=4.5",
 
     # opentelemetry
     "opentelemetry-api",

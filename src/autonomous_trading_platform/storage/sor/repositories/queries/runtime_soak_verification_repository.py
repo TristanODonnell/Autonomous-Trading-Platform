@@ -145,7 +145,21 @@ class RuntimeSoakVerificationRepository:
         return cast(RunManifestRow | None, self.session.scalars(stmt).one_or_none())
 
     # TASK-508
-    # Stale running state
+    # Stale running state / concurrent execution detection
+
+    def list_concurrent_running_job_names(self) -> list[str]:
+        """Return job names that currently have 2 or more active RUNNING records.
+
+        Any entry here indicates the no-overlap lock did not prevent concurrent
+        execution of the same job — a critical invariant violation.
+        """
+        subq = (
+            select(RuntimeJobRuns.job_name)
+            .where(RuntimeJobRuns.status == "running")
+            .group_by(RuntimeJobRuns.job_name)
+            .having(func.count(RuntimeJobRuns.job_run_id) >= 2)
+        )
+        return list(self.session.scalars(subq).all())
 
     def list_stale_running_runtime_jobs(
         self,

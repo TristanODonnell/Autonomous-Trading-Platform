@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
-import signal
-import time
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -18,6 +15,15 @@ from autonomous_trading_platform.research.experiments.models.experiment_plan imp
 from autonomous_trading_platform.research.simulation.contexts.build_simulation_context import (
     build_simulation_context,
 )
+from autonomous_trading_platform.runtime.clock import (
+    MarketPhase,
+    RealMarketCalendar,
+    RealTradingClock,
+)
+from autonomous_trading_platform.runtime.interruptible_sleep import InterruptibleSleeper
+from autonomous_trading_platform.runtime.services.orphan_job_recovery_service import (
+    OrphanJobRecoveryService,
+)
 from autonomous_trading_platform.scheduler.orchestration.historical_research_golden_path_orchestrator import (
     HistoricalResearchGoldenPathOrchestrator,
 )
@@ -30,9 +36,6 @@ from autonomous_trading_platform.scheduler.registry.scheduler_registry import SC
 _ET = ZoneInfo("America/New_York")
 _INTRADAY_LOCK_KEY = SCHEDULER_REGISTRY["market_ingestion_cycle"].lock_key
 _EOD_LOCK_KEY = SCHEDULER_REGISTRY["corporate_action_ingestion_cycle"].lock_key
-_MARKET_OPEN_H, _MARKET_OPEN_M = 9, 30
-_MARKET_CLOSE_H, _MARKET_CLOSE_M = 16, 0
-_EOD_WINDOW_H, _EOD_WINDOW_M = 18, 0
 _INTRADAY_INTERVAL_SECONDS = 300
 
 
@@ -55,34 +58,6 @@ def _ts() -> str:
     return _now_utc().strftime("%Y-%m-%dT%H:%M:%S")
 
 
-def _market_phase(now_et: datetime) -> str:
-    if now_et.weekday() >= 5:
-        return "WEEKEND"
-    market_open = now_et.replace(
-        hour=_MARKET_OPEN_H, minute=_MARKET_OPEN_M, second=0, microsecond=0
-    )
-    market_close = now_et.replace(
-        hour=_MARKET_CLOSE_H, minute=_MARKET_CLOSE_M, second=0, microsecond=0
-    )
-    if now_et < market_open:
-        return "PRE_MARKET"
-    if now_et < market_close:
-        return "MARKET_HOURS"
-    return "POST_MARKET"
-
-
-def _seconds_until_next_market_open(now_et: datetime) -> int:
-    candidate = now_et
-    for _ in range(8):
-        candidate += timedelta(days=1)
-        if candidate.weekday() < 5:
-            next_open = candidate.replace(
-                hour=_MARKET_OPEN_H, minute=_MARKET_OPEN_M, second=0, microsecond=0
-            )
-            return max(0, int((next_open - now_et).total_seconds()))
-    return 86400
-
-
 def _fmt_duration(total_seconds: int) -> str:
     h, rem = divmod(total_seconds, 3600)
     m, s = divmod(rem, 60)
@@ -103,30 +78,14 @@ class _PaperTradingSoakRunner:
     def __init__(self, mode: str) -> None:
         self._mode = mode
         self._lock = InMemoryNoOverlapLock()
-        self._shutdown = False
+        self._clock = RealTradingClock()
+        self._calendar = RealMarketCalendar()
+        self._sleeper = InterruptibleSleeper()
         self._intraday_cycles = 0
         self._eod_cycles = 0
         self._locks_acquired = 0
         self._locks_skipped = 0
         self._eod_done_for: date | None = None
-
-    def _install_signal_handlers(self) -> None:
-        signal.signal(signal.SIGINT, self._on_signal)
-        with contextlib.suppress(OSError, ValueError):
-            signal.signal(signal.SIGTERM, self._on_signal)
-
-    def _on_signal(self, signum: int, _frame: object) -> None:
-        name = "SIGINT" if signum == signal.SIGINT else "SIGTERM"
-        print(f"\n[SoakTestRunner] Received {name}, shutting down gracefully...")
-        self._shutdown = True
-
-    def _interruptible_sleep(self, seconds: int) -> None:
-        end = time.monotonic() + seconds
-        while not self._shutdown:
-            remaining = end - time.monotonic()
-            if remaining <= 0:
-                break
-            time.sleep(min(1.0, remaining))
 
     def _run_intraday_tick(self) -> None:
         tick_num = self._intraday_cycles + 1
@@ -143,7 +102,7 @@ class _PaperTradingSoakRunner:
             print(f"  Lock acquired: {_INTRADAY_LOCK_KEY}")
             print("  Steps: market_ingestion → features → trading")
             orchestrator = PaperTradingGoldenPathOrchestrator(session)
-            result = orchestrator.run_intraday_tick(now_utc=_now_utc())
+            result = orchestrator.run_intraday_tick(now_utc=self._clock.now())
             print("  Lock released")
             print(f"  ✓ Completed (correlation_id: {result.correlation_id})")
             self._intraday_cycles += 1
@@ -166,8 +125,8 @@ class _PaperTradingSoakRunner:
             print(f"  Lock acquired: {_EOD_LOCK_KEY}")
             print("  Steps: corporate_actions → features (adjusted bars)")
             orchestrator = PaperTradingGoldenPathOrchestrator(session)
-            result = orchestrator.run_eod_maintenance(now_utc=_now_utc())
-            self._eod_done_for = _now_et().date()
+            result = orchestrator.run_eod_maintenance(now_utc=self._clock.now())
+            self._eod_done_for = self._clock.now().astimezone(_ET).date()
             print("  Lock released")
             print(f"  ✓ Completed (correlation_id: {result.correlation_id})")
             self._eod_cycles += 1
@@ -176,14 +135,6 @@ class _PaperTradingSoakRunner:
         finally:
             session.close()
             self._lock.release(_EOD_LOCK_KEY)
-
-    def _eod_eligible(self, now_et: datetime) -> bool:
-        if now_et.weekday() >= 5 or _market_phase(now_et) != "POST_MARKET":
-            return False
-        eod_threshold = now_et.replace(
-            hour=_EOD_WINDOW_H, minute=_EOD_WINDOW_M, second=0, microsecond=0
-        )
-        return now_et >= eod_threshold and self._eod_done_for != now_et.date()
 
     def _print_stats(self) -> None:
         total = self._locks_acquired + self._locks_skipped
@@ -196,8 +147,22 @@ class _PaperTradingSoakRunner:
             f"{self._locks_skipped} skipped / {total} total"
         )
 
+    def _rescue_orphan_jobs(self) -> None:
+        cutoff = self._clock.now() - timedelta(minutes=30)
+        session = get_session()
+        try:
+            rescued = OrphanJobRecoveryService(session).rescue_orphan_running_jobs(cutoff=cutoff)
+            session.commit()
+            if rescued:
+                print(
+                    f"[SoakTestRunner] Rescued {len(rescued)} orphan RUNNING job(s) from prior run: "
+                    + ", ".join(r.job_name for r in rescued)
+                )
+        finally:
+            session.close()
+
     def run(self) -> int:
-        self._install_signal_handlers()
+        self._sleeper.install_signal_handlers(label="SoakTestRunner")
         mode_label = {
             "fast": "fast mode",
             "realistic": "realistic mode",
@@ -206,6 +171,7 @@ class _PaperTradingSoakRunner:
         print_header(f"Paper Trading Soak Loop — {mode_label}")
         print("[SoakTestRunner] WARNING: This makes real API calls to Alpaca paper trading")
         print("[SoakTestRunner] Lock manager: InMemoryNoOverlapLock")
+        self._rescue_orphan_jobs()
 
         if self._mode == "single":
             return self._run_single()
@@ -213,10 +179,10 @@ class _PaperTradingSoakRunner:
         return self._run_loop(intraday_interval=interval)
 
     def _run_single(self) -> int:
-        now_et = _now_et()
-        phase = _market_phase(now_et)
-        print(f"[SoakTestRunner] Market phase: {phase}")
-        if phase != "MARKET_HOURS":
+        now_utc = self._clock.now()
+        phase = self._calendar.market_phase(now_utc)
+        print(f"[SoakTestRunner] Market phase: {phase.value}")
+        if phase != MarketPhase.MARKET_HOURS:
             print("[SoakTestRunner] Market is not open — single mode requires MARKET_HOURS")
             return 1
         self._run_intraday_tick()
@@ -224,29 +190,28 @@ class _PaperTradingSoakRunner:
         return 0
 
     def _run_loop(self, intraday_interval: int) -> int:
-        last_phase: str | None = None
+        last_phase: MarketPhase | None = None
         waiting_for: str | None = None
 
-        while not self._shutdown:
-            now_et = _now_et()
-            phase = _market_phase(now_et)
+        while not self._sleeper.is_shutdown:
+            now_utc = self._clock.now()
+            phase = self._calendar.market_phase(now_utc)
 
             if phase != last_phase:
-                if last_phase == "MARKET_HOURS" and phase == "POST_MARKET":
+                if last_phase == MarketPhase.MARKET_HOURS and phase == MarketPhase.POST_MARKET:
                     print(f"[{_ts()}] Market phase: POST_MARKET")
                     print(f"[{_ts()}] Market closed — stopping intraday ticks")
                 else:
-                    print(f"[{_ts()}] Market phase: {phase}")
+                    print(f"[{_ts()}] Market phase: {phase.value}")
                 last_phase = phase
                 waiting_for = None
 
-            if phase == "MARKET_HOURS":
+            if phase == MarketPhase.MARKET_HOURS:
                 self._run_intraday_tick()
-                if not self._shutdown and intraday_interval > 0:
-                    close_et = now_et.replace(
-                        hour=_MARKET_CLOSE_H, minute=_MARKET_CLOSE_M, second=0, microsecond=0
-                    )
-                    secs_to_close = max(0, int((close_et - _now_et()).total_seconds()))
+                if not self._sleeper.is_shutdown and intraday_interval > 0:
+                    today_et = now_utc.astimezone(_ET).date()
+                    close_utc = self._calendar.market_close(today_et)
+                    secs_to_close = max(0, int((close_utc - self._clock.now()).total_seconds()))
                     sleep_secs = min(intraday_interval, secs_to_close)
                     if sleep_secs > 0:
                         next_tick = (_now_et() + timedelta(seconds=sleep_secs)).strftime("%H:%M:%S")
@@ -254,37 +219,35 @@ class _PaperTradingSoakRunner:
                             f"[SoakTestRunner] Sleeping {sleep_secs}s until next tick "
                             f"({next_tick} ET)..."
                         )
-                        self._interruptible_sleep(sleep_secs)
-            elif self._eod_eligible(now_et):
+                        self._sleeper.sleep(sleep_secs)
+            elif self._calendar.is_eod_eligible(now_utc, last_eod_date=self._eod_done_for):
                 waiting_for = None
                 self._run_eod_maintenance()
             else:
-                eod_threshold = now_et.replace(
-                    hour=_EOD_WINDOW_H, minute=_EOD_WINDOW_M, second=0, microsecond=0
-                )
+                today_et = now_utc.astimezone(_ET).date()
+                eod_window_utc = self._calendar.eod_window_open(today_et)
                 if (
-                    phase == "POST_MARKET"
-                    and now_et < eod_threshold
-                    and now_et.weekday() < 5
-                    and self._eod_done_for != now_et.date()
+                    phase == MarketPhase.POST_MARKET
+                    and now_utc < eod_window_utc
+                    and self._eod_done_for != today_et
                 ):
-                    secs = max(0, int((eod_threshold - now_et).total_seconds()))
+                    secs = max(0, int((eod_window_utc - now_utc).total_seconds()))
                     if waiting_for != "eod":
                         print(
                             f"[SoakTestRunner] EOD maintenance at 18:00 ET "
                             f"(in {_fmt_duration(secs)}), sleeping..."
                         )
                         waiting_for = "eod"
-                    self._interruptible_sleep(min(secs, 60))
+                    self._sleeper.sleep(min(secs, 60))
                 else:
-                    secs = _seconds_until_next_market_open(now_et)
+                    secs = self._calendar.seconds_until_next_session_open(now_utc)
                     if waiting_for != "market_open":
                         print(
                             f"[SoakTestRunner] Next market open in "
                             f"{_fmt_duration(secs)}, sleeping..."
                         )
                         waiting_for = "market_open"
-                    self._interruptible_sleep(min(secs, 300))
+                    self._sleeper.sleep(min(secs, 300))
 
         self._print_stats()
         return 0
@@ -304,21 +267,11 @@ class _ResearchSoakRunner:
         self._end = end
         self._loop = loop
         self._experiment_plan = experiment_plan
-        self._shutdown = False
+        self._sleeper = InterruptibleSleeper()
         self._cycles = 0
 
-    def _install_signal_handlers(self) -> None:
-        signal.signal(signal.SIGINT, self._on_signal)
-        with contextlib.suppress(OSError, ValueError):
-            signal.signal(signal.SIGTERM, self._on_signal)
-
-    def _on_signal(self, signum: int, _frame: object) -> None:
-        name = "SIGINT" if signum == signal.SIGINT else "SIGTERM"
-        print(f"\n[SoakTestRunner] Received {name}, shutting down gracefully...")
-        self._shutdown = True
-
     def run(self) -> int:
-        self._install_signal_handlers()
+        self._sleeper.install_signal_handlers(label="SoakTestRunner")
         mode_label = "loop mode" if self._loop else "one-shot"
         print_header(f"Historical Research Soak Loop — {mode_label}")
         print(f"[SoakTestRunner] Symbols: {', '.join(self._symbols)}")
@@ -329,7 +282,7 @@ class _ResearchSoakRunner:
                 "(soak test)"
             )
 
-        while not self._shutdown:
+        while not self._sleeper.is_shutdown:
             cycle_num = self._cycles + 1
             label = f"pipeline #{cycle_num}" if self._loop else "pipeline"
             print(f"[{_ts()}] Running historical research {label}")
