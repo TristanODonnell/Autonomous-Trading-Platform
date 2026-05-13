@@ -37,6 +37,9 @@ from autonomous_trading_platform.interfaces.rest.schemas.active_strategies_schem
     ExperimentCreateResponse,
     ExperimentDetailResponse,
     ExperimentListResponse,
+    ExperimentStrategiesResponse,
+    StrategyAllocationsListResponse,
+    StrategyAllocationStateResponse,
     StrategyAllocationUpdateRequest,
     StrategyAllocationUpdateResponse,
     StrategyCompareRequest,
@@ -119,6 +122,25 @@ def get_active_strategies(
 
 
 @router.get(
+    "/allocations",
+    response_model=SuccessEnvelope[StrategyAllocationsListResponse],
+)
+def get_strategy_allocations(
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+    actor: str = Depends(require_operator_or_admin),
+) -> SuccessEnvelope[StrategyAllocationsListResponse]:
+    service = StrategyAllocationService(session=session)
+    rows = service.get_allocations_for_active_strategies()
+    return success_response(
+        data=StrategyAllocationsListResponse(
+            strategies=[StrategyAllocationStateResponse(**r) for r in rows]
+        ),
+        request_id=request_id,
+    )
+
+
+@router.get(
     "/{strategy_id}",
     response_model=SuccessEnvelope[StrategyDetailResponse],
 )
@@ -190,7 +212,7 @@ def update_strategy_allocation(
     try:
         result = service.override_allocation(
             strategy_id=strategy_id,
-            allocated_capital=payload.allocated_capital,
+            allocation_pct=payload.allocation_pct,
             reason=reason,
             updated_by=actor,
         )
@@ -208,6 +230,7 @@ def update_strategy_allocation(
     return success_response(
         data=StrategyAllocationUpdateResponse(
             strategy_id=result.strategy_id,
+            allocation_pct=result.allocation_pct,
             allocated_capital=result.allocated_capital,
             total_portfolio_capital=result.total_portfolio_capital,
             reason=result.reason,
@@ -344,9 +367,14 @@ def create_experiment(
     service = ExperimentCatalogService(session=session)
     try:
         result = service.create_experiment(
-            strategy_type=payload.strategy_type,
-            risk_level=payload.risk_level,
-            time_horizon=payload.time_horizon,
+            name=payload.name,
+            experiment_type=payload.experiment_type,
+            symbols=payload.symbols,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            price_basis=payload.price_basis,
+            strategy_count=payload.strategy_count,
+            parameter_ranges=payload.parameter_ranges,
             actor=actor,
         )
     except ValueError as exc:
@@ -372,6 +400,64 @@ def get_experiments(
     service = ExperimentCatalogService(session=session)
     return success_response(
         data=ExperimentListResponse(experiments=service.list_experiments()),
+        request_id=request_id,
+    )
+
+
+@experiments_router.post(
+    "/{experiment_id}/cancel",
+    response_model=SuccessEnvelope[ExperimentCreateResponse],
+    status_code=status.HTTP_200_OK,
+)
+def cancel_experiment(
+    experiment_id: str,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+    actor: str = Depends(require_operator_or_admin),
+) -> SuccessEnvelope[ExperimentCreateResponse]:
+    service = ExperimentCatalogService(session=session)
+    try:
+        service.cancel_experiment(experiment_id=experiment_id)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    return success_response(
+        data=ExperimentCreateResponse(experiment_id=experiment_id, status="cancelled"),
+        request_id=request_id,
+    )
+
+
+@experiments_router.get(
+    "/{experiment_id}/strategies",
+    response_model=SuccessEnvelope[ExperimentStrategiesResponse],
+)
+def get_experiment_strategies(
+    experiment_id: str,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[ExperimentStrategiesResponse]:
+    service = ExperimentCatalogService(session=session)
+    try:
+        strategies = service.get_experiment_strategies(experiment_id=experiment_id)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return success_response(
+        data=ExperimentStrategiesResponse(
+            experiment_id=experiment_id,
+            strategies=strategies,
+        ),
         request_id=request_id,
     )
 

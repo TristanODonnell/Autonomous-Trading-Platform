@@ -173,6 +173,8 @@ class HistoricalBarDatasetReader:
         con = duckdb.connect(database=":memory:")
 
         try:
+            con.execute("SET threads=1")
+            con.execute("SET preserve_insertion_order=false")
             file_list = [str(f) for f in files]
 
             result = con.execute(
@@ -188,6 +190,16 @@ class HistoricalBarDatasetReader:
             )
 
             return result.arrow().read_all()
+        except OSError as exc:
+            if "Out of Memory" not in str(exc):
+                raise
+            return self.read_with_pyarrow(
+                dataset=dataset,
+                dataset_version=dataset_version,
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+            )
         finally:
             con.close()
 

@@ -22,9 +22,19 @@ def test_get_settings_returns_default_operator_settings(client: TestClient) -> N
     assert data == {
         "risk_tolerance": "medium",
         "max_drawdown_limit": "0.1",
+        "max_strategy_drawdown": "0.12",
         "rebalance_frequency": "weekly",
         "auto_promote_enabled": False,
+        "min_sharpe_for_promotion": "1.5",
+        "min_paper_trading_period_days": 30,
+        "auto_demote_on_breach": True,
+        "notify_drawdown_alerts": True,
+        "notify_strategy_promotion_events": True,
+        "notify_pipeline_failures": True,
         "per_strategy_cap": "0.25",
+        "target_portfolio_volatility": "0.15",
+        "slippage_model": "fixed",
+        "transaction_cost_model": "per_share",
     }
 
 
@@ -44,6 +54,7 @@ def test_put_settings_validates_out_of_range_values(client: TestClient) -> None:
         "/api/v1/settings",
         json={
             "max_drawdown_limit": "1.5",
+            "target_portfolio_volatility": "0.2",
             "reason": "bad drawdown",
         },
         headers=auth_headers(role="admin"),
@@ -62,9 +73,17 @@ def test_put_settings_persists_changes_and_records_audit_log(
         json={
             "risk_tolerance": "high",
             "max_drawdown_limit": "0.15",
+            "max_strategy_drawdown": "0.18",
             "rebalance_frequency": "daily",
             "auto_promote_enabled": True,
+            "min_sharpe_for_promotion": "1.8",
+            "min_paper_trading_period_days": 60,
+            "auto_demote_on_breach": False,
+            "notify_drawdown_alerts": False,
+            "notify_strategy_promotion_events": False,
+            "notify_pipeline_failures": False,
             "per_strategy_cap": "0.30",
+            "target_portfolio_volatility": "0.22",
             "reason": "increase operator risk appetite",
         },
         headers=auth_headers(role="admin"),
@@ -74,14 +93,30 @@ def test_put_settings_persists_changes_and_records_audit_log(
     data = response.json()["data"]
     assert data["risk_tolerance"] == "high"
     assert Decimal(str(data["max_drawdown_limit"])) == Decimal("0.15")
+    assert Decimal(str(data["max_strategy_drawdown"])) == Decimal("0.18")
     assert data["rebalance_frequency"] == "daily"
     assert data["auto_promote_enabled"] is True
+    assert Decimal(str(data["min_sharpe_for_promotion"])) == Decimal("1.8")
+    assert data["min_paper_trading_period_days"] == 60
+    assert data["auto_demote_on_breach"] is False
+    assert data["notify_drawdown_alerts"] is False
+    assert data["notify_strategy_promotion_events"] is False
+    assert data["notify_pipeline_failures"] is False
     assert Decimal(str(data["per_strategy_cap"])) == Decimal("0.3")
+    assert Decimal(str(data["target_portfolio_volatility"])) == Decimal("0.22")
 
     row = db_session.get(OperatorSettingsRow, "default")
     assert row is not None
     assert row.updated_by == "test-user"
     assert row.risk_tolerance == "high"
+    assert Decimal(str(row.min_sharpe_for_promotion)) == Decimal("1.8")
+    assert row.min_paper_trading_period_days == 60
+    assert row.auto_demote_on_breach is False
+    assert row.notify_drawdown_alerts is False
+    assert row.notify_strategy_promotion_events is False
+    assert row.notify_pipeline_failures is False
+    assert Decimal(str(row.max_strategy_drawdown)) == Decimal("0.18")
+    assert Decimal(str(row.target_portfolio_volatility)) == Decimal("0.22")
 
     audit_log = db_session.query(AuditLogRow).one()
     assert audit_log.event_type == "OPERATOR_SETTINGS_UPDATED"

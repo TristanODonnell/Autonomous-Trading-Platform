@@ -10,7 +10,10 @@ from autonomous_trading_platform.research.simulation.services.lookahead_guard_se
     LookaheadGuardService,
 )
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
-from autonomous_trading_platform.storage.parquet.datasets import ADJUSTED_BARS_DATASET
+from autonomous_trading_platform.storage.parquet.datasets import (
+    ADJUSTED_BARS_DATASET,
+    ParquetDataset,
+)
 from autonomous_trading_platform.storage.parquet.reader import HistoricalBarDatasetReader
 from autonomous_trading_platform.storage.sor.repositories.core.strategy_runtime_state_repository import (
     StrategyRuntimeStateRepository,
@@ -54,6 +57,9 @@ def build_strategy_runtime_context(
     *,
     session: Session,
     strategy: BaseStrategy,
+    dataset_version: str = "v1",
+    fallback_dataset: ParquetDataset | None = None,
+    fallback_dataset_version: str | None = None,
 ) -> StrategyRuntimeContext:
     universe_repository = UniverseSnapshotRepository(session)
     runtime_state_repository = StrategyRuntimeStateRepository(session)
@@ -72,6 +78,9 @@ def build_strategy_runtime_context(
         bars_dataset=ADJUSTED_BARS_DATASET,
         lookback_bars=300,
         lookahead_guard_service=lookahead_guard_service,
+        dataset_version=dataset_version,
+        fallback_dataset=fallback_dataset,
+        fallback_dataset_version=fallback_dataset_version,
     )
 
     signal_writer = SignalWriter(session)

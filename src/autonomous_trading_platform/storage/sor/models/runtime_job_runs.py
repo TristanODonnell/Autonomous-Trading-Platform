@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import sqlalchemy as sa
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -35,7 +36,7 @@ class RuntimeJobRuns(Base):
     )
 
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    error_message: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
     correlation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     input_summary_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

@@ -7,9 +7,6 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from autonomous_trading_platform.application.services.experiment_input_mapping import (
-    build_experiment_mapping,
-)
 from autonomous_trading_platform.storage.parquet.repositories.parquet_simulation_repository import (
     ParquetSimulationRepository,
 )
@@ -300,6 +297,24 @@ class StrategyCatalogService:
         return metadata
 
 
+_EXPERIMENT_STATUS_NORMALISE = {
+    "queued": "pending",
+    "complete": "completed",
+    "RUNNING": "running",
+    "COMPLETED": "completed",
+    "ACTIVE": "completed",
+    "FAILED": "failed",
+    "CANCELLED": "cancelled",
+    "PENDING": "pending",
+}
+
+_EXPERIMENT_TYPE_NORMALISE = {
+    "sweep": "parameter_sweep",
+    "ab": "ab_comparison",
+    "rolling": "rolling_window",
+}
+
+
 class ExperimentCatalogService:
     def __init__(self, *, session: Session) -> None:
         self._session = session
@@ -307,36 +322,40 @@ class ExperimentCatalogService:
     def create_experiment(
         self,
         *,
-        strategy_type: str,
-        risk_level: str,
-        time_horizon: str,
+        name: str,
+        experiment_type: str,
+        symbols: list[str],
+        start_date: str,
+        end_date: str,
+        price_basis: str,
+        strategy_count: int,
+        parameter_ranges: dict[str, Any],
         actor: str,
     ) -> dict[str, Any]:
-        mapping = build_experiment_mapping(
-            strategy_type=strategy_type,
-            risk_level=risk_level,
-            time_horizon=time_horizon,
-        )
         now = datetime.now(UTC)
         experiment_id = str(uuid4())
         self._session.add(
             Experiments(
                 experiment_id=experiment_id,
-                experiment_name=f"{strategy_type} {risk_level} {time_horizon}",
+                experiment_name=name,
                 created_at=now,
-                description="Frontend simplified experiment request",
-                status="queued",
-                strategy_set_json={"strategy_type": strategy_type},
-                parameter_grid_json=mapping["parameter_grid"],
-                dataset_version=mapping["dataset_version"],
-                universe_version=mapping["universe"],
+                description=None,
+                status="pending",
+                strategy_set_json={"strategy_count": strategy_count},
+                parameter_grid_json={"parameter_ranges": parameter_ranges},
+                dataset_version=None,
+                universe_version=None,
                 start_time=None,
                 end_time=None,
                 metadata_json={
                     "created_by": actor,
-                    "risk_level": risk_level,
-                    "time_horizon": time_horizon,
-                    "mapping": mapping,
+                    "experiment_type": experiment_type,
+                    "symbols": symbols,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "price_basis": price_basis,
+                    "strategy_count": strategy_count,
+                    "parameter_ranges": parameter_ranges,
                 },
             )
         )
@@ -354,16 +373,25 @@ class ExperimentCatalogService:
                 correlation_id=experiment_id,
                 input_summary_json={
                     "experiment_id": experiment_id,
-                    "strategy_type": strategy_type,
-                    "risk_level": risk_level,
-                    "time_horizon": time_horizon,
-                    "mapping_version": mapping["mapping_version"],
+                    "experiment_type": experiment_type,
+                    "symbols": symbols,
+                    "start_date": start_date,
+                    "end_date": end_date,
                 },
                 output_summary_json=None,
             )
         )
         self._session.flush()
-        return {"experiment_id": experiment_id, "status": "queued"}
+        return {"experiment_id": experiment_id, "status": "pending"}
+
+    def cancel_experiment(self, *, experiment_id: str) -> None:
+        experiment = self._session.get(Experiments, experiment_id)
+        if experiment is None:
+            raise LookupError(f"Experiment not found: {experiment_id}")
+        if experiment.status not in ("pending", "queued", "running"):
+            raise ValueError(f"Cannot cancel experiment with status '{experiment.status}'")
+        experiment.status = "cancelled"
+        self._session.flush()
 
     def list_experiments(self) -> list[dict[str, Any]]:
         stmt = select(Experiments).order_by(Experiments.created_at.desc())
@@ -373,32 +401,65 @@ class ExperimentCatalogService:
         experiment = self._session.get(Experiments, experiment_id)
         if experiment is None:
             raise LookupError(f"Experiment not found: {experiment_id}")
-        runs = self._runs_for_experiment(experiment_id)
-        ranked = sorted(
-            [self._run_result(run) for run in runs],
-            key=lambda row: row["composite_score"],
-            reverse=True,
-        )
+        metadata = experiment.metadata_json or {}
+        strategies = self.get_experiment_strategies(experiment_id=experiment_id)
         return {
             **self._experiment_summary(experiment),
-            "mapping": (experiment.metadata_json or {}).get("mapping"),
-            "simulation_results": [self._run_result(run) for run in runs],
-            "ranked_strategy_outputs": ranked,
-            "filtering_summary": self._filtering_summary(ranked),
+            "strategies": strategies,
+            "parameter_ranges": metadata.get("parameter_ranges"),
+            "price_basis": metadata.get("price_basis"),
         }
+
+    def get_experiment_strategies(self, *, experiment_id: str) -> list[dict[str, Any]]:
+        experiment = self._session.get(Experiments, experiment_id)
+        if experiment is None:
+            raise LookupError(f"Experiment not found: {experiment_id}")
+        runs = self._runs_for_experiment(experiment_id)
+        # One row per strategy: keep the latest run (deepest pipeline stage reached)
+        latest: dict[str, SimulationRuns] = {}
+        for run in runs:
+            existing = latest.get(run.strategy_id)
+            if existing is None or run.start_time > existing.start_time:
+                latest[run.strategy_id] = run
+        results = [self._strategy_row_for_run(run) for run in latest.values()]
+        return sorted(results, key=lambda row: row["composite_score"], reverse=True)
 
     def _experiment_summary(self, row: Experiments) -> dict[str, Any]:
         metadata = row.metadata_json or {}
+        runs = self._runs_for_experiment(row.experiment_id)
+        strategy_results = [self._run_metrics(run) for run in runs]
+        ranked = sorted(strategy_results, key=lambda r: r["sharpe_ratio"], reverse=True)
+        best = ranked[0] if ranked else None
+        passed = len([r for r in strategy_results if r["sharpe_ratio"] > 0])
+
+        raw_status = row.status or "pending"
+        status = _EXPERIMENT_STATUS_NORMALISE.get(raw_status, raw_status.lower())
+
+        # Recover stale "running" experiments: if the DB says running but no
+        # simulation run is still in-flight, derive the real status from the runs.
+        if status == "running" and runs:
+            active_run_statuses = {(r.status or "").upper() for r in runs}
+            if "RUNNING" not in active_run_statuses:
+                status = "failed" if "FAILED" in active_run_statuses else "completed"
+
+        raw_type = metadata.get("experiment_type", "backtest") or "backtest"
+        experiment_type = _EXPERIMENT_TYPE_NORMALISE.get(str(raw_type), str(raw_type))
+
         return {
             "experiment_id": row.experiment_id,
+            "experiment_name": row.experiment_name,
+            "experiment_type": experiment_type,
+            "status": status,
             "created_at": row.created_at,
-            "status": row.status,
-            "strategy_type": metadata.get("strategy_type")
-            or (row.strategy_set_json or {}).get("strategy_type")
-            or "unknown",
-            "risk_level": metadata.get("risk_level") or "unknown",
-            "time_horizon": metadata.get("time_horizon") or "unknown",
-            "result_summary": metadata.get("result_summary") if row.status == "complete" else None,
+            "symbols": metadata.get("symbols") or [],
+            "start_date": metadata.get("start_date"),
+            "end_date": metadata.get("end_date"),
+            "dataset_version": row.dataset_version,
+            "total_strategies": len(strategy_results),
+            "strategies_passed_filters": passed,
+            "best_sharpe": best["sharpe_ratio"] if best else None,
+            "best_return": best["total_return"] if best else None,
+            "progress": metadata.get("progress"),
         }
 
     def _runs_for_experiment(self, experiment_id: str) -> list[SimulationRuns]:
@@ -409,25 +470,33 @@ class ExperimentCatalogService:
         )
         return list(self._session.scalars(stmt).all())
 
-    def _run_result(self, run: SimulationRuns) -> dict[str, Any]:
-        metrics = StrategyCatalogService(session=self._session)._metrics_for_run(run.run_id)
-        payload = StrategyCatalogService(session=self._session)._metrics_payload(metrics)
-        score = StrategyCatalogService(session=self._session)._composite_score(payload)
-        return {
-            "run_id": run.run_id,
-            "strategy_id": run.strategy_id,
-            "status": run.status,
-            "metrics": payload,
-            "composite_score": score,
-        }
+    def _run_metrics(self, run: SimulationRuns) -> dict[str, Any]:
+        catalog = StrategyCatalogService(session=self._session)
+        metrics = catalog._metrics_for_run(run.run_id)
+        return catalog._metrics_payload(metrics)
 
-    def _filtering_summary(self, ranked: list[dict[str, Any]]) -> dict[str, int]:
-        total = len(ranked)
-        positive_return = len([row for row in ranked if row["metrics"]["total_return"] > 0])
-        positive_sharpe = len([row for row in ranked if row["metrics"]["sharpe_ratio"] > 0])
+    def _strategy_row_for_run(self, run: SimulationRuns) -> dict[str, Any]:
+        catalog = StrategyCatalogService(session=self._session)
+        metrics = catalog._metrics_for_run(run.run_id)
+        payload = catalog._metrics_payload(metrics)
+        score = catalog._composite_score(payload)
+        governance = catalog._latest_governance(run.strategy_id)
+        stage_name = (run.execution_config or {}).get("stage_name")
+
+        if run.status == "FAILED":
+            derived_status = "failed"
+        elif governance is None:
+            derived_status = "filtered"
+        else:
+            derived_status = "passed"
+
         return {
-            "submitted": total,
-            "positive_return": positive_return,
-            "positive_sharpe": positive_sharpe,
-            "ranked": total,
+            "strategy_id": run.strategy_id,
+            "sharpe_ratio": payload["sharpe_ratio"],
+            "total_return": payload["total_return"],
+            "max_drawdown": payload["max_drawdown"],
+            "simulation_stage": stage_name,
+            "governance_state": governance.current_state if governance else "filtered",
+            "composite_score": score,
+            "status": derived_status,
         }

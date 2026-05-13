@@ -85,6 +85,7 @@ class StrategyControlService:
             },
         )
         self._session.flush()
+        self._session.commit()
 
         return StrategyEnabledUpdateResult(
             strategy_id=strategy_id,

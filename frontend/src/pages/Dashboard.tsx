@@ -500,12 +500,12 @@ function RiskSnapshotCard() {
     {
       // NOTE: Backend exposes current_drawdown (live), not max historical drawdown.
       label: 'Current Drawdown',
-      value: `${Number(risk.current_drawdown).toFixed(1)}%`,
+      value: `${(Number(risk.current_drawdown) * 100).toFixed(1)}%`,
       color: 'var(--yellow)',
     },
     {
       label: 'Portfolio Volatility',
-      value: `${Number(risk.portfolio_volatility).toFixed(1)}% ann.`,
+      value: `${(Number(risk.portfolio_volatility) * 100).toFixed(1)}% ann.`,
     },
     {
       label: 'Sharpe (30d)',
@@ -619,9 +619,9 @@ export default function Dashboard() {
 
   const portfolioValue = Number(summary?.current_portfolio_value ?? 0)
   const dayPnl        = Number(summary?.todays_pnl_amount ?? 0)
-  const dayPnlPct     = Number(summary?.todays_pnl_percent ?? 0)
+  const dayPnlPct     = Number(summary?.todays_pnl_percent ?? 0) * 100
   const totalPnl      = Number(summary?.total_pnl_amount ?? 0)
-  const totalPnlPct   = Number(summary?.total_pnl_percent ?? 0)
+  const totalPnlPct   = Number(summary?.total_pnl_percent ?? 0) * 100
 
   const liveCount  = activeStrategies.filter((s) => s.status === 'live').length
   const paperCount = activeStrategies.filter((s) => s.status === 'paper').length

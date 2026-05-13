@@ -12,9 +12,19 @@ from autonomous_trading_platform.storage.sor.repositories.core.operator_settings
 class OperatorSettingsDTO:
     risk_tolerance: str
     max_drawdown_limit: float
+    max_strategy_drawdown: float
     rebalance_frequency: str
     auto_promote_enabled: bool
+    min_sharpe_for_promotion: float
+    min_paper_trading_period_days: int
+    auto_demote_on_breach: bool
+    notify_drawdown_alerts: bool
+    notify_strategy_promotion_events: bool
+    notify_pipeline_failures: bool
     per_strategy_cap: float
+    target_portfolio_volatility: float
+    slippage_model: str
+    transaction_cost_model: str
 
 
 class OperatorSettingsService:
@@ -100,7 +110,17 @@ class OperatorSettingsService:
         return OperatorSettingsDTO(
             risk_tolerance=row.risk_tolerance,
             max_drawdown_limit=float(row.max_drawdown_limit),
+            max_strategy_drawdown=float(row.max_strategy_drawdown),
             rebalance_frequency=row.rebalance_frequency,
             auto_promote_enabled=row.auto_promote_enabled,
+            min_sharpe_for_promotion=float(row.min_sharpe_for_promotion),
+            min_paper_trading_period_days=int(row.min_paper_trading_period_days),
+            auto_demote_on_breach=row.auto_demote_on_breach,
+            notify_drawdown_alerts=row.notify_drawdown_alerts,
+            notify_strategy_promotion_events=row.notify_strategy_promotion_events,
+            notify_pipeline_failures=row.notify_pipeline_failures,
             per_strategy_cap=float(row.per_strategy_cap),
+            target_portfolio_volatility=float(row.target_portfolio_volatility),
+            slippage_model=row.slippage_model or "fixed",
+            transaction_cost_model=row.transaction_cost_model or "per_share",
         )

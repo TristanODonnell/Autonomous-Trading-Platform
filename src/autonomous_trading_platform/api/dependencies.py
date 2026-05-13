@@ -1,6 +1,23 @@
 from __future__ import annotations
 
+from functools import lru_cache
+
 from fastapi import HTTPException, Request, status
+
+from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.execution.clients.alpaca_broker_client import AlpacaBrokerClient
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()
+
+
+def get_alpaca_broker_client() -> AlpacaBrokerClient | None:
+    try:
+        return AlpacaBrokerClient(settings=get_settings())
+    except Exception:
+        return None
 
 
 def get_request_id(request: Request) -> str:

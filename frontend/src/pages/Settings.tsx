@@ -6,8 +6,12 @@ import StatusBadge from '../components/shared/StatusBadge'
 import {
   fetchOperatorSettings,
   updateOperatorSettings,
+  fetchLatestDatasetVersion,
+  fetchLatestFeatureVersion,
   type ApiOperatorSettings,
   type ApiOperatorSettingsUpdate,
+  type SlippageModel,
+  type TransactionCostModel,
 } from '../services'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -23,6 +27,15 @@ const FREQ_TO_UI: Record<ApiOperatorSettings['rebalance_frequency'], string> = {
 }
 const UI_TO_FREQ: Record<string, ApiOperatorSettings['rebalance_frequency']> = {
   Daily: 'daily', Weekly: 'weekly', Monthly: 'monthly',
+}
+const PAPER_PERIOD_TO_UI: Record<number, string> = {
+  14: '14 days', 30: '30 days', 60: '60 days', 90: '90 days',
+}
+const UI_TO_PAPER_PERIOD: Record<string, number> = {
+  '14 days': 14, '30 days': 30, '60 days': 60, '90 days': 90,
+}
+function paperPeriodDays(value: string): number {
+  return UI_TO_PAPER_PERIOD[value] ?? Number.parseInt(value, 10)
 }
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
@@ -212,28 +225,32 @@ function RiskParametersCard() {
     queryFn: fetchOperatorSettings,
   })
 
-  // API-backed — GET/PUT /settings: max_drawdown_limit, per_strategy_cap, risk_tolerance
+  // API-backed — GET/PUT /settings: drawdown limits, capital cap, target volatility, risk tolerance
   const [portfolioDD,   setPortfolioDD]   = useState(10)
+  const [strategyDD,    setStrategyDD]    = useState(12)
   const [maxCapital,    setMaxCapital]    = useState(30)
+  const [targetVol,     setTargetVol]     = useState(15)
   const [riskTolerance, setRiskTolerance] = useState(2)
-
-  // TODO: no max_strategy_drawdown or target_volatility fields on GET/PUT /settings — local only, does not persist
-  const [strategyDD, setStrategyDD] = useState(12)
-  const [targetVol,  setTargetVol]  = useState(15)
 
   useEffect(() => {
     if (!data) return
     setPortfolioDD(Math.round(Number(data.max_drawdown_limit) * 100))
+    setStrategyDD(Math.round(Number(data.max_strategy_drawdown) * 100))
     setMaxCapital(Math.round(Number(data.per_strategy_cap) * 100))
+    setTargetVol(Math.round(Number(data.target_portfolio_volatility) * 100))
     setRiskTolerance(RISK_TO_NUM[data.risk_tolerance])
   }, [data])
 
   const apiPortfolioDD   = data ? Math.round(Number(data.max_drawdown_limit) * 100) : 10
+  const apiStrategyDD    = data ? Math.round(Number(data.max_strategy_drawdown) * 100) : 12
   const apiMaxCapital    = data ? Math.round(Number(data.per_strategy_cap) * 100) : 30
+  const apiTargetVol     = data ? Math.round(Number(data.target_portfolio_volatility) * 100) : 15
   const apiRiskTolerance = data ? RISK_TO_NUM[data.risk_tolerance] : 2
   const isDirty =
     portfolioDD   !== apiPortfolioDD   ||
+    strategyDD    !== apiStrategyDD    ||
     maxCapital    !== apiMaxCapital    ||
+    targetVol     !== apiTargetVol     ||
     riskTolerance !== apiRiskTolerance
 
   const mutation = useMutation({
@@ -243,9 +260,11 @@ function RiskParametersCard() {
 
   function handleSave() {
     mutation.mutate({
-      max_drawdown_limit: portfolioDD / 100,
-      per_strategy_cap:   maxCapital / 100,
-      risk_tolerance:     NUM_TO_RISK[riskTolerance],
+      max_drawdown_limit:          portfolioDD / 100,
+      max_strategy_drawdown:       strategyDD / 100,
+      per_strategy_cap:            maxCapital / 100,
+      target_portfolio_volatility: targetVol / 100,
+      risk_tolerance:              NUM_TO_RISK[riskTolerance],
     })
   }
 
@@ -263,7 +282,6 @@ function RiskParametersCard() {
       </SettingRow>
 
       <SettingRow label="Max Strategy Drawdown" desc="Per-strategy limit before it triggers a warning">
-        {/* TODO: no per-strategy drawdown limit on GET/PUT /settings; value is local-only and does not persist */}
         <Slider min={5} max={25} value={strategyDD} onChange={setStrategyDD} format={v => `${v}%`} />
       </SettingRow>
 
@@ -284,7 +302,6 @@ function RiskParametersCard() {
       </SettingRow>
 
       <SettingRow label="Target Portfolio Volatility" desc="Annualized volatility target for position sizing" last>
-        {/* TODO: no target_volatility field on GET/PUT /settings; value is local-only and does not persist */}
         <Slider min={5} max={30} value={targetVol} onChange={setTargetVol} format={v => `${v}%`} />
       </SettingRow>
     </Card>
@@ -304,7 +321,6 @@ function GovernanceCard() {
   const [autoPromote,   setAutoPromote]   = useState(false)
   const [rebalanceFreq, setRebalanceFreq] = useState('Daily')
 
-  // TODO: min_sharpe_for_promotion, min_paper_period, auto_demote_on_breach fields not on GET/PUT /settings — local only
   const [minSharpe,   setMinSharpe]   = useState(1.5)
   const [paperPeriod, setPaperPeriod] = useState('30 days')
   const [autoDemote,  setAutoDemote]  = useState(true)
@@ -313,13 +329,28 @@ function GovernanceCard() {
     if (!data) return
     setAutoPromote(data.auto_promote_enabled)
     setRebalanceFreq(FREQ_TO_UI[data.rebalance_frequency])
+    setMinSharpe(Number(data.min_sharpe_for_promotion))
+    setPaperPeriod(
+      PAPER_PERIOD_TO_UI[data.min_paper_trading_period_days] ??
+        `${data.min_paper_trading_period_days} days`,
+    )
+    setAutoDemote(data.auto_demote_on_breach)
   }, [data])
 
   const apiAutoPromote   = data?.auto_promote_enabled ?? false
   const apiRebalanceFreq = data ? FREQ_TO_UI[data.rebalance_frequency] : 'Daily'
+  const apiMinSharpe     = data ? Number(data.min_sharpe_for_promotion) : 1.5
+  const apiPaperPeriod   = data
+    ? (PAPER_PERIOD_TO_UI[data.min_paper_trading_period_days] ??
+      `${data.min_paper_trading_period_days} days`)
+    : '30 days'
+  const apiAutoDemote    = data?.auto_demote_on_breach ?? true
   const isDirty =
     autoPromote   !== apiAutoPromote   ||
-    rebalanceFreq !== apiRebalanceFreq
+    rebalanceFreq !== apiRebalanceFreq ||
+    minSharpe     !== apiMinSharpe     ||
+    paperPeriod   !== apiPaperPeriod   ||
+    autoDemote    !== apiAutoDemote
 
   const mutation = useMutation({
     mutationFn: (updates: ApiOperatorSettingsUpdate) => updateOperatorSettings(updates),
@@ -330,6 +361,9 @@ function GovernanceCard() {
     mutation.mutate({
       auto_promote_enabled: autoPromote,
       rebalance_frequency:  UI_TO_FREQ[rebalanceFreq],
+      min_sharpe_for_promotion: minSharpe,
+      min_paper_trading_period_days: paperPeriodDays(paperPeriod),
+      auto_demote_on_breach: autoDemote,
     })
   }
 
@@ -347,7 +381,6 @@ function GovernanceCard() {
       </SettingRow>
 
       <SettingRow label="Minimum Sharpe for promotion" desc="Paper strategies must exceed this to be eligible">
-        {/* TODO: no min_sharpe_for_promotion field on GET/PUT /settings; value is local-only and does not persist */}
         <Slider
           min={0.5}
           max={3}
@@ -359,7 +392,6 @@ function GovernanceCard() {
       </SettingRow>
 
       <SettingRow label="Min paper trading period" desc="Days of paper trading required before promotion">
-        {/* TODO: no min_paper_period field on GET/PUT /settings; value is local-only and does not persist */}
         <Select
           options={['14 days', '30 days', '60 days', '90 days']}
           value={paperPeriod}
@@ -376,36 +408,103 @@ function GovernanceCard() {
       </SettingRow>
 
       <SettingRow label="Auto-demote on breach" desc="Auto-demote live strategy to paper if DD limit exceeded" last>
-        {/* TODO: no auto_demote_on_breach field on GET/PUT /settings; value is local-only and does not persist */}
         <Toggle on={autoDemote} onChange={setAutoDemote} />
       </SettingRow>
     </Card>
   )
 }
 
+// ── Slippage / cost model maps ────────────────────────────────────────────────
+
+const SLIPPAGE_TO_UI: Record<SlippageModel, string> = {
+  fixed:        'Fixed (0.02%)',
+  volume_based: 'Volume-based',
+  spread:       'Spread model',
+}
+const UI_TO_SLIPPAGE: Record<string, SlippageModel> = {
+  'Fixed (0.02%)': 'fixed',
+  'Volume-based':  'volume_based',
+  'Spread model':  'spread',
+}
+const TX_TO_UI: Record<TransactionCostModel, string> = {
+  per_share:    '$0.005 / share',
+  per_trade:    '$1.00 / trade',
+  notional_pct: '0.1% notional',
+}
+const UI_TO_TX: Record<string, TransactionCostModel> = {
+  '$0.005 / share': 'per_share',
+  '$1.00 / trade':  'per_trade',
+  '0.1% notional':  'notional_pct',
+}
+
 // ── Data & Simulation card ────────────────────────────────────────────────────
 
 function DataSimulationCard() {
-  // TODO: no GET endpoint returns the active dataset/feature version — metadata routes (/metadata/datasets, /metadata/features) are POST-only (create new versions)
-  // TODO: slippage model and transaction cost selects have no configurable PUT endpoint; cost_model_configuration in GET /settings/advanced is read-only
+  const qc = useQueryClient()
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['settings'],
+    queryFn: fetchOperatorSettings,
+  })
+  const { data: datasetVersion } = useQuery({
+    queryKey: ['metadata', 'dataset-version-latest'],
+    queryFn: fetchLatestDatasetVersion,
+  })
+  const { data: featureVersion } = useQuery({
+    queryKey: ['metadata', 'feature-version-latest'],
+    queryFn: fetchLatestFeatureVersion,
+  })
+
   const [slippage, setSlippage] = useState('Fixed (0.02%)')
   const [txCost,   setTxCost]   = useState('$0.005 / share')
 
+  useEffect(() => {
+    if (!data) return
+    setSlippage(SLIPPAGE_TO_UI[data.slippage_model] ?? 'Fixed (0.02%)')
+    setTxCost(TX_TO_UI[data.transaction_cost_model] ?? '$0.005 / share')
+  }, [data])
+
+  const apiSlippage = data ? SLIPPAGE_TO_UI[data.slippage_model] : 'Fixed (0.02%)'
+  const apiTxCost   = data ? TX_TO_UI[data.transaction_cost_model] : '$0.005 / share'
+  const isDirty = slippage !== apiSlippage || txCost !== apiTxCost
+
+  const mutation = useMutation({
+    mutationFn: (updates: ApiOperatorSettingsUpdate) => updateOperatorSettings(updates),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  })
+
+  function handleSave() {
+    mutation.mutate({
+      slippage_model:        UI_TO_SLIPPAGE[slippage],
+      transaction_cost_model: UI_TO_TX[txCost],
+    })
+  }
+
+  if (isLoading || !data) return <CardSkeleton />
+  if (isError)            return <CardError message="Failed to load data & simulation settings" />
+
   return (
     <Card>
-      <CardTitle>Data & Simulation</CardTitle>
+      <CardTitle action={isDirty ? <SaveButton onClick={handleSave} isPending={mutation.isPending} /> : undefined}>
+        Data & Simulation
+      </CardTitle>
 
-      {/* TODO: active dataset version not available from any GET endpoint */}
-      <SettingRow label="Active Dataset Version" desc="Currently loaded market data version">
-        <StatusBadge variant="green" className="font-mono">—</StatusBadge>
+      <SettingRow label="Active Dataset Version" desc="Most recently registered market data version">
+        {datasetVersion ? (
+          <StatusBadge variant="green" className="font-mono">{datasetVersion.dataset_version_id}</StatusBadge>
+        ) : (
+          <StatusBadge variant="gray" className="font-mono">—</StatusBadge>
+        )}
       </SettingRow>
 
-      {/* TODO: active feature version not available from any GET endpoint */}
-      <SettingRow label="Feature Version" desc="Currently loaded feature dataset">
-        <StatusBadge variant="green" className="font-mono">—</StatusBadge>
+      <SettingRow label="Feature Version" desc="Most recently registered feature dataset">
+        {featureVersion ? (
+          <StatusBadge variant="blue" className="font-mono">{featureVersion.dataset_version_id}</StatusBadge>
+        ) : (
+          <StatusBadge variant="gray" className="font-mono">—</StatusBadge>
+        )}
       </SettingRow>
 
-      {/* TODO: slippage model is not configurable via API — local only, does not persist */}
       <SettingRow label="Slippage Model" desc="Applied to all simulated fills">
         <Select
           options={['Fixed (0.02%)', 'Volume-based', 'Spread model']}
@@ -414,7 +513,6 @@ function DataSimulationCard() {
         />
       </SettingRow>
 
-      {/* TODO: transaction cost is not configurable via API — local only, does not persist */}
       <SettingRow label="Transaction Cost" desc="Per-trade cost applied in simulation and live" last>
         <Select
           options={['$0.005 / share', '$1.00 / trade', '0.1% notional']}
@@ -429,15 +527,52 @@ function DataSimulationCard() {
 // ── Notifications card ────────────────────────────────────────────────────────
 
 function NotificationsCard() {
-  // TODO: no notifications endpoint on any route — all toggles are local-only and do not persist
+  const qc = useQueryClient()
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['settings'],
+    queryFn: fetchOperatorSettings,
+  })
+
   const [drawdown,  setDrawdown]  = useState(true)
   const [promotion, setPromotion] = useState(true)
   const [pipeline,  setPipeline]  = useState(true)
-  const [dailyPnl,  setDailyPnl]  = useState(false)
+
+  useEffect(() => {
+    if (!data) return
+    setDrawdown(data.notify_drawdown_alerts)
+    setPromotion(data.notify_strategy_promotion_events)
+    setPipeline(data.notify_pipeline_failures)
+  }, [data])
+
+  const apiDrawdown  = data?.notify_drawdown_alerts ?? true
+  const apiPromotion = data?.notify_strategy_promotion_events ?? true
+  const apiPipeline  = data?.notify_pipeline_failures ?? true
+  const isDirty =
+    drawdown  !== apiDrawdown  ||
+    promotion !== apiPromotion ||
+    pipeline  !== apiPipeline
+
+  const mutation = useMutation({
+    mutationFn: (updates: ApiOperatorSettingsUpdate) => updateOperatorSettings(updates),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  })
+
+  function handleSave() {
+    mutation.mutate({
+      notify_drawdown_alerts: drawdown,
+      notify_strategy_promotion_events: promotion,
+      notify_pipeline_failures: pipeline,
+    })
+  }
+
+  if (isLoading || !data) return <CardSkeleton />
+  if (isError)            return <CardError message="Failed to load notification settings" />
 
   return (
     <Card>
-      <CardTitle>Notifications</CardTitle>
+      <CardTitle action={isDirty ? <SaveButton onClick={handleSave} isPending={mutation.isPending} /> : undefined}>
+        Notifications
+      </CardTitle>
 
       <SettingRow label="Drawdown alerts" desc="Notify when any drawdown threshold is hit">
         <Toggle on={drawdown} onChange={setDrawdown} />
@@ -457,8 +592,10 @@ function NotificationsCard() {
         </div>
       </SettingRow>
 
-      <SettingRow label="Daily PnL summary" desc="End of day performance email" last>
-        <Toggle on={dailyPnl} onChange={setDailyPnl} />
+      <SettingRow label="Daily PnL summary" desc="Stubbed until email/report delivery exists" last>
+        <div style={{ opacity: 0.6 }}>
+          <Toggle on={false} disabled />
+        </div>
       </SettingRow>
     </Card>
   )

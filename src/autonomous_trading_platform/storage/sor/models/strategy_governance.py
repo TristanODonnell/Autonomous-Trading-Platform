@@ -13,7 +13,7 @@ from autonomous_trading_platform.storage.sor.models.helpers.sa_types import UTCD
 class StrategyGovernance(Base):
     __tablename__ = "strategy_governance"
 
-    strategy_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    strategy_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     config_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     current_state: Mapped[str] = mapped_column(String(32), nullable=False)
     experiment_id: Mapped[str] = mapped_column(String(64), nullable=False)

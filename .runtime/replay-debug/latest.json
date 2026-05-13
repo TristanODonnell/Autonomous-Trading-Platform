@@ -1,0 +1,196 @@
+{
+  "replay_id": "5c88c358-2aed-40fa-9d84-0494bd08c37e",
+  "inputs": {
+    "date_range": {
+      "start": "2024-01-01",
+      "end": "2024-01-31"
+    },
+    "symbols": [
+      "SPY",
+      "QQQ"
+    ],
+    "starting_cash": 100000.0,
+    "random_seed": 42,
+    "price_basis": "adjusted",
+    "calendar_mode": "historical",
+    "cycles": [
+      "market_backfill",
+      "features",
+      "trading",
+      "rebalance",
+      "portfolio_snapshot"
+    ],
+    "cadence_minutes": 390,
+    "max_ticks": null
+  },
+  "loaded_settings": {
+    "loaded_at": "2026-05-13T01:35:58.182442+00:00",
+    "environment": {
+      "app_env": "dev",
+      "trading_environment": "paper",
+      "no_live_trading": true,
+      "shadow_mode_enabled": true,
+      "max_gross_exposure": 100000.0,
+      "max_net_exposure": 50000.0,
+      "max_symbol_exposure": 25000.0,
+      "max_leverage": 2.0,
+      "max_orders_per_hour": 20,
+      "max_orders_per_bar": 2,
+      "max_daily_notional_traded": 100000.0,
+      "max_reserved_cash": 100000.0
+    },
+    "operator_settings": {
+      "settings_id": "default",
+      "source": "operator_settings",
+      "risk_tolerance": "high",
+      "max_drawdown_limit": 0.3,
+      "max_strategy_drawdown": 0.25,
+      "rebalance_frequency": "daily",
+      "auto_promote_enabled": false,
+      "min_sharpe_for_promotion": 0.5,
+      "min_paper_trading_period_days": 30,
+      "auto_demote_on_breach": true,
+      "notify_drawdown_alerts": false,
+      "notify_strategy_promotion_events": false,
+      "notify_pipeline_failures": false,
+      "per_strategy_cap": 0.25,
+      "target_portfolio_volatility": 0.3,
+      "slippage_model": "spread",
+      "transaction_cost_model": "per_share",
+      "updated_by": "local-dev-operator",
+      "updated_at": "2026-05-13T01:35:48.974587+00:00"
+    },
+    "runtime_control": {
+      "control_id": "global",
+      "source": "runtime_control_state",
+      "trading_enabled": true,
+      "trading_paused": false,
+      "kill_switch_enabled": false,
+      "trading_mode": "simulation",
+      "reason": "test",
+      "updated_by": "local-dev-operator",
+      "updated_at": "2026-05-12T23:18:45.037783+00:00"
+    },
+    "strategy_control_states": [
+      {
+        "strategy_id": "moving_average_crossover__5381e2ce923861bdb5606e3c723639aac7c3bc6f7b7d379298d53f1a6075622b",
+        "enabled": false,
+        "reason": "test",
+        "updated_by": "local-dev-operator",
+        "updated_at": "2026-05-12T21:48:34.020951+00:00"
+      },
+      {
+        "strategy_id": "moving_average_crossover__7100229de334bcdc4cba56799ec76c2212a7b92c6bac363a7d7367e7e1796c95",
+        "enabled": true,
+        "reason": "testing",
+        "updated_by": "local-dev-operator",
+        "updated_at": "2026-05-12T04:49:03.399062+00:00"
+      }
+    ],
+    "allocation_overrides": [
+      {
+        "override_id": "86e74785-0efb-4b67-9949-fd9c8e0abe7c",
+        "strategy_id": "moving_average_crossover__7100229de334bcdc4cba56799ec76c2212a7b92c6bac363a7d7367e7e1796c95",
+        "max_pct_of_capital": 0.3,
+        "max_position_size_usd": null,
+        "max_drawdown_allowed": null,
+        "is_active": true,
+        "expires_at": null
+      }
+    ]
+  },
+  "settings_snapshot_hash": "a3e77f1be4e4",
+  "execution": {
+    "trading_days_processed": 23,
+    "cycle_invocations": {
+      "market_backfill": 46,
+      "features": 46,
+      "trading": 46,
+      "rebalance": 46,
+      "portfolio_snapshot": 46
+    },
+    "runtime_jobs_completed": 230,
+    "runtime_jobs_failed": 0
+  },
+  "trading": {
+    "signals_generated": 92,
+    "orders_attempted": 92,
+    "orders_submitted": 28,
+    "orders_blocked_by_risk": 54,
+    "fills_created": 28
+  },
+  "rebalancing": {
+    "rebalance_checks": 46,
+    "rebalances_triggered": 23,
+    "rebalances_skipped": 23,
+    "skip_reasons": {
+      "frequency_not_due": 23
+    }
+  },
+  "portfolio": {
+    "starting_equity": 100000.0,
+    "ending_equity": 2768.15965374,
+    "cash": 0.00033566,
+    "positions": {
+      "SPY": 622.7086,
+      "QQQ": 525.0222
+    },
+    "total_return_pct": -97.23184034626,
+    "portfolio_snapshots": 46
+  },
+  "risk_metrics": {
+    "max_drawdown_observed": -0.9723184034626,
+    "peak_equity": 100000.0
+  },
+  "market_data": {
+    "market_data_points_seen": 0
+  },
+  "warnings": [
+    "No persisted market bars found at 2024-01-01T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-01T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-02T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-02T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-03T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-03T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-04T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-04T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-05T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-05T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-08T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-08T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-09T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-09T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-10T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-10T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-11T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-11T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-12T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-12T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-15T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-15T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-16T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-16T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-17T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-17T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-18T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-18T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-19T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-19T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-22T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-22T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-23T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-23T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-24T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-24T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-25T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-25T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-26T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-26T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-29T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-29T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-30T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-30T21:00:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-31T14:30:00+00:00; synthetic prices used",
+    "No persisted market bars found at 2024-01-31T21:00:00+00:00; synthetic prices used"
+  ]
+}

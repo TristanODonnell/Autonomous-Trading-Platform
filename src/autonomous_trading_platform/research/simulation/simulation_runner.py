@@ -92,6 +92,7 @@ class SimulationRunRequest:
     strict_data_loading: bool = True
     shuffle_timestamp: bool = False
     window_role: str | None = None
+    stage_name: str | None = None
 
 
 @dataclass(slots=True)
@@ -233,22 +234,32 @@ class SimulationRunner:
                 signal_log=signal_log,
             )
 
-            self._record_run_completed(
-                run_id=run_id,
-                trade_count=len(trade_logs),
-                equity_points=len(equity_curve),
-                per_bar_metric_points=len(per_bar_metrics),
-            )
-            self._commit_metadata()
-
-            # Strip warmup rows from the equity curve before computing metrics.
-            # Warmup bars predate start_date and must not skew duration, CAGR,
-            # Sharpe or drawdown calculations.
+            # Strip warmup rows before computing metrics so indicators don't
+            # skew duration, CAGR, Sharpe or drawdown calculations.
             live_equity_curve = equity_curve
             if window.warmup_timestamps and not equity_curve.empty:
                 live_equity_curve = equity_curve[
                     ~equity_curve["timestamp"].isin(window.warmup_timestamps)
                 ].reset_index(drop=True)
+
+            rm = compute_return_metrics(live_equity_curve)
+            risk = compute_risk_metrics(live_equity_curve)
+            tm = compute_trade_metrics(trade_logs)
+            sm = compute_stability_metrics(live_equity_curve)
+
+            self._record_run_completed(
+                run_id=run_id,
+                trade_count=tm.total_trades,
+                equity_points=len(live_equity_curve),
+                per_bar_metric_points=len(per_bar_metrics),
+                total_return=rm.total_return,
+                sharpe_ratio=risk.sharpe_ratio,
+                max_drawdown=risk.max_drawdown,
+                volatility=risk.volatility,
+                win_rate=tm.win_rate,
+                consistency_score=sm.consistency_score,
+            )
+            self._commit_metadata()
 
             return SimulationRunResult(
                 run_id=run_id,
@@ -262,10 +273,10 @@ class SimulationRunner:
                 equity_points=len(live_equity_curve),
                 per_bar_metric_points=len(per_bar_metrics),
                 status="completed",
-                return_metrics=compute_return_metrics(live_equity_curve),
-                risk_metrics=compute_risk_metrics(live_equity_curve),
-                trade_metrics=compute_trade_metrics(trade_logs),
-                stability_metrics=compute_stability_metrics(live_equity_curve),
+                return_metrics=rm,
+                risk_metrics=risk,
+                trade_metrics=tm,
+                stability_metrics=sm,
                 equity_curve=live_equity_curve,
             )
 
@@ -369,6 +380,7 @@ class SimulationRunner:
                     "end_date": str(request.end_date),
                     "initial_cash": request.initial_cash,
                     "strict_data_loading": request.strict_data_loading,
+                    "stage_name": request.stage_name,
                     "resolved_dataset_metadata": resolved_dataset_metadata,
                 },
                 status="RUNNING",
@@ -446,6 +458,12 @@ class SimulationRunner:
         trade_count: int,
         equity_points: int,
         per_bar_metric_points: int,
+        total_return: float = 0.0,
+        sharpe_ratio: float = 0.0,
+        max_drawdown: float = 0.0,
+        volatility: float = 0.0,
+        win_rate: float = 0.0,
+        consistency_score: float = 0.0,
     ) -> None:
         now = datetime.now(UTC)
 
@@ -459,9 +477,15 @@ class SimulationRunner:
                     run_id=str(run_id),
                     created_at=now,
                     trade_count=trade_count,
+                    total_return=total_return,
+                    sharpe_ratio=sharpe_ratio,
+                    max_drawdown=max_drawdown,
+                    volatility=volatility,
                     metrics_json={
                         "equity_points": equity_points,
                         "per_bar_metric_points": per_bar_metric_points,
+                        "win_rate": win_rate,
+                        "consistency_score": consistency_score,
                     },
                 )
                 snapshot_row = self.metrics_summary_repository.to_row(snapshot)

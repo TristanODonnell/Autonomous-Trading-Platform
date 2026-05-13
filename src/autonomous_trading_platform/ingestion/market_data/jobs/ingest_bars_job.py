@@ -103,8 +103,6 @@ class IngestBarsJob:
         self.completed_cycle_bars.append(five_min_bar)
         self.received_symbols.add(five_min_bar.symbol)
 
-        print(five_min_bar)
-
     def finalize_cycle(self, cycle_timestamp: datetime) -> None:
         component = "ingestion.ingest_bars_job"
 

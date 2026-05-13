@@ -15,8 +15,12 @@ import {
 } from '../services/controlsService'
 import {
   fetchAllStrategies,
+  fetchStrategyAllocations,
+  updateStrategyAllocation,
   updateStrategyEnabled,
+  transitionStrategyGovernance,
   type ApiStrategyListItem,
+  type ApiStrategyAllocationState,
 } from '../services/strategiesService'
 import { fetchAuditLog, type ApiAuditLogEvent } from '../services/auditLogService'
 import { fetchOperatorSettings, updateOperatorSettings } from '../services/settingsService'
@@ -353,21 +357,22 @@ function StrategyTogglesCard() {
   if (isLoading) return <CardSkeleton title="Strategy Toggles" />
   if (controlsError) return <CardError title="Strategy Toggles" message={(controlsError as Error).message} />
 
-  // Build control-state map for O(1) lookup
-  const controlMap = new Map<string, ApiStrategyControlState>(
-    (controlsState?.strategies ?? []).map((s) => [s.strategy_id, s])
+  // Build catalog map for O(1) display-name lookup
+  const catalogMap = new Map<string, ApiStrategyListItem>(
+    catalog.map((c) => [c.strategy_id, c])
   )
 
-  // Merge catalog names with control states
-  // Catalog is the authoritative list; control state provides runtime enabled/status
-  const merged = catalog.map((c) => {
-    const ctrl = controlMap.get(c.strategy_id)
+  // Only show strategies that are in active governance (paper/live).
+  // Controls state is the authoritative list — strategies not in it have no
+  // governance row and cannot be enabled/disabled by the API (would 404).
+  const merged = (controlsState?.strategies ?? []).map((s) => {
+    const cat = catalogMap.get(s.strategy_id)
     return {
-      strategy_id:  c.strategy_id,
-      display_name: c.display_name,
-      enabled:      ctrl?.enabled ?? c.status !== 'off',
-      status:       (ctrl?.status ?? (c.status === 'research' ? 'off' : c.status)) as ApiStrategyControlState['status'],
-      reason:       ctrl?.reason ?? null,
+      strategy_id:  s.strategy_id,
+      display_name: cat?.display_name ?? s.strategy_id,
+      enabled:      s.enabled,
+      status:       s.status,
+      reason:       s.reason,
     }
   })
 
@@ -458,7 +463,7 @@ function StrategyTogglesCard() {
 // ── Environment card ──────────────────────────────────────────────────────────
 
 const ENV_MODES: { key: Environment; label: string; variant: BadgeVariant; suffix?: string }[] = [
-  { key: 'simulation', label: 'Simulation', variant: 'gray'  },
+  { key: 'backtesting', label: 'Backtesting', variant: 'gray'  },
   { key: 'paper',      label: 'Paper',      variant: 'blue'  },
   { key: 'live',       label: 'Live',       variant: 'green', suffix: ' ●' },
 ]
@@ -497,7 +502,8 @@ function EnvironmentCard() {
     },
   })
 
-  const currentMode = (controlsState?.trading_mode ?? 'paper') as Environment
+  const rawMode = controlsState?.trading_mode ?? 'paper'
+  const currentMode = (rawMode === 'simulation' ? 'backtesting' : rawMode) as Environment
 
   function selectMode(mode: Environment) {
     if (mode === currentMode) return
@@ -597,69 +603,238 @@ function EnvironmentCard() {
   )
 }
 
-// ── Allocation Overrides card (deferred) ──────────────────────────────────────
+// ── Allocation Overrides card ─────────────────────────────────────────────────
 
 function AllocationOverridesCard() {
-  // TODO: No backend endpoint exposes current allocation override state.
-  // GET /api/v1/portfolio/allocation returns live allocations (by_strategy) but does not
-  // distinguish between policy-computed allocations and operator overrides.
-  // PUT /api/v1/strategies/{strategy_id}/allocation exists for writing overrides.
-  // Backend dependency: add a GET /api/v1/strategies/{id}/allocation endpoint (or extend
-  // portfolio/allocation response) that returns { policy_allocation, override_allocation, is_overridden }
-  // per strategy before this card can be wired.
+  const queryClient = useQueryClient()
+  const [editing, setEditing] = useState<{ id: string } | null>(null)
+  const [pct, setPct] = useState('')
+  const [reason, setReason] = useState('')
+
+  const { data: allocations = [], isLoading, error } = useQuery({
+    queryKey: ['strategies', 'allocations'],
+    queryFn: fetchStrategyAllocations,
+    refetchInterval: 30_000,
+  })
+
+  const overrideMutation = useMutation({
+    mutationFn: ({ id, allocationPct, rsn }: { id: string; allocationPct: number; rsn: string }) =>
+      updateStrategyAllocation(id, allocationPct, rsn),
+    onSuccess: () => {
+      setEditing(null)
+      setPct('')
+      setReason('')
+      void queryClient.invalidateQueries({ queryKey: ['strategies', 'allocations'] })
+      void queryClient.invalidateQueries({ queryKey: ['portfolio', 'allocation'] })
+    },
+  })
+
+  function startEdit(s: ApiStrategyAllocationState) {
+    setEditing({ id: s.strategy_id })
+    setPct(s.allocation_pct != null ? Number(s.allocation_pct).toFixed(1) : '')
+    setReason('')
+  }
+
+  function confirmEdit() {
+    if (!editing || !reason.trim()) return
+    const parsed = parseFloat(pct)
+    if (isNaN(parsed) || parsed < 0 || parsed > 100) return
+    overrideMutation.mutate({ id: editing.id, allocationPct: parsed, rsn: reason })
+  }
+
+  if (isLoading) return <CardSkeleton title="Allocation Overrides" />
+  if (error) return <CardError title="Allocation Overrides" message={(error as Error).message} />
+
   return (
     <Card>
       <CardTitle>Allocation Overrides</CardTitle>
-      <p className="font-mono text-[11px] text-[var(--text2)] mb-3">
-        Manual overrides take precedence over policy-computed allocations.
-        All changes are logged.
+      <p className="font-mono text-[11px] mb-3" style={{ color: 'var(--text2)' }}>
+        Set each strategy's share of total capital (0–100%). Overrides take precedence over policy. All changes are logged.
       </p>
-      <div
-        className="rounded-md px-4 py-6 text-center"
-        style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}
-      >
-        <p className="font-mono text-[11px] text-[var(--text3)]">
-          Allocation override data not yet available.
+
+      {allocations.length === 0 ? (
+        <p className="font-mono text-[11px] text-center py-4" style={{ color: 'var(--text3)' }}>
+          No active paper/live strategies
         </p>
-        <p className="font-mono text-[10px] text-[var(--text3)] mt-1">
-          Awaiting GET endpoint for per-strategy override state.
-        </p>
-      </div>
-      <div className="mt-4">
-        <button
-          disabled
-          className="w-full font-mono text-[10px] font-medium uppercase tracking-[0.08em] py-2 px-4 rounded border opacity-40 cursor-not-allowed"
-          style={{ background: 'transparent', color: 'var(--text2)', borderColor: 'var(--border2)' }}
-        >
-          + Add Override
-        </button>
-      </div>
+      ) : (
+        allocations.map((s, i) => {
+          const isLast = i === allocations.length - 1
+          const isEditing = editing?.id === s.strategy_id
+          const pctValue = s.allocation_pct != null ? Number(s.allocation_pct) : null
+          const dollarValue = s.allocated_capital != null ? Number(s.allocated_capital) : null
+
+          if (isEditing) {
+            return (
+              <div
+                key={s.strategy_id}
+                className="py-3 space-y-2"
+                style={{ borderBottom: isLast ? 'none' : '1px solid var(--border)' }}
+              >
+                <div className="text-[13px]" style={{ color: 'var(--text)' }}>{s.display_name}</div>
+                <div className="flex items-center gap-2">
+                  <input
+                    autoFocus
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    className="flex-1 px-3 py-1.5 rounded font-mono text-[11px] outline-none"
+                    style={{
+                      background: 'var(--surface2)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--text)',
+                    }}
+                    placeholder="e.g. 25.0"
+                    value={pct}
+                    onChange={(e) => setPct(e.target.value)}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border2)')}
+                  />
+                  <span className="font-mono text-[13px]" style={{ color: 'var(--text2)' }}>%</span>
+                </div>
+                <ReasonInput value={reason} onChange={setReason} placeholder="Reason (required)" />
+                {overrideMutation.error && (
+                  <p className="font-mono text-[10px]" style={{ color: 'var(--red)' }}>
+                    {(overrideMutation.error as Error).message}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <ConfirmButton
+                    disabled={
+                      !reason.trim() ||
+                      !pct ||
+                      isNaN(parseFloat(pct)) ||
+                      parseFloat(pct) < 0 ||
+                      parseFloat(pct) > 100 ||
+                      overrideMutation.isPending
+                    }
+                    onClick={confirmEdit}
+                  >
+                    {overrideMutation.isPending ? 'Saving…' : 'Apply'}
+                  </ConfirmButton>
+                  <CancelButton onClick={() => { setEditing(null); setPct(''); setReason('') }} />
+                </div>
+              </div>
+            )
+          }
+
+          return (
+            <Row key={s.strategy_id} last={isLast}>
+              <div>
+                <div className="text-[13px]" style={{ color: 'var(--text)' }}>{s.display_name}</div>
+                <div className="font-mono text-[11px] mt-0.5" style={{ color: 'var(--text2)' }}>
+                  {s.is_overridden && pctValue != null
+                    ? `Override: ${pctValue.toFixed(1)}%${dollarValue != null ? ` · $${dollarValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : ''}`
+                    : 'Policy allocation'}
+                </div>
+              </div>
+              <button
+                onClick={() => startEdit(s)}
+                className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] px-3 py-1 rounded border cursor-pointer"
+                style={{ color: 'var(--accent)', borderColor: 'rgba(0,229,160,0.3)', background: 'transparent' }}
+              >
+                Edit
+              </button>
+            </Row>
+          )
+        })
+      )}
     </Card>
   )
 }
 
-// ── Alert Thresholds card (deferred) ──────────────────────────────────────────
+// ── Governance Pending card ───────────────────────────────────────────────────
 
-function AlertThresholdsCard() {
-  // TODO: No backend endpoint for alert threshold configuration.
-  // GET /api/v1/system/health returns active alerts (alerts: string[]) but not threshold definitions.
-  // Backend dependency: a new /api/v1/alerts/thresholds endpoint (or settings extension) returning
-  // [{ name, description, threshold_value, threshold_unit, status: "active"|"firing"|"disabled" }]
-  // is required before this card can be wired.
+function GovernancePendingCard() {
+  const queryClient = useQueryClient()
+  const [promoting, setPromoting] = useState<string | null>(null)
+  const [promoteReason, setPromoteReason] = useState('')
+
+  const { data: researchStrategies = [], isLoading, error } = useQuery({
+    queryKey: ['strategies', 'research'],
+    queryFn: () => fetchAllStrategies('research'),
+    refetchInterval: 30_000,
+  })
+
+  const promoteMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      transitionStrategyGovernance(id, 'approved_for_paper_trading', reason),
+    onSuccess: () => {
+      setPromoting(null)
+      setPromoteReason('')
+      void queryClient.invalidateQueries({ queryKey: ['strategies'] })
+      void queryClient.invalidateQueries({ queryKey: ['controls', 'state'] })
+    },
+  })
+
+  if (isLoading) return <CardSkeleton title="Governance — Pending Promotion" />
+  if (error) return <CardError title="Governance — Pending Promotion" message={(error as Error).message} />
+
   return (
     <Card>
-      <CardTitle>Alert Thresholds</CardTitle>
-      <div
-        className="rounded-md px-4 py-6 text-center"
-        style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}
-      >
-        <p className="font-mono text-[11px] text-[var(--text3)]">
-          Alert threshold configuration not yet available.
+      <CardTitle>Governance — Pending Promotion</CardTitle>
+
+      {researchStrategies.length === 0 ? (
+        <p className="font-mono text-[11px] text-center py-4" style={{ color: 'var(--text3)' }}>
+          No research strategies awaiting promotion
         </p>
-        <p className="font-mono text-[10px] text-[var(--text3)] mt-1">
-          Awaiting GET /alerts/thresholds endpoint.
-        </p>
-      </div>
+      ) : (
+        researchStrategies.map((s, i) => {
+          const isLast = i === researchStrategies.length - 1
+          const isPromoting = promoting === s.strategy_id
+
+          if (isPromoting) {
+            return (
+              <div
+                key={s.strategy_id}
+                className="py-3 space-y-2"
+                style={{ borderBottom: isLast ? 'none' : '1px solid var(--border)' }}
+              >
+                <div className="text-[13px]" style={{ color: 'var(--text)' }}>
+                  {s.display_name}
+                  <span className="font-mono text-[10px] ml-2" style={{ color: 'var(--blue)' }}>
+                    → paper trading
+                  </span>
+                </div>
+                <ReasonInput value={promoteReason} onChange={setPromoteReason} placeholder="Promotion rationale (required)" />
+                {promoteMutation.error && (
+                  <p className="font-mono text-[10px]" style={{ color: 'var(--red)' }}>
+                    {(promoteMutation.error as Error).message}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <ConfirmButton
+                    disabled={!promoteReason.trim() || promoteMutation.isPending}
+                    onClick={() => promoteMutation.mutate({ id: s.strategy_id, reason: promoteReason })}
+                  >
+                    {promoteMutation.isPending ? 'Promoting…' : 'Confirm Promote'}
+                  </ConfirmButton>
+                  <CancelButton onClick={() => { setPromoting(null); setPromoteReason('') }} />
+                </div>
+              </div>
+            )
+          }
+
+          return (
+            <Row key={s.strategy_id} last={isLast}>
+              <div>
+                <div className="text-[13px]" style={{ color: 'var(--text)' }}>{s.display_name}</div>
+                <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--text2)' }}>
+                  Sharpe {s.sharpe_ratio.toFixed(2)} · Return {(s.current_return * 100).toFixed(1)}%
+                </div>
+              </div>
+              <button
+                onClick={() => { setPromoting(s.strategy_id); setPromoteReason('') }}
+                disabled={promoteMutation.isPending}
+                className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] px-3 py-1 rounded border cursor-pointer disabled:opacity-40"
+                style={{ color: 'var(--blue)', borderColor: 'rgba(59,158,255,0.3)', background: 'transparent' }}
+              >
+                Promote
+              </button>
+            </Row>
+          )
+        })
+      )}
     </Card>
   )
 }
@@ -754,7 +929,7 @@ export default function Controls() {
         {/* Middle column */}
         <div className="flex flex-col gap-4">
           <AllocationOverridesCard />
-          <AlertThresholdsCard />
+          <GovernancePendingCard />
         </div>
 
         {/* Right column */}

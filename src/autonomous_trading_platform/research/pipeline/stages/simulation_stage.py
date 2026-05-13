@@ -128,6 +128,7 @@ class SimulationStage(BaseStage):
                 end_date=cfg.end_date,
                 initial_cash=initial_cash,
                 window_role=cfg.window_role,
+                stage_name=self.stage_name,
             )
             sim_results.append(self._simulation_runner.run(request))
 

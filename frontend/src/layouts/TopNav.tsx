@@ -10,7 +10,7 @@ const TAB_ACTIVE =
   'border-b-2 border-[var(--accent)] transition-all duration-150 select-none cursor-pointer whitespace-nowrap'
 
 const ENV_LABEL: Record<string, string> = {
-  simulation: 'Sim Mode',
+  backtesting: 'Backtest Mode',
   paper: 'Paper Mode',
   live: 'Live Mode',
 }
@@ -39,7 +39,7 @@ export default function TopNav() {
         Portfolio
       </Link>
       <Link to="/strategy" className={TAB_BASE} activeProps={{ className: TAB_ACTIVE }}>
-        Strategy Lab
+        Experiment Lab
       </Link>
       <Link to="/controls" className={TAB_BASE} activeProps={{ className: TAB_ACTIVE }}>
         Controls

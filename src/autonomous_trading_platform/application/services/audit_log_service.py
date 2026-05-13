@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -63,7 +63,11 @@ class AuditLogService:
                 action_type=row.event_type,
                 description=row.message,
                 user=(row.event_metadata or {}).get("actor"),
-                timestamp=row.event_timestamp,
+                timestamp=(
+                    row.event_timestamp
+                    if row.event_timestamp.tzinfo is not None
+                    else row.event_timestamp.replace(tzinfo=UTC)
+                ),
                 strategy_id=(row.event_metadata or {}).get("strategy_id"),
                 rationale=(row.event_metadata or {}).get("reason"),
             )

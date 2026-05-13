@@ -118,6 +118,7 @@ class StrategyGovernanceService:
             },
         )
         self._session.flush()
+        self._session.commit()
 
         return StrategyGovernanceTransitionResult(
             strategy_id=strategy_id,

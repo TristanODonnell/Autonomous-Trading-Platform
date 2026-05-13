@@ -1,0 +1,31 @@
+# Fixture: Mean Reversion debug run — contrasts with ma_crossover_debug.yaml
+# Seed with: python -m autonomous_trading_platform.cli.main backtesting seed-fixture --fixture fixtures/mean_reversion_debug.yaml
+# Then run:  python -m autonomous_trading_platform.cli.main runtime replay-debug \
+#               --symbols SPY,QQQ --start 2024-01-01 --end 2024-01-31 \
+#               --starting-cash 100000 --random-seed 42 \
+#               --reset-sim-state --print-summary
+
+label: "Mean Reversion — Jan 2024 Debug"
+
+strategies:
+  - type: mean_reversion
+    display_name: "Mean Reversion (Z-Score)"
+    enabled: true
+    governance_state: approved_live
+    allocation_pct: 0.80
+    parameters:
+      lookback_period: 20
+      z_score_threshold: 2.0
+
+settings:
+  risk_tolerance: medium
+  max_drawdown_limit: 0.15
+  rebalance_frequency: weekly
+  slippage_model: fixed
+  transaction_cost_model: per_share
+  per_strategy_cap: 0.80
+
+controls:
+  trading_enabled: true
+  kill_switch_enabled: false
+  trading_mode: simulation

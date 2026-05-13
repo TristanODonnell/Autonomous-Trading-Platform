@@ -1,3 +1,4 @@
+export * from './experimentsService'
 export * from './portfolioService'
 export * from './strategiesService'
 export * from './systemService'

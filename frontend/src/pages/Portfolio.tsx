@@ -514,8 +514,8 @@ function RiskMetricsCard() {
   const rows: { label: string; value: string; color?: string }[] = [
     { label: 'Sharpe Ratio',      value: Number(perf.sharpe_ratio).toFixed(2),                  color: 'var(--accent)' },
     { label: 'Sortino Ratio',     value: Number(perf.sortino_ratio).toFixed(2),                 color: 'var(--accent)' },
-    { label: 'Max Drawdown',      value: `${Number(perf.max_drawdown).toFixed(1)}%`,            color: 'var(--yellow)' },
-    { label: 'Volatility (ann.)', value: `${Number(perf.volatility).toFixed(1)}%` },
+    { label: 'Max Drawdown',      value: `${(Number(perf.max_drawdown) * 100).toFixed(1)}%`,            color: 'var(--yellow)' },
+    { label: 'Volatility (ann.)', value: `${(Number(perf.volatility) * 100).toFixed(1)}%` },
     { label: 'Beta (vs SPY)',     value: Number(risk.beta).toFixed(2) },
     { label: 'VaR 95% (1d)',      value: `$${Number(risk.value_at_risk_1d_95).toLocaleString()}` },
   ]

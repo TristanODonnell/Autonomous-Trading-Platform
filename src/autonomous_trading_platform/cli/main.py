@@ -3,6 +3,7 @@ import argparse
 from autonomous_trading_platform.cli.commands import (
     admin,
     backtesting,
+    diagnostics,
     execution,
     features,
     ingestion,
@@ -21,6 +22,7 @@ def build_parser():
     subparsers = parser.add_subparsers(dest="domain", required=True)
 
     safety.register(subparsers)
+    diagnostics.register(subparsers)
     ingestion.register(subparsers)
     strategy.register(subparsers)
     execution.register(subparsers)

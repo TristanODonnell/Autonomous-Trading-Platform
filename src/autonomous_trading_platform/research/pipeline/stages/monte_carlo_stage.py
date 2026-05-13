@@ -332,6 +332,7 @@ class MonteCarloStage(BaseStage):
                 end_date=self._cfg.end_date,
                 initial_cash=initial_cash,
                 window_role=f"mc_run_{run_index}",
+                stage_name=self.stage_name,
             )
             run_results.append(self._simulation_runner.run(req))
 

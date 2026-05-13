@@ -6,8 +6,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from autonomous_trading_platform.api.dependencies import get_request_id
+from autonomous_trading_platform.api.dependencies import (
+    get_alpaca_broker_client,
+    get_request_id,
+    get_settings,
+)
 from autonomous_trading_platform.api.envelope import SuccessEnvelope, success_response
+from autonomous_trading_platform.application.services.alpaca_portfolio_service import (
+    AlpacaPortfolioService,
+)
 from autonomous_trading_platform.application.services.portfolio_analytics_service import (
     PortfolioAnalyticsService,
 )
@@ -17,7 +24,11 @@ from autonomous_trading_platform.application.services.portfolio_equity_curve_ser
 from autonomous_trading_platform.application.services.portfolio_summary_service import (
     PortfolioSummaryService,
 )
+from autonomous_trading_platform.application.services.strategy_allocation_service import (
+    StrategyAllocationService,
+)
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.execution.clients.alpaca_broker_client import AlpacaBrokerClient
 from autonomous_trading_platform.interfaces.rest.schemas.portfolio_schemas import (
     PortfolioAllocationResponse,
     PortfolioEquityCurvePeriod,
@@ -28,20 +39,56 @@ from autonomous_trading_platform.interfaces.rest.schemas.portfolio_schemas impor
     PortfolioRiskResponse,
     PortfolioSummaryResponse,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.runtime_control_state_repository import (
+    RuntimeControlStateRepository,
+)
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 _request_id_dependency = Depends(get_request_id)
 _session_dependency = Depends(get_session)
+_alpaca_dependency = Depends(get_alpaca_broker_client)
+
+
+def _alpaca_service(
+    client: AlpacaBrokerClient | None,
+    session: Session,
+) -> AlpacaPortfolioService | None:
+    if client is None:
+        return None
+    # In simulation/backtesting mode always read from DB so the frontend
+    # reflects backtest results rather than the live broker account.
+    try:
+        ctrl = RuntimeControlStateRepository(session).get_global_state()
+        if ctrl is not None and ctrl.trading_mode == "simulation":
+            return None
+    except Exception:
+        pass
+    try:
+        settings = get_settings()
+        return AlpacaPortfolioService(client=client, initial_capital=settings.initial_capital)
+    except Exception:
+        return None
 
 
 @router.get("/summary", response_model=SuccessEnvelope[PortfolioSummaryResponse])
 def get_portfolio_summary(
     request_id: str = _request_id_dependency,
     session: Session = _session_dependency,
+    alpaca_client: AlpacaBrokerClient | None = _alpaca_dependency,
 ) -> SuccessEnvelope[PortfolioSummaryResponse]:
+    alpaca = _alpaca_service(alpaca_client, session)
+    if alpaca is not None:
+        try:
+            result = alpaca.get_summary()
+            return success_response(
+                data=PortfolioSummaryResponse(**result),
+                request_id=request_id,
+            )
+        except Exception:
+            pass
+
     service = PortfolioSummaryService(session=session)
     result = service.get_summary()
-
     return success_response(
         data=PortfolioSummaryResponse(**result),
         request_id=request_id,
@@ -83,10 +130,21 @@ def get_portfolio_performance(
 def get_portfolio_holdings(
     request_id: str = _request_id_dependency,
     session: Session = _session_dependency,
+    alpaca_client: AlpacaBrokerClient | None = _alpaca_dependency,
 ) -> SuccessEnvelope[PortfolioHoldingsResponse]:
+    alpaca = _alpaca_service(alpaca_client, session)
+    if alpaca is not None:
+        try:
+            result = alpaca.get_holdings()
+            return success_response(
+                data=PortfolioHoldingsResponse(**result),
+                request_id=request_id,
+            )
+        except Exception:
+            pass
+
     service = PortfolioAnalyticsService(session=session)
     result = service.get_holdings()
-
     return success_response(
         data=PortfolioHoldingsResponse(**result),
         request_id=request_id,
@@ -97,14 +155,47 @@ def get_portfolio_holdings(
 def get_portfolio_allocation(
     request_id: str = _request_id_dependency,
     session: Session = _session_dependency,
+    alpaca_client: AlpacaBrokerClient | None = _alpaca_dependency,
 ) -> SuccessEnvelope[PortfolioAllocationResponse]:
+    alpaca = _alpaca_service(alpaca_client, session)
+    if alpaca is not None:
+        try:
+            result = alpaca.get_allocation()
+            if result["by_strategy"]:
+                return success_response(
+                    data=PortfolioAllocationResponse(**result),
+                    request_id=request_id,
+                )
+        except Exception:
+            pass
+
     service = PortfolioAnalyticsService(session=session)
     result = service.get_allocation()
+
+    # No live positions — fall back to configured strategy allocation percentages
+    # so the chart shows what operators have set, not just an empty state.
+    if not result["by_strategy"]:
+        result = _allocation_from_strategy_config(session=session)
 
     return success_response(
         data=PortfolioAllocationResponse(**result),
         request_id=request_id,
     )
+
+
+def _allocation_from_strategy_config(*, session: Session) -> dict:
+    from decimal import Decimal
+
+    rows = StrategyAllocationService(session=session).get_allocations_for_active_strategies()
+    by_strategy = [
+        {
+            "name": row["display_name"],
+            "allocated_capital": row["allocated_capital"] or Decimal("0"),
+            "percent_of_portfolio": row["allocation_pct"] or Decimal("0"),
+        }
+        for row in rows
+    ]
+    return {"by_strategy": by_strategy, "by_asset": []}
 
 
 @router.get("/risk", response_model=SuccessEnvelope[PortfolioRiskResponse])

@@ -48,6 +48,7 @@ from autonomous_trading_platform.research.simulation.contexts.build_simulation_c
 from autonomous_trading_platform.research.simulation.simulation_runner import SimulationRunner
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
+from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
 from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_repository import (
     RuntimeJobRunRepository,
 )
@@ -224,6 +225,12 @@ def run_experiment_pipeline_cycle(
                         )
                         final_survivors_count = len(pipeline_result.final_survivors)
                         total_simulation_runs = len(pipeline_result.all_simulation_results)
+                        _seed_governance_for_survivors(
+                            session=session,
+                            survivors=pipeline_result.final_survivors,
+                            experiment_id=experiment_plan.experiment_id,
+                            now_utc=now_utc,
+                        )
                     else:
                         simulation_results, filter_outputs = (
                             simulation_context.experiment_orchestration_service.run_experiment(
@@ -325,6 +332,33 @@ def run_experiment_pipeline_cycle(
         raise
     finally:
         session.close()
+
+
+def _seed_governance_for_survivors(
+    *,
+    session: Session,
+    survivors: list,
+    experiment_id: str,
+    now_utc: datetime,
+) -> None:
+    """Insert approved_research governance rows for pipeline survivors that don't yet have one."""
+    for config in survivors:
+        config_hash = config.config_hash()
+        existing = session.get(StrategyGovernance, (config.strategy_id, config_hash))
+        if existing is None:
+            session.add(
+                StrategyGovernance(
+                    strategy_id=config.strategy_id,
+                    config_hash=config_hash,
+                    current_state="approved_research",
+                    experiment_id=experiment_id,
+                    source_run_id=None,
+                    submitted_at=now_utc,
+                    updated_at=now_utc,
+                    submitted_by="system",
+                )
+            )
+    session.commit()
 
 
 def _load_experiment_definition_from_yaml(

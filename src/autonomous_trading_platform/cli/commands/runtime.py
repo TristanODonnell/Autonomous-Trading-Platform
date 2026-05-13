@@ -1,8 +1,18 @@
 from __future__ import annotations
 
 import argparse
+from decimal import Decimal
+from pathlib import Path
 
-from autonomous_trading_platform.cli.formatters import print_header, print_json
+from autonomous_trading_platform.cli.commands.runtime_soak_loop import register_soak_loop_commands
+from autonomous_trading_platform.cli.formatters import print_error, print_header, print_json
+from autonomous_trading_platform.cli.helpers import parse_datetime
+from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.runtime.replay_debug import (
+    RuntimeReplayDebugRunner,
+    RuntimeReplayInputs,
+    format_text_summary,
+)
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_cycle_dependencies,
 )
@@ -34,6 +44,44 @@ def register(subparsers) -> None:
     )
     inspect_audit_parser.add_argument("--run-id", required=True)
     inspect_audit_parser.set_defaults(func=handle_inspect_audit)
+
+    soak_loop_parser = runtime_subparsers.add_parser(
+        "soak-loop",
+        help="Soak testing loop for paper trading or historical research",
+    )
+    soak_loop_subparsers = soak_loop_parser.add_subparsers(dest="soak_command", required=True)
+    register_soak_loop_commands(soak_loop_subparsers)
+
+    replay_debug_parser = runtime_subparsers.add_parser(
+        "replay-debug",
+        help="Deterministic local runtime replay for settings/control wiring validation",
+    )
+    replay_debug_parser.add_argument("--symbols", required=True)
+    replay_debug_parser.add_argument("--start", required=True)
+    replay_debug_parser.add_argument("--end", required=True)
+    replay_debug_parser.add_argument("--starting-cash", type=Decimal, default=Decimal("10000"))
+    replay_debug_parser.add_argument("--random-seed", type=int, default=42)
+    replay_debug_parser.add_argument(
+        "--price-basis",
+        choices=[basis.value for basis in PriceBasis],
+        default=PriceBasis.ADJUSTED.value,
+    )
+    replay_debug_parser.add_argument(
+        "--calendar-mode",
+        choices=["historical"],
+        default="historical",
+    )
+    replay_debug_parser.add_argument(
+        "--cycles",
+        default="market_backfill,features,trading,rebalance,portfolio_snapshot",
+        help="Comma-separated cycle names or full_runtime_day",
+    )
+    replay_debug_parser.add_argument("--reset-sim-state", action="store_true")
+    replay_debug_parser.add_argument("--print-summary", action="store_true")
+    replay_debug_parser.add_argument("--output-json", type=Path)
+    replay_debug_parser.add_argument("--cadence-minutes", type=int, default=390)
+    replay_debug_parser.add_argument("--max-ticks", type=int)
+    replay_debug_parser.set_defaults(func=handle_replay_debug)
 
 
 def handle_run_cycle(args: argparse.Namespace) -> int:
@@ -79,3 +127,52 @@ def handle_inspect_audit(args: argparse.Namespace) -> int:
         return 0
     finally:
         session.close()
+
+
+def handle_replay_debug(args: argparse.Namespace) -> int:
+    print_header("Deterministic Local Runtime Replay")
+    print(
+        "This runner reads persisted platform settings/control state and never submits broker orders."
+    )
+
+    try:
+        symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
+        if not symbols:
+            raise ValueError("At least one symbol must be provided")
+        cycles = [c.strip() for c in args.cycles.split(",") if c.strip()]
+        inputs = RuntimeReplayInputs(
+            symbols=symbols,
+            start_date=parse_datetime(args.start).date(),
+            end_date=parse_datetime(args.end).date(),
+            starting_cash=args.starting_cash,
+            random_seed=args.random_seed,
+            price_basis=PriceBasis(args.price_basis),
+            calendar_mode=args.calendar_mode,
+            cycles=cycles,
+            reset_sim_state=args.reset_sim_state,
+            print_summary=args.print_summary,
+            output_json=args.output_json,
+            cadence_minutes=args.cadence_minutes,
+            max_ticks=args.max_ticks,
+        )
+        summary = RuntimeReplayDebugRunner(inputs=inputs).run()
+    except Exception as exc:
+        print_error(f"Runtime replay-debug failed: {exc}")
+        return 1
+
+    if args.print_summary:
+        print()
+        print(format_text_summary(summary))
+    else:
+        print_json(
+            {
+                "status": "completed",
+                "replay_id": summary["replay_id"],
+                "settings_snapshot_hash": summary["settings_snapshot_hash"],
+                "execution": summary["execution"],
+                "trading": summary["trading"],
+                "portfolio": summary["portfolio"],
+                "warnings": summary["warnings"],
+            }
+        )
+    return 0

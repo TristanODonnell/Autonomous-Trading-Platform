@@ -21,7 +21,7 @@ class FillQualityMetrics(Base):
     run_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False, index=True)
     intent_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False, index=True)
     fill_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    strategy_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    strategy_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     symbol: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
 
     signal_timestamp: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)

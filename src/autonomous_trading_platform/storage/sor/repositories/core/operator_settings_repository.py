@@ -30,12 +30,23 @@ class OperatorSettingsRepository:
             settings_id=DEFAULT_OPERATOR_SETTINGS_ID,
             risk_tolerance="medium",
             max_drawdown_limit=0.10,
+            max_strategy_drawdown=0.12,
             rebalance_frequency="weekly",
             auto_promote_enabled=False,
+            min_sharpe_for_promotion=1.5,
+            min_paper_trading_period_days=30,
+            auto_demote_on_breach=True,
+            notify_drawdown_alerts=True,
+            notify_strategy_promotion_events=True,
+            notify_pipeline_failures=True,
             per_strategy_cap=0.25,
+            target_portfolio_volatility=0.15,
+            slippage_model="fixed",
+            transaction_cost_model="per_share",
         )
         self._session.add(row)
         self._session.flush()
+        self._session.commit()
         return row
 
     def update_current(self, values: dict, updated_by: str | None) -> OperatorSettingsRow:
@@ -48,4 +59,5 @@ class OperatorSettingsRepository:
 
         self._session.add(row)
         self._session.flush()
+        self._session.commit()
         return row

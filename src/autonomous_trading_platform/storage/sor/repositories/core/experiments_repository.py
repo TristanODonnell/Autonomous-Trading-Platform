@@ -14,6 +14,10 @@ class ExperimentsRepository(BaseRepository):
         stmt = select(Experiments).where(Experiments.experiment_id == experiment_id)
         return cast(Experiments | None, self.session.scalars(stmt).one_or_none())
 
+    def list_recent(self, limit: int = 10) -> list[Experiments]:
+        stmt = select(Experiments).order_by(Experiments.created_at.desc()).limit(limit)
+        return list(self.session.scalars(stmt).all())
+
     def insert(self, row: Experiments) -> None:
         self.session.add(row)
 

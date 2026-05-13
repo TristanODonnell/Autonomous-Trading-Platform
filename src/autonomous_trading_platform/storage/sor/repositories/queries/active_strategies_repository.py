@@ -5,7 +5,7 @@ from datetime import UTC, datetime, time
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.storage.sor.models.allocation_overrides import (
@@ -14,6 +14,7 @@ from autonomous_trading_platform.storage.sor.models.allocation_overrides import 
 from autonomous_trading_platform.storage.sor.models.capital_allocation_policies import (
     CapitalAllocationPolicies,
 )
+from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
 from autonomous_trading_platform.storage.sor.models.fills import Fill
 from autonomous_trading_platform.storage.sor.models.order_intents import OrderIntents
 from autonomous_trading_platform.storage.sor.models.strategy_configs import StrategyConfigs
@@ -64,6 +65,7 @@ class ActiveStrategiesRepository:
             now=now,
         )
         policies_by_status_and_tier = self._get_active_policies_by_status_and_tier()
+        latest_equity = self._get_latest_equity()
 
         rows: list[ActiveStrategyDashboardRow] = []
         for governance in governance_rows:
@@ -90,6 +92,7 @@ class ActiveStrategiesRepository:
                     allocated_capital=self._resolve_allocated_capital(
                         override=override,
                         allocation_policy=allocation_policy,
+                        latest_equity=latest_equity,
                     ),
                     enabled=self._resolve_enabled(
                         status=status,
@@ -259,14 +262,30 @@ class ActiveStrategiesRepository:
 
         return Decimal(str(value))
 
+    def _get_latest_equity(self) -> Decimal:
+        stmt = (
+            select(CashSnapshot.equity)
+            .where(CashSnapshot.equity.is_not(None))
+            .order_by(desc(CashSnapshot.timestamp), desc(CashSnapshot.snapshot_id))
+            .limit(1)
+        )
+        result = self.session.scalars(stmt).one_or_none()
+        return Decimal(str(result)) if result is not None else Decimal("0")
+
     def _resolve_allocated_capital(
         self,
         *,
         override: AllocationOverrides | None,
         allocation_policy: CapitalAllocationPolicies | None,
+        latest_equity: Decimal,
     ) -> Decimal:
         if override is not None and override.max_position_size_usd is not None:
             return Decimal(str(override.max_position_size_usd))
+
+        if override is not None and override.max_pct_of_capital is not None and latest_equity > 0:
+            return (Decimal(str(override.max_pct_of_capital)) * latest_equity).quantize(
+                Decimal("0.01")
+            )
 
         if allocation_policy is not None and allocation_policy.max_position_size_usd is not None:
             return Decimal(str(allocation_policy.max_position_size_usd))

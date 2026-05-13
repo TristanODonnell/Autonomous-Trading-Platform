@@ -1,0 +1,41 @@
+# Fixture: MA Crossover debug run
+# Seed with: python -m autonomous_trading_platform.cli.main backtesting seed-fixture --fixture fixtures/ma_crossover_debug.yaml
+# Then run:  python -m autonomous_trading_platform.cli.main runtime replay-debug \
+#               --symbols SPY,QQQ --start 2024-01-01 --end 2024-01-31 \
+#               --starting-cash 100000 --random-seed 42 \
+#               --reset-sim-state --print-summary
+
+label: "MA Crossover — Jan 2024 Debug"
+
+strategies:
+  - type: moving_average_crossover
+    display_name: "MA Crossover (10/50)"
+    enabled: true
+    governance_state: approved_live   # proposed | approved_research | approved_paper | approved_live
+    allocation_pct: 0.60              # fraction of total portfolio capital (0.0–1.0)
+    parameters:
+      fast_period: 10
+      slow_period: 50
+
+  - type: momentum
+    display_name: "Momentum Factor"
+    enabled: true
+    governance_state: approved_paper
+    allocation_pct: 0.30
+    parameters:
+      lookback_period: 20
+
+# settings: optional — only fields listed here are updated; everything else is left as-is
+settings:
+  risk_tolerance: high
+  max_drawdown_limit: 0.20
+  rebalance_frequency: daily
+  slippage_model: spread
+  transaction_cost_model: per_share
+  per_strategy_cap: 0.60
+
+# controls: optional — only fields listed here are updated
+controls:
+  trading_enabled: true
+  kill_switch_enabled: false
+  trading_mode: simulation

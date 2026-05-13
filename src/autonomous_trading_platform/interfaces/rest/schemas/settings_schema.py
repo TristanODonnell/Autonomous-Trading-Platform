@@ -9,20 +9,48 @@ RiskTolerance = Literal["low", "medium", "high"]
 RebalanceFrequency = Literal["daily", "weekly", "monthly"]
 
 
+SlippageModel = Literal["fixed", "volume_based", "spread"]
+TransactionCostModel = Literal["per_share", "per_trade", "notional_pct"]
+
+
 class OperatorSettingsResponse(BaseModel):
     risk_tolerance: RiskTolerance
     max_drawdown_limit: Decimal
+    max_strategy_drawdown: Decimal
     rebalance_frequency: RebalanceFrequency
     auto_promote_enabled: bool
+    min_sharpe_for_promotion: Decimal
+    min_paper_trading_period_days: int
+    auto_demote_on_breach: bool
+    notify_drawdown_alerts: bool
+    notify_strategy_promotion_events: bool
+    notify_pipeline_failures: bool
     per_strategy_cap: Decimal
+    target_portfolio_volatility: Decimal
+    slippage_model: SlippageModel
+    transaction_cost_model: TransactionCostModel
 
 
 class OperatorSettingsUpdateRequest(BaseModel):
     risk_tolerance: RiskTolerance | None = None
     max_drawdown_limit: Decimal | None = Field(default=None, ge=Decimal("0"), le=Decimal("1"))
+    max_strategy_drawdown: Decimal | None = Field(default=None, ge=Decimal("0"), le=Decimal("1"))
     rebalance_frequency: RebalanceFrequency | None = None
     auto_promote_enabled: bool | None = None
+    min_sharpe_for_promotion: Decimal | None = Field(
+        default=None, ge=Decimal("0"), le=Decimal("10")
+    )
+    min_paper_trading_period_days: int | None = Field(default=None, ge=1, le=365)
+    auto_demote_on_breach: bool | None = None
+    notify_drawdown_alerts: bool | None = None
+    notify_strategy_promotion_events: bool | None = None
+    notify_pipeline_failures: bool | None = None
     per_strategy_cap: Decimal | None = Field(default=None, gt=Decimal("0"), le=Decimal("1"))
+    target_portfolio_volatility: Decimal | None = Field(
+        default=None, gt=Decimal("0"), le=Decimal("1")
+    )
+    slippage_model: SlippageModel | None = None
+    transaction_cost_model: TransactionCostModel | None = None
     reason: str | None = Field(default=None, max_length=500)
 
 
