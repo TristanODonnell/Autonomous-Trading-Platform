@@ -61,6 +61,8 @@ class IngestBarsJob:
         audit_logger: AuditLoggingService,
         ingestion_run_id: str,
         dataset_version_id: str,
+        *,
+        enforce_lateness: bool = True,
     ) -> None:
         self.session = session
         self.ingestion_run_id = ingestion_run_id
@@ -73,6 +75,7 @@ class IngestBarsJob:
             session=session,
             run_id=run_id,
             audit_logger=audit_logger,
+            enforce_lateness=enforce_lateness,
         )
         self.run_id = run_id
         self.audit_logger = audit_logger
@@ -146,7 +149,7 @@ class IngestBarsJob:
             was_received = symbol in self.received_symbols
             coverage_rows.append(
                 SymbolDateCoverage(
-                    coverage_id=f"{self.dataset_version_id}:{symbol}:{cycle_timestamp.isoformat()}",
+                    coverage_id=f"{self.dataset_version_id}:{symbol}:{cycle_timestamp.date().isoformat()}",
                     symbol=symbol,
                     date=cycle_timestamp.date(),
                     dataset_version=self.dataset_version_id,

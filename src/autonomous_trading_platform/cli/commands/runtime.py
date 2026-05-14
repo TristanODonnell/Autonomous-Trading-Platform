@@ -104,6 +104,28 @@ def register(subparsers) -> None:
     replay_debug_parser.add_argument("--max-ticks", type=int)
     replay_debug_parser.set_defaults(func=handle_replay_debug)
 
+    replay_ingestion_parser = runtime_subparsers.add_parser(
+        "replay-ingestion",
+        help="Replay historical ingestion tick-by-tick using real market data cycles",
+    )
+    replay_ingestion_parser.add_argument("--symbols", required=True, help="Comma-separated symbols")
+    replay_ingestion_parser.add_argument(
+        "--start", required=True, help="Start datetime (ISO 8601 UTC)"
+    )
+    replay_ingestion_parser.add_argument("--end", required=True, help="End datetime (ISO 8601 UTC)")
+    replay_ingestion_parser.add_argument("--cadence-minutes", type=int, default=5)
+    replay_ingestion_parser.add_argument(
+        "--include-non-market-hours", action="store_true", default=False
+    )
+    replay_ingestion_parser.add_argument("--session-open-buffer-minutes", type=int, default=0)
+    replay_ingestion_parser.add_argument("--session-close-buffer-minutes", type=int, default=0)
+    replay_ingestion_parser.add_argument("--max-ticks", type=int, default=None)
+    replay_ingestion_parser.add_argument("--run-trading", action="store_true", default=False)
+    replay_ingestion_parser.add_argument("--stop-on-failure", action="store_true", default=False)
+    replay_ingestion_parser.add_argument("--print-summary", action="store_true", default=False)
+    replay_ingestion_parser.add_argument("--output-json", type=Path, default=None)
+    replay_ingestion_parser.set_defaults(func=handle_replay_ingestion)
+
 
 def handle_run_cycle(args: argparse.Namespace) -> int:
     print_header("Run Trading Cycle")
@@ -222,3 +244,90 @@ def handle_replay_debug(args: argparse.Namespace) -> int:
             }
         )
     return 0
+
+
+def handle_replay_ingestion(args: argparse.Namespace) -> int:
+    import json
+
+    from autonomous_trading_platform.db import get_session
+    from autonomous_trading_platform.scheduler.orchestration.historical_ingestion_replay_orchestrator import (
+        HistoricalIngestionReplayOrchestrator,
+    )
+
+    symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
+    if not symbols:
+        print_error("At least one symbol must be provided via --symbols")
+        return 1
+
+    try:
+        start = parse_datetime(args.start)
+        end = parse_datetime(args.end)
+    except Exception as exc:
+        print_error(f"Invalid datetime: {exc}")
+        return 1
+
+    print_header("Historical Ingestion Replay")
+    print(f"  Symbols:          {', '.join(symbols)}")
+    print(f"  Start:            {start.isoformat()}")
+    print(f"  End:              {end.isoformat()}")
+    print(f"  Cadence:          {args.cadence_minutes} min")
+    print(f"  Market hours only:{not args.include_non_market_hours}")
+    if args.max_ticks is not None:
+        print(f"  Max ticks:        {args.max_ticks}")
+    if args.run_trading:
+        print("  Trading:          ENABLED")
+    else:
+        print("  Trading:          disabled (pass --run-trading to enable)")
+    print()
+
+    session = get_session()
+    try:
+        orchestrator = HistoricalIngestionReplayOrchestrator(session)
+        result = orchestrator.run(
+            symbols=symbols,
+            start=start,
+            end=end,
+            cadence_minutes=args.cadence_minutes,
+            market_hours_only=not args.include_non_market_hours,
+            session_open_buffer_minutes=args.session_open_buffer_minutes,
+            session_close_buffer_minutes=args.session_close_buffer_minutes,
+            max_ticks=args.max_ticks,
+            run_trading=args.run_trading,
+            stop_on_failure=args.stop_on_failure,
+        )
+    except Exception as exc:
+        print_error(f"Replay ingestion failed: {exc}")
+        return 1
+    finally:
+        session.close()
+
+    summary = {
+        "replay_id": result.replay_id,
+        "correlation_id": result.correlation_id,
+        "start": result.start.isoformat(),
+        "end": result.end.isoformat(),
+        "cadence_minutes": result.cadence_minutes,
+        "symbols": result.symbols,
+        "ticks_attempted": result.ticks_attempted,
+        "ticks_ingestion_ok": result.ticks_ingestion_ok,
+        "ticks_features_ok": result.ticks_features_ok,
+        "ticks_trading_ok": result.ticks_trading_ok,
+        "ticks_failed": result.ticks_failed,
+        "ticks_skipped": result.ticks_skipped,
+        "latest_raw_dataset_version_id": result.latest_raw_dataset_version_id,
+        "warnings": result.warnings,
+    }
+
+    if result.ticks_failed > 0:
+        print("Failed ticks:")
+        for tick in result.tick_results:
+            if tick.error:
+                print(f"  {tick.tick_utc.isoformat()}  {tick.error}")
+        print()
+
+    if args.output_json is not None:
+        args.output_json.write_text(json.dumps(summary, indent=2))
+
+    print_json(summary)
+
+    return 0 if result.ticks_ingestion_ok > 0 else 1

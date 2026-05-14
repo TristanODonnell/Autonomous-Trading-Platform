@@ -82,9 +82,19 @@ def floor_to_five_minutes(timestamp: datetime) -> datetime:
 
 def run_market_ingestion_cycle(
     now_utc: datetime | None = None,
+    symbols_override: list[str] | None = None,
+    *,
+    enforce_lateness: bool = True,
 ) -> None:
     """
     Entry point for the Airflow DAG.
+
+    Pass symbols_override to bypass UniverseMembershipService — used by
+    HistoricalIngestionReplayOrchestrator so the replay can target a
+    specific symbol set instead of the live universe snapshot.
+
+    Pass enforce_lateness=False for historical replay — bars fetched via
+    HTTP for past timestamps are not subject to streaming lateness checks.
     """
 
     if now_utc is None:
@@ -159,19 +169,26 @@ def run_market_ingestion_cycle(
     )
 
     try:
-        snapshot_repository = UniverseSnapshotRepository(session)
-        ticker_lifecycle_repository = TickerLifecycleRepository(session)
-        ticker_lifecycle_service = TickerLifecycleService(ticker_lifecycle_repository)
+        if symbols_override is not None:
+            if not symbols_override:
+                raise RuntimeError("symbols_override was provided but is empty")
+            expected_symbols = set(symbols_override)
+        else:
+            snapshot_repository = UniverseSnapshotRepository(session)
+            ticker_lifecycle_repository = TickerLifecycleRepository(session)
+            ticker_lifecycle_service = TickerLifecycleService(ticker_lifecycle_repository)
 
-        membership_service = UniverseMembershipService(
-            repository=snapshot_repository,
-            ticker_lifecycle_service=ticker_lifecycle_service,
-        )
+            membership_service = UniverseMembershipService(
+                repository=snapshot_repository,
+                ticker_lifecycle_service=ticker_lifecycle_service,
+            )
 
-        expected_symbols = set(membership_service.get_query_symbols_for_date(now_utc.date()))
+            expected_symbols = set(membership_service.get_query_symbols_for_date(now_utc.date()))
 
-        if not expected_symbols:
-            raise RuntimeError(f"No active universe symbols found for {now_utc.date().isoformat()}")
+            if not expected_symbols:
+                raise RuntimeError(
+                    f"No active universe symbols found for {now_utc.date().isoformat()}"
+                )
 
         cycle_end = floor_to_five_minutes(now_utc)
         cycle_start = cycle_end - timedelta(minutes=5)
@@ -275,6 +292,7 @@ def run_market_ingestion_cycle(
                 audit_logger=audit_logger,
                 ingestion_run_id=str(ingestion_run_id),
                 dataset_version_id=str(dataset_version_id),
+                enforce_lateness=enforce_lateness,
             )
 
             step = "ingest_bars"

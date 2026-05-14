@@ -237,19 +237,24 @@ class PaperTradingGoldenPathOrchestrator:
             )
             self.session.flush()
 
-            run_feature_pipeline_cycle(
-                now_utc=now_utc,
-                price_basis=PriceBasis.ADJUSTED,
-                dataset_version_id=adjusted_bars_version_id,
-                symbols=raw_bars_symbols,
-                start_date=raw_bars_start,
-                end_date=raw_bars_end,
-                include_returns=True,
-                include_volatility=False,
-                include_moving_average=False,
-                include_liquidity=False,
-                include_regime=False,
-            )
+            try:
+                run_feature_pipeline_cycle(
+                    now_utc=now_utc,
+                    price_basis=PriceBasis.ADJUSTED,
+                    dataset_version_id=adjusted_bars_version_id,
+                    symbols=raw_bars_symbols,
+                    start_date=raw_bars_start,
+                    end_date=raw_bars_end,
+                    include_returns=True,
+                    include_volatility=False,
+                    include_moving_average=False,
+                    include_liquidity=False,
+                    include_regime=False,
+                )
+            except ValueError as exc:
+                if not str(exc).startswith("No bar data found for dataset_version_id="):
+                    raise
+                # No adjusted bars produced (e.g. no corporate action adjustments) — skip features.
 
             features_version_id = generate_dataset_version("features")
             self.session.add(

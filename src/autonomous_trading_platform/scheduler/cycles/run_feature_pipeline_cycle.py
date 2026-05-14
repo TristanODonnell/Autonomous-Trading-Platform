@@ -236,8 +236,6 @@ def run_feature_pipeline_cycle(
         run_id=str(run_id),
     )
 
-    no_source_bars = False
-
     try:
         manifest = RunManifest(
             run_id=run_id,
@@ -399,28 +397,16 @@ def run_feature_pipeline_cycle(
                     raise
 
             if include_returns:
-                try:
-                    run_step(
-                        "returns_feature",
-                        lambda: returns_job.run(
-                            price_basis=price_basis,
-                            dataset_version_id=dataset_version_id,
-                            symbols=symbols,
-                            start_date=start_date,
-                            end_date=end_date,
-                        ),
-                    )
-                except ValueError as exc:
-                    if not str(exc).startswith("No bar data found for dataset_version_id="):
-                        raise
-                    no_source_bars = True
-                    logger.info(
-                        "feature_pipeline_cycle.no_source_bars",
-                        extra={
-                            "dataset_version_id": dataset_version_id,
-                            "symbols": symbols,
-                        },
-                    )
+                run_step(
+                    "returns_feature",
+                    lambda: returns_job.run(
+                        price_basis=price_basis,
+                        dataset_version_id=dataset_version_id,
+                        symbols=symbols,
+                        start_date=start_date,
+                        end_date=end_date,
+                    ),
+                )
 
             if include_volatility:
                 run_step(
@@ -500,7 +486,6 @@ def run_feature_pipeline_cycle(
                     "include_moving_average": include_moving_average,
                     "include_liquidity": include_liquidity,
                     "include_regime": include_regime,
-                    "no_source_bars": no_source_bars,
                 },
             )
 

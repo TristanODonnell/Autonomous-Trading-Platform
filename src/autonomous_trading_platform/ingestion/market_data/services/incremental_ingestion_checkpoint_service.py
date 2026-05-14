@@ -44,11 +44,7 @@ class IncrementalIngestionCheckpointService:
         now = datetime.now(UTC)
 
         with SorUnitOfWork(self.session) as uow:
-            checkpoint = uow.ingestion_checkpoints.get_cycle_checkpoint(
-                ingestion_run_id=ingestion_run_id,
-                dataset_version=dataset_version_id,
-                cycle_timestamp=cycle_timestamp,
-            )
+            checkpoint = uow.ingestion_checkpoints.get_by_checkpoint_id(checkpoint_id)
 
             if checkpoint is None:
                 checkpoint = IngestionCheckpoint(

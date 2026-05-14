@@ -13,7 +13,7 @@ from .helpers.sa_types import UTCDateTimeType
 
 class SymbolDateCoverage(Base):
     __tablename__ = "symbol_date_coverages"
-    coverage_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    coverage_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     symbol: Mapped[str] = mapped_column(String(64), nullable=False)
     date: Mapped[date] = mapped_column(Date, nullable=False)
     dataset_version: Mapped[str] = mapped_column(String(64), nullable=False)
