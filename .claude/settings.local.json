@@ -58,7 +58,9 @@
       "Bash(Select-String \"passed\")",
       "Bash(Get-ChildItem -Path . -Recurse -Include \"*.py\")",
       "Bash(Select-Object -First 5)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\" -Recurse -Filter \"main.py\")",
+      "Bash(Select-Object FullName)"
     ]
   }
 }
