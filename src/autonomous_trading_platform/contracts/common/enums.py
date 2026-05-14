@@ -82,6 +82,7 @@ class RunType(enum.StrEnum):
     BACKFILL = "backfill"
     SIMULATION = "simulation"
     CORPORATE_ACTION_INGESTION = "corporate_action_ingestion"
+    GOVERNANCE = "governance"
 
 
 class SignalDirection(enum.StrEnum):

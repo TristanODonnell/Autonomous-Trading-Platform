@@ -55,7 +55,9 @@
       "Bash(atp backtesting *)",
       "PowerShell(atp backtesting *)",
       "Bash(pip install *)",
-      "Bash(Select-String \"passed\")"
+      "Bash(Select-String \"passed\")",
+      "Bash(Get-ChildItem -Path . -Recurse -Include \"*.py\")",
+      "Bash(Select-Object -First 5)"
     ]
   }
 }

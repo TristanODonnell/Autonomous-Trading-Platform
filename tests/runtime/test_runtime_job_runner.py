@@ -70,6 +70,23 @@ def test_runtime_job_runner_tracks_success() -> None:
     assert completed.error_message is None
 
 
+def test_runtime_job_runner_persists_success_output_summary() -> None:
+    repository = FakeRuntimeJobRunRepository()
+    runner = RuntimeJobRunner(repository=repository)
+
+    result = runner.run(
+        job_name="test_job",
+        trigger_type="test",
+        correlation_id="corr-output",
+        job=lambda: {"value": 42},
+        output_summary_json=lambda payload: {"value": payload["value"]},
+    )
+
+    assert result == {"value": 42}
+    assert repository.saved[-1].status == "completed"
+    assert repository.saved[-1].output_summary_json == {"value": 42}
+
+
 def test_runtime_job_runner_tracks_failure_and_reraises_exception() -> None:
     repository = FakeRuntimeJobRunRepository()
     runner = RuntimeJobRunner(repository=repository)

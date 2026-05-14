@@ -34,6 +34,27 @@ SCHEDULER_REGISTRY = {
         manual_trigger_enabled=True,
         lock_key="scheduler:trading_cycle",
     ),
+    "strategy_allocation_rebalance_cycle": SchedulerJobDefinition(
+        job_name="strategy_allocation_rebalance_cycle",
+        cron="0 21 * * 1-5",
+        interval_seconds=None,
+        manual_trigger_enabled=True,
+        lock_key="scheduler:strategy_allocation_rebalance_cycle",
+    ),
+    "strategy_auto_promotion_cycle": SchedulerJobDefinition(
+        job_name="strategy_auto_promotion_cycle",
+        cron="30 21 * * 1-5",
+        interval_seconds=None,
+        manual_trigger_enabled=True,
+        lock_key="scheduler:strategy_auto_promotion_cycle",
+    ),
+    "strategy_auto_demotion_cycle": SchedulerJobDefinition(
+        job_name="strategy_auto_demotion_cycle",
+        cron="45 21 * * 1-5",
+        interval_seconds=None,
+        manual_trigger_enabled=True,
+        lock_key="scheduler:strategy_auto_demotion_cycle",
+    ),
     "corporate_action_ingestion_cycle": SchedulerJobDefinition(
         job_name="corporate_action_ingestion_cycle",
         cron="0 22 * * 1-5",

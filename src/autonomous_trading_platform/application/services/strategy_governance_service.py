@@ -268,6 +268,9 @@ class StrategyGovernanceService:
                 metrics_row, run_row = row
 
         if metrics_row is None:
+            metrics_row = self._latest_metrics_from_json(strategy_id)
+
+        if metrics_row is None:
             return {}
 
         metrics_json = metrics_row.metrics_json or {}
@@ -288,6 +291,18 @@ class StrategyGovernanceService:
             metrics["days_tested"] = float((run_row.end_date - run_row.start_date).days + 1)
 
         return metrics
+
+    def _latest_metrics_from_json(self, strategy_id: str) -> MetricsSummary | None:
+        rows = self._session.scalars(
+            select(MetricsSummary).order_by(
+                MetricsSummary.created_at.desc(),
+                MetricsSummary.metrics_snapshot_id.asc(),
+            )
+        ).all()
+        for row in rows:
+            if (row.metrics_json or {}).get("strategy_id") == strategy_id:
+                return cast(MetricsSummary, row)
+        return None
 
     def _set_metric(
         self,

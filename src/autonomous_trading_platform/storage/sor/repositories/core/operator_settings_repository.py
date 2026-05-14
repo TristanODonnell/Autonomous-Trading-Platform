@@ -39,6 +39,8 @@ class OperatorSettingsRepository:
             auto_demote_on_breach=True,
             notify_drawdown_alerts=True,
             notify_strategy_promotion_events=True,
+            notify_strategy_demotion_events=True,
+            notify_allocation_rebalance_events=True,
             notify_pipeline_failures=True,
             per_strategy_cap=0.25,
             target_portfolio_volatility=0.15,

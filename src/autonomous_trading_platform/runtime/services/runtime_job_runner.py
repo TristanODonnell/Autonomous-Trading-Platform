@@ -39,6 +39,7 @@ class RuntimeJobRunner:
         correlation_id: str | None = None,
         input_summary_json: dict[str, object] | None = None,
         skip_reason: str | None = None,
+        output_summary_json: Callable[[T], dict[str, object] | None] | None = None,
     ) -> T | None:
         job_run_id = str(uuid4())
         started_at = datetime.now(UTC)
@@ -125,7 +126,9 @@ class RuntimeJobRunner:
                 error_message=None,
                 correlation_id=correlation_id,
                 input_summary_json=input_summary_json,
-                output_summary_json=None,
+                output_summary_json=(
+                    output_summary_json(result) if output_summary_json is not None else None
+                ),
             )
         )
 

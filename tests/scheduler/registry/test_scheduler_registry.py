@@ -7,6 +7,9 @@ EXPECTED_JOB_NAMES = {
     "market_ingestion_cycle",
     "feature_pipeline_cycle",
     "trading_cycle",
+    "strategy_allocation_rebalance_cycle",
+    "strategy_auto_promotion_cycle",
+    "strategy_auto_demotion_cycle",
     "corporate_action_ingestion_cycle",
     "experiment_pipeline_cycle",
 }
@@ -48,6 +51,9 @@ def test_scheduler_registry_has_expected_schedules():
     assert SCHEDULER_REGISTRY["feature_pipeline_cycle"].interval_seconds == 300
     assert SCHEDULER_REGISTRY["trading_cycle"].interval_seconds == 300
 
+    assert SCHEDULER_REGISTRY["strategy_allocation_rebalance_cycle"].cron == "0 21 * * 1-5"
+    assert SCHEDULER_REGISTRY["strategy_auto_promotion_cycle"].cron == "30 21 * * 1-5"
+    assert SCHEDULER_REGISTRY["strategy_auto_demotion_cycle"].cron == "45 21 * * 1-5"
     assert SCHEDULER_REGISTRY["corporate_action_ingestion_cycle"].cron == "0 22 * * 1-5"
     assert SCHEDULER_REGISTRY["experiment_pipeline_cycle"].cron == "0 23 * * 1-5"
 
