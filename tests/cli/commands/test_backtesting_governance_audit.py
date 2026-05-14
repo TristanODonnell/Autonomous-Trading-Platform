@@ -27,6 +27,38 @@ def test_verify_governance_allocation_command_is_registered() -> None:
     assert args.settings.as_posix() == "fixtures/settings.yaml"
 
 
+def test_verify_auto_promotion_command_is_registered() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "backtesting",
+            "verify-auto-promotion",
+            "--settings",
+            "fixtures/settings.yaml",
+        ]
+    )
+
+    assert args.func is backtesting.handle_verify_auto_promotion
+    assert args.settings.as_posix() == "fixtures/settings.yaml"
+
+
+def test_verify_auto_demotion_command_is_registered() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "backtesting",
+            "verify-auto-demotion",
+            "--settings",
+            "fixtures/settings.yaml",
+        ]
+    )
+
+    assert args.func is backtesting.handle_verify_auto_demotion
+    assert args.settings.as_posix() == "fixtures/settings.yaml"
+
+
 def test_governance_audit_metric_probes_straddle_rule_thresholds() -> None:
     rule = SimpleNamespace(
         min_sharpe=1.5,

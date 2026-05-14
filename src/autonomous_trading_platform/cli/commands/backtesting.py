@@ -256,6 +256,36 @@ def register(subparsers) -> None:
     )
     verify_governance_parser.set_defaults(func=handle_verify_governance_allocation)
 
+    verify_auto_promotion_parser = backtesting_subparsers.add_parser(
+        "verify-auto-promotion",
+        help=(
+            "Run deterministic automatic promotion probes and report whether "
+            "auto_promote_enabled gates PromotionRules-based promotion."
+        ),
+    )
+    verify_auto_promotion_parser.add_argument(
+        "--settings",
+        required=True,
+        type=Path,
+        help="Path to settings YAML fixture (e.g. fixtures/settings.yaml)",
+    )
+    verify_auto_promotion_parser.set_defaults(func=handle_verify_auto_promotion)
+
+    verify_auto_demotion_parser = backtesting_subparsers.add_parser(
+        "verify-auto-demotion",
+        help=(
+            "Run deterministic demotion probes and report whether drawdown breaches "
+            "change governance state, controls, allocation, and audit records."
+        ),
+    )
+    verify_auto_demotion_parser.add_argument(
+        "--settings",
+        required=True,
+        type=Path,
+        help="Path to settings YAML fixture (e.g. fixtures/settings.yaml)",
+    )
+    verify_auto_demotion_parser.set_defaults(func=handle_verify_auto_demotion)
+
 
 def handle_run(args: argparse.Namespace) -> int:
     print_header("Backtesting Run")
@@ -1916,13 +1946,13 @@ _GOVERNANCE_SETTING_WIRING = [
     },
     {
         "setting": "auto_rebalance_enabled",
-        "status": "FLAG_NOT_WIRED",
+        "status": "WIRED",
         "classification": "automation_control",
         "active_source": "settings",
-        "runtime_source": "none_found",
+        "runtime_source": "strategy_allocation_rebalance_cycle",
         "note": (
-            "Persisted in operator_settings; it permits future automation but no "
-            "quality-based allocation runner consumes it yet."
+            "Consumed by the scheduled allocation rebalance cycle before running "
+            "quality-based strategy reallocation."
         ),
     },
     {
@@ -1962,19 +1992,19 @@ _GOVERNANCE_SETTING_WIRING = [
     },
     {
         "setting": "rebalance_frequency",
-        "status": "DEBUG_REPLAY_ONLY",
+        "status": "PERSISTED_WITH_SCHEDULED_JOB",
         "classification": "automation_control",
         "active_source": "settings",
-        "runtime_source": "replay_debug_rebalance_counter",
-        "note": "Debug replay can count rebalance cadence; no production reallocation loop was found.",
+        "runtime_source": "scheduler_registry.strategy_allocation_rebalance_cycle",
+        "note": "Production reallocation runs through the scheduler; cadence mapping remains registry-based.",
     },
     {
         "setting": "per_strategy_cap",
-        "status": "PARTIALLY_WIRED",
+        "status": "WIRED",
         "classification": "allocation_control",
-        "active_source": "settings_for_runtime_position_cap_and_audit_policy_seed",
-        "runtime_source": "replay_debug_position_cap",
-        "note": "Replay uses it directly; production sizing uses CapitalAllocationPolicies/overrides.",
+        "active_source": "operator_settings.per_strategy_cap",
+        "runtime_source": "QualityBasedReallocationService",
+        "note": "Quality reallocation clamps each proposed allocation by per_strategy_cap and policy cap.",
     },
 ]
 
@@ -1991,6 +2021,9 @@ _GOVERNANCE_AUDIT_PROMOTION_RULE_DEFAULTS = {
 def handle_verify_governance_allocation(args: argparse.Namespace) -> int:
     from sqlalchemy import select as sa_select
 
+    from autonomous_trading_platform.application.services.quality_based_reallocation_service import (
+        QualityBasedReallocationService,
+    )
     from autonomous_trading_platform.application.services.strategy_allocation_service import (
         StrategyAllocationService,
     )
@@ -2111,6 +2144,23 @@ def handle_verify_governance_allocation(args: argparse.Namespace) -> int:
             ).all()
         ]
         settings_snapshot = _governance_audit_settings_payload(settings_row)
+        OperatorSettingsRepository(session).update_current(
+            values={"auto_rebalance_enabled": False},
+            updated_by="verify-governance-allocation",
+        )
+        rebalance_disabled = QualityBasedReallocationService(session=session).rebalance(
+            actor="verify-governance-allocation"
+        )
+        OperatorSettingsRepository(session).update_current(
+            values={"auto_rebalance_enabled": True},
+            updated_by="verify-governance-allocation",
+        )
+        rebalance_enabled = QualityBasedReallocationService(session=session).rebalance(
+            actor="verify-governance-allocation"
+        )
+        settings_snapshot = _governance_audit_settings_payload(
+            OperatorSettingsRepository(session).get_or_create_default()
+        )
     except Exception as exc:
         session.rollback()
         print_error(f"Governance/allocation verification failed: {exc}")
@@ -2150,13 +2200,14 @@ def handle_verify_governance_allocation(args: argparse.Namespace) -> int:
         },
         {
             "area": "quality_based_reallocation",
-            "status": "NOT_IMPLEMENTED",
+            "status": "AUTO_REBALANCE_WIRED",
             "evidence": {
-                "automatic_reallocation_runner_found": False,
-                "allocation_sources": [
-                    "capital_allocation_policies",
-                    "allocation_overrides",
-                ],
+                "automatic_reallocation_runner_found": True,
+                "scheduled_job_name": "strategy_allocation_rebalance_cycle",
+                "disabled_path_skipped_reason": rebalance_disabled.skipped_reason,
+                "disabled_path_changed": rebalance_disabled.changed,
+                "enabled_path_changed": rebalance_enabled.changed,
+                "proposal_count": len(rebalance_enabled.proposals),
                 "automation_controls_source": "settings",
             },
         },
@@ -2206,6 +2257,12 @@ def handle_verify_governance_allocation(args: argparse.Namespace) -> int:
         "active_promotion_rules": active_rules,
         "allocation_service_rows": allocation_service_rows,
         "portfolio_engine_allocations": portfolio_allocations,
+        "quality_reallocation_disabled_path": (
+            QualityBasedReallocationService.result_to_jsonable(rebalance_disabled)
+        ),
+        "quality_reallocation_enabled_path": (
+            QualityBasedReallocationService.result_to_jsonable(rebalance_enabled)
+        ),
         "transition_probes": transition_probes,
         "results": results,
     }
@@ -2215,6 +2272,383 @@ def handle_verify_governance_allocation(args: argparse.Namespace) -> int:
     )
     print(f"  Artifact saved: {artifact_path}")
     return 0
+
+
+def handle_verify_auto_promotion(args: argparse.Namespace) -> int:
+    from sqlalchemy import select as sa_select
+
+    from autonomous_trading_platform.application.services.auto_promotion_service import (
+        AutoPromotionService,
+    )
+    from autonomous_trading_platform.storage.sor.models.audit_logs import AuditLogRow
+    from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
+    from autonomous_trading_platform.storage.sor.models.promotion_rules import PromotionRules
+
+    settings_path: Path = args.settings
+    if not settings_path.exists():
+        print_error(f"Settings file not found: {settings_path}")
+        return 1
+
+    try:
+        settings_raw = yaml.safe_load(settings_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        print_error(f"Failed to parse YAML: {exc}")
+        return 1
+
+    settings_patch: dict[str, Any] = settings_raw.get("settings", settings_raw)
+    unknown = set(settings_patch) - _VALID_SETTINGS_KEYS
+    if unknown:
+        for key in sorted(unknown):
+            print_error(
+                f"Unknown settings key: '{key}'. Valid keys: {sorted(_VALID_SETTINGS_KEYS)}"
+            )
+        return 1
+
+    print_header("Auto-Promotion Verification")
+    print(f"  Settings fixture : {settings_path}")
+    print("  Threshold source : promotion_rules")
+    print()
+
+    session = get_session()
+    try:
+        settings_repo = OperatorSettingsRepository(session)
+        settings_repo.update_current(values=settings_patch, updated_by="verify-auto-promotion")
+        settings_repo.update_current(
+            values={
+                "auto_promote_enabled": False,
+                "notify_strategy_promotion_events": True,
+                "min_sharpe_for_promotion": 99.0,
+                "min_paper_trading_period_days": 999,
+            },
+            updated_by="verify-auto-promotion",
+        )
+
+        seed = _auto_promotion_audit_seed(session=session)
+        disabled_result = AutoPromotionService(session=session).run(actor="verify-auto-promotion")
+
+        settings_repo.update_current(
+            values={"auto_promote_enabled": True, "notify_strategy_promotion_events": True},
+            updated_by="verify-auto-promotion",
+        )
+        enabled_result = AutoPromotionService(session=session).run(actor="verify-auto-promotion")
+        settings_snapshot = AutoPromotionService.settings_payload(
+            settings_repo.get_or_create_default()
+        )
+
+        audit_events = [
+            {
+                "event_type": row.event_type,
+                "component": row.component,
+                "message": row.message,
+                "metadata": row.event_metadata,
+            }
+            for row in session.scalars(
+                sa_select(AuditLogRow)
+                .where(
+                    AuditLogRow.event_type.in_(
+                        [
+                            "STRATEGY_AUTO_PROMOTION_SKIPPED",
+                            "STRATEGY_AUTO_PROMOTION_COMPLETED",
+                            "STRATEGY_GOVERNANCE_TRANSITIONED",
+                            "STRATEGY_PROMOTION_EVENT",
+                        ]
+                    )
+                )
+                .order_by(AuditLogRow.event_timestamp.asc())
+            ).all()
+        ]
+        notification_events = [
+            event for event in audit_events if event["event_type"] == "STRATEGY_PROMOTION_EVENT"
+        ]
+        active_rules = [
+            _governance_audit_rule_payload(row)
+            for row in session.scalars(
+                sa_select(PromotionRules).where(PromotionRules.is_active.is_(True))
+            ).all()
+        ]
+        candidate_metrics = [
+            {
+                "strategy_id": (row.metrics_json or {}).get("strategy_id"),
+                "metrics_snapshot_id": row.metrics_snapshot_id,
+                "sharpe_ratio": row.sharpe_ratio,
+                "max_drawdown": row.max_drawdown,
+                "trade_count": row.trade_count,
+                "metrics_json": row.metrics_json,
+            }
+            for row in session.scalars(
+                sa_select(MetricsSummary).where(
+                    MetricsSummary.metrics_snapshot_id.like(f"{seed['prefix']}%")
+                )
+            ).all()
+        ]
+    except Exception as exc:
+        session.rollback()
+        print_error(f"Auto-promotion verification failed: {exc}")
+        return 1
+    finally:
+        session.close()
+
+    disabled_payload = AutoPromotionService.result_to_jsonable(disabled_result)
+    enabled_payload = AutoPromotionService.result_to_jsonable(enabled_result)
+    results = [
+        {
+            "area": "disabled_flag",
+            "status": (
+                "PASSED"
+                if disabled_result.skipped_reason == "auto_promote_disabled"
+                and disabled_result.promotions_executed == []
+                else "FAILED"
+            ),
+        },
+        {
+            "area": "eligible_candidate",
+            "status": (
+                "PASSED"
+                if any(
+                    row["strategy_id"] == seed["eligible_strategy_id"]
+                    and row["status"] == "promoted"
+                    for row in enabled_result.promotions_executed
+                )
+                else "FAILED"
+            ),
+        },
+        {
+            "area": "ineligible_candidate",
+            "status": (
+                "PASSED"
+                if any(
+                    row["strategy_id"] == seed["ineligible_strategy_id"]
+                    and row["status"] == "ineligible"
+                    for row in enabled_payload["candidate_strategies"]
+                )
+                else "FAILED"
+            ),
+        },
+        {
+            "area": "missing_rule_candidate",
+            "status": (
+                "PASSED"
+                if any(
+                    row["strategy_id"] == seed["missing_rule_strategy_id"]
+                    and row["status"] == "missing_rule"
+                    for row in enabled_payload["candidate_strategies"]
+                )
+                else "FAILED"
+            ),
+        },
+        {
+            "area": "notification_event",
+            "status": "PASSED" if notification_events else "FAILED",
+        },
+    ]
+
+    timestamp_str = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    artifact_path = Path("artifacts/backtesting") / (f"auto_promotion_audit_{timestamp_str}.json")
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_data = {
+        "run_id": str(uuid.uuid4()),
+        "settings_fixture": str(settings_path),
+        "settings": settings_snapshot,
+        "seed": seed,
+        "active_promotion_rules": active_rules,
+        "quality_metrics_used": candidate_metrics,
+        "disabled_path": disabled_payload,
+        "enabled_path": enabled_payload,
+        "audit_events": audit_events,
+        "notification_event_status": "emitted" if notification_events else "missing",
+        "results": results,
+    }
+    artifact_path.write_text(json.dumps(artifact_data, indent=2, default=str), encoding="utf-8")
+
+    print_json(
+        {
+            "auto_promote_enabled": settings_snapshot["auto_promote_enabled"],
+            "disabled_skipped_reason": disabled_result.skipped_reason,
+            "promotions_executed": enabled_payload["promotions_executed"],
+            "notification_event_status": artifact_data["notification_event_status"],
+            "artifact": str(artifact_path),
+            "results": results,
+        }
+    )
+    return 0 if all(row["status"] == "PASSED" for row in results) else 1
+
+
+def handle_verify_auto_demotion(args: argparse.Namespace) -> int:
+    from sqlalchemy import select as sa_select
+
+    from autonomous_trading_platform.application.services.auto_demotion_service import (
+        AutoDemotionService,
+    )
+    from autonomous_trading_platform.storage.sor.models.audit_logs import AuditLogRow
+    from autonomous_trading_platform.storage.sor.models.strategy_control_states import (
+        StrategyControlState,
+    )
+
+    settings_path: Path = args.settings
+    if not settings_path.exists():
+        print_error(f"Settings file not found: {settings_path}")
+        return 1
+
+    try:
+        settings_raw = yaml.safe_load(settings_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        print_error(f"Failed to parse YAML: {exc}")
+        return 1
+
+    settings_patch: dict[str, Any] = settings_raw.get("settings", settings_raw)
+    unknown = set(settings_patch) - _VALID_SETTINGS_KEYS
+    if unknown:
+        for key in sorted(unknown):
+            print_error(
+                f"Unknown settings key: '{key}'. Valid keys: {sorted(_VALID_SETTINGS_KEYS)}"
+            )
+        return 1
+
+    print_header("Auto-Demotion Verification")
+    print(f"  Settings fixture : {settings_path}")
+    print("  Threshold source : operator_settings.max_strategy_drawdown")
+    print()
+
+    session = get_session()
+    try:
+        settings_repo = OperatorSettingsRepository(session)
+        settings_repo.update_current(values=settings_patch, updated_by="verify-auto-demotion")
+        seed = _auto_demotion_audit_seed(session=session)
+
+        settings_repo.update_current(
+            values={"auto_demote_on_breach": False, "max_strategy_drawdown": 0.12},
+            updated_by="verify-auto-demotion",
+        )
+        disabled_result = AutoDemotionService(session=session).run(actor="verify-auto-demotion")
+
+        settings_repo.update_current(
+            values={"auto_demote_on_breach": True, "max_strategy_drawdown": 0.12},
+            updated_by="verify-auto-demotion",
+        )
+        enabled_result = AutoDemotionService(session=session).run(actor="verify-auto-demotion")
+        duplicate_result = AutoDemotionService(session=session).run(actor="verify-auto-demotion")
+
+        controls = [
+            {
+                "strategy_id": row.strategy_id,
+                "enabled": row.enabled,
+                "reason": row.reason,
+            }
+            for row in session.scalars(sa_select(StrategyControlState)).all()
+            if row.strategy_id in seed["strategy_ids"]
+        ]
+        audit_events = [
+            {
+                "event_type": row.event_type,
+                "component": row.component,
+                "message": row.message,
+                "metadata": row.event_metadata,
+            }
+            for row in session.scalars(
+                sa_select(AuditLogRow)
+                .where(
+                    AuditLogRow.event_type.in_(
+                        [
+                            "STRATEGY_AUTO_DEMOTION_SKIPPED",
+                            "STRATEGY_AUTO_DEMOTION_COMPLETED",
+                            "STRATEGY_AUTO_DEMOTED",
+                        ]
+                    )
+                )
+                .order_by(AuditLogRow.event_timestamp.asc())
+            ).all()
+        ]
+    except Exception as exc:
+        session.rollback()
+        print_error(f"Auto-demotion verification failed: {exc}")
+        return 1
+    finally:
+        session.close()
+
+    disabled_payload = AutoDemotionService.result_to_jsonable(disabled_result)
+    enabled_payload = AutoDemotionService.result_to_jsonable(enabled_result)
+    duplicate_payload = AutoDemotionService.result_to_jsonable(duplicate_result)
+    demoted = enabled_result.demotions_executed
+    results = [
+        {
+            "area": "disabled_flag",
+            "status": (
+                "PASSED"
+                if disabled_result.skipped_reason == "auto_demote_disabled"
+                and disabled_result.demotions_executed == []
+                else "FAILED"
+            ),
+        },
+        {
+            "area": "breach_candidate",
+            "status": (
+                "PASSED"
+                if any(row["strategy_id"] == seed["breach_strategy_id"] for row in demoted)
+                else "FAILED"
+            ),
+        },
+        {
+            "area": "no_breach_candidate",
+            "status": (
+                "PASSED"
+                if any(
+                    row["strategy_id"] == seed["safe_strategy_id"] and row["status"] == "no_breach"
+                    for row in enabled_payload["candidate_strategies"]
+                )
+                else "FAILED"
+            ),
+        },
+        {
+            "area": "duplicate_breach",
+            "status": (
+                "PASSED"
+                if duplicate_result.demotions_executed == []
+                and any(
+                    row["strategy_id"] == seed["breach_strategy_id"]
+                    and row["status"] == "already_demoted"
+                    for row in duplicate_payload["candidate_strategies"]
+                )
+                else "FAILED"
+            ),
+        },
+        {
+            "area": "audit_event",
+            "status": (
+                "PASSED"
+                if any(event["event_type"] == "STRATEGY_AUTO_DEMOTED" for event in audit_events)
+                else "FAILED"
+            ),
+        },
+    ]
+
+    timestamp_str = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    artifact_path = Path("artifacts/backtesting") / (f"auto_demotion_audit_{timestamp_str}.json")
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_data = {
+        "run_id": str(uuid.uuid4()),
+        "settings_fixture": str(settings_path),
+        "seed": seed,
+        "max_strategy_drawdown": 0.12,
+        "disabled_path": disabled_payload,
+        "enabled_path": enabled_payload,
+        "duplicate_path": duplicate_payload,
+        "strategy_controls": controls,
+        "audit_events": audit_events,
+        "notification_status": "audit_event_emitted",
+        "results": results,
+    }
+    artifact_path.write_text(json.dumps(artifact_data, indent=2, default=str), encoding="utf-8")
+    print_json(
+        {
+            "auto_demote_on_breach": True,
+            "max_strategy_drawdown": 0.12,
+            "demotions_executed": enabled_payload["demotions_executed"],
+            "duplicate_demotions_executed": duplicate_payload["demotions_executed"],
+            "artifact": str(artifact_path),
+            "results": results,
+        }
+    )
+    return 0 if all(row["status"] == "PASSED" for row in results) else 1
 
 
 def _governance_audit_settings_payload(settings_row: Any) -> dict[str, Any]:
@@ -2233,6 +2667,263 @@ def _governance_audit_settings_payload(settings_row: Any) -> dict[str, Any]:
         "notify_strategy_promotion_events": bool(settings_row.notify_strategy_promotion_events),
         "updated_by": settings_row.updated_by,
         "updated_at": settings_row.updated_at.isoformat() if settings_row.updated_at else None,
+    }
+
+
+def _auto_promotion_audit_seed(*, session: Any) -> dict[str, Any]:
+    from datetime import date, timedelta
+
+    from sqlalchemy import select as sa_select
+
+    from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
+    from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+    from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
+    from autonomous_trading_platform.storage.sor.models.promotion_rules import PromotionRules
+    from autonomous_trading_platform.storage.sor.models.simulation_runs import SimulationRuns
+
+    now = datetime.now(UTC)
+    suffix = uuid.uuid4().hex[:8]
+    prefix = f"auto_promotion_audit_{suffix}"
+    eligible_strategy_id = f"{prefix}_eligible"
+    ineligible_strategy_id = f"{prefix}_ineligible"
+    missing_rule_strategy_id = f"{prefix}_missing_rule"
+
+    for row in session.scalars(
+        sa_select(PromotionRules).where(
+            PromotionRules.from_status.in_(["approved_research", "approved_paper"]),
+            PromotionRules.to_status.in_(["approved_paper", "approved_live"]),
+            PromotionRules.is_active.is_(True),
+        )
+    ).all():
+        row.is_active = False
+
+    rule = PromotionRules(
+        rule_id=f"{prefix}_research_to_paper",
+        from_status="approved_research",
+        to_status="approved_paper",
+        min_sharpe=1.5,
+        max_drawdown=0.15,
+        min_days_tested=30,
+        min_trade_count=10,
+        min_cagr=0.05,
+        min_win_rate=0.50,
+        is_active=True,
+        created_at=now,
+        notes="seeded by verify-auto-promotion",
+    )
+    session.add(rule)
+
+    use_simulation_runs = session.bind is not None and session.bind.dialect.name != "sqlite"
+    dataset_version_id = f"{prefix}_dataset"
+    if use_simulation_runs:
+        session.add(
+            DatasetVersions(
+                dataset_version_id=dataset_version_id,
+                dataset_name="auto_promotion_audit",
+                created_at=now,
+                source="cli",
+                price_basis=PriceBasis.ADJUSTED,
+                interval=BarInterval.ONE_DAY,
+                schema_version="1",
+                symbol_coverage=1,
+                date_coverage_start=date(2026, 1, 1),
+                date_coverage_end=date(2026, 2, 15),
+                validation_status="validated",
+                checksum=None,
+                source_dataset_version=None,
+                source_manifest=None,
+                metadata_json={"created_by": "verify-auto-promotion"},
+            )
+        )
+
+    specs = [
+        (
+            eligible_strategy_id,
+            "approved_research",
+            {
+                "sharpe": 2.0,
+                "max_drawdown": 0.05,
+                "days_tested": 45,
+                "trade_count": 20,
+                "winning_trade_count": 13,
+                "losing_trade_count": 7,
+                "cagr": 0.12,
+                "win_rate": 0.65,
+            },
+        ),
+        (
+            ineligible_strategy_id,
+            "approved_research",
+            {
+                "sharpe": 0.5,
+                "max_drawdown": 0.30,
+                "days_tested": 12,
+                "trade_count": 3,
+                "winning_trade_count": 1,
+                "losing_trade_count": 2,
+                "cagr": -0.02,
+                "win_rate": 0.33,
+            },
+        ),
+        (
+            missing_rule_strategy_id,
+            "approved_for_paper_trading",
+            {
+                "sharpe": 3.0,
+                "max_drawdown": 0.03,
+                "days_tested": 60,
+                "trade_count": 30,
+                "winning_trade_count": 22,
+                "losing_trade_count": 8,
+                "cagr": 0.18,
+                "win_rate": 0.73,
+            },
+        ),
+    ]
+
+    for strategy_id, state, metrics in specs:
+        config_hash = f"{strategy_id}_hash"[:64]
+        run_uuid = uuid.uuid4()
+        session.add(
+            StrategyConfigs(
+                strategy_id=strategy_id,
+                config_hash=config_hash,
+                config_json={"strategy_id": strategy_id, "created_by": "verify-auto-promotion"},
+                created_at=now,
+                strategy_type="auto_promotion_audit",
+                metadata_json={"display_name": strategy_id},
+            )
+        )
+        source_run_id = run_uuid if use_simulation_runs else None
+        if use_simulation_runs:
+            start_date = date(2026, 1, 1)
+            end_date = start_date + timedelta(days=int(metrics["days_tested"]) - 1)
+            session.add(
+                SimulationRuns(
+                    run_id=str(run_uuid),
+                    experiment_id=None,
+                    strategy_id=strategy_id,
+                    dataset_version=dataset_version_id,
+                    universe_version="auto_promotion_audit",
+                    price_basis="adjusted",
+                    symbols=["SPY"],
+                    start_date=start_date,
+                    end_date=end_date,
+                    window_role="audit",
+                    start_time=now,
+                    end_time=now,
+                    execution_config={"created_by": "verify-auto-promotion"},
+                    status="completed",
+                    metrics_snapshot_id=f"{prefix}_metrics_{strategy_id[-16:]}",
+                )
+            )
+        session.add(
+            StrategyGovernance(
+                strategy_id=strategy_id,
+                config_hash=config_hash,
+                current_state=state,
+                experiment_id="auto_promotion_audit",
+                source_run_id=source_run_id,
+                submitted_at=now,
+                updated_at=now,
+                submitted_by="verify-auto-promotion",
+            )
+        )
+        session.add(
+            MetricsSummary(
+                metrics_snapshot_id=f"{prefix}_metrics_{strategy_id[-16:]}",
+                run_id=str(run_uuid),
+                created_at=now,
+                total_return=float(metrics["cagr"]),
+                sharpe_ratio=float(metrics["sharpe"]),
+                max_drawdown=float(metrics["max_drawdown"]),
+                trade_count=int(metrics["trade_count"]),
+                winning_trade_count=int(metrics["winning_trade_count"]),
+                losing_trade_count=int(metrics["losing_trade_count"]),
+                volatility=0.12,
+                metrics_json={
+                    "strategy_id": strategy_id,
+                    "cagr": metrics["cagr"],
+                    "win_rate": metrics["win_rate"],
+                    "days_tested": metrics["days_tested"],
+                },
+            )
+        )
+
+    session.flush()
+    session.commit()
+    return {
+        "prefix": prefix,
+        "eligible_strategy_id": eligible_strategy_id,
+        "ineligible_strategy_id": ineligible_strategy_id,
+        "missing_rule_strategy_id": missing_rule_strategy_id,
+        "seeded_rule_id": rule.rule_id,
+        "deprecated_operator_settings_deliberately_ignored": [
+            "min_sharpe_for_promotion",
+            "min_paper_trading_period_days",
+        ],
+    }
+
+
+def _auto_demotion_audit_seed(*, session: Any) -> dict[str, Any]:
+    from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
+
+    now = datetime.now(UTC)
+    suffix = uuid.uuid4().hex[:8]
+    prefix = f"auto_demotion_audit_{suffix}"
+    breach_strategy_id = f"{prefix}_breach"
+    safe_strategy_id = f"{prefix}_safe"
+
+    for strategy_id, state, drawdown in [
+        (breach_strategy_id, "approved_for_live_trading", 0.25),
+        (safe_strategy_id, "approved_for_paper_trading", 0.03),
+    ]:
+        config_hash = f"{strategy_id}_hash"[:64]
+        session.add(
+            StrategyConfigs(
+                strategy_id=strategy_id,
+                config_hash=config_hash,
+                config_json={"strategy_id": strategy_id, "created_by": "verify-auto-demotion"},
+                created_at=now,
+                strategy_type="auto_demotion_audit",
+                metadata_json={"display_name": strategy_id},
+            )
+        )
+        session.add(
+            StrategyGovernance(
+                strategy_id=strategy_id,
+                config_hash=config_hash,
+                current_state=state,
+                experiment_id="auto_demotion_audit",
+                source_run_id=None,
+                submitted_at=now,
+                updated_at=now,
+                submitted_by="verify-auto-demotion",
+            )
+        )
+        session.add(
+            MetricsSummary(
+                metrics_snapshot_id=f"{prefix}_metrics_{strategy_id[-16:]}",
+                run_id=str(uuid.uuid4()),
+                created_at=now,
+                total_return=-0.10 if drawdown > 0.12 else 0.05,
+                sharpe_ratio=-0.5 if drawdown > 0.12 else 1.1,
+                max_drawdown=drawdown,
+                trade_count=20,
+                winning_trade_count=8,
+                losing_trade_count=12,
+                volatility=0.20,
+                metrics_json={"strategy_id": strategy_id},
+            )
+        )
+
+    session.flush()
+    session.commit()
+    return {
+        "prefix": prefix,
+        "breach_strategy_id": breach_strategy_id,
+        "safe_strategy_id": safe_strategy_id,
+        "strategy_ids": [breach_strategy_id, safe_strategy_id],
     }
 
 

@@ -90,6 +90,37 @@ def _settings_response(result) -> OperatorSettingsResponse:
                 "source": "settings",
             },
         },
+        "promotion_rules": {
+            "label": "Promotion Rules",
+            "source": "promotion_rules",
+            "description": (
+                "Active PromotionRules rows are the source of truth for manual "
+                "and automated promotion eligibility thresholds."
+            ),
+            "controls": {
+                "min_sharpe": "promotion_rules.min_sharpe",
+                "max_drawdown": "promotion_rules.max_drawdown",
+                "min_days_tested": "promotion_rules.min_days_tested",
+                "min_trade_count": "promotion_rules.min_trade_count",
+                "min_cagr": "promotion_rules.min_cagr",
+                "min_win_rate": "promotion_rules.min_win_rate",
+            },
+        },
+        "allocation_policies": {
+            "label": "Allocation Policies",
+            "source": "capital_allocation_policies + allocation_overrides",
+            "description": (
+                "CapitalAllocationPolicies define allocation caps by approval "
+                "status and tier; active AllocationOverrides supply strategy-level "
+                "manual or automated overrides."
+            ),
+            "controls": {
+                "policy_cap": "capital_allocation_policies.max_pct_of_capital",
+                "position_cap": "capital_allocation_policies.max_position_size_usd",
+                "drawdown_cap": "capital_allocation_policies.max_drawdown_allowed",
+                "strategy_override": "allocation_overrides",
+            },
+        },
         "deprecated_or_ignored_settings": {
             "min_sharpe_for_promotion": {
                 "value": result.min_sharpe_for_promotion,
@@ -102,6 +133,12 @@ def _settings_response(result) -> OperatorSettingsResponse:
                 "status": "deprecated_persisted_only",
                 "ignored_for": "manual_promotion_eligibility",
                 "active_source": "promotion_rules.min_days_tested",
+            },
+            "per_strategy_cap": {
+                "value": result.per_strategy_cap,
+                "status": "deprecated_persisted_only",
+                "ignored_for": "allocation_targets",
+                "active_source": "capital_allocation_policies.max_pct_of_capital",
             },
         },
     }

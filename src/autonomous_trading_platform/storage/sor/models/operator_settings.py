@@ -26,6 +26,12 @@ class OperatorSettingsRow(Base):
     auto_demote_on_breach: Mapped[bool] = mapped_column(Boolean, nullable=False)
     notify_drawdown_alerts: Mapped[bool] = mapped_column(Boolean, nullable=False)
     notify_strategy_promotion_events: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    notify_strategy_demotion_events: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    notify_allocation_rebalance_events: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
     notify_pipeline_failures: Mapped[bool] = mapped_column(Boolean, nullable=False)
     per_strategy_cap: Mapped[float] = mapped_column(Numeric(6, 4), nullable=False)
     target_portfolio_volatility: Mapped[float] = mapped_column(Numeric(6, 4), nullable=False)

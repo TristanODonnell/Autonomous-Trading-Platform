@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from autonomous_trading_platform.cli.commands.runtime_soak_loop import register_soak_loop_commands
 from autonomous_trading_platform.cli.formatters import print_error, print_header, print_json
@@ -16,7 +18,19 @@ from autonomous_trading_platform.runtime.replay_debug import (
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_cycle_dependencies,
 )
+from autonomous_trading_platform.scheduler.cycles.run_allocation_rebalance_cycle import (
+    run_strategy_allocation_rebalance_cycle,
+)
+from autonomous_trading_platform.scheduler.cycles.run_governance_demotion_cycle import (
+    run_strategy_auto_demotion_cycle,
+)
+from autonomous_trading_platform.scheduler.cycles.run_governance_promotion_cycle import (
+    run_strategy_auto_promotion_cycle,
+)
 from autonomous_trading_platform.scheduler.cycles.run_trading_cycle import run_trading_cycle
+from autonomous_trading_platform.scheduler.registry.manual_trigger_service import (
+    ManualTriggerService,
+)
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 
@@ -30,6 +44,13 @@ def register(subparsers) -> None:
     )
     run_cycle_parser.add_argument("--timestamp")
     run_cycle_parser.set_defaults(func=handle_run_cycle)
+
+    trigger_job_parser = runtime_subparsers.add_parser(
+        "trigger-job",
+        help="Manually trigger a registered scheduler job with no-overlap locking.",
+    )
+    trigger_job_parser.add_argument("--job-name", required=True)
+    trigger_job_parser.set_defaults(func=handle_trigger_job)
 
     inspect_manifest_parser = runtime_subparsers.add_parser(
         "inspect-manifest",
@@ -89,6 +110,31 @@ def handle_run_cycle(args: argparse.Namespace) -> int:
     run_trading_cycle()
     print_json({"status": "completed"})
     return 0
+
+
+def handle_trigger_job(args: argparse.Namespace) -> int:
+    dispatchers: dict[str, Callable[[], Any]] = {
+        "trading_cycle": run_trading_cycle,
+        "strategy_auto_promotion_cycle": lambda: run_strategy_auto_promotion_cycle(
+            trigger_source="cli"
+        ),
+        "strategy_auto_demotion_cycle": lambda: run_strategy_auto_demotion_cycle(
+            trigger_source="cli"
+        ),
+        "strategy_allocation_rebalance_cycle": lambda: run_strategy_allocation_rebalance_cycle(
+            trigger_source="cli"
+        ),
+    }
+    result = ManualTriggerService(dispatchers=dispatchers).trigger(args.job_name)
+    print_header("Manual Scheduler Trigger")
+    print_json(
+        {
+            "job_name": result.job_name,
+            "status": result.status,
+            "result": result.result,
+        }
+    )
+    return 0 if result.status in {"completed", "skipped"} else 1
 
 
 def handle_inspect_manifest(args: argparse.Namespace) -> int:

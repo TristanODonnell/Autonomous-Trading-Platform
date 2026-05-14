@@ -76,6 +76,37 @@ def test_get_settings_returns_default_operator_settings(client: TestClient) -> N
                     "source": "settings",
                 },
             },
+            "promotion_rules": {
+                "label": "Promotion Rules",
+                "source": "promotion_rules",
+                "description": (
+                    "Active PromotionRules rows are the source of truth for manual "
+                    "and automated promotion eligibility thresholds."
+                ),
+                "controls": {
+                    "min_sharpe": "promotion_rules.min_sharpe",
+                    "max_drawdown": "promotion_rules.max_drawdown",
+                    "min_days_tested": "promotion_rules.min_days_tested",
+                    "min_trade_count": "promotion_rules.min_trade_count",
+                    "min_cagr": "promotion_rules.min_cagr",
+                    "min_win_rate": "promotion_rules.min_win_rate",
+                },
+            },
+            "allocation_policies": {
+                "label": "Allocation Policies",
+                "source": "capital_allocation_policies + allocation_overrides",
+                "description": (
+                    "CapitalAllocationPolicies define allocation caps by approval "
+                    "status and tier; active AllocationOverrides supply strategy-level "
+                    "manual or automated overrides."
+                ),
+                "controls": {
+                    "policy_cap": "capital_allocation_policies.max_pct_of_capital",
+                    "position_cap": "capital_allocation_policies.max_position_size_usd",
+                    "drawdown_cap": "capital_allocation_policies.max_drawdown_allowed",
+                    "strategy_override": "allocation_overrides",
+                },
+            },
             "deprecated_or_ignored_settings": {
                 "min_sharpe_for_promotion": {
                     "value": 1.5,
@@ -88,6 +119,12 @@ def test_get_settings_returns_default_operator_settings(client: TestClient) -> N
                     "status": "deprecated_persisted_only",
                     "ignored_for": "manual_promotion_eligibility",
                     "active_source": "promotion_rules.min_days_tested",
+                },
+                "per_strategy_cap": {
+                    "value": 0.25,
+                    "status": "deprecated_persisted_only",
+                    "ignored_for": "allocation_targets",
+                    "active_source": "capital_allocation_policies.max_pct_of_capital",
                 },
             },
         },
@@ -156,11 +193,21 @@ def test_put_settings_persists_changes_and_records_audit_log(
     assert data["auto_rebalance_enabled"] is True
     assert Decimal(str(data["min_sharpe_for_promotion"])) == Decimal("1.8")
     assert data["metadata"]["source_of_truth"]["promotion_thresholds_source"] == "promotion_rules"
+    assert data["metadata"]["promotion_rules"]["controls"]["min_sharpe"] == (
+        "promotion_rules.min_sharpe"
+    )
+    assert data["metadata"]["allocation_policies"]["controls"]["policy_cap"] == (
+        "capital_allocation_policies.max_pct_of_capital"
+    )
     assert (
         data["metadata"]["deprecated_or_ignored_settings"]["min_sharpe_for_promotion"][
             "active_source"
         ]
         == "promotion_rules.min_sharpe"
+    )
+    assert (
+        data["metadata"]["deprecated_or_ignored_settings"]["per_strategy_cap"]["active_source"]
+        == "capital_allocation_policies.max_pct_of_capital"
     )
     assert data["min_paper_trading_period_days"] == 60
     assert data["auto_demote_on_breach"] is False

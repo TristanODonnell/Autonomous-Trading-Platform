@@ -29,9 +29,22 @@ export interface ApiOperatorSettingsMetadata {
     auto_rebalance_enabled?: ApiSettingsControlMetadataItem
     rebalance_frequency?: ApiSettingsControlMetadataItem
   }
+  promotion_rules?: {
+    label: string
+    source: string
+    description: string
+    controls: Record<string, string>
+  }
+  allocation_policies?: {
+    label: string
+    source: string
+    description: string
+    controls: Record<string, string>
+  }
   deprecated_or_ignored_settings?: {
     min_sharpe_for_promotion?: ApiDeprecatedSettingMetadataItem
     min_paper_trading_period_days?: ApiDeprecatedSettingMetadataItem
+    per_strategy_cap?: ApiDeprecatedSettingMetadataItem
   }
 }
 

@@ -87,8 +87,6 @@ class OperatorSettingsService:
         settings = self.get_settings()
 
         drawdown_pct = round(settings.max_drawdown_limit * 100, 2)
-        cap_pct = round(settings.per_strategy_cap * 100, 2)
-
         summary = (
             f"Your system will pause or restrict strategy promotion if drawdown exceeds "
             f"{drawdown_pct}%. Auto-promotion is "
@@ -99,7 +97,7 @@ class OperatorSettingsService:
             f"Risk tolerance is set to {settings.risk_tolerance}.",
             f"Maximum drawdown limit is {drawdown_pct}%.",
             f"Rebalance frequency is {settings.rebalance_frequency}.",
-            f"Each strategy can use up to {cap_pct}% of total capital.",
+            "Allocation caps come from capital allocation policies and active overrides.",
         ]
 
         return {
