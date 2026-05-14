@@ -12,7 +12,7 @@ from .helpers.sa_types import UTCDateTimeType
 class MissingBarIncidents(Base):
     __tablename__ = "missing_bar_incidents"
 
-    incident_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False)
     bar_timestamp: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
     dataset_version: Mapped[str] = mapped_column(String(64), nullable=False)

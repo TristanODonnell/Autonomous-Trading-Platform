@@ -16,7 +16,7 @@ from .helpers.sa_types import UTCDateTimeType
 class IngestionCheckpoint(Base):
     __tablename__ = "ingestion_checkpoints"
 
-    checkpoint_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    checkpoint_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     ingestion_run_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey("ingestion_runs.ingestion_run_id"),
