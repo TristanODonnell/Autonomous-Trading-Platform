@@ -4,6 +4,10 @@ import pytest
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.runtime.runtime_job_run import RuntimeJobRun
+from autonomous_trading_platform.observability.runtime_context import (
+    get_runtime_context,
+    runtime_context,
+)
 from autonomous_trading_platform.runtime.services.pipeline_failure_notification_service import (
     PipelineFailureNotificationService,
 )
@@ -212,6 +216,36 @@ def test_runtime_job_runner_tracks_parent_child_relationship() -> None:
     assert child_final.status == "completed"
     assert child_final.parent_job_run_id == parent_final.job_run_id
     assert child_final.correlation_id == parent_final.correlation_id
+
+
+def test_runtime_job_runner_propagates_runtime_context_identity() -> None:
+    repository = FakeRuntimeJobRunRepository()
+    runner = RuntimeJobRunner(repository=repository)
+    observed = {}
+
+    def job() -> str:
+        ctx = get_runtime_context()
+        assert ctx is not None
+        observed["job_run_id"] = ctx.job_run_id
+        observed["job_name"] = ctx.job_name
+        observed["correlation_id"] = ctx.correlation_id
+        observed["environment"] = ctx.environment
+        return "ok"
+
+    with runtime_context(environment="test-env"):
+        runner.run(
+            job_name="context_job",
+            trigger_type="test",
+            correlation_id="corr-context",
+            job=job,
+        )
+
+    assert observed == {
+        "job_run_id": repository.saved[0].job_run_id,
+        "job_name": "context_job",
+        "correlation_id": "corr-context",
+        "environment": "test-env",
+    }
 
 
 def test_pipeline_failure_notification_flag_true_persists_notification(

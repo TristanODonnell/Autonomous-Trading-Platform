@@ -30,6 +30,10 @@ class _SpanWithTimespan:
                 span.set_attribute("ratp.correlation_id", ctx.correlation_id)
             if ctx.run_id:
                 span.set_attribute("ratp.run_id", ctx.run_id)
+            if ctx.environment:
+                span.set_attribute("ratp.environment", ctx.environment)
+            if ctx.job_run_id:
+                span.set_attribute("ratp.job_run_id", ctx.job_run_id)
             if ctx.job_name:
                 span.set_attribute("ratp.job_name", ctx.job_name)
             if ctx.strategy_id:
@@ -42,6 +46,10 @@ class _SpanWithTimespan:
         for key, value in self._extra_attrs.items():
             if value is not None:
                 span.set_attribute(f"ratp.{key}", str(value))
+                if key == "broker_endpoint":
+                    span.set_attribute("ratp.broker.endpoint", str(value))
+                elif key == "broker_status":
+                    span.set_attribute("ratp.broker.status", str(value))
 
         return span
 

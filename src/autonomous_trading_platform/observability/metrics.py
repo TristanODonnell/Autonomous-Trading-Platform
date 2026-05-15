@@ -810,3 +810,43 @@ experiment_pipeline_cycle_step_duration = meter.create_histogram(
     description="Experiment pipeline cycle step execution duration",
     unit="s",
 )
+
+# =========================
+# GOVERNANCE / ALLOCATION CYCLE METRICS
+# =========================
+
+governance_cycle_runs = meter.create_counter(
+    name="ratp_governance_cycle_runs_total",
+    description="Total number of governance cycle executions",
+    unit="1",
+)
+
+governance_cycle_failures = meter.create_counter(
+    name="ratp_governance_cycle_failures_total",
+    description="Total number of governance cycle failures",
+    unit="1",
+)
+
+governance_cycle_duration = meter.create_histogram(
+    name="ratp_governance_cycle_duration_seconds",
+    description="Governance cycle execution duration",
+    unit="s",
+)
+
+allocation_cycle_runs = meter.create_counter(
+    name="ratp_allocation_cycle_runs_total",
+    description="Total number of allocation cycle executions",
+    unit="1",
+)
+
+allocation_cycle_failures = meter.create_counter(
+    name="ratp_allocation_cycle_failures_total",
+    description="Total number of allocation cycle failures",
+    unit="1",
+)
+
+allocation_cycle_duration = meter.create_histogram(
+    name="ratp_allocation_cycle_duration_seconds",
+    description="Allocation cycle execution duration",
+    unit="s",
+)

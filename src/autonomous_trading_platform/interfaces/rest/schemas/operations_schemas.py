@@ -31,6 +31,8 @@ class OperationsJobRunResponse(BaseModel):
     duration_ms: int | None
     error_message: str | None
     correlation_id: str | None
+    tempo_link: str | None
+    loki_link: str | None
     input_summary: dict[str, Any] | None
     output_summary: dict[str, Any] | None
 

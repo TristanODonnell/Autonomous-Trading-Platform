@@ -77,5 +77,8 @@ def test_operations_service_lists_job_summaries_runs_and_runtime_state(
     assert jobs[0]["last_error_message"] == "simulated failure"
     assert jobs[0]["run_count"] == 2
     assert [run["job_run_id"] for run in runs] == ["job-run-2", "job-run-1"]
+    assert runs[0]["correlation_id"] == "corr-2"
+    assert "ratp.correlation_id" in runs[0]["tempo_link"]
+    assert "correlation_id" in runs[0]["loki_link"]
     assert runtime_state["trading_paused"] is True
     assert runtime_state["reason"] == "operator pause"

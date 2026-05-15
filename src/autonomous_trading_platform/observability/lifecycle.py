@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -8,6 +7,11 @@ from opentelemetry import trace
 from opentelemetry.trace import StatusCode
 
 from autonomous_trading_platform.observability.log_context import LogContext
+from autonomous_trading_platform.observability.metric_labels import (
+    broker_labels,
+    context_strategy_id,
+    observability_environment,
+)
 from autonomous_trading_platform.observability.metrics import (
     order_execution_ack_to_fill_latency_seconds,
     order_execution_signal_to_submit_latency_seconds,
@@ -19,14 +23,9 @@ from autonomous_trading_platform.observability.metrics import (
 )
 from autonomous_trading_platform.observability.runtime_context import get_runtime_context
 
-_ENVIRONMENT = os.getenv("RATP_ENVIRONMENT", "unknown")
-
 
 def _environment() -> str:
-    ctx = get_runtime_context()
-    if ctx is not None and ctx.environment is not None:
-        return ctx.environment
-    return _ENVIRONMENT
+    return observability_environment()
 
 
 def _correlation_id() -> str | None:
@@ -35,8 +34,7 @@ def _correlation_id() -> str | None:
 
 
 def _strategy_id() -> str | None:
-    ctx = get_runtime_context()
-    return ctx.strategy_id if ctx is not None else None
+    return context_strategy_id()
 
 
 @dataclass(frozen=True)
@@ -558,7 +556,7 @@ def record_cash_drift_detected(
     env = _environment()
     ratp_cash_drift_amount.record(
         cash_drift,
-        {"environment": env, "component": component, "severity": severity},
+        {"environment": env, "component": component, "status": severity},
     )
 
 
@@ -590,7 +588,7 @@ def record_position_drift_detected(
     )
 
     env = _environment()
-    labels = {"environment": env, "component": component, "severity": severity}
+    labels = {"environment": env, "component": component, "status": severity}
     ratp_position_drift_count_total.add(1, labels)
     ratp_position_quantity_drift.record(position_drift, labels)
 
@@ -630,7 +628,11 @@ def record_order_execution_latency(
         },
     )
 
-    labels = {"environment": _environment(), "component": component, "broker": broker}
+    labels = broker_labels(
+        component=component,
+        broker=broker,
+        endpoint="order_execution.latency",
+    )
     if signal_to_submit_seconds is not None:
         order_execution_signal_to_submit_latency_seconds.record(
             signal_to_submit_seconds,

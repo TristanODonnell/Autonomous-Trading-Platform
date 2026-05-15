@@ -14,6 +14,7 @@ from autonomous_trading_platform.contracts.runtime.reconciliation_report import 
     ReconciliationReport,
     ReconciliationStatus,
 )
+from autonomous_trading_platform.observability.metric_labels import broker_labels
 from autonomous_trading_platform.observability.metrics import (
     ratp_duplicate_fills_detected_total,
     ratp_equity_drift_amount,
@@ -121,13 +122,14 @@ class ExternalBrokerReconciliationService:
         checks.append(cash_check)
         checks.append(equity_check)
 
+        overall = self._derive_overall_status(checks)
         self._emit_aggregate_metrics(
             unreconciled_count=unreconciled_count,
             duplicate_count=duplicate_count,
             equity_check=equity_check,
+            status=overall.value,
         )
 
-        overall = self._derive_overall_status(checks)
         return ReconciliationReport(
             report_id=uuid4(),
             run_id=run_id,
@@ -483,8 +485,15 @@ class ExternalBrokerReconciliationService:
         unreconciled_count: int,
         duplicate_count: int,
         equity_check: ReconciliationCheckResult,
+        status: str,
     ) -> None:
-        labels = {"environment": self._environment}
+        labels = broker_labels(
+            component="execution.reconciliation",
+            broker="alpaca",
+            endpoint="external_broker_reconciliation",
+            status=status,
+        )
+        labels["environment"] = self._environment
 
         ratp_unreconciled_orders.add(unreconciled_count, labels)
 

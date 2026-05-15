@@ -13,12 +13,15 @@ from autonomous_trading_platform.config.broker_config_validator import (
 )
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.observability.enums import SpanTimespan
+from autonomous_trading_platform.observability.metric_labels import broker_labels
 from autonomous_trading_platform.observability.metrics import (
     ratp_broker_api_failures_total,
     ratp_broker_api_latency_seconds,
     ratp_broker_api_requests_total,
 )
 from autonomous_trading_platform.observability.tracing import start_span
+
+COMPONENT = "execution.broker_client"
 
 
 class AlpacaBrokerClient:
@@ -201,7 +204,11 @@ class AlpacaBrokerClient:
         request_id = f"ratp-{uuid4()}"
         headers = dict(kwargs.pop("headers", {}) or {})
         headers["X-RATP-Request-ID"] = request_id
-        labels = {"broker": "alpaca", "endpoint": endpoint_tag, "method": method.upper()}
+        base_labels = broker_labels(
+            component=COMPONENT,
+            broker="alpaca",
+            endpoint=endpoint_tag,
+        )
 
         with start_span(
             "broker_http_request",
@@ -213,27 +220,32 @@ class AlpacaBrokerClient:
             request_id=request_id,
         ) as span:
             start = perf_counter()
-            ratp_broker_api_requests_total.add(1, labels)
+            ratp_broker_api_requests_total.add(1, {**base_labels, "status": "started"})
             try:
                 response = self.client.request(method, path, headers=headers, **kwargs)
                 latency = perf_counter() - start
+                status = str(response.status_code)
+                response_labels = {**base_labels, "status": status}
                 ratp_broker_api_latency_seconds.record(
                     latency,
-                    {**labels, "status_code": str(response.status_code)},
+                    response_labels,
                 )
                 span.set_attribute("http.status_code", response.status_code)
+                span.set_attribute("ratp.broker.status", status)
                 span.set_attribute("ratp.broker_api_latency_seconds", latency)
                 if response.is_error:
                     ratp_broker_api_failures_total.add(
                         1,
-                        {**labels, "status_code": str(response.status_code)},
+                        response_labels,
                     )
                     span.set_status(StatusCode.ERROR, f"HTTP {response.status_code}")
                 return response
             except Exception as exc:
                 latency = perf_counter() - start
-                ratp_broker_api_latency_seconds.record(latency, {**labels, "status_code": "error"})
-                ratp_broker_api_failures_total.add(1, {**labels, "status_code": "error"})
+                error_labels = {**base_labels, "status": "error"}
+                ratp_broker_api_latency_seconds.record(latency, error_labels)
+                ratp_broker_api_failures_total.add(1, error_labels)
+                span.set_attribute("ratp.broker.status", "error")
                 span.record_exception(exc)
                 span.set_status(StatusCode.ERROR, str(exc))
                 raise

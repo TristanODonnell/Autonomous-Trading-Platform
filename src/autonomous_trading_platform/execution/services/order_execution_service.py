@@ -12,8 +12,11 @@ from autonomous_trading_platform.execution.services.paper_runtime_order_safeguar
     PaperRuntimeOrderSafeguardService,
 )
 from autonomous_trading_platform.observability.enums import SpanTimespan
+from autonomous_trading_platform.observability.metric_labels import broker_labels
 from autonomous_trading_platform.observability.metrics import ratp_broker_api_retries_total
 from autonomous_trading_platform.observability.tracing import start_span
+
+COMPONENT = "execution.order_execution"
 
 
 class OrderExecutionService:
@@ -46,7 +49,9 @@ class OrderExecutionService:
             with start_span(
                 "order_execution.submit_order",
                 timespan=SpanTimespan.REQUEST,
+                broker="alpaca",
                 broker_endpoint="orders.submit",
+                broker_status="attempt",
                 retry_attempt=attempt,
                 max_attempts=self.max_attempts,
                 symbol=intent.symbol,
@@ -60,6 +65,7 @@ class OrderExecutionService:
                         "ratp.broker_submit_attempt_latency_seconds",
                         perf_counter() - attempt_start,
                     )
+                    span.set_attribute("ratp.broker.status", "submitted")
                     span.set_attribute("ratp.retry_succeeded", attempt > 1)
                     return response
                 except httpx.HTTPError as exc:
@@ -67,15 +73,18 @@ class OrderExecutionService:
                     span.set_status(StatusCode.ERROR, str(exc))
                     if attempt >= self.max_attempts:
                         span.set_attribute("ratp.retry_exhausted", True)
+                        span.set_attribute("ratp.broker.status", "error")
                         raise
                     ratp_broker_api_retries_total.add(
                         1,
-                        {
-                            "broker": "alpaca",
-                            "endpoint": "orders.submit",
-                            "exception_type": type(exc).__name__,
-                        },
+                        broker_labels(
+                            component=COMPONENT,
+                            broker="alpaca",
+                            endpoint="orders.submit",
+                            status="retry",
+                        ),
                     )
+                    span.set_attribute("ratp.broker.status", "retry")
                     span.set_attribute("ratp.retry_scheduled", True)
                     span.set_attribute("ratp.retry_backoff_seconds", backoff)
                     time.sleep(backoff)

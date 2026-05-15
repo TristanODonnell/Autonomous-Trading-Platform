@@ -177,4 +177,4 @@ No dedicated `ratp_*` health/control metric declarations were found. Health/cont
 - `infra/observability/prometheus-config.yaml`: scrape interval `5s`, scrape job `otel-collector`, target `otel-collector:9464`.
 - `infra/observability/tempo-config.yaml`: Tempo HTTP `3200`, gRPC `9096`, OTLP receiver on `4317/4318`, local storage with 168h retention.
 - `infra/observability/prometheus.yaml`: exists but was not readable in this sandbox session due permission denial; `prometheus-config.yaml` is the compose-mounted file.
-- Gaps: no `infra/observability/grafana/provisioning`, no dashboard JSON, no alert rules, no datasource-as-code checked in beyond the LGTM image defaults.
+- Grafana scaffolding: provisioning and datasource files live under `infra/observability/grafana/`; dashboard definitions remain empty placeholders until dashboard construction begins.

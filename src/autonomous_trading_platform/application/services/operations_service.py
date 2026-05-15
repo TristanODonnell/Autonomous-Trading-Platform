@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.observability.correlation_links import loki_link, tempo_link
 from autonomous_trading_platform.storage.sor.repositories.queries.operations_repository import (
     OperationsRepository,
 )
@@ -49,6 +50,8 @@ class OperationsService:
                 "duration_ms": row.duration_ms,
                 "error_message": row.error_message,
                 "correlation_id": row.correlation_id,
+                "tempo_link": tempo_link(row.correlation_id),
+                "loki_link": loki_link(row.correlation_id),
                 "input_summary": row.input_summary_json,
                 "output_summary": row.output_summary_json,
             }
