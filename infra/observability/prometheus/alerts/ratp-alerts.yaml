@@ -1,0 +1,196 @@
+groups:
+  - name: ratp-runtime-alerts
+    interval: 30s
+    rules:
+      - alert: RATPTradingCycleFailure
+        expr: sum by (environment, component, failure_class) (increase(ratp_trading_cycle_failures_total[10m])) > 0
+        for: 2m
+        labels:
+          severity: critical
+          category: runtime
+          job_name: trading_cycle
+        annotations:
+          summary: Trading cycle failures detected
+          description: "Trading cycle failures have been observed for {{ $labels.component }} in {{ $labels.environment }}."
+          recommended_action: Review runtime job failures, Tempo traces, and Loki logs before resuming trading.
+      - alert: RATPTradingCycleDegraded
+        expr: sum by (environment, component) (increase(ratp_trading_cycle_degraded_total[15m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: runtime
+          job_name: trading_cycle
+        annotations:
+          summary: Trading cycle is degraded
+          description: "Degraded trading-cycle outcomes are sustained for {{ $labels.component }} in {{ $labels.environment }}."
+          recommended_action: Inspect runtime state and recent step logs.
+      - alert: RATPMissingTradingCycle
+        expr: absent_over_time(ratp_trading_cycle_runs_total[30m])
+        for: 5m
+        labels:
+          severity: critical
+          category: runtime
+          job_name: trading_cycle
+          environment: unknown
+        annotations:
+          summary: Trading cycle telemetry missing
+          description: No trading cycle run metric has been exported in the last 30 minutes.
+          recommended_action: Check scheduler, runtime_job_runs, and OTLP metric export health.
+      - alert: RATPMissingIngestionCycle
+        expr: absent_over_time(ratp_ingestion_cycle_runs_total[30m])
+        for: 5m
+        labels:
+          severity: warning
+          category: runtime
+          job_name: market_ingestion_cycle
+          environment: unknown
+        annotations:
+          summary: Ingestion cycle telemetry missing
+          description: No ingestion cycle run metric has been exported in the last 30 minutes.
+          recommended_action: Check ingestion scheduler and freshness APIs.
+      - alert: RATPIngestionLagHigh
+        expr: ratp_ingestion_lag_seconds > 900
+        for: 10m
+        labels:
+          severity: warning
+          category: runtime
+          job_name: ingestion_readiness
+        annotations:
+          summary: Ingestion lag is high
+          description: Ingestion lag has exceeded 15 minutes.
+          recommended_action: Inspect ingestion readiness jobs and market data source health.
+
+  - name: ratp-broker-alerts
+    interval: 30s
+    rules:
+      - alert: RATPBrokerApiFailureRateHigh
+        expr: sum by (environment, component, broker, endpoint) (rate(ratp_broker_api_failures_total[5m])) / clamp_min(sum by (environment, component, broker, endpoint) (rate(ratp_broker_api_requests_total[5m])), 0.001) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          category: broker
+        annotations:
+          summary: Broker API failure rate is high
+          description: "Broker {{ $labels.broker }} endpoint {{ $labels.endpoint }} has sustained API failures."
+          recommended_action: Check broker status, credentials, and request traces before submitting orders.
+      - alert: RATPBrokerLatencyHigh
+        expr: histogram_quantile(0.95, sum by (le, environment, component, broker, endpoint) (rate(ratp_broker_api_latency_seconds_bucket[5m]))) > 3
+        for: 10m
+        labels:
+          severity: warning
+          category: broker
+        annotations:
+          summary: Broker API latency p95 is elevated
+          description: "Broker {{ $labels.broker }} endpoint {{ $labels.endpoint }} p95 latency is above 3 seconds."
+          recommended_action: Inspect broker operations dashboard and order submission traces.
+      - alert: RATPBrokerRetryStorm
+        expr: sum by (environment, component, broker, endpoint) (rate(ratp_broker_api_retries_total[5m])) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          category: broker
+        annotations:
+          summary: Broker retry storm detected
+          description: "Retry rate is elevated for {{ $labels.broker }} {{ $labels.endpoint }}."
+          recommended_action: Consider pausing order submission if retries continue.
+      - alert: RATPOrderRiskRejectionsHigh
+        expr: sum by (environment, component, strategy_id) (increase(ratp_order_submission_risk_rejection_count_total[15m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: broker
+          job_name: order_submission
+        annotations:
+          summary: Excessive order risk rejections
+          description: "Order submission risk rejections are elevated for {{ $labels.strategy_id }}."
+          recommended_action: Inspect risk limits and strategy control state.
+
+  - name: ratp-reconciliation-alerts
+    interval: 30s
+    rules:
+      - alert: RATPUnreconciledOpenOrders
+        expr: ratp_unreconciled_orders > 0
+        for: 10m
+        labels:
+          severity: critical
+          category: reconciliation
+        annotations:
+          summary: Unreconciled open orders detected
+          description: Platform-open orders are absent from broker open-order state.
+          recommended_action: Review reconciliation snapshots before additional order submission.
+      - alert: RATPDuplicateFillsDetected
+        expr: sum by (environment, component, broker, endpoint, status) (increase(ratp_duplicate_fills_detected_total[10m])) > 0
+        for: 2m
+        labels:
+          severity: critical
+          category: reconciliation
+        annotations:
+          summary: Duplicate fills detected
+          description: Duplicate fill evidence was emitted by reconciliation.
+          recommended_action: Freeze trading if duplicate fills are confirmed.
+      - alert: RATPCashDriftCritical
+        expr: abs(histogram_quantile(0.95, sum by (le, environment, component, status) (rate(ratp_cash_drift_amount_bucket[10m])))) > 100
+        for: 5m
+        labels:
+          severity: critical
+          category: reconciliation
+        annotations:
+          summary: Cash drift exceeds critical threshold
+          description: Cash reconciliation drift p95 is above 100 USD.
+          recommended_action: Review broker/account snapshots and consider trading freeze.
+      - alert: RATPEquityDriftCritical
+        expr: abs(histogram_quantile(0.95, sum by (le, environment, component, broker, endpoint, status) (rate(ratp_equity_drift_amount_bucket[10m])))) > 100
+        for: 5m
+        labels:
+          severity: critical
+          category: reconciliation
+        annotations:
+          summary: Equity drift exceeds critical threshold
+          description: Equity reconciliation drift p95 is above 100 USD.
+          recommended_action: Review reconciliation report and broker account state.
+      - alert: RATPPositionDriftDetected
+        expr: sum by (environment, component, status) (increase(ratp_position_drift_count_total[10m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: reconciliation
+        annotations:
+          summary: Position drift detected
+          description: Position reconciliation drift has been observed.
+          recommended_action: Inspect reconciliation details and position snapshots.
+
+  - name: ratp-governance-control-alerts
+    interval: 30s
+    rules:
+      - alert: RATPGovernanceCycleFailure
+        expr: sum by (environment, component, failure_class) (increase(ratp_governance_cycle_failures_total[15m])) > 0
+        for: 2m
+        labels:
+          severity: warning
+          category: risk_governance
+        annotations:
+          summary: Governance automation cycle failed
+          description: "Governance cycle failure detected for {{ $labels.component }}."
+          recommended_action: Review governance runtime dashboard and audit logs.
+      - alert: RATPAllocationCycleFailure
+        expr: sum by (environment, component, failure_class) (increase(ratp_allocation_cycle_failures_total[15m])) > 0
+        for: 2m
+        labels:
+          severity: warning
+          category: risk_governance
+          job_name: strategy_allocation_rebalance_cycle
+        annotations:
+          summary: Allocation rebalance cycle failed
+          description: Allocation rebalance automation failed.
+          recommended_action: Review allocation decisions and audit logs.
+      - alert: RATPMetricExporterMissing
+        expr: absent(up{job="otel-collector"}) or up{job="otel-collector"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: control_infra
+          environment: unknown
+        annotations:
+          summary: OpenTelemetry metric exporter scrape is unavailable
+          description: Prometheus cannot scrape the OTel collector metrics endpoint.
+          recommended_action: Check otel-collector and LGTM containers.

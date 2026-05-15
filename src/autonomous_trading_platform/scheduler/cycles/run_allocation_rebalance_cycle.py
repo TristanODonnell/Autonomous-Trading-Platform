@@ -1,12 +1,28 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from time import perf_counter
 from uuid import uuid4
 
 from autonomous_trading_platform.application.services.quality_based_reallocation_service import (
     QualityBasedReallocationService,
 )
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.observability.enums import SpanTimespan
+from autonomous_trading_platform.observability.lifecycle import (
+    CycleMetricSet,
+    record_cycle_completed,
+    record_cycle_failed,
+    record_cycle_started,
+)
+from autonomous_trading_platform.observability.logging import get_logger
+from autonomous_trading_platform.observability.metrics import (
+    allocation_cycle_duration,
+    allocation_cycle_failures,
+    allocation_cycle_runs,
+)
+from autonomous_trading_platform.observability.runtime_context import runtime_context
+from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.pipeline_failure_notification_service import (
     PipelineFailureNotificationService,
 )
@@ -24,6 +40,13 @@ from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_r
 )
 
 JOB_NAME = "strategy_allocation_rebalance_cycle"
+COMPONENT = "scheduler.run_strategy_allocation_rebalance_cycle"
+ALLOCATION_CYCLE_METRICS = CycleMetricSet(
+    runs=allocation_cycle_runs,
+    failures=allocation_cycle_failures,
+    duration=allocation_cycle_duration,
+)
+logger = get_logger(__name__)
 
 
 def run_allocation_rebalance_cycle(
@@ -42,6 +65,7 @@ def run_strategy_allocation_rebalance_cycle(
 
     session = get_session()
     run_id = uuid4()
+    cycle_wall_start = perf_counter()
     settings = OperatorSettingsRepository(session).get_or_create_default()
     manifest = create_governance_manifest(
         session=session,
@@ -83,22 +107,58 @@ def run_strategy_allocation_rebalance_cycle(
             raise
 
     try:
-        result = runner.run(
-            job_name=JOB_NAME,
-            trigger_type=trigger_source,
-            correlation_id=str(run_id),
-            input_summary_json={
-                "component": "scheduler.run_strategy_allocation_rebalance_cycle",
-                "run_manifest_id": str(run_id),
-            },
-            job=job,
-            output_summary_json=lambda payload: payload,
+        record_cycle_started(
+            logger=logger,
+            metrics=ALLOCATION_CYCLE_METRICS,
+            component=COMPONENT,
+            run_id=str(run_id),
         )
-        session.commit()
-        return result or {}
-    except Exception:
-        session.commit()
-        raise
+
+        with (
+            runtime_context(
+                correlation_id=str(run_id),
+                run_id=str(run_id),
+                environment=manifest.environment,
+                strategy_id=manifest.strategy_id,
+            ),
+            start_span(f"{JOB_NAME}.run", timespan=SpanTimespan.CYCLE) as cycle_span,
+        ):
+            cycle_span.set_attribute("ratp.component", COMPONENT)
+            cycle_span.set_attribute("ratp.run_id", str(run_id))
+            cycle_span.set_attribute("ratp.governance_action", "allocation_rebalance")
+            try:
+                result = runner.run(
+                    job_name=JOB_NAME,
+                    trigger_type=trigger_source,
+                    correlation_id=str(run_id),
+                    input_summary_json={
+                        "component": COMPONENT,
+                        "run_manifest_id": str(run_id),
+                    },
+                    job=job,
+                    output_summary_json=lambda payload: payload,
+                )
+                record_cycle_completed(
+                    logger=logger,
+                    metrics=ALLOCATION_CYCLE_METRICS,
+                    component=COMPONENT,
+                    run_id=str(run_id),
+                    duration_seconds=perf_counter() - cycle_wall_start,
+                )
+                session.commit()
+                return result or {}
+            except Exception as exc:
+                record_cycle_failed(
+                    logger=logger,
+                    metrics=ALLOCATION_CYCLE_METRICS,
+                    component=COMPONENT,
+                    run_id=str(run_id),
+                    exc=exc,
+                    duration_seconds=perf_counter() - cycle_wall_start,
+                    failure_class=type(exc).__name__,
+                )
+                session.commit()
+                raise
     finally:
         session.close()
 

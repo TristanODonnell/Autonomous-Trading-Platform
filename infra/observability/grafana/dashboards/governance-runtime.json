@@ -1,0 +1,373 @@
+{
+  "uid": "ratp-governance-runtime",
+  "title": "RATP Governance Runtime",
+  "tags": [
+    "ratp",
+    "governance"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(environment)",
+        "includeAll": true,
+        "allValue": ".*",
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "correlation_id",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      },
+      {
+        "name": "strategy_id",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "ratp-postgres"
+        },
+        "query": "SELECT DISTINCT strategy_id FROM strategy_governance ORDER BY 1",
+        "includeAll": true,
+        "allValue": "%",
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "job_name",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "ratp-postgres"
+        },
+        "query": "SELECT DISTINCT job_name FROM runtime_job_runs ORDER BY 1",
+        "includeAll": true,
+        "allValue": "%",
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Annotations & Alerts",
+        "type": "dashboard",
+        "builtIn": 1,
+        "hide": true,
+        "enable": true
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Tempo by correlation_id",
+      "type": "link",
+      "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+    },
+    {
+      "title": "Loki by correlation_id",
+      "type": "link",
+      "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Governance job status",
+      "type": "table",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT job_name, status, count(*) AS runs, max(started_at) AS latest_started_at, max(correlation_id) AS latest_correlation_id FROM runtime_job_runs WHERE $__timeFilter(started_at) AND job_name IN ('strategy_auto_promotion_cycle','strategy_auto_demotion_cycle','strategy_allocation_rebalance_cycle') AND job_name LIKE '$job_name' GROUP BY job_name, status ORDER BY job_name, status",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Governance cycle duration",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, component) (rate(ratp_governance_cycle_duration_seconds_bucket{environment=~\"$environment\"}[5m])))",
+          "legendFormat": "{{component}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ],
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Strategy governance states",
+      "type": "table",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT current_state, count(*) AS strategies FROM strategy_governance WHERE strategy_id LIKE '$strategy_id' GROUP BY current_state ORDER BY strategies DESC",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Promotion/demotion decisions",
+      "type": "table",
+      "description": "",
+      "gridPos": {
+        "x": 8,
+        "y": 8,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT event_timestamp, event_type, run_id, component, message, metadata FROM audit_logs WHERE $__timeFilter(event_timestamp) AND event_type IN ('STRATEGY_AUTO_PROMOTION_COMPLETED','STRATEGY_AUTO_DEMOTION_COMPLETED','STRATEGY_AUTO_PROMOTED','STRATEGY_AUTO_DEMOTED','STRATEGY_GOVERNANCE_TRANSITIONED') ORDER BY event_timestamp DESC LIMIT 100",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Risk block and control state",
+      "type": "table",
+      "description": "",
+      "gridPos": {
+        "x": 16,
+        "y": 8,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT 'runtime_control' AS source, trading_mode, trading_enabled, trading_paused, kill_switch_enabled, reason, updated_at FROM runtime_control_state UNION ALL SELECT 'latest_risk' AS source, NULL, NOT is_blocked, NULL, NULL, array_to_string(block_reasons, ', '), timestamp FROM risk_snapshots ORDER BY updated_at DESC LIMIT 20",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 6,
+      "title": "Governance logs",
+      "type": "logs",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{} | json | component=~\".*governance.*|.*strategy.*\" |~ \"$correlation_id\"",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {}
+    }
+  ]
+}

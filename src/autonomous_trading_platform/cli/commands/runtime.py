@@ -15,6 +15,7 @@ from autonomous_trading_platform.runtime.replay_debug import (
     RuntimeReplayInputs,
     format_text_summary,
 )
+from autonomous_trading_platform.runtime.services.replay_runtime_service import ReplayRuntimeService
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_cycle_dependencies,
 )
@@ -73,35 +74,18 @@ def register(subparsers) -> None:
     soak_loop_subparsers = soak_loop_parser.add_subparsers(dest="soak_command", required=True)
     register_soak_loop_commands(soak_loop_subparsers)
 
+    replay_parser = runtime_subparsers.add_parser(
+        "replay",
+        help="Run replay runtime service and persist runtime_replay job evidence",
+    )
+    _add_replay_arguments(replay_parser)
+    replay_parser.set_defaults(func=handle_replay)
+
     replay_debug_parser = runtime_subparsers.add_parser(
         "replay-debug",
         help="Deterministic local runtime replay for settings/control wiring validation",
     )
-    replay_debug_parser.add_argument("--symbols", required=True)
-    replay_debug_parser.add_argument("--start", required=True)
-    replay_debug_parser.add_argument("--end", required=True)
-    replay_debug_parser.add_argument("--starting-cash", type=Decimal, default=Decimal("10000"))
-    replay_debug_parser.add_argument("--random-seed", type=int, default=42)
-    replay_debug_parser.add_argument(
-        "--price-basis",
-        choices=[basis.value for basis in PriceBasis],
-        default=PriceBasis.ADJUSTED.value,
-    )
-    replay_debug_parser.add_argument(
-        "--calendar-mode",
-        choices=["historical"],
-        default="historical",
-    )
-    replay_debug_parser.add_argument(
-        "--cycles",
-        default="market_backfill,features,trading,rebalance,portfolio_snapshot",
-        help="Comma-separated cycle names or full_runtime_day",
-    )
-    replay_debug_parser.add_argument("--reset-sim-state", action="store_true")
-    replay_debug_parser.add_argument("--print-summary", action="store_true")
-    replay_debug_parser.add_argument("--output-json", type=Path)
-    replay_debug_parser.add_argument("--cadence-minutes", type=int, default=390)
-    replay_debug_parser.add_argument("--max-ticks", type=int)
+    _add_replay_arguments(replay_debug_parser)
     replay_debug_parser.set_defaults(func=handle_replay_debug)
 
     replay_ingestion_parser = runtime_subparsers.add_parser(
@@ -125,6 +109,34 @@ def register(subparsers) -> None:
     replay_ingestion_parser.add_argument("--print-summary", action="store_true", default=False)
     replay_ingestion_parser.add_argument("--output-json", type=Path, default=None)
     replay_ingestion_parser.set_defaults(func=handle_replay_ingestion)
+
+
+def _add_replay_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--symbols", required=True)
+    parser.add_argument("--start", required=True)
+    parser.add_argument("--end", required=True)
+    parser.add_argument("--starting-cash", type=Decimal, default=Decimal("10000"))
+    parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument(
+        "--price-basis",
+        choices=[basis.value for basis in PriceBasis],
+        default=PriceBasis.ADJUSTED.value,
+    )
+    parser.add_argument(
+        "--calendar-mode",
+        choices=["historical"],
+        default="historical",
+    )
+    parser.add_argument(
+        "--cycles",
+        default="market_backfill,features,trading,rebalance,portfolio_snapshot",
+        help="Comma-separated cycle names or full_runtime_day",
+    )
+    parser.add_argument("--reset-sim-state", action="store_true")
+    parser.add_argument("--print-summary", action="store_true")
+    parser.add_argument("--output-json", type=Path)
+    parser.add_argument("--cadence-minutes", type=int, default=390)
+    parser.add_argument("--max-ticks", type=int)
 
 
 def handle_run_cycle(args: argparse.Namespace) -> int:
@@ -244,6 +256,55 @@ def handle_replay_debug(args: argparse.Namespace) -> int:
             }
         )
     return 0
+
+
+def handle_replay(args: argparse.Namespace) -> int:
+    print_header("Replay Runtime")
+    try:
+        inputs = _runtime_replay_inputs_from_args(args)
+        summary = ReplayRuntimeService().run(inputs)
+    except Exception as exc:
+        print_error(f"Runtime replay failed: {exc}")
+        return 1
+
+    if args.print_summary:
+        print()
+        print(format_text_summary(summary))
+    else:
+        print_json(
+            {
+                "status": "completed",
+                "replay_id": summary["replay_id"],
+                "settings_snapshot_hash": summary["settings_snapshot_hash"],
+                "execution": summary["execution"],
+                "trading": summary["trading"],
+                "portfolio": summary["portfolio"],
+                "warnings": summary["warnings"],
+            }
+        )
+    return 0
+
+
+def _runtime_replay_inputs_from_args(args: argparse.Namespace) -> RuntimeReplayInputs:
+    symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
+    if not symbols:
+        raise ValueError("At least one symbol must be provided")
+    cycles = [c.strip() for c in args.cycles.split(",") if c.strip()]
+    return RuntimeReplayInputs(
+        symbols=symbols,
+        start_date=parse_datetime(args.start).date(),
+        end_date=parse_datetime(args.end).date(),
+        starting_cash=args.starting_cash,
+        random_seed=args.random_seed,
+        price_basis=PriceBasis(args.price_basis),
+        calendar_mode=args.calendar_mode,
+        cycles=cycles,
+        reset_sim_state=args.reset_sim_state,
+        print_summary=args.print_summary,
+        output_json=args.output_json,
+        cadence_minutes=args.cadence_minutes,
+        max_ticks=args.max_ticks,
+    )
 
 
 def handle_replay_ingestion(args: argparse.Namespace) -> int:

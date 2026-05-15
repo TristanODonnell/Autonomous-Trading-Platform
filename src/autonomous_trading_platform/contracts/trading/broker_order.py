@@ -41,3 +41,7 @@ class BrokerOrder(BaseModel):
     last_error: str | None = None
     raw_broker_payload: dict[str, Any] | None = None
     requested_qty: Quantity | None = None
+    signal_generated_at: UTCDateTime | None = None
+    submitted_to_broker_at: UTCDateTime | None = None
+    broker_acknowledged_at: UTCDateTime | None = None
+    first_fill_at: UTCDateTime | None = None

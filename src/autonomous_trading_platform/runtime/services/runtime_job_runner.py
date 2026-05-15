@@ -7,6 +7,10 @@ from typing import Protocol, TypeVar
 from uuid import uuid4
 
 from autonomous_trading_platform.contracts.runtime.runtime_job_run import RuntimeJobRun
+from autonomous_trading_platform.observability.runtime_context import (
+    get_runtime_context,
+    runtime_context,
+)
 
 T = TypeVar("T")
 logger = logging.getLogger(__name__)
@@ -41,6 +45,14 @@ class RuntimeJobRunner:
         skip_reason: str | None = None,
         output_summary_json: Callable[[T], dict[str, object] | None] | None = None,
     ) -> T | None:
+        # Pull from ambient context when not explicitly provided.
+        ctx = get_runtime_context()
+        if ctx is not None:
+            if parent_job_run_id is None:
+                parent_job_run_id = ctx.job_run_id
+            if correlation_id is None:
+                correlation_id = ctx.correlation_id
+
         job_run_id = str(uuid4())
         started_at = datetime.now(UTC)
 
@@ -85,7 +97,13 @@ class RuntimeJobRunner:
         )
 
         try:
-            result = job()
+            # Bind job identity into context so child jobs see this run as their parent.
+            with runtime_context(
+                job_run_id=job_run_id,
+                job_name=job_name,
+                correlation_id=correlation_id,
+            ):
+                result = job()
         except Exception as exc:
             completed_at = datetime.now(UTC)
             duration_ms = int((completed_at - started_at).total_seconds() * 1000)

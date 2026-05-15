@@ -49,6 +49,17 @@ def test_governance_promotion_cycle_runs_when_flag_true(
     monkeypatch,
 ) -> None:
     _patch_cycle_session(monkeypatch, db_session)
+    telemetry_events: list[str] = []
+    monkeypatch.setattr(
+        cycle_module,
+        "record_cycle_started",
+        lambda **kwargs: telemetry_events.append("started"),
+    )
+    monkeypatch.setattr(
+        cycle_module,
+        "record_cycle_completed",
+        lambda **kwargs: telemetry_events.append("completed"),
+    )
     _seed_rule(db_session)
     _seed_candidate(db_session, "eligible", sharpe=2.0, days=45, trades=20)
     OperatorSettingsRepository(db_session).update_current(
@@ -66,6 +77,7 @@ def test_governance_promotion_cycle_runs_when_flag_true(
     manifest = db_session.query(RunManifestRow).filter_by(run_id=UUID(job.correlation_id)).one()
     assert manifest.status == "completed"
     assert manifest.artifact_manifest["strategy_ids"] == ["eligible"]
+    assert telemetry_events == ["started", "completed"]
 
 
 def _patch_cycle_session(monkeypatch, session: Session) -> None:

@@ -1,6 +1,9 @@
 global:
   scrape_interval: 5s
 
+rule_files:
+  - /otel-lgtm/alerts/*.yaml
+
 scrape_configs:
   - job_name: otel-collector
     static_configs:

@@ -44,6 +44,9 @@ from autonomous_trading_platform.runtime.clock import (
     MarketCalendar,
     TradingClock,
 )
+from autonomous_trading_platform.runtime.services.orphan_job_recovery_service import (
+    OrphanJobRecoveryService,
+)
 from autonomous_trading_platform.runtime.services.pipeline_failure_notification_service import (
     PipelineFailureNotificationService,
 )
@@ -247,6 +250,7 @@ class RuntimeReplayDebugRunner:
         close_session: bool = True,
         calendar: MarketCalendar | None = None,
         cycle_handlers: dict[str, CycleHandler] | None = None,
+        job_name_prefix: str = "runtime_replay_debug",
     ) -> None:
         self.inputs = inputs
         self.settings = settings or Settings()
@@ -254,11 +258,22 @@ class RuntimeReplayDebugRunner:
         self.close_session = close_session
         self.calendar = calendar or HistoricalMarketCalendar()
         self.cycle_handlers = cycle_handlers or {}
+        self.job_name_prefix = job_name_prefix
+
+    def _rescue_orphan_jobs(self) -> None:
+        cutoff = datetime.now(UTC) - timedelta(minutes=30)
+        session = self.session_factory()
+        try:
+            OrphanJobRecoveryService(session).rescue_orphan_running_jobs(cutoff=cutoff)
+            session.commit()
+        finally:
+            session.close()
 
     def run(self) -> dict[str, Any]:
         cycles = expand_cycles(self.inputs.cycles)
         validate_cycles(cycles)
         self._assert_local_safe()
+        self._rescue_orphan_jobs()
 
         replay_uuid = uuid.uuid4()
         replay_id = str(replay_uuid)
@@ -378,7 +393,7 @@ class RuntimeReplayDebugRunner:
 
         try:
             output = runner.run(
-                job_name=f"runtime_replay_debug.{cycle}",
+                job_name=f"{self.job_name_prefix}.{cycle}",
                 trigger_type="manual_cli",
                 job=lambda: handler(ctx),
                 correlation_id=ctx.replay_id,
@@ -1246,7 +1261,7 @@ def _update_latest_runtime_job_output(
     row = (
         session.query(RuntimeJobRuns)
         .filter(RuntimeJobRuns.correlation_id == replay_id)
-        .filter(RuntimeJobRuns.job_name == f"runtime_replay_debug.{cycle}")
+        .filter(RuntimeJobRuns.job_name.like(f"%.{cycle}"))
         .order_by(RuntimeJobRuns.started_at.desc())
         .first()
     )

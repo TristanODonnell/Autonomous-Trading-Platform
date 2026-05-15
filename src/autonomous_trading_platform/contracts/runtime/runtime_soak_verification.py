@@ -29,6 +29,12 @@ class RuntimeSoakCheckName(StrEnum):
     DUPLICATE_FILL_PROTECTION = "duplicate_fill_protection"
     CASH_POSITION_EQUITY_CONSISTENCY = "cash_position_equity_consistency"
     OBSERVABILITY_SIGNALS = "observability_signals"
+    METRIC_EXPORT = "metric_export"
+    TRACE_EXPORT = "trace_export"
+    LOKI_INGESTION = "loki_ingestion"
+    GOVERNANCE_RUNTIME = "governance_runtime"
+    REPLAY_RUNTIME = "replay_runtime"
+    LONG_RUNNING_RUNTIME_INTEGRITY = "long_running_runtime_integrity"
     FAILURE_CONTROLS = "failure_controls"
 
 

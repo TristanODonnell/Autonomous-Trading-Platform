@@ -1,7 +1,7 @@
 # autonomous_trading_platform/scheduler/jobs/run_order_submission_job.py
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from time import perf_counter
 from uuid import UUID
 
@@ -25,6 +25,7 @@ from autonomous_trading_platform.observability.lifecycle import (
     record_job_completed,
     record_job_failed,
     record_job_started,
+    record_order_execution_latency,
 )
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
@@ -288,9 +289,50 @@ def run_order_submission_job(
 
                     # ── SUBMIT ────────────────────────────────────────────────
                     try:
-                        submit_start = perf_counter()
-                        response = execution_context.order_execution_service.submit(submit_intent)
-                        submit_duration = perf_counter() - submit_start
+                        signal_generated_at = _signal_generated_at(submit_intent)
+                        submitted_to_broker_at = datetime.now(UTC)
+                        with start_span(
+                            "order_submission_job.order_lifecycle",
+                            timespan=SpanTimespan.REQUEST,
+                        ) as lifecycle_span:
+                            lifecycle_span.set_attribute("ratp.run_id", str(run_id))
+                            lifecycle_span.set_attribute("ratp.component", component)
+                            lifecycle_span.set_attribute(
+                                "ratp.order_intent_id", str(submit_intent.intent_id)
+                            )
+                            lifecycle_span.set_attribute("ratp.symbol", submit_intent.symbol)
+                            lifecycle_span.set_attribute(
+                                "ratp.client_order_id", submit_intent.client_order_id
+                            )
+                            lifecycle_span.set_attribute(
+                                "ratp.signal_generated_at",
+                                signal_generated_at.isoformat(),
+                            )
+                            lifecycle_span.set_attribute(
+                                "ratp.submitted_to_broker_at",
+                                submitted_to_broker_at.isoformat(),
+                            )
+
+                            submit_start = perf_counter()
+                            response = execution_context.order_execution_service.submit(
+                                submit_intent
+                            )
+                            submit_duration = perf_counter() - submit_start
+                            broker_acknowledged_at = datetime.now(UTC)
+                            response = {
+                                **response,
+                                "ratp_signal_generated_at": signal_generated_at.isoformat(),
+                                "ratp_submitted_to_broker_at": submitted_to_broker_at.isoformat(),
+                                "ratp_broker_acknowledged_at": broker_acknowledged_at.isoformat(),
+                            }
+                            lifecycle_span.set_attribute(
+                                "ratp.broker_acknowledged_at",
+                                broker_acknowledged_at.isoformat(),
+                            )
+                            lifecycle_span.set_attribute(
+                                "ratp.submit_to_ack_seconds",
+                                _seconds_between(submitted_to_broker_at, broker_acknowledged_at),
+                            )
 
                         order_submission_latency_seconds.record(
                             submit_duration, {"component": component, "job": job}
@@ -310,6 +352,40 @@ def run_order_submission_job(
                         intent_id=submit_intent.intent_id,
                         run_id=run_id,
                         account_id=manifest.broker_account_id,
+                    )
+                    if (
+                        broker_order.status == OrderStatus.FILLED
+                        and broker_order.first_fill_at is None
+                    ):
+                        broker_order.first_fill_at = broker_order.updated_at
+
+                    signal_to_submit_seconds = _seconds_between(
+                        broker_order.signal_generated_at,
+                        broker_order.submitted_to_broker_at,
+                    )
+                    submit_to_ack_seconds = _seconds_between(
+                        broker_order.submitted_to_broker_at,
+                        broker_order.broker_acknowledged_at,
+                    )
+                    ack_to_fill_seconds = _seconds_between(
+                        broker_order.broker_acknowledged_at,
+                        broker_order.first_fill_at,
+                    )
+                    total_execution_seconds = _seconds_between(
+                        broker_order.signal_generated_at,
+                        broker_order.first_fill_at or broker_order.broker_acknowledged_at,
+                    )
+                    record_order_execution_latency(
+                        logger=logger,
+                        component=component,
+                        run_id=str(run_id),
+                        symbol=submit_intent.symbol,
+                        broker=broker_order.broker,
+                        broker_order_id=broker_order.broker_order_id,
+                        signal_to_submit_seconds=signal_to_submit_seconds,
+                        submit_to_ack_seconds=submit_to_ack_seconds,
+                        ack_to_fill_seconds=ack_to_fill_seconds,
+                        total_execution_seconds=total_execution_seconds,
                     )
 
                     order_status = execution_context.order_state_machine_service.apply_event(
@@ -436,3 +512,24 @@ def run_order_submission_job(
             ),
         )
         raise
+
+
+def _as_utc(timestamp: datetime) -> datetime:
+    if timestamp.tzinfo is None:
+        return timestamp.replace(tzinfo=UTC)
+    return timestamp.astimezone(UTC)
+
+
+def _signal_generated_at(intent) -> datetime:
+    value = (intent.metadata or {}).get("signal_generated_at")
+    if isinstance(value, datetime):
+        return _as_utc(value)
+    if isinstance(value, str):
+        return _as_utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
+    return _as_utc(intent.timestamp)
+
+
+def _seconds_between(start: datetime | None, end: datetime | None) -> float | None:
+    if start is None or end is None:
+        return None
+    return max(0.0, (end - start).total_seconds())

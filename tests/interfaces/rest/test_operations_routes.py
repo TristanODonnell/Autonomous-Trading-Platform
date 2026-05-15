@@ -139,6 +139,9 @@ def test_operations_job_runs_reflect_selected_job(
     assert run["job_name"] == "trading_cycle"
     assert run["status"] == "failed"
     assert run["trigger_type"] == "manual"
+    assert run["correlation_id"] == "corr-new"
+    assert "ratp.correlation_id" in run["tempo_link"]
+    assert "correlation_id" in run["loki_link"]
     assert run["output_summary"] == {"orders": 0}
 
 

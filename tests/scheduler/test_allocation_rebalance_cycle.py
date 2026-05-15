@@ -53,6 +53,17 @@ def test_allocation_rebalance_cycle_runs_when_flag_true(
     monkeypatch,
 ) -> None:
     _patch_cycle_session(monkeypatch, db_session)
+    telemetry_events: list[str] = []
+    monkeypatch.setattr(
+        cycle_module,
+        "record_cycle_started",
+        lambda **kwargs: telemetry_events.append("started"),
+    )
+    monkeypatch.setattr(
+        cycle_module,
+        "record_cycle_completed",
+        lambda **kwargs: telemetry_events.append("completed"),
+    )
     _seed_policy(db_session, max_pct=0.80)
     _seed_strategy(db_session, "good", sharpe=2.0, total_return=0.20, max_drawdown=0.03)
     OperatorSettingsRepository(db_session).update_current(
@@ -76,6 +87,7 @@ def test_allocation_rebalance_cycle_runs_when_flag_true(
     assert manifest.artifact_manifest["output_decisions"]["audit_event_emitted"] == (
         "STRATEGY_ALLOCATION_REBALANCED"
     )
+    assert telemetry_events == ["started", "completed"]
 
 
 def _patch_cycle_session(monkeypatch, session: Session) -> None:

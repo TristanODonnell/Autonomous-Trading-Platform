@@ -61,3 +61,13 @@ class BrokerOrder(Base):
     last_error: Mapped[str | None] = mapped_column(String, nullable=True)
     raw_broker_payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     requested_qty: Mapped[Quantity | None] = mapped_column(QuantityType(), nullable=True)
+    signal_generated_at: Mapped[UTCDateTime | None] = mapped_column(
+        UTCDateTimeType(), nullable=True
+    )
+    submitted_to_broker_at: Mapped[UTCDateTime | None] = mapped_column(
+        UTCDateTimeType(), nullable=True
+    )
+    broker_acknowledged_at: Mapped[UTCDateTime | None] = mapped_column(
+        UTCDateTimeType(), nullable=True
+    )
+    first_fill_at: Mapped[UTCDateTime | None] = mapped_column(UTCDateTimeType(), nullable=True)

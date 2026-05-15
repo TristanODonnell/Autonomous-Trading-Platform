@@ -69,6 +69,17 @@ def test_governance_demotion_cycle_failure_emits_pipeline_failure_when_enabled(
     monkeypatch,
 ) -> None:
     _patch_cycle_session(monkeypatch, db_session)
+    telemetry_events: list[str] = []
+    monkeypatch.setattr(
+        cycle_module,
+        "record_cycle_started",
+        lambda **kwargs: telemetry_events.append("started"),
+    )
+    monkeypatch.setattr(
+        cycle_module,
+        "record_cycle_failed",
+        lambda **kwargs: telemetry_events.append("failed"),
+    )
     OperatorSettingsRepository(db_session).update_current(
         {"notify_pipeline_failures": True},
         updated_by="test",
@@ -103,6 +114,7 @@ def test_governance_demotion_cycle_failure_emits_pipeline_failure_when_enabled(
     assert manifest.status == "failed"
     assert manifest.error_message == "demotion boom"
     assert event.event_metadata["job_name"] == "strategy_auto_demotion_cycle"
+    assert telemetry_events == ["started", "failed"]
 
 
 def _patch_cycle_session(monkeypatch, session: Session) -> None:

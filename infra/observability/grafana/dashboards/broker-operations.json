@@ -1,0 +1,472 @@
+{
+  "uid": "ratp-broker-operations",
+  "title": "RATP Broker Operations",
+  "tags": [
+    "ratp",
+    "broker"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(environment)",
+        "includeAll": true,
+        "allValue": ".*",
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "correlation_id",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      },
+      {
+        "name": "strategy_id",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "ratp-postgres"
+        },
+        "query": "SELECT DISTINCT strategy_id FROM strategy_governance ORDER BY 1",
+        "includeAll": true,
+        "allValue": "%",
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "job_name",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "ratp-postgres"
+        },
+        "query": "SELECT DISTINCT job_name FROM runtime_job_runs ORDER BY 1",
+        "includeAll": true,
+        "allValue": "%",
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Annotations & Alerts",
+        "type": "dashboard",
+        "builtIn": 1,
+        "hide": true,
+        "enable": true
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Tempo by correlation_id",
+      "type": "link",
+      "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+    },
+    {
+      "title": "Loki by correlation_id",
+      "type": "link",
+      "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Broker request rate",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (broker, endpoint, status) (rate(ratp_broker_api_requests_total{environment=~\"$environment\"}[5m]))",
+          "legendFormat": "{{component}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "title": "Broker failure rate",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (broker, endpoint, status) (rate(ratp_broker_api_failures_total{environment=~\"$environment\"}[5m]))",
+          "legendFormat": "{{component}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Broker latency p95",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, broker, endpoint) (rate(ratp_broker_api_latency_seconds_bucket{environment=~\"$environment\"}[5m])))",
+          "legendFormat": "{{component}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ],
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "title": "Retry counts",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (broker, endpoint, status) (rate(ratp_broker_api_retries_total{environment=~\"$environment\"}[5m]))",
+          "legendFormat": "{{component}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "title": "Order execution latency",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 8,
+        "y": 8,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, broker) (rate(ratp_order_execution_total_latency_seconds_bucket{environment=~\"$environment\"}[5m])))",
+          "legendFormat": "{{component}} {{status}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, broker) (rate(ratp_order_execution_signal_to_submit_latency_seconds_bucket{environment=~\"$environment\"}[5m])))",
+          "legendFormat": "{{component}} {{status}}"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, broker) (rate(ratp_order_execution_ack_to_fill_latency_seconds_bucket{environment=~\"$environment\"}[5m])))",
+          "legendFormat": "{{component}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ],
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "title": "Broker order status counts",
+      "type": "table",
+      "description": "",
+      "gridPos": {
+        "x": 16,
+        "y": 8,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT status::text AS status, broker, count(*) AS orders, max(updated_at) AS latest_update FROM broker_orders WHERE $__timeFilter(updated_at) GROUP BY status, broker ORDER BY orders DESC",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 7,
+      "title": "Fill quality and slippage",
+      "type": "table",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT strategy_id, count(*) AS fills, avg(submission_latency_seconds) AS avg_submit_latency_seconds, avg(fill_latency_seconds) AS avg_fill_latency_seconds, avg(slippage_bps) AS avg_slippage_bps, avg(fill_vs_expected_bps) AS avg_fill_vs_expected_bps FROM fill_quality_metrics WHERE $__timeFilter(submission_timestamp) AND strategy_id LIKE '$strategy_id' GROUP BY strategy_id ORDER BY fills DESC",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 8,
+      "title": "Broker request traces",
+      "type": "logs",
+      "description": "",
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{} | json | component=\"execution.broker_client\" |~ \"$correlation_id\"",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {}
+    }
+  ]
+}

@@ -607,6 +607,58 @@ def run_trading_cycle(now_utc: datetime | None = None):
                 raise
 
             # STEP 3: ORDER SUBMISSION
+            # Re-check control state and freeze immediately before submitting —
+            # a freeze or kill-switch triggered mid-cycle (after evaluation) must
+            # block order dispatch even if the cycle-start check passed.
+            if freeze_service.is_trading_frozen():
+                logger.warning(
+                    "trading_cycle_aborted_due_to_mid_cycle_freeze",
+                    extra=LogContext(
+                        run_id=str(run_id),
+                        component=component,
+                        incident_type="mid_cycle_freeze",
+                    ).to_extra(),
+                )
+                _save_runtime_job_run(
+                    status="failed",
+                    completed_at=datetime.now(UTC),
+                    error_message="mid_cycle_freeze: trading frozen before order_submission",
+                    output_summary_json={
+                        "last_successful_step": manifest.last_successful_step,
+                        "current_step": None,
+                    },
+                )
+                manifest.status = "failed"
+                manifest.error_message = "mid_cycle_freeze"
+                manifest_service.save(manifest)
+                return
+
+            mid_cycle_block = runtime_control_service.get_cycle_block_reason(
+                expected_trading_mode=settings.trading_environment.value,
+            )
+            if mid_cycle_block is not None:
+                logger.warning(
+                    "trading_cycle_aborted_due_to_mid_cycle_control_state",
+                    extra=LogContext(
+                        run_id=str(run_id),
+                        component=component,
+                        incident_type=mid_cycle_block,
+                    ).to_extra(),
+                )
+                _save_runtime_job_run(
+                    status="failed",
+                    completed_at=datetime.now(UTC),
+                    error_message=f"mid_cycle_control_block: {mid_cycle_block}",
+                    output_summary_json={
+                        "last_successful_step": manifest.last_successful_step,
+                        "current_step": None,
+                    },
+                )
+                manifest.status = "failed"
+                manifest.error_message = f"mid_cycle_control_block: {mid_cycle_block}"
+                manifest_service.save(manifest)
+                return
+
             step = "order_submission"
             manifest.current_step = step
             manifest_service.save(manifest)
@@ -661,6 +713,31 @@ def run_trading_cycle(now_utc: datetime | None = None):
                 raise
 
             # STEP 4: ORDER RECONCILIATION
+            # Re-check freeze state before reconciliation — a freeze triggered
+            # post-submission (e.g., by a fill callback) must halt reconciliation.
+            if freeze_service.is_trading_frozen():
+                logger.warning(
+                    "trading_cycle_aborted_due_to_mid_cycle_freeze",
+                    extra=LogContext(
+                        run_id=str(run_id),
+                        component=component,
+                        incident_type="mid_cycle_freeze",
+                    ).to_extra(),
+                )
+                _save_runtime_job_run(
+                    status="failed",
+                    completed_at=datetime.now(UTC),
+                    error_message="mid_cycle_freeze: trading frozen before order_reconciliation",
+                    output_summary_json={
+                        "last_successful_step": manifest.last_successful_step,
+                        "current_step": None,
+                    },
+                )
+                manifest.status = "failed"
+                manifest.error_message = "mid_cycle_freeze"
+                manifest_service.save(manifest)
+                return
+
             step = "order_reconciliation"
             manifest.current_step = step
             manifest_service.save(manifest)

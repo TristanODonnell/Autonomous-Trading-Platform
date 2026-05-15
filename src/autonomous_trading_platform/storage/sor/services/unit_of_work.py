@@ -51,11 +51,17 @@ from autonomous_trading_platform.storage.sor.repositories.core.order_intent_repo
 from autonomous_trading_platform.storage.sor.repositories.core.position_snapshot_repository import (
     PositionSnapshotRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.reconciliation_snapshot_repository import (
+    ReconciliationSnapshotRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.risk_snapshot_repository import (
     RiskSnapshotRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.run_manifests_repository import (
     RunManifestRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.runtime_soak_report_repository import (
+    RuntimeSoakReportRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.signals_repository import (
     SignalRepository,
@@ -111,6 +117,8 @@ class SorUnitOfWork:
         self.feature_dataset_versions = FeatureDatasetVersionsRepository(session)
         self.experiments_repository = ExperimentsRepository(session)
         self.metrics_summary_repository = MetricsSummaryRepository(session)
+        self.reconciliation_snapshots = ReconciliationSnapshotRepository(session)
+        self.runtime_soak_reports = RuntimeSoakReportRepository(session)
 
     def __enter__(self) -> "SorUnitOfWork":
         self._started_transaction = False

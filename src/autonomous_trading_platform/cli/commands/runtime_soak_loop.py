@@ -270,12 +270,27 @@ class _ResearchSoakRunner:
         self._sleeper = InterruptibleSleeper()
         self._cycles = 0
 
+    def _rescue_orphan_jobs(self) -> None:
+        cutoff = _now_utc() - timedelta(minutes=30)
+        session = get_session()
+        try:
+            rescued = OrphanJobRecoveryService(session).rescue_orphan_running_jobs(cutoff=cutoff)
+            session.commit()
+            if rescued:
+                print(
+                    f"[SoakTestRunner] Rescued {len(rescued)} orphan RUNNING job(s) from prior run: "
+                    + ", ".join(r.job_name for r in rescued)
+                )
+        finally:
+            session.close()
+
     def run(self) -> int:
         self._sleeper.install_signal_handlers(label="SoakTestRunner")
         mode_label = "loop mode" if self._loop else "one-shot"
         print_header(f"Historical Research Soak Loop — {mode_label}")
         print(f"[SoakTestRunner] Symbols: {', '.join(self._symbols)}")
         print(f"[SoakTestRunner] Period: {self._start.date()} to {self._end.date()}")
+        self._rescue_orphan_jobs()
         if self._loop:
             print(
                 "[SoakTestRunner] WARNING: This will repeatedly backfill the same period "

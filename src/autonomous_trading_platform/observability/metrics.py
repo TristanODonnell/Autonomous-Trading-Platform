@@ -1,8 +1,35 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from opentelemetry import metrics
 
 meter = metrics.get_meter("autonomous_trading_platform")
+
+
+@dataclass
+class RuntimeFreshnessState:
+    ingestion_lag_seconds: float | None = None
+    symbols_expected: int | None = None
+    symbols_received: int | None = None
+
+
+_runtime_freshness_state = RuntimeFreshnessState()
+
+
+def record_runtime_freshness(
+    *,
+    ingestion_lag_seconds: float | None = None,
+    symbols_expected: int | None = None,
+    symbols_received: int | None = None,
+) -> None:
+    if ingestion_lag_seconds is not None:
+        _runtime_freshness_state.ingestion_lag_seconds = max(0.0, float(ingestion_lag_seconds))
+    if symbols_expected is not None:
+        _runtime_freshness_state.symbols_expected = max(0, int(symbols_expected))
+    if symbols_received is not None:
+        _runtime_freshness_state.symbols_received = max(0, int(symbols_received))
+
 
 # ==========================================
 # INCIDENT METRICS
@@ -154,9 +181,57 @@ order_submission_latency_seconds = meter.create_histogram(
     unit="s",
 )
 
+order_execution_signal_to_submit_latency_seconds = meter.create_histogram(
+    name="ratp_order_execution_signal_to_submit_latency_seconds",
+    description="Latency from signal generation to broker order submission attempt",
+    unit="s",
+)
+
+order_execution_submit_to_ack_latency_seconds = meter.create_histogram(
+    name="ratp_order_execution_submit_to_ack_latency_seconds",
+    description="Latency from broker order submission attempt to broker acknowledgement",
+    unit="s",
+)
+
+order_execution_ack_to_fill_latency_seconds = meter.create_histogram(
+    name="ratp_order_execution_ack_to_fill_latency_seconds",
+    description="Latency from broker acknowledgement to fill receipt",
+    unit="s",
+)
+
+order_execution_total_latency_seconds = meter.create_histogram(
+    name="ratp_order_execution_total_latency_seconds",
+    description="Total latency from signal generation to fill receipt or broker acknowledgement",
+    unit="s",
+)
+
 order_submission_risk_rejection_count = meter.create_counter(
     name="ratp_order_submission_risk_rejection_count_total",
     description="Total number of order submission risk rejection count",
+    unit="1",
+)
+
+ratp_broker_api_requests_total = meter.create_counter(
+    name="ratp_broker_api_requests_total",
+    description="Total number of broker API requests",
+    unit="1",
+)
+
+ratp_broker_api_failures_total = meter.create_counter(
+    name="ratp_broker_api_failures_total",
+    description="Total number of failed broker API requests",
+    unit="1",
+)
+
+ratp_broker_api_latency_seconds = meter.create_histogram(
+    name="ratp_broker_api_latency_seconds",
+    description="Broker API request latency",
+    unit="s",
+)
+
+ratp_broker_api_retries_total = meter.create_counter(
+    name="ratp_broker_api_retries_total",
+    description="Total number of broker API retry attempts",
     unit="1",
 )
 
@@ -184,6 +259,50 @@ order_reconciliation_mismatches = meter.create_counter(
     name="ratp_order_reconciliation_mismatches_total",
     description="Total number of reconciliation mismatches detected",
     unit="1",
+)
+
+# --- External Broker Reconciliation metrics (TASK-514 to TASK-519) ---
+
+# TASK-514: open tracked orders whose broker_order_id is absent from broker's open order list
+ratp_unreconciled_orders = meter.create_up_down_counter(
+    name="ratp_unreconciled_orders",
+    description="Current number of platform-open orders not present in broker's open order list",
+    unit="1",
+)
+
+# TASK-515: fills where platform-side cumulative qty exceeds broker-reported filled qty
+ratp_duplicate_fills_detected_total = meter.create_counter(
+    name="ratp_duplicate_fills_detected_total",
+    description="Total number of possible duplicate fill events detected during reconciliation",
+    unit="1",
+)
+
+# TASK-516: signed cash drift (platform internal cash minus broker-reported cash)
+ratp_cash_drift_amount = meter.create_histogram(
+    name="ratp_cash_drift_amount",
+    description="Signed cash drift (platform minus broker) detected during external reconciliation",
+    unit="USD",
+)
+
+# TASK-517: count of per-symbol position drift events
+ratp_position_drift_count_total = meter.create_counter(
+    name="ratp_position_drift_count_total",
+    description="Total number of per-symbol position drift events detected during reconciliation",
+    unit="1",
+)
+
+# TASK-518: signed position quantity drift per symbol (platform minus broker)
+ratp_position_quantity_drift = meter.create_histogram(
+    name="ratp_position_quantity_drift",
+    description="Signed position quantity drift (platform minus broker) per symbol during reconciliation",
+    unit="1",
+)
+
+# TASK-519: signed equity drift (platform internal equity minus broker-reported equity)
+ratp_equity_drift_amount = meter.create_histogram(
+    name="ratp_equity_drift_amount",
+    description="Signed equity drift (platform minus broker) detected during external reconciliation",
+    unit="USD",
 )
 
 # --- Risk Snapshot ---
@@ -304,12 +423,9 @@ ingestion_batch_size = meter.create_histogram(
 
 
 def _ingestion_lag_callback(options):
-    """
-    Returns current ingestion lag in seconds.
-    Replace with real computation (e.g., now - latest_bar_timestamp).
-    """
-    # TODO: wire to real state
-    return [metrics.Observation(0.0)]
+    if _runtime_freshness_state.ingestion_lag_seconds is None:
+        return []
+    return [metrics.Observation(_runtime_freshness_state.ingestion_lag_seconds)]
 
 
 ingestion_lag_seconds = meter.create_observable_gauge(
@@ -321,8 +437,9 @@ ingestion_lag_seconds = meter.create_observable_gauge(
 
 
 def _symbols_expected_callback(options):
-    # TODO: wire to membership service
-    return [metrics.Observation(0)]
+    if _runtime_freshness_state.symbols_expected is None:
+        return []
+    return [metrics.Observation(_runtime_freshness_state.symbols_expected)]
 
 
 symbols_expected = meter.create_observable_gauge(
@@ -334,8 +451,9 @@ symbols_expected = meter.create_observable_gauge(
 
 
 def _symbols_received_callback(options):
-    # TODO: wire to ingestion results
-    return [metrics.Observation(0)]
+    if _runtime_freshness_state.symbols_received is None:
+        return []
+    return [metrics.Observation(_runtime_freshness_state.symbols_received)]
 
 
 symbols_received = meter.create_observable_gauge(
@@ -690,5 +808,45 @@ experiment_pipeline_cycle_step_runs = meter.create_counter(
 experiment_pipeline_cycle_step_duration = meter.create_histogram(
     name="ratp_experiment_pipeline_cycle_step_duration_seconds",
     description="Experiment pipeline cycle step execution duration",
+    unit="s",
+)
+
+# =========================
+# GOVERNANCE / ALLOCATION CYCLE METRICS
+# =========================
+
+governance_cycle_runs = meter.create_counter(
+    name="ratp_governance_cycle_runs_total",
+    description="Total number of governance cycle executions",
+    unit="1",
+)
+
+governance_cycle_failures = meter.create_counter(
+    name="ratp_governance_cycle_failures_total",
+    description="Total number of governance cycle failures",
+    unit="1",
+)
+
+governance_cycle_duration = meter.create_histogram(
+    name="ratp_governance_cycle_duration_seconds",
+    description="Governance cycle execution duration",
+    unit="s",
+)
+
+allocation_cycle_runs = meter.create_counter(
+    name="ratp_allocation_cycle_runs_total",
+    description="Total number of allocation cycle executions",
+    unit="1",
+)
+
+allocation_cycle_failures = meter.create_counter(
+    name="ratp_allocation_cycle_failures_total",
+    description="Total number of allocation cycle failures",
+    unit="1",
+)
+
+allocation_cycle_duration = meter.create_histogram(
+    name="ratp_allocation_cycle_duration_seconds",
+    description="Allocation cycle execution duration",
     unit="s",
 )

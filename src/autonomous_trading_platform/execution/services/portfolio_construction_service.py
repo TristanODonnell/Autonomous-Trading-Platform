@@ -66,6 +66,7 @@ class PortfolioConstructionService:
         performance_tier: str | None = None,
         recent_closes: dict[str, list[float]] | None = None,
     ):
+        signals_by_symbol = {signal.symbol: signal for signal in signals}
         target_positions = self._compute_target_positions(
             signals=signals,
             prices=prices,
@@ -85,6 +86,13 @@ class PortfolioConstructionService:
                 bar_timestamp=bar_timestamp,
                 now=now,
             )
+            signal = signals_by_symbol.get(order_intent.symbol)
+            if signal is not None:
+                order_intent.metadata = {
+                    **(order_intent.metadata or {}),
+                    "signal_id": str(signal.signal_id),
+                    "signal_generated_at": signal.timestamp.isoformat(),
+                }
             self.pre_trade_risk_service.assert_order_allowed(order_intent, now=now)
             yield order_intent
 

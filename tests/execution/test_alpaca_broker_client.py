@@ -13,6 +13,40 @@ class CapturingHttpClient:
         self.calls.append(kwargs)
 
 
+class FakeResponse:
+    status_code = 200
+    is_error = False
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self):
+        return {"id": "order-1"}
+
+
+class RequestCapturingHttpClient:
+    init_calls: list[dict] = []
+    requests: list[dict] = []
+
+    def __init__(self, **kwargs) -> None:
+        self.init_calls.append(kwargs)
+
+    def request(self, method, path, **kwargs):
+        self.requests.append({"method": method, "path": path, **kwargs})
+        return FakeResponse()
+
+
+class CapturingMetric:
+    def __init__(self) -> None:
+        self.calls: list[tuple[float, dict]] = []
+
+    def add(self, value, labels) -> None:
+        self.calls.append((value, labels))
+
+    def record(self, value, labels) -> None:
+        self.calls.append((value, labels))
+
+
 def _settings(**overrides):
     data = {
         "broker_api_key": "paper-key",
@@ -75,3 +109,47 @@ def test_alpaca_broker_client_rejects_missing_credentials(api_key, api_secret) -
 def test_alpaca_broker_client_rejects_invalid_base_url() -> None:
     with pytest.raises(ValueError, match="Invalid Alpaca base URL"):
         AlpacaBrokerClient(_settings(alpaca_base_url="https://example.test"))
+
+
+def test_alpaca_broker_client_adds_request_id_and_endpoint_instrumentation(
+    monkeypatch,
+) -> None:
+    RequestCapturingHttpClient.init_calls.clear()
+    RequestCapturingHttpClient.requests.clear()
+    monkeypatch.setattr(alpaca_broker_client.httpx, "Client", RequestCapturingHttpClient)
+
+    client = AlpacaBrokerClient(_settings())
+    response = client.submit_order({"symbol": "AAPL"})
+
+    request = RequestCapturingHttpClient.requests[0]
+    assert response == {"id": "order-1"}
+    assert request["method"] == "POST"
+    assert request["path"] == "/v2/orders"
+    assert request["headers"]["X-RATP-Request-ID"].startswith("ratp-")
+
+
+def test_alpaca_broker_client_broker_metrics_use_dashboard_safe_labels(monkeypatch) -> None:
+    RequestCapturingHttpClient.init_calls.clear()
+    RequestCapturingHttpClient.requests.clear()
+    requests_metric = CapturingMetric()
+    latency_metric = CapturingMetric()
+    monkeypatch.setattr(alpaca_broker_client.httpx, "Client", RequestCapturingHttpClient)
+    monkeypatch.setattr(alpaca_broker_client, "ratp_broker_api_requests_total", requests_metric)
+    monkeypatch.setattr(alpaca_broker_client, "ratp_broker_api_latency_seconds", latency_metric)
+
+    client = AlpacaBrokerClient(_settings())
+    client.submit_order({"symbol": "AAPL"})
+
+    request_labels = requests_metric.calls[0][1]
+    latency_labels = latency_metric.calls[0][1]
+    assert request_labels == {
+        "environment": "unknown",
+        "component": "execution.broker_client",
+        "broker": "alpaca",
+        "endpoint": "orders.submit",
+        "status": "started",
+    }
+    assert latency_labels["status"] == "200"
+    assert "correlation_id" not in latency_labels
+    assert "job_run_id" not in latency_labels
+    assert "run_id" not in latency_labels
