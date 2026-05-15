@@ -13,6 +13,29 @@ class CapturingHttpClient:
         self.calls.append(kwargs)
 
 
+class FakeResponse:
+    status_code = 200
+    is_error = False
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self):
+        return {"id": "order-1"}
+
+
+class RequestCapturingHttpClient:
+    init_calls: list[dict] = []
+    requests: list[dict] = []
+
+    def __init__(self, **kwargs) -> None:
+        self.init_calls.append(kwargs)
+
+    def request(self, method, path, **kwargs):
+        self.requests.append({"method": method, "path": path, **kwargs})
+        return FakeResponse()
+
+
 def _settings(**overrides):
     data = {
         "broker_api_key": "paper-key",
@@ -75,3 +98,20 @@ def test_alpaca_broker_client_rejects_missing_credentials(api_key, api_secret) -
 def test_alpaca_broker_client_rejects_invalid_base_url() -> None:
     with pytest.raises(ValueError, match="Invalid Alpaca base URL"):
         AlpacaBrokerClient(_settings(alpaca_base_url="https://example.test"))
+
+
+def test_alpaca_broker_client_adds_request_id_and_endpoint_instrumentation(
+    monkeypatch,
+) -> None:
+    RequestCapturingHttpClient.init_calls.clear()
+    RequestCapturingHttpClient.requests.clear()
+    monkeypatch.setattr(alpaca_broker_client.httpx, "Client", RequestCapturingHttpClient)
+
+    client = AlpacaBrokerClient(_settings())
+    response = client.submit_order({"symbol": "AAPL"})
+
+    request = RequestCapturingHttpClient.requests[0]
+    assert response == {"id": "order-1"}
+    assert request["method"] == "POST"
+    assert request["path"] == "/v2/orders"
+    assert request["headers"]["X-RATP-Request-ID"].startswith("ratp-")

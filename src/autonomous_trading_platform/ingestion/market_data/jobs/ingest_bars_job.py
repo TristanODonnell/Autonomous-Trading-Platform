@@ -33,6 +33,7 @@ from autonomous_trading_platform.observability.metrics import (
     ingestion_job_failures,
     ingestion_job_runs,
     missing_bars,
+    record_runtime_freshness,
 )
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
@@ -111,6 +112,10 @@ class IngestBarsJob:
 
         missing_symbols = self.expected_symbols - self.received_symbols
         symbols_to_evaluate = sorted(self.expected_symbols & self.received_symbols)
+        record_runtime_freshness(
+            symbols_expected=len(self.expected_symbols),
+            symbols_received=len(self.received_symbols),
+        )
         incidents: list[MissingBarIncidents] = []
         if missing_symbols:
             incidents = []

@@ -46,6 +46,9 @@ from autonomous_trading_platform.storage.sor.models.runtime_control_state import
     RuntimeControlState,
 )
 from autonomous_trading_platform.storage.sor.models.runtime_job_runs import RuntimeJobRuns
+from autonomous_trading_platform.storage.sor.models.runtime_soak_reports import (
+    RuntimeSoakReportRow,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.run_manifests_repository import (
     RunManifestRepository,
 )
@@ -466,6 +469,11 @@ def test_verify_returns_runtime_soak_report(db_session: Session) -> None:
     assert report.window_start == window_start
     assert report.window_end == window_end
 
+    persisted = db_session.query(RuntimeSoakReportRow).one()
+    assert persisted.status == report.status.value
+    assert persisted.environment == "paper"
+    assert persisted.report_json["summary"]["total_checks"] == len(report.checks)
+
 
 def test_failed_check_escalates_report_status(
     db_session: Session,
@@ -541,6 +549,25 @@ def test_warning_check_produces_warning_report_status(
             "Failure controls forced to pass for warning aggregation coverage.",
         ),
     )
+    for method_name, check_name in (
+        ("_check_metric_export", RuntimeSoakCheckName.METRIC_EXPORT),
+        ("_check_trace_export", RuntimeSoakCheckName.TRACE_EXPORT),
+        ("_check_loki_ingestion", RuntimeSoakCheckName.LOKI_INGESTION),
+        ("_check_governance_runtime", RuntimeSoakCheckName.GOVERNANCE_RUNTIME),
+        ("_check_replay_runtime", RuntimeSoakCheckName.REPLAY_RUNTIME),
+        (
+            "_check_long_running_runtime_integrity",
+            RuntimeSoakCheckName.LONG_RUNNING_RUNTIME_INTEGRITY,
+        ),
+    ):
+        monkeypatch.setattr(
+            service,
+            method_name,
+            lambda *, window_start, window_end, check_name=check_name: service._passed(
+                check_name,
+                "Forced to pass for warning aggregation coverage.",
+            ),
+        )
     monkeypatch.setattr(
         service,
         "_check_cash_position_equity_consistency",
@@ -601,6 +628,25 @@ def test_all_passed_checks_produce_passed_report(
             "Data freshness forced to pass for passed-report coverage.",
         ),
     )
+    for method_name, check_name in (
+        ("_check_metric_export", RuntimeSoakCheckName.METRIC_EXPORT),
+        ("_check_trace_export", RuntimeSoakCheckName.TRACE_EXPORT),
+        ("_check_loki_ingestion", RuntimeSoakCheckName.LOKI_INGESTION),
+        ("_check_governance_runtime", RuntimeSoakCheckName.GOVERNANCE_RUNTIME),
+        ("_check_replay_runtime", RuntimeSoakCheckName.REPLAY_RUNTIME),
+        (
+            "_check_long_running_runtime_integrity",
+            RuntimeSoakCheckName.LONG_RUNNING_RUNTIME_INTEGRITY,
+        ),
+    ):
+        monkeypatch.setattr(
+            service,
+            method_name,
+            lambda *, window_start, window_end, check_name=check_name: service._passed(
+                check_name,
+                "Forced to pass for passed-report coverage.",
+            ),
+        )
 
     report = service.verify(
         window_start=window_start,

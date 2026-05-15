@@ -65,6 +65,15 @@ class BrokerOrderMapper:
             last_error=self._extract_last_error(payload),
             raw_broker_payload=payload,
             requested_qty=self._to_decimal_or_none(payload.get("qty")),
+            signal_generated_at=self._parse_datetime(payload.get("ratp_signal_generated_at")),
+            submitted_to_broker_at=self._parse_datetime(payload.get("ratp_submitted_to_broker_at")),
+            broker_acknowledged_at=(
+                self._parse_datetime(payload.get("ratp_broker_acknowledged_at"))
+                or self._parse_datetime(payload.get("accepted_at"))
+                or self._parse_datetime(payload.get("submitted_at"))
+                or datetime.now(UTC)
+            ),
+            first_fill_at=self._parse_datetime(payload.get("filled_at")),
         )
 
     @staticmethod
@@ -111,6 +120,10 @@ class BrokerOrderMapper:
             last_error=broker_order.last_error,
             raw_broker_payload=broker_order.raw_broker_payload,
             requested_qty=broker_order.requested_qty,
+            signal_generated_at=broker_order.signal_generated_at,
+            submitted_to_broker_at=broker_order.submitted_to_broker_at,
+            broker_acknowledged_at=broker_order.broker_acknowledged_at,
+            first_fill_at=broker_order.first_fill_at,
         )
 
     def to_order_event(self, broker_order: BrokerOrder) -> OrderEvent | None:

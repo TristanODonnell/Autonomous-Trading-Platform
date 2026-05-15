@@ -19,12 +19,16 @@ from autonomous_trading_platform.storage.sor.models.feature_dataset_versions imp
 from autonomous_trading_platform.storage.sor.models.fills import Fill
 from autonomous_trading_platform.storage.sor.models.order_intents import OrderIntents
 from autonomous_trading_platform.storage.sor.models.position_snapshots import PositionSnapshot
+from autonomous_trading_platform.storage.sor.models.reconciliation_snapshots import (
+    ReconciliationSnapshot,
+)
 from autonomous_trading_platform.storage.sor.models.risk_snapshots import RiskSnapshot
 from autonomous_trading_platform.storage.sor.models.run_manifests import RunManifestRow
 from autonomous_trading_platform.storage.sor.models.runtime_control_state import (
     RuntimeControlState,
 )
 from autonomous_trading_platform.storage.sor.models.runtime_job_runs import RuntimeJobRuns
+from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
 
 FINALIZED_DATASET_STATUSES = ("validated", "complete", "finalized")
 TERMINAL_ORDER_STATUSES = (
@@ -397,6 +401,82 @@ class RuntimeSoakVerificationRepository:
                 ),
             )
             .order_by(AuditLogRow.event_timestamp.asc())
+        )
+        return list(self.session.scalars(stmt).all())
+
+    def list_audit_events_by_component_or_type(
+        self,
+        *,
+        window_start: datetime,
+        window_end: datetime,
+        component_prefixes: tuple[str, ...] = (),
+        event_type_patterns: tuple[str, ...] = (),
+    ) -> list[AuditLogRow]:
+        predicates = []
+        for prefix in component_prefixes:
+            predicates.append(AuditLogRow.component.like(f"{prefix}%"))
+        for pattern in event_type_patterns:
+            predicates.append(AuditLogRow.event_type.like(pattern))
+        if not predicates:
+            return []
+
+        stmt = (
+            select(AuditLogRow)
+            .where(
+                AuditLogRow.event_timestamp >= window_start,
+                AuditLogRow.event_timestamp <= window_end,
+                or_(*predicates),
+            )
+            .order_by(AuditLogRow.event_timestamp.asc())
+        )
+        return list(self.session.scalars(stmt).all())
+
+    def count_reconciliation_snapshots(
+        self,
+        *,
+        window_start: datetime,
+        window_end: datetime,
+    ) -> int:
+        stmt = select(func.count(ReconciliationSnapshot.snapshot_id)).where(
+            ReconciliationSnapshot.reconciled_at >= window_start,
+            ReconciliationSnapshot.reconciled_at <= window_end,
+        )
+        return int(self.session.scalar(stmt) or 0)
+
+    def list_governance_transitions(
+        self,
+        *,
+        window_start: datetime,
+        window_end: datetime,
+    ) -> list[StrategyGovernance]:
+        stmt = (
+            select(StrategyGovernance)
+            .where(
+                StrategyGovernance.updated_at >= window_start,
+                StrategyGovernance.updated_at <= window_end,
+            )
+            .order_by(StrategyGovernance.updated_at.asc(), StrategyGovernance.strategy_id.asc())
+        )
+        return list(self.session.scalars(stmt).all())
+
+    def list_successful_job_runs_by_names(
+        self,
+        *,
+        job_names: tuple[str, ...],
+        window_start: datetime,
+        window_end: datetime,
+    ) -> list[RuntimeJobRuns]:
+        if not job_names:
+            return []
+        stmt = (
+            select(RuntimeJobRuns)
+            .where(
+                RuntimeJobRuns.job_name.in_(job_names),
+                RuntimeJobRuns.status == "completed",
+                RuntimeJobRuns.started_at >= window_start,
+                RuntimeJobRuns.started_at <= window_end,
+            )
+            .order_by(RuntimeJobRuns.started_at.asc(), RuntimeJobRuns.job_name.asc())
         )
         return list(self.session.scalars(stmt).all())
 

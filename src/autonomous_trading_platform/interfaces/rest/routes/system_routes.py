@@ -4,10 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.api.dependencies import (
+    get_alpaca_broker_client,
     get_request_id,
     require_operator_or_admin,
 )
 from autonomous_trading_platform.api.envelope import SuccessEnvelope, success_response
+from autonomous_trading_platform.application.services.health.detailed_system_health_service import (
+    DetailedSystemHealthService,
+)
 from autonomous_trading_platform.application.services.runtime_control_service import (
     RuntimeControlService,
 )
@@ -15,6 +19,9 @@ from autonomous_trading_platform.application.services.system_health_service impo
     SystemHealthService,
 )
 from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.contracts.runtime.detailed_health import (
+    DetailedSystemHealthReport,
+)
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.interfaces.rest.schemas.system_schemas import (
     SystemHealthResponse,
@@ -40,6 +47,20 @@ def get_system_health(
         data=SystemHealthResponse(**result),
         request_id=request_id,
     )
+
+
+@router.get(
+    "/health/detailed",
+    response_model=SuccessEnvelope[DetailedSystemHealthReport],
+)
+def get_detailed_system_health(
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+    broker_client=Depends(get_alpaca_broker_client),
+) -> SuccessEnvelope[DetailedSystemHealthReport]:
+    service = DetailedSystemHealthService(session=session, broker_client=broker_client)
+    report = service.get_health()
+    return success_response(data=report, request_id=request_id)
 
 
 @router.put(

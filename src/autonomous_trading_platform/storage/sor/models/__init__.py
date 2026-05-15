@@ -19,10 +19,13 @@ from . import order_intents as order_intents
 from . import position_snapshot_items as position_snapshot_items
 from . import position_snapshots as position_snapshots
 from . import promotion_rules as promotion_rules
+from . import reconciliation_snapshots as reconciliation_snapshots
 from . import risk_snapshots as risk_snapshots
 from . import run_manifests as run_manifests
 from . import runtime_control_state as runtime_control_state
+from . import runtime_job_run_steps as runtime_job_run_steps
 from . import runtime_job_runs as runtime_job_runs
+from . import runtime_soak_reports as runtime_soak_reports
 from . import signals as signals
 from . import simulation_runs as simulation_runs
 from . import strategy_configs as strategy_configs
@@ -71,5 +74,8 @@ __all__ = [
     "capital_allocation_policies",
     "promotion_rules",
     "runtime_job_runs",
+    "runtime_job_run_steps",
     "runtime_control_state",
+    "reconciliation_snapshots",
+    "runtime_soak_reports",
 ]

@@ -1,14 +1,24 @@
 # autonomous_trading_platform/execution/clients/alpaca_broker_client.py
 
+from time import perf_counter
 from typing import Any, cast
+from uuid import uuid4
 
 import httpx
+from opentelemetry.trace import StatusCode
 
 from autonomous_trading_platform.config.broker_config_validator import (
     ALPACA_LIVE_BASE_URL,
     ALPACA_PAPER_BASE_URL,
 )
 from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.observability.enums import SpanTimespan
+from autonomous_trading_platform.observability.metrics import (
+    ratp_broker_api_failures_total,
+    ratp_broker_api_latency_seconds,
+    ratp_broker_api_requests_total,
+)
+from autonomous_trading_platform.observability.tracing import start_span
 
 
 class AlpacaBrokerClient:
@@ -37,23 +47,30 @@ class AlpacaBrokerClient:
     # ------------------------------------------------------------------
 
     def submit_order(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = self.client.post("/v2/orders", json=payload)
-        response.raise_for_status()
-        return cast(dict[str, Any], response.json())
+        return cast(
+            dict[str, Any],
+            self._request("POST", "/v2/orders", endpoint_tag="orders.submit", json=payload),
+        )
 
     def get_order_by_id(self, order_id: str) -> dict[str, Any]:
-        response = self.client.get(f"/v2/orders/{order_id}")
-        response.raise_for_status()
-        return cast(dict[str, Any], response.json())
+        return cast(
+            dict[str, Any],
+            self._request("GET", f"/v2/orders/{order_id}", endpoint_tag="orders.get"),
+        )
 
     def list_open_orders(self) -> list[dict[str, Any]]:
-        response = self.client.get("/v2/orders", params={"status": "open"})
-        response.raise_for_status()
-        return cast(list[dict[str, Any]], response.json())
+        return cast(
+            list[dict[str, Any]],
+            self._request(
+                "GET",
+                "/v2/orders",
+                endpoint_tag="orders.list_open",
+                params={"status": "open"},
+            ),
+        )
 
     def cancel_order(self, order_id: str) -> None:
-        response = self.client.delete(f"/v2/orders/{order_id}")
-        response.raise_for_status()
+        self._request("DELETE", f"/v2/orders/{order_id}", endpoint_tag="orders.cancel")
 
     # ------------------------------------------------------------------
     # Account & Positions
@@ -69,9 +86,7 @@ class AlpacaBrokerClient:
             buying_power    — available buying power
             portfolio_value — alias for equity in most Alpaca account types
         """
-        response = self.client.get("/v2/account")
-        response.raise_for_status()
-        return cast(dict[str, Any], response.json())
+        return cast(dict[str, Any], self._request("GET", "/v2/account", endpoint_tag="account.get"))
 
     def get_positions(self) -> list[dict[str, Any]]:
         """
@@ -85,16 +100,21 @@ class AlpacaBrokerClient:
             unrealized_pl   — unrealized P&L (string)
             current_price   — latest price for this position (string)
         """
-        response = self.client.get("/v2/positions")
-        response.raise_for_status()
-        return cast(list[dict[str, Any]], response.json())
+        return cast(
+            list[dict[str, Any]],
+            self._request("GET", "/v2/positions", endpoint_tag="positions.list"),
+        )
 
     def get_position(self, symbol: str) -> dict[str, Any] | None:
         """
         Fetch a single open position by symbol.
         Returns None if no position exists for that symbol (404).
         """
-        response = self.client.get(f"/v2/positions/{symbol}")
+        response = self._raw_request(
+            "GET",
+            f"/v2/positions/{symbol}",
+            endpoint_tag="positions.get",
+        )
         if response.status_code == 404:
             return None
         response.raise_for_status()
@@ -124,9 +144,15 @@ class AlpacaBrokerClient:
         Callers must ensure settings.alpaca_data_base_url is configured.
         """
         params = {"symbols": ",".join(symbols), "feed": "iex"}
-        response = self.client.get("/v2/stocks/quotes/latest", params=params)
-        response.raise_for_status()
-        data = cast(dict[str, Any], response.json())
+        data = cast(
+            dict[str, Any],
+            self._request(
+                "GET",
+                "/v2/stocks/quotes/latest",
+                endpoint_tag="market_data.latest_quotes",
+                params=params,
+            ),
+        )
         return cast(dict[str, Any], data.get("quotes", {}))
 
     def get_latest_trades(self, symbols: list[str]) -> dict[str, Any]:
@@ -139,10 +165,78 @@ class AlpacaBrokerClient:
             t   — timestamp
         """
         params = {"symbols": ",".join(symbols), "feed": "iex"}
-        response = self.client.get("/v2/stocks/trades/latest", params=params)
-        response.raise_for_status()
-        data = cast(dict[str, Any], response.json())
+        data = cast(
+            dict[str, Any],
+            self._request(
+                "GET",
+                "/v2/stocks/trades/latest",
+                endpoint_tag="market_data.latest_trades",
+                params=params,
+            ),
+        )
         return cast(dict[str, Any], data.get("trades", {}))
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        endpoint_tag: str,
+        **kwargs: Any,
+    ) -> Any:
+        response = self._raw_request(method, path, endpoint_tag=endpoint_tag, **kwargs)
+        response.raise_for_status()
+        if response.status_code == 204:
+            return None
+        return response.json()
+
+    def _raw_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        endpoint_tag: str,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        request_id = f"ratp-{uuid4()}"
+        headers = dict(kwargs.pop("headers", {}) or {})
+        headers["X-RATP-Request-ID"] = request_id
+        labels = {"broker": "alpaca", "endpoint": endpoint_tag, "method": method.upper()}
+
+        with start_span(
+            "broker_http_request",
+            timespan=SpanTimespan.REQUEST,
+            broker="alpaca",
+            broker_endpoint=endpoint_tag,
+            http_method=method.upper(),
+            http_route=path,
+            request_id=request_id,
+        ) as span:
+            start = perf_counter()
+            ratp_broker_api_requests_total.add(1, labels)
+            try:
+                response = self.client.request(method, path, headers=headers, **kwargs)
+                latency = perf_counter() - start
+                ratp_broker_api_latency_seconds.record(
+                    latency,
+                    {**labels, "status_code": str(response.status_code)},
+                )
+                span.set_attribute("http.status_code", response.status_code)
+                span.set_attribute("ratp.broker_api_latency_seconds", latency)
+                if response.is_error:
+                    ratp_broker_api_failures_total.add(
+                        1,
+                        {**labels, "status_code": str(response.status_code)},
+                    )
+                    span.set_status(StatusCode.ERROR, f"HTTP {response.status_code}")
+                return response
+            except Exception as exc:
+                latency = perf_counter() - start
+                ratp_broker_api_latency_seconds.record(latency, {**labels, "status_code": "error"})
+                ratp_broker_api_failures_total.add(1, {**labels, "status_code": "error"})
+                span.record_exception(exc)
+                span.set_status(StatusCode.ERROR, str(exc))
+                raise
 
     # ------------------------------------------------------------------
     # Lifecycle

@@ -6,9 +6,6 @@ from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
-from autonomous_trading_platform.application.services.runtime_soak_verification_service import (
-    RuntimeSoakVerificationService,
-)
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.cli.helpers import parse_datetime
 from autonomous_trading_platform.config.settings import Settings
@@ -16,6 +13,9 @@ from autonomous_trading_platform.contracts.runtime.runtime_soak_verification imp
     RuntimeSoakStatus,
 )
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.observability.verification.runtime_soak_verification_service import (
+    RuntimeSoakVerificationService,
+)
 
 
 @dataclass

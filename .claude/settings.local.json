@@ -60,7 +60,8 @@
       "Bash(Select-Object -First 5)",
       "Bash(git stash *)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\" -Recurse -Filter \"main.py\")",
-      "Bash(Select-Object FullName)"
+      "Bash(Select-Object FullName)",
+      "Bash(echo \"EXIT:$?\")"
     ]
   }
 }

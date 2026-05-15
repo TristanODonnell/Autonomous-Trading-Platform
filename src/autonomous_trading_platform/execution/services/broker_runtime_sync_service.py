@@ -12,6 +12,8 @@ from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.contracts.common.enums import OrderSource
 from autonomous_trading_platform.execution.errors import BrokerRuntimeSyncError
 from autonomous_trading_platform.execution.mappers.broker_order_mapper import BrokerOrderMapper
+from autonomous_trading_platform.observability.lifecycle import record_order_execution_latency
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.models.broker_account_snapshots import (
     BrokerAccountSnapshot,
 )
@@ -21,6 +23,8 @@ from autonomous_trading_platform.storage.sor.models.position_snapshot_items impo
 )
 from autonomous_trading_platform.storage.sor.models.position_snapshots import PositionSnapshot
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
+
+logger = get_logger(__name__)
 
 
 class BrokerRuntimeClient(Protocol):
@@ -314,6 +318,10 @@ class BrokerRuntimeSyncService:
         )
 
         with SorUnitOfWork(self.session) as uow:
+            previous = uow.broker_orders.get_by_broker_order_id(broker_order.broker_order_id)
+            _carry_forward_execution_timestamps(broker_order, previous)
+            if broker_order.status.value == "filled" and broker_order.first_fill_at is None:
+                broker_order.first_fill_at = broker_order.updated_at
             uow.broker_orders.upsert(self.broker_order_mapper.to_orm_row(broker_order))
 
         return broker_order.broker_order_id
@@ -342,18 +350,45 @@ class BrokerRuntimeSyncService:
             previous = uow.broker_orders.get_by_broker_order_id(broker_order.broker_order_id)
             previous_filled_qty = previous.filled_qty if previous is not None else Decimal("0")
             previous_avg_fill_price = previous.avg_fill_price if previous is not None else None
+            _carry_forward_execution_timestamps(broker_order, previous)
 
             fill_result = self.broker_order_mapper.extract_incremental_fill(
                 broker_order=broker_order,
                 previous_filled_qty=previous_filled_qty,
                 previous_avg_fill_price=previous_avg_fill_price,
             )
+            if fill_result.fill is not None and broker_order.first_fill_at is None:
+                broker_order.first_fill_at = fill_result.fill.timestamp
             uow.broker_orders.upsert(self.broker_order_mapper.to_orm_row(broker_order))
 
             if fill_result.fill is not None:
                 fill_row = self.broker_order_mapper.to_fill_orm_row(fill_result.fill)
                 uow.fills.upsert(fill_row)
                 fill_ids.append(fill_row.fill_id)
+                record_order_execution_latency(
+                    logger=logger,
+                    component="execution.broker_runtime_sync_service",
+                    run_id=str(run_id),
+                    symbol=broker_order.symbol,
+                    broker=broker_order.broker,
+                    broker_order_id=broker_order.broker_order_id,
+                    signal_to_submit_seconds=_seconds_between(
+                        broker_order.signal_generated_at,
+                        broker_order.submitted_to_broker_at,
+                    ),
+                    submit_to_ack_seconds=_seconds_between(
+                        broker_order.submitted_to_broker_at,
+                        broker_order.broker_acknowledged_at,
+                    ),
+                    ack_to_fill_seconds=_seconds_between(
+                        broker_order.broker_acknowledged_at,
+                        broker_order.first_fill_at,
+                    ),
+                    total_execution_seconds=_seconds_between(
+                        broker_order.signal_generated_at,
+                        broker_order.first_fill_at,
+                    ),
+                )
 
         return tuple(fill_ids)
 
@@ -433,3 +468,22 @@ def _compare_optional_decimal(
 def _runtime_sync_intent_id(payload: dict[str, Any]) -> UUID:
     broker_order_id = str(payload.get("id") or payload.get("client_order_id") or uuid4())
     return uuid5(NAMESPACE_URL, f"broker-runtime-sync:intent:{broker_order_id}")
+
+
+def _carry_forward_execution_timestamps(broker_order, previous) -> None:
+    if previous is None:
+        return
+    if broker_order.signal_generated_at is None:
+        broker_order.signal_generated_at = previous.signal_generated_at
+    if broker_order.submitted_to_broker_at is None:
+        broker_order.submitted_to_broker_at = previous.submitted_to_broker_at
+    if broker_order.broker_acknowledged_at is None:
+        broker_order.broker_acknowledged_at = previous.broker_acknowledged_at
+    if broker_order.first_fill_at is None:
+        broker_order.first_fill_at = previous.first_fill_at
+
+
+def _seconds_between(start: datetime | None, end: datetime | None) -> float | None:
+    if start is None or end is None:
+        return None
+    return max(0.0, (end - start).total_seconds())
