@@ -62,6 +62,12 @@ from autonomous_trading_platform.contracts.runtime.ticker_lifecycle_event import
 from autonomous_trading_platform.contracts.runtime.universe_snapshot import (
     UniverseSnapshot as UniverseSnapshotContract,
 )
+from autonomous_trading_platform.contracts.runtime.universe_version import (
+    UniverseMember as UniverseMemberContract,
+)
+from autonomous_trading_platform.contracts.runtime.universe_version import (
+    UniverseVersion as UniverseVersionContract,
+)
 from autonomous_trading_platform.contracts.trading.broker_order import (
     BrokerOrder as BrokerOrderContract,
 )
@@ -119,6 +125,12 @@ from autonomous_trading_platform.storage.sor.models.ticker_lifecycle_event impor
 )
 from autonomous_trading_platform.storage.sor.models.universe_snapshots import (
     UniverseSnapshot as UniverseSnapshotOrm,
+)
+from autonomous_trading_platform.storage.sor.models.universe_versions import (
+    UniverseMember as UniverseMemberOrm,
+)
+from autonomous_trading_platform.storage.sor.models.universe_versions import (
+    UniverseVersion as UniverseVersionOrm,
 )
 
 from .schema_drift_helpers import (
@@ -217,6 +229,16 @@ SCHEMA_PAIRS: tuple[ContractOrmSchemaPair, ...] = (
         contract=UniverseSnapshotContract,
         orm_model=UniverseSnapshotOrm,
         expected_fields=tuple(UniverseSnapshotContract.model_fields),
+    ),
+    ContractOrmSchemaPair(
+        contract=UniverseVersionContract,
+        orm_model=UniverseVersionOrm,
+        expected_fields=tuple(UniverseVersionContract.model_fields),
+    ),
+    ContractOrmSchemaPair(
+        contract=UniverseMemberContract,
+        orm_model=UniverseMemberOrm,
+        expected_fields=tuple(UniverseMemberContract.model_fields),
     ),
     ContractOrmSchemaPair(
         contract=BrokerOrderContract,
@@ -320,6 +342,10 @@ UNMAPPED_NOT_TESTED: tuple[tuple[str, str], ...] = (
     (
         "storage.sor.models.symbol_date_coverage.SymbolDateCoverage",
         "Coverage metadata table; no matching runtime contract found.",
+    ),
+    (
+        "storage.sor.models.universe_snapshots.UniverseSnapshot (DEPRECATED)",
+        "Superseded by UniverseVersion + UniverseMember. Retained for historical data only.",
     ),
     (
         "storage.sor.models.tracked_orders.TrackedOrder",

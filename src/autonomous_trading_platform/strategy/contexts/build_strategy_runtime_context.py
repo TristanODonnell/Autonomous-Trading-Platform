@@ -18,8 +18,8 @@ from autonomous_trading_platform.storage.parquet.reader import HistoricalBarData
 from autonomous_trading_platform.storage.sor.repositories.core.strategy_runtime_state_repository import (
     StrategyRuntimeStateRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.core.universe_snapshot_repository import (
-    UniverseSnapshotRepository,
+from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
+    UniverseVersionRepository,
 )
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
     StrategyContextBuilder,
@@ -43,14 +43,14 @@ from autonomous_trading_platform.strategy.services.strategy_evaluation_service i
 
 
 class SqlAlchemyUniverseMembershipReader:
-    def __init__(self, repository: UniverseSnapshotRepository) -> None:
+    def __init__(self, repository: UniverseVersionRepository) -> None:
         self.repository = repository
 
     def get_symbols_for_timestamp(self, as_of: datetime) -> list[str]:
-        snapshot = self.repository.get_by_snapshot_date(as_of.date())
-        if snapshot is None:
+        version = self.repository.get_active_version(as_of)
+        if version is None:
             return []
-        return list(snapshot.symbols)
+        return self.repository.get_symbols(version.universe_version_id)
 
 
 def build_strategy_runtime_context(
@@ -61,7 +61,7 @@ def build_strategy_runtime_context(
     fallback_dataset: ParquetDataset | None = None,
     fallback_dataset_version: str | None = None,
 ) -> StrategyRuntimeContext:
-    universe_repository = UniverseSnapshotRepository(session)
+    universe_repository = UniverseVersionRepository(session)
     runtime_state_repository = StrategyRuntimeStateRepository(session)
 
     universe_reader = SqlAlchemyUniverseMembershipReader(universe_repository)

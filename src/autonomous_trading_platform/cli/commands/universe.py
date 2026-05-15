@@ -8,12 +8,13 @@ from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.cli.helpers import parse_datetime
+from autonomous_trading_platform.contracts.common.enums import UniverseSource
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.storage.sor.repositories.core.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.core.universe_snapshot_repository import (
-    UniverseSnapshotRepository,
+from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
+    UniverseVersionRepository,
 )
 from autonomous_trading_platform.universe.jobs.run_universe_selection_cycle import (
     run_universe_selection_cycle,
@@ -24,19 +25,19 @@ from autonomous_trading_platform.universe.services.ticker_lifecycle_service impo
 from autonomous_trading_platform.universe.services.universe_membership_service import (
     UniverseMembershipService,
 )
-from autonomous_trading_platform.universe.services.universe_snapshot_service import (
-    UniverseSnapshotService,
-)
 from autonomous_trading_platform.universe.services.universe_validation_service import (
     UniverseValidationService,
+)
+from autonomous_trading_platform.universe.services.universe_version_service import (
+    UniverseVersionService,
 )
 
 
 @dataclass
 class UniverseDependencies:
     session: Session
-    snapshot_repository: UniverseSnapshotRepository
-    snapshot_service: UniverseSnapshotService
+    version_repository: UniverseVersionRepository
+    version_service: UniverseVersionService
     validation_service: UniverseValidationService
     membership_service: UniverseMembershipService
 
@@ -44,22 +45,22 @@ class UniverseDependencies:
 def build_dependencies() -> UniverseDependencies:
     session = get_session()
 
-    snapshot_repository = UniverseSnapshotRepository(session)
-    snapshot_service = UniverseSnapshotService(snapshot_repository)
+    version_repository = UniverseVersionRepository(session)
+    version_service = UniverseVersionService(version_repository)
     validation_service = UniverseValidationService(session)
 
     ticker_lifecycle_repository = TickerLifecycleRepository(session)
     ticker_lifecycle_service = TickerLifecycleService(ticker_lifecycle_repository)
 
     membership_service = UniverseMembershipService(
-        repository=snapshot_repository,
+        repository=version_repository,
         ticker_lifecycle_service=ticker_lifecycle_service,
     )
 
     return UniverseDependencies(
         session=session,
-        snapshot_repository=snapshot_repository,
-        snapshot_service=snapshot_service,
+        version_repository=version_repository,
+        version_service=version_service,
         validation_service=validation_service,
         membership_service=membership_service,
     )
@@ -81,7 +82,7 @@ def register(subparsers) -> None:
 
     inspect_active_parser = universe_subparsers.add_parser(
         "inspect-active",
-        help="Inspect the active universe snapshot for a date",
+        help="Inspect the active universe version for a timestamp",
     )
     inspect_active_parser.add_argument("--timestamp")
     inspect_active_parser.set_defaults(func=handle_inspect_active)
@@ -103,7 +104,7 @@ def register(subparsers) -> None:
 
     validate_active_parser = universe_subparsers.add_parser(
         "validate-active",
-        help="Validate the active universe snapshot for a date",
+        help="Validate the active universe version for a timestamp",
     )
     validate_active_parser.add_argument("--timestamp")
     validate_active_parser.set_defaults(func=handle_validate_active)
@@ -117,7 +118,7 @@ def register(subparsers) -> None:
 
     seed_parser = universe_subparsers.add_parser(
         "seed",
-        help="Create a universe snapshot from explicit symbols",
+        help="Create a universe version from explicit symbols",
     )
     seed_parser.add_argument(
         "--symbols",
@@ -127,8 +128,13 @@ def register(subparsers) -> None:
     seed_parser.add_argument("--timestamp")
     seed_parser.add_argument(
         "--source",
-        default="manual_seed",
-        help="Source label for the seeded universe snapshot",
+        default=UniverseSource.CUSTOM,
+        help="Source label for the seeded universe version",
+    )
+    seed_parser.add_argument(
+        "--name",
+        default=None,
+        help="Human-readable name for the seeded universe version",
     )
     seed_parser.set_defaults(func=handle_seed)
 
@@ -138,27 +144,23 @@ def handle_seed(args: argparse.Namespace) -> int:
     try:
         timestamp = _resolve_timestamp(args.timestamp)
         symbols = _parse_symbols(args.symbols)
+        name = args.name or f"seed_{timestamp.date().isoformat()}"
 
-        criteria = {
-            "seeded": True,
-            "input_symbols": symbols,
-            "symbol_count": len(symbols),
-        }
-
-        snapshot = deps.snapshot_service.build_snapshot(
-            snapshot_date=timestamp.date(),
-            effective_start=timestamp,
+        version, members = deps.version_service.build_version(
+            name=name,
+            effective_from=timestamp,
             symbols=symbols,
-            criteria=criteria,
             source=args.source,
+            rebalance_reason="manual_seed",
         )
 
-        validation = deps.validation_service.validate_row(snapshot)
+        validation = deps.validation_service.validate_version_row(version, members)
         if not validation.ok:
             raise RuntimeError(validation.errors)
 
-        deps.snapshot_repository.close_open_snapshot(snapshot.effective_start)
-        deps.snapshot_service.save_snapshot(snapshot)
+        deps.version_repository.retire_active_version(version.effective_from)
+        deps.version_service.save_version(version, members)
+        deps.version_repository.activate_version(version.universe_version_id)
         deps.session.commit()
 
         print_header("Seed Universe")
@@ -166,10 +168,12 @@ def handle_seed(args: argparse.Namespace) -> int:
             {
                 "status": "success",
                 "timestamp": timestamp.isoformat(),
-                "symbol_count": len(symbols),
-                "symbols": symbols,
+                "symbol_count": len(members),
+                "symbols": [m.symbol for m in members],
                 "source": args.source,
-                "universe_id": snapshot.universe_id,
+                "universe_version_id": version.universe_version_id,
+                "name": version.name,
+                "config_hash": version.config_hash,
             }
         )
         return 0
@@ -200,10 +204,10 @@ def handle_inspect_active(args: argparse.Namespace) -> int:
     deps = build_dependencies()
     timestamp = _resolve_timestamp(args.timestamp)
 
-    snapshot = deps.snapshot_repository.get_effective_for_date(timestamp)
+    version = deps.version_repository.get_active_version(timestamp)
 
     print_header("Inspect Active Universe")
-    if snapshot is None:
+    if version is None:
         print_json(
             {
                 "timestamp": timestamp.isoformat(),
@@ -212,20 +216,24 @@ def handle_inspect_active(args: argparse.Namespace) -> int:
         )
         return 0
 
+    members = deps.version_repository.get_members(version.universe_version_id)
+    symbols = [m.symbol for m in members]
+
     print_json(
         {
             "timestamp": timestamp.isoformat(),
             "found": True,
-            "universe_id": snapshot.universe_id,
-            "snapshot_date": str(snapshot.snapshot_date),
-            "effective_start": snapshot.effective_start,
-            "effective_end": snapshot.effective_end,
-            "symbol_count": len(snapshot.symbols),
-            "symbols_preview": snapshot.symbols[:25],
-            "criteria": snapshot.criteria,
-            "version": snapshot.version,
-            "source": snapshot.source,
-            "built_at": snapshot.built_at,
+            "universe_version_id": version.universe_version_id,
+            "name": version.name,
+            "effective_from": version.effective_from,
+            "effective_to": version.effective_to,
+            "status": version.status,
+            "source": version.source,
+            "rebalance_reason": version.rebalance_reason,
+            "config_hash": version.config_hash,
+            "created_at": version.created_at,
+            "symbol_count": len(symbols),
+            "symbols_preview": symbols[:25],
         }
     )
     return 0
@@ -270,11 +278,12 @@ def handle_validate_active(args: argparse.Namespace) -> int:
     deps = build_dependencies()
     timestamp = _resolve_timestamp(args.timestamp)
 
-    snapshot = deps.snapshot_repository.get_effective_for_date(timestamp)
-    if snapshot is None:
-        raise RuntimeError(f"No active universe snapshot found for {timestamp.isoformat()}")
+    version = deps.version_repository.get_active_version(timestamp)
+    if version is None:
+        raise RuntimeError(f"No active universe version found for {timestamp.isoformat()}")
 
-    result = deps.validation_service.validate_row(snapshot)
+    members = deps.version_repository.get_members(version.universe_version_id)
+    result = deps.validation_service.validate_version_row(version, members)
 
     print_header("Validate Active Universe")
     print_json(
@@ -282,7 +291,8 @@ def handle_validate_active(args: argparse.Namespace) -> int:
             "timestamp": timestamp.isoformat(),
             "ok": result.ok,
             "errors": result.errors,
-            "symbol_count": len(snapshot.symbols),
+            "universe_version_id": version.universe_version_id,
+            "symbol_count": len(members),
         }
     )
     return 0

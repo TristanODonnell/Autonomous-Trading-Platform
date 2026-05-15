@@ -55,8 +55,8 @@ from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_r
 from autonomous_trading_platform.storage.sor.repositories.core.ticker_lifecycle_repository import (
     TickerLifecycleRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.core.universe_snapshot_repository import (
-    UniverseSnapshotRepository,
+from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
+    UniverseVersionRepository,
 )
 from autonomous_trading_platform.universe.services.ticker_lifecycle_service import (
     TickerLifecycleService,
@@ -174,12 +174,12 @@ def run_market_ingestion_cycle(
                 raise RuntimeError("symbols_override was provided but is empty")
             expected_symbols = set(symbols_override)
         else:
-            snapshot_repository = UniverseSnapshotRepository(session)
+            version_repository = UniverseVersionRepository(session)
             ticker_lifecycle_repository = TickerLifecycleRepository(session)
             ticker_lifecycle_service = TickerLifecycleService(ticker_lifecycle_repository)
 
             membership_service = UniverseMembershipService(
-                repository=snapshot_repository,
+                repository=version_repository,
                 ticker_lifecycle_service=ticker_lifecycle_service,
             )
 

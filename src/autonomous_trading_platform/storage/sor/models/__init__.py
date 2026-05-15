@@ -37,6 +37,7 @@ from . import symbol_date_coverage as symbol_date_coverage
 from . import ticker_lifecycle_event as ticker_lifecycle_events
 from . import tracked_orders as tracked_orders
 from . import universe_snapshots as universe_snapshots
+from . import universe_versions as universe_versions
 from .base import Base as Base
 
 __all__ = [
@@ -56,6 +57,7 @@ __all__ = [
     "run_manifests",
     "signals",
     "universe_snapshots",
+    "universe_versions",
     "strategy_runtime_states",
     "audit_logs",
     "tracked_orders",

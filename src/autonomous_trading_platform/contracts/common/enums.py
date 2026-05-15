@@ -139,3 +139,17 @@ class CheckpointStatus(enum.StrEnum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class UniverseStatus(enum.StrEnum):
+    CANDIDATE = "candidate"
+    PROPOSED = "proposed"
+    ACTIVE = "active"
+    RETIRED = "retired"
+
+
+class UniverseSource(enum.StrEnum):
+    IEX_TOP500 = "iex_top500"
+    CUSTOM = "custom"
+    SECTOR_FILTERED = "sector_filtered"
+    VOLATILITY_FILTERED = "volatility_filtered"

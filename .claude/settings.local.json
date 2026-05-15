@@ -61,7 +61,9 @@
       "Bash(git stash *)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\" -Recurse -Filter \"main.py\")",
       "Bash(Select-Object FullName)",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\" -Directory)",
+      "Bash(Select-Object -ExpandProperty Name)"
     ]
   }
 }

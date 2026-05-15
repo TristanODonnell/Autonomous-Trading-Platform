@@ -1,3 +1,6 @@
+# DEPRECATED: UniverseSnapshotService (query service) has been superseded by UniverseVersionQueryService.
+# See: storage/sor/services/universe_version_query_service.py
+
 from datetime import date
 
 from sqlalchemy.orm import Session

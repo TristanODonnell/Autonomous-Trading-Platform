@@ -1,4 +1,5 @@
 # autonomous_trading_platform/contracts/validators/universe_snapshot.py
+# DEPRECATED: Use contracts/validators/universe_version.py instead.
 
 from __future__ import annotations
 

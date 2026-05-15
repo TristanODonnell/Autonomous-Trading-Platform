@@ -1,3 +1,7 @@
+# DEPRECATED: This test suite covers the old UniverseSnapshotService build service.
+# See tests/universe/test_universe_version_service.py for the canonical replacement.
+# Retained to prevent silent test-suite coverage gaps during the transition.
+
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta, timezone

@@ -1,4 +1,7 @@
 # autonomous_trading_platform/contracts/runtime/universe_snapshot.py
+# DEPRECATED: UniverseSnapshot has been superseded by UniverseVersion + UniverseMember.
+# See: contracts/runtime/universe_version.py
+# Retained only for the schema drift test backward-compatibility pair.
 from __future__ import annotations
 
 from datetime import date

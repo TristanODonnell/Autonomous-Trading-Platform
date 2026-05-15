@@ -5,18 +5,19 @@ from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.config.enums import TradingEnvironment
 from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.contracts.common.enums import UniverseSource
 from autonomous_trading_platform.db import get_session
-from autonomous_trading_platform.storage.sor.repositories.core.universe_snapshot_repository import (
-    UniverseSnapshotRepository,
+from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
+    UniverseVersionRepository,
 )
 from autonomous_trading_platform.universe.services.universe_selection_service import (
     UniverseSelectionService,
 )
-from autonomous_trading_platform.universe.services.universe_snapshot_service import (
-    UniverseSnapshotService,
-)
 from autonomous_trading_platform.universe.services.universe_validation_service import (
     UniverseValidationService,
+)
+from autonomous_trading_platform.universe.services.universe_version_service import (
+    UniverseVersionService,
 )
 from autonomous_trading_platform.universe.types import UniverseAsset
 
@@ -67,29 +68,30 @@ def run_universe_selection_cycle(*, cycle_timestamp: datetime | None = None) -> 
     asset_source = AlpacaUniverseAssetSource(trading_client)
 
     selection_service = UniverseSelectionService(session, asset_source)
-    snapshot_repository = UniverseSnapshotRepository(session)
-    snapshot_service = UniverseSnapshotService(snapshot_repository)
+    version_repository = UniverseVersionRepository(session)
+    version_service = UniverseVersionService(version_repository)
     validation_service = UniverseValidationService(session)
 
-    selected_symbols, criteria = selection_service.select_symbols(as_of=now_utc)
-    criteria["rebalance_cadence"] = cadence
+    selected_symbols, _criteria = selection_service.select_symbols(as_of=now_utc)
 
     if not selected_symbols:
         raise RuntimeError(
-            "Universe selection produced zero symbols; refusing to create empty snapshot"
+            "Universe selection produced zero symbols; refusing to create empty version"
         )
 
-    snapshot = snapshot_service.build_snapshot(
-        snapshot_date=now_utc.date(),
-        effective_start=now_utc,
+    version_name = f"universe_{now_utc.date().isoformat()}"
+    version, members = version_service.build_version(
+        name=version_name,
+        effective_from=now_utc,
         symbols=selected_symbols,
-        criteria=criteria,
-        source="alpaca_universe_selection",
+        source=UniverseSource.CUSTOM,
+        rebalance_reason=cadence,
     )
 
-    validation = validation_service.validate_row(snapshot)
+    validation = validation_service.validate_version_row(version, members)
     if not validation.ok:
         raise RuntimeError(validation.errors)
 
-    snapshot_repository.close_open_snapshot(snapshot.effective_start)
-    snapshot_service.save_snapshot(snapshot)
+    version_repository.retire_active_version(version.effective_from)
+    version_service.save_version(version, members)
+    version_repository.activate_version(version.universe_version_id)

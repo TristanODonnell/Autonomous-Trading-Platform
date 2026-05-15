@@ -10,10 +10,16 @@ from autonomous_trading_platform.contracts.common.enums import (
     PriceBasis,
     Side,
     TimeInForce,
+    UniverseSource,
+    UniverseStatus,
 )
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 from autonomous_trading_platform.contracts.runtime.universe_snapshot import (
     UniverseSnapshot,
+)
+from autonomous_trading_platform.contracts.runtime.universe_version import (
+    UniverseMember,
+    UniverseVersion,
 )
 from autonomous_trading_platform.contracts.trading.fill import Fill
 from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
@@ -44,6 +50,54 @@ def make_universe_snapshot(
         source=source,
         built_at=built_at,
         notes=notes,
+    )
+
+
+def make_universe_version(
+    *,
+    universe_version_id: str = "00000000-0000-0000-0000-000000000401",
+    name: str = "test_universe",
+    source: str = UniverseSource.CUSTOM,
+    created_at: datetime = datetime(2025, 1, 15, 14, 30, tzinfo=UTC),
+    effective_from: datetime = datetime(2025, 1, 15, 14, 30, tzinfo=UTC),
+    effective_to: datetime | None = None,
+    status: str = UniverseStatus.ACTIVE,
+    rebalance_reason: str | None = None,
+    config_hash: str = "testhash",
+) -> UniverseVersion:
+    return UniverseVersion(
+        universe_version_id=universe_version_id,
+        name=name,
+        source=source,
+        created_at=created_at,
+        effective_from=effective_from,
+        effective_to=effective_to,
+        status=status,
+        rebalance_reason=rebalance_reason,
+        config_hash=config_hash,
+    )
+
+
+def make_universe_member(
+    *,
+    universe_version_id: str = "00000000-0000-0000-0000-000000000401",
+    symbol: str = "AAPL",
+    rank: int | None = None,
+    score: float | None = None,
+    included_reason: str | None = None,
+    excluded_reason: str | None = None,
+    liquidity_metrics_json=None,
+    quality_metrics_json=None,
+) -> UniverseMember:
+    return UniverseMember(
+        universe_version_id=universe_version_id,
+        symbol=symbol,
+        rank=rank,
+        score=score,
+        included_reason=included_reason,
+        excluded_reason=excluded_reason,
+        liquidity_metrics_json=liquidity_metrics_json,
+        quality_metrics_json=quality_metrics_json,
     )
 
 

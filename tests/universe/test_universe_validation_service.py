@@ -7,7 +7,7 @@ import pytest
 from autonomous_trading_platform.universe.services.universe_validation_service import (
     UniverseValidationService,
 )
-from tests.utilities.factories import make_universe_snapshot
+from tests.utilities.factories import make_universe_member, make_universe_version
 
 
 class FakeExecuteResult:
@@ -27,32 +27,100 @@ class FakeExecuteResult:
 class FakeSession:
     def __init__(self) -> None:
         self.dataset_symbols: list[str] = []
-        self.coverage_rows: list[tuple[str, int]] = []
         self.executed: list[tuple[object, object | None]] = []
 
     def execute(self, stmt, params=None):
         self.executed.append((stmt, params))
-
-        stmt_text = str(stmt)
-
-        if "SELECT DISTINCT symbol" in stmt_text:
-            return FakeExecuteResult(scalar_rows=self.dataset_symbols)
-
-        return FakeExecuteResult(rows=self.coverage_rows)
+        return FakeExecuteResult(scalar_rows=self.dataset_symbols)
 
 
 class TestUniverseValidationService:
-    def test_validate_reports_missing_symbols_with_descriptive_message(self) -> None:
+    def test_validate_fails_with_no_members(self) -> None:
         session = FakeSession()
         service = UniverseValidationService(session=session)
-        snapshot = make_universe_snapshot(symbols=[])
+        version = make_universe_version()
 
-        result = service.validate(snapshot)
+        result = service.validate(version, [])
 
         assert result.ok is False
-        assert "UniverseSnapshot must contain at least one symbol" in result.errors
+        assert "UniverseVersion must have at least one member symbol" in result.errors
 
-    def test_find_symbols_missing_from_dataset_identifies_missing_tickers(self) -> None:
+    def test_validate_fails_with_duplicate_symbols(self) -> None:
+        session = FakeSession()
+        session.dataset_symbols = ["AAPL"]
+        service = UniverseValidationService(session=session)
+        version = make_universe_version()
+        members = [
+            make_universe_member(symbol="AAPL"),
+            make_universe_member(symbol="AAPL"),
+        ]
+
+        result = service.validate(version, members)
+
+        assert result.ok is False
+        assert "duplicate symbols" in result.errors[0]
+
+    def test_validate_passes_with_all_symbols_in_dataset(self) -> None:
+        session = FakeSession()
+        session.dataset_symbols = ["AAPL", "MSFT"]
+        service = UniverseValidationService(session=session)
+        version = make_universe_version()
+        members = [
+            make_universe_member(symbol="AAPL"),
+            make_universe_member(symbol="MSFT"),
+        ]
+
+        result = service.validate(version, members)
+
+        assert result.ok is True
+        assert result.errors == []
+
+    def test_validate_reports_symbols_missing_from_dataset(self) -> None:
+        session = FakeSession()
+        session.dataset_symbols = ["AAPL"]
+        service = UniverseValidationService(session=session)
+        version = make_universe_version()
+        members = [
+            make_universe_member(symbol="AAPL"),
+            make_universe_member(symbol="MSFT"),
+            make_universe_member(symbol="NVDA"),
+        ]
+
+        result = service.validate(version, members)
+
+        assert result.ok is False
+        assert "UniverseVersion contains symbols missing from dataset: MSFT, NVDA" in result.errors
+
+    def test_validate_propagates_version_rule_violations(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        session = FakeSession()
+        session.dataset_symbols = ["AAPL"]
+        service = UniverseValidationService(session=session)
+        version = make_universe_version()
+        members = [make_universe_member(symbol="AAPL")]
+
+        fake_rule_result = SimpleNamespace(
+            violations=[
+                SimpleNamespace(
+                    code="STATUS_VALID",
+                    field="status",
+                    message="invalid status",
+                )
+            ]
+        )
+
+        monkeypatch.setattr(
+            "autonomous_trading_platform.universe.services.universe_validation_service.run_rules",
+            lambda _obj, _rules: fake_rule_result,
+        )
+
+        result = service.validate(version, members)
+
+        assert result.ok is False
+        assert "STATUS_VALID [status]: invalid status" in result.errors
+
+    def test_find_symbols_missing_from_dataset_returns_missing(self) -> None:
         session = FakeSession()
         session.dataset_symbols = ["AAPL"]
         service = UniverseValidationService(session=session)
@@ -61,84 +129,20 @@ class TestUniverseValidationService:
 
         assert missing == ["MSFT", "NVDA"]
 
-    def test_validate_reports_symbols_missing_from_dataset(self) -> None:
+    def test_validate_missing_symbols_sorted_in_error_message(self) -> None:
         session = FakeSession()
         session.dataset_symbols = ["AAPL"]
         service = UniverseValidationService(session=session)
-        snapshot = make_universe_snapshot(symbols=["AAPL", "MSFT", "NVDA"])
-
-        result = service.validate(snapshot)
-
-        assert result.ok is False
-        assert "UniverseSnapshot contains symbols missing from dataset: MSFT, NVDA" in result.errors
-
-    def test_validate_reports_insufficient_recent_bar_coverage(self) -> None:
-        session = FakeSession()
-        session.dataset_symbols = ["AAPL", "MSFT"]
-        session.coverage_rows = [
-            ("AAPL", 9),
-            ("MSFT", 5),
+        version = make_universe_version()
+        members = [
+            make_universe_member(symbol="NVDA"),
+            make_universe_member(symbol="AAPL"),
+            make_universe_member(symbol="MSFT"),
         ]
-        service = UniverseValidationService(session=session)
 
-        snapshot = make_universe_snapshot(
-            symbols=["AAPL", "MSFT"],
-            criteria={
-                "lookback_days": 10,
-                "selection_timestamp": "2025-01-15T14:30:00+00:00",
-            },
-        )
+        result = service.validate(version, members)
 
-        result = service.validate(snapshot)
-
-        assert result.ok is False
-        assert (
-            "UniverseSnapshot contains symbols with insufficient recent coverage: MSFT"
-            in result.errors
-        )
-
-    def test_validate_allows_sufficient_recent_bar_coverage(self) -> None:
-        session = FakeSession()
-        session.dataset_symbols = ["AAPL", "MSFT"]
-        session.coverage_rows = [
-            ("AAPL", 9),
-            ("MSFT", 8),
-        ]
-        service = UniverseValidationService(session=session)
-
-        snapshot = make_universe_snapshot(
-            symbols=["AAPL", "MSFT"],
-            criteria={
-                "lookback_days": 10,
-                "selection_timestamp": "2025-01-15T14:30:00+00:00",
-            },
-        )
-
-        result = service.validate(snapshot)
-
-        assert result.ok is True
-        assert result.errors == []
-
-    def test_validate_reports_invalid_coverage_criteria_inputs(self) -> None:
-        session = FakeSession()
-        session.dataset_symbols = ["AAPL"]
-        service = UniverseValidationService(session=session)
-
-        snapshot = make_universe_snapshot(
-            symbols=["AAPL"],
-            criteria={
-                "lookback_days": "not-an-int",
-                "selection_timestamp": "not-a-datetime",
-            },
-        )
-
-        result = service.validate(snapshot)
-
-        assert result.ok is False
-        assert (
-            "UniverseSnapshot criteria has invalid lookback_days or selection_timestamp"
-            in result.errors
-        )
+        assert "UniverseVersion contains symbols missing from dataset: MSFT, NVDA" in result.errors
 
     def test_format_rule_errors_includes_code_field_and_message(self) -> None:
         session = FakeSession()
@@ -146,119 +150,59 @@ class TestUniverseValidationService:
 
         rule_result = SimpleNamespace(
             violations=[
-                SimpleNamespace(
-                    code="INVALID_FIELD",
-                    field="symbols",
-                    message="symbols must be unique",
-                ),
-                SimpleNamespace(
-                    code="BAD_SOURCE",
-                    field=None,
-                    message="source is invalid",
-                ),
+                SimpleNamespace(code="INVALID_FIELD", field="symbol", message="bad symbol"),
+                SimpleNamespace(code="BAD_SOURCE", field=None, message="source is invalid"),
             ]
         )
 
         formatted = service._format_rule_errors(rule_result)
 
         assert formatted == [
-            "INVALID_FIELD [symbols]: symbols must be unique",
+            "INVALID_FIELD [symbol]: bad symbol",
             "BAD_SOURCE: source is invalid",
         ]
 
-    def test_validate_propagates_contract_rule_violations(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        session = FakeSession()
-        session.dataset_symbols = ["AAPL", "MSFT"]
-        service = UniverseValidationService(session=session)
-        snapshot = make_universe_snapshot(symbols=["AAPL", "MSFT"])
+    def test_validate_version_row_adapter_works(self) -> None:
+        from datetime import UTC, datetime
 
-        fake_rule_result = SimpleNamespace(
-            violations=[
-                SimpleNamespace(
-                    code="DUPLICATE_SYMBOL",
-                    field="symbols",
-                    message="duplicate symbols are not allowed",
-                )
-            ]
+        from autonomous_trading_platform.contracts.common.enums import (
+            UniverseSource,
+            UniverseStatus,
+        )
+        from autonomous_trading_platform.storage.sor.models.universe_versions import (
+            UniverseMember as UniverseMemberRow,
+        )
+        from autonomous_trading_platform.storage.sor.models.universe_versions import (
+            UniverseVersion as UniverseVersionRow,
         )
 
-        monkeypatch.setattr(
-            "autonomous_trading_platform.universe.services.universe_validation_service.run_rules",
-            lambda snapshot_arg, rules_arg: fake_rule_result,
-        )
-
-        result = service.validate(snapshot)
-
-        assert result.ok is False
-        assert "DUPLICATE_SYMBOL [symbols]: duplicate symbols are not allowed" in result.errors
-
-    def test_validate_accumulates_multiple_error_sources(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        session = FakeSession()
-        session.dataset_symbols = ["AAPL"]
-        session.coverage_rows = [("AAPL", 3)]
-        service = UniverseValidationService(session=session)
-
-        snapshot = make_universe_snapshot(
-            symbols=["AAPL", "MSFT"],
-            criteria={
-                "lookback_days": 10,
-                "selection_timestamp": "2025-01-15T14:30:00+00:00",
-            },
-        )
-
-        fake_rule_result = SimpleNamespace(
-            violations=[
-                SimpleNamespace(
-                    code="BAD_NOTES",
-                    field="notes",
-                    message="notes exceeded limit",
-                )
-            ]
-        )
-
-        monkeypatch.setattr(
-            "autonomous_trading_platform.universe.services.universe_validation_service.run_rules",
-            lambda snapshot_arg, rules_arg: fake_rule_result,
-        )
-
-        result = service.validate(snapshot)
-
-        assert result.ok is False
-        assert "BAD_NOTES [notes]: notes exceeded limit" in result.errors
-        assert "UniverseSnapshot contains symbols missing from dataset: MSFT" in result.errors
-        assert (
-            "UniverseSnapshot contains symbols with insufficient recent coverage: AAPL, MSFT"
-            in result.errors
-        )
-
-    def test_validate_rejects_non_positive_lookback_days_with_descriptive_error(self) -> None:
         session = FakeSession()
         session.dataset_symbols = ["AAPL"]
         service = UniverseValidationService(session=session)
 
-        snapshot = make_universe_snapshot(
-            symbols=["AAPL"],
-            criteria={
-                "lookback_days": 0,
-                "selection_timestamp": "2025-01-15T14:30:00+00:00",
-            },
+        now = datetime(2025, 1, 15, 14, 30, tzinfo=UTC)
+        version_row = UniverseVersionRow(
+            universe_version_id="v-adapt-01",
+            name="test",
+            source=UniverseSource.CUSTOM,
+            created_at=now,
+            effective_from=now,
+            effective_to=None,
+            status=UniverseStatus.ACTIVE,
+            rebalance_reason=None,
+            config_hash="abc123",
+        )
+        member_row = UniverseMemberRow(
+            universe_version_id="v-adapt-01",
+            symbol="AAPL",
+            rank=0,
+            score=None,
+            included_reason=None,
+            excluded_reason=None,
+            liquidity_metrics_json=None,
+            quality_metrics_json=None,
         )
 
-        result = service.validate(snapshot)
+        result = service.validate_version_row(version_row, [member_row])
 
-        assert result.ok is False
-        assert "lookback_days must be positive" in result.errors
-
-    def test_validate_reports_missing_symbols_in_sorted_order(self) -> None:
-        session = FakeSession()
-        session.dataset_symbols = ["AAPL"]
-        service = UniverseValidationService(session=session)
-        snapshot = make_universe_snapshot(symbols=["NVDA", "AAPL", "MSFT"])
-
-        result = service.validate(snapshot)
-
-        assert "UniverseSnapshot contains symbols missing from dataset: MSFT, NVDA" in result.errors
+        assert result.ok is True

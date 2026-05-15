@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, time
 
-from autonomous_trading_platform.storage.sor.repositories.core.universe_snapshot_repository import (
-    UniverseSnapshotRepository,
+from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
+    UniverseVersionRepository,
 )
 from autonomous_trading_platform.universe.services.ticker_lifecycle_service import (
     TickerLifecycleService,
@@ -13,7 +13,7 @@ from autonomous_trading_platform.universe.services.ticker_lifecycle_service impo
 class UniverseMembershipService:
     def __init__(
         self,
-        repository: UniverseSnapshotRepository,
+        repository: UniverseVersionRepository,
         ticker_lifecycle_service: TickerLifecycleService | None = None,
     ) -> None:
         self.repository = repository
@@ -21,10 +21,10 @@ class UniverseMembershipService:
 
     def get_symbols_for_date(self, as_of: date) -> list[str]:
         as_of_dt = datetime.combine(as_of, time.min, tzinfo=UTC)
-        snapshot = self.repository.get_effective_for_date(as_of_dt)
-        if snapshot is None:
+        version = self.repository.get_active_version(as_of_dt)
+        if version is None:
             return []
-        return list(snapshot.symbols)
+        return self.repository.get_symbols(version.universe_version_id)
 
     def get_resolved_symbols_for_date(self, as_of: date) -> list[str]:
         raw_symbols = self.get_symbols_for_date(as_of)
