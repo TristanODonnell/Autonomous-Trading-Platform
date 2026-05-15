@@ -1,0 +1,359 @@
+{
+  "uid": "ratp-runtime-verification",
+  "title": "RATP Runtime Verification",
+  "tags": [
+    "ratp",
+    "verification"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(environment)",
+        "includeAll": true,
+        "allValue": ".*",
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "correlation_id",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      },
+      {
+        "name": "job_name",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "ratp-postgres"
+        },
+        "query": "SELECT DISTINCT job_name FROM runtime_job_runs ORDER BY 1",
+        "includeAll": true,
+        "allValue": "%",
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Annotations & Alerts",
+        "type": "dashboard",
+        "builtIn": 1,
+        "hide": true,
+        "enable": true
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Tempo by correlation_id",
+      "type": "link",
+      "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+    },
+    {
+      "title": "Loki by correlation_id",
+      "type": "link",
+      "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Runtime soak verification reports",
+      "type": "table",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT checked_at, environment, status, jsonb_array_length(failed_checks) AS failed_check_count, runtime_metadata FROM runtime_soak_reports WHERE $__timeFilter(checked_at) AND environment LIKE CASE WHEN '$environment' = '.*' THEN '%' ELSE '$environment' END ORDER BY checked_at DESC LIMIT 50",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Failed verification checks",
+      "type": "table",
+      "description": "",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT checked_at, status, failed_checks FROM runtime_soak_reports WHERE $__timeFilter(checked_at) AND jsonb_array_length(failed_checks) > 0 ORDER BY checked_at DESC LIMIT 50",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 3,
+      "title": "Stale/orphan job visibility",
+      "type": "table",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT job_run_id, job_name, status, started_at, parent_job_run_id, correlation_id, error_message FROM runtime_job_runs WHERE (status = 'running' AND started_at < now() - interval '30 minutes') OR (parent_job_run_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM runtime_job_runs p WHERE p.job_run_id = runtime_job_runs.parent_job_run_id)) ORDER BY started_at DESC LIMIT 100",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Missing telemetry evidence",
+      "type": "table",
+      "description": "",
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT checked_at, report_json -> 'checks' AS checks FROM runtime_soak_reports WHERE report_json::text ILIKE '%telemetry%' ORDER BY checked_at DESC LIMIT 20",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Integrity verification summaries",
+      "type": "table",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT checked_at, status, runtime_metadata -> 'integrity' AS integrity, runtime_metadata -> 'runtime' AS runtime FROM runtime_soak_reports ORDER BY checked_at DESC LIMIT 50",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 6,
+      "title": "Verification logs",
+      "type": "logs",
+      "description": "",
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{} | json | component=~\".*soak.*|.*verification.*|.*runtime.*\" |~ \"$correlation_id\"",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Tempo by correlation_id",
+              "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+            },
+            {
+              "title": "Loki by correlation_id",
+              "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {}
+    }
+  ]
+}

@@ -16,6 +16,7 @@ from .broker_health_service import BrokerHealthService
 from .control_state_health_service import ControlStateHealthService
 from .data_pipeline_health_service import DataPipelineHealthService
 from .job_health_service import JobHealthService
+from .market_session_health_service import MarketSessionHealthService
 from .otel_health_service import OtelHealthService
 
 
@@ -49,13 +50,21 @@ class DetailedSystemHealthService:
         otel_report = OtelHealthService().check()
         job_report = JobHealthService(self._session).check()
         data_report = DataPipelineHealthService(self._session).check()
+        market_session_report = MarketSessionHealthService().check()
         broker_report = BrokerHealthService(
             self._session,
             broker_client=self._broker_client,
         ).check()
         control_report = ControlStateHealthService(self._session).check()
 
-        reports = [otel_report, job_report, data_report, broker_report, control_report]
+        reports = [
+            otel_report,
+            job_report,
+            data_report,
+            market_session_report,
+            broker_report,
+            control_report,
+        ]
         overall = _aggregate_status(reports)
 
         all_checks = [c for r in reports for c in r.checks]

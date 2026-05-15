@@ -130,6 +130,9 @@ services:
       - ratp_lgtm_data:/data
       - ./infra/observability/tempo-config.yaml:/otel-lgtm/tempo-config.yaml:ro
       - ./infra/observability/prometheus-config.yaml:/otel-lgtm/prometheus.yaml:ro
+      - ./infra/observability/prometheus/alerts:/otel-lgtm/alerts:ro
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
 
   # ----------------------------
   # OpenTelemetry Collector

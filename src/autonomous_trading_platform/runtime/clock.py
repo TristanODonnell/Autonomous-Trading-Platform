@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from enum import Enum
 from functools import lru_cache
@@ -24,6 +25,19 @@ class MarketPhase(Enum):
     # holiday calendar is added; callers that only check != MARKET_HOURS are
     # already forward-compatible.
     NON_TRADING_DAY = "NON_TRADING_DAY"
+
+
+@dataclass(frozen=True)
+class MarketSessionState:
+    current_market_phase: MarketPhase
+    next_market_open: datetime | None
+    next_market_close: datetime | None
+    current_trading_date: date | None
+    eod_eligible: bool
+    calendar_source: str
+    is_trading_day: bool
+    is_early_close: bool
+    closure_reason: str | None = None
 
 
 class TradingClock:
@@ -67,6 +81,10 @@ class RealTradingClock(TradingClock):
 
 
 class MarketCalendar:
+    @property
+    def calendar_source(self) -> str:
+        return type(self).__name__
+
     def is_trading_day(self, value: date) -> bool:
         raise NotImplementedError
 
@@ -99,6 +117,74 @@ class MarketCalendar:
     def market_phase(self, now_utc: datetime) -> MarketPhase:
         raise NotImplementedError
 
+    def current_trading_date(self, now_utc: datetime) -> date | None:
+        candidate = _ensure_utc(now_utc).astimezone(_ET).date()
+        if self.is_trading_day(candidate):
+            return candidate
+        return None
+
+    def next_session_open(self, now_utc: datetime) -> datetime | None:
+        now_utc = _ensure_utc(now_utc)
+        candidate = now_utc.astimezone(_ET).date()
+        for _ in range(14):
+            if self.is_trading_day(candidate):
+                open_ = self.market_open(candidate)
+                if now_utc < open_:
+                    return open_
+            candidate += timedelta(days=1)
+        return None
+
+    def next_session_close(self, now_utc: datetime) -> datetime | None:
+        now_utc = _ensure_utc(now_utc)
+        candidate = now_utc.astimezone(_ET).date()
+        for _ in range(14):
+            if self.is_trading_day(candidate):
+                close = self.market_close(candidate)
+                if now_utc < close:
+                    return close
+            candidate += timedelta(days=1)
+        return None
+
+    def is_early_close(self, value: date) -> bool:
+        if not self.is_trading_day(value):
+            return False
+        return self.market_close(value).astimezone(_ET).time() < time(16, 0)
+
+    def closure_reason(self, value: date) -> str | None:
+        if self.is_trading_day(value):
+            return None
+        if value.weekday() >= 5:
+            return "weekend"
+        return "holiday"
+
+    def session_state(
+        self,
+        now_utc: datetime,
+        *,
+        last_eod_date: date | None = None,
+        eod_hour: int = 18,
+        eod_minute: int = 0,
+    ) -> MarketSessionState:
+        now_utc = _ensure_utc(now_utc)
+        local_date = now_utc.astimezone(_ET).date()
+        trading_date = self.current_trading_date(now_utc)
+        return MarketSessionState(
+            current_market_phase=self.market_phase(now_utc),
+            next_market_open=self.next_session_open(now_utc),
+            next_market_close=self.next_session_close(now_utc),
+            current_trading_date=trading_date,
+            eod_eligible=self.is_eod_eligible(
+                now_utc,
+                eod_hour=eod_hour,
+                eod_minute=eod_minute,
+                last_eod_date=last_eod_date,
+            ),
+            calendar_source=self.calendar_source,
+            is_trading_day=trading_date is not None,
+            is_early_close=self.is_early_close(local_date),
+            closure_reason=self.closure_reason(local_date),
+        )
+
     def seconds_until_next_session_open(self, now_utc: datetime) -> int:
         raise NotImplementedError
 
@@ -117,6 +203,13 @@ class MarketCalendar:
 
 
 class HistoricalMarketCalendar(MarketCalendar):
+    def __init__(self, *, early_closes: dict[date, time] | None = None) -> None:
+        self._early_closes = early_closes or {}
+
+    @property
+    def calendar_source(self) -> str:
+        return "historical_weekday"
+
     def is_trading_day(self, value: date) -> bool:
         return value.weekday() < 5
 
@@ -124,7 +217,8 @@ class HistoricalMarketCalendar(MarketCalendar):
         return datetime.combine(value, time(9, 30), tzinfo=_ET).astimezone(UTC)
 
     def market_close(self, value: date) -> datetime:
-        return datetime.combine(value, time(16, 0), tzinfo=_ET).astimezone(UTC)
+        close_time = self._early_closes.get(value, time(16, 0))
+        return datetime.combine(value, close_time, tzinfo=_ET).astimezone(UTC)
 
     def scheduled_times(
         self,
@@ -161,9 +255,13 @@ class HistoricalMarketCalendar(MarketCalendar):
         return MarketPhase.POST_MARKET
 
     def seconds_until_next_session_open(self, now_utc: datetime) -> int:
-        candidate = now_utc.astimezone(_ET).date() + timedelta(days=1)
-        for _ in range(8):
+        now_utc = _ensure_utc(now_utc)
+        candidate = now_utc.astimezone(_ET).date()
+        for _ in range(14):
             if self.is_trading_day(candidate):
+                next_open = self.next_session_open(now_utc)
+                if next_open is not None:
+                    return max(0, int((next_open - now_utc).total_seconds()))
                 next_open = self.market_open(candidate)
                 return max(0, int((next_open - now_utc).total_seconds()))
             candidate += timedelta(days=1)
@@ -207,11 +305,34 @@ class RealMarketCalendar(HistoricalMarketCalendar):
     historical data that pre-dates this library's coverage isn't affected.
     """
 
+    @property
+    def calendar_source(self) -> str:
+        return "exchange_calendars:XNYS"
+
     def is_trading_day(self, value: date) -> bool:
         return bool(_nyse_calendar().is_session(value))
+
+    def market_open(self, value: date) -> datetime:
+        return _to_utc_datetime(_nyse_calendar().session_open(value))
+
+    def market_close(self, value: date) -> datetime:
+        return _to_utc_datetime(_nyse_calendar().session_close(value))
+
+    def is_early_close(self, value: date) -> bool:
+        if not self.is_trading_day(value):
+            return False
+        return self.market_close(value).astimezone(_ET).time() < time(16, 0)
 
 
 def _ensure_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def _to_utc_datetime(value: object) -> datetime:
+    if hasattr(value, "to_pydatetime"):
+        value = value.to_pydatetime()
+    if not isinstance(value, datetime):
+        raise TypeError(f"Expected datetime-compatible market timestamp, got {type(value)!r}")
+    return _ensure_utc(value)

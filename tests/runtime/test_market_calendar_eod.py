@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from autonomous_trading_platform.runtime.clock import (
     HistoricalMarketCalendar,
     MarketPhase,
+    RealMarketCalendar,
 )
 
 _ET = ZoneInfo("America/New_York")
@@ -105,3 +106,60 @@ class TestSecondsUntilNextSessionOpen:
         now = _et(_TRADING_DAY, 18, 0)
         seconds = cal.seconds_until_next_session_open(now)
         assert seconds > 0
+
+    def test_premarket_waits_for_same_day_open(self) -> None:
+        cal = self._cal()
+        now = _et(_TRADING_DAY, 8, 0)
+        seconds = cal.seconds_until_next_session_open(now)
+        assert seconds == int(timedelta(hours=1, minutes=30).total_seconds())
+
+
+class TestMarketSessionState:
+    def test_exposes_runtime_health_fields(self) -> None:
+        cal = HistoricalMarketCalendar()
+        now = _et(_TRADING_DAY, 12, 0)
+        state = cal.session_state(now)
+
+        assert state.current_market_phase == MarketPhase.MARKET_HOURS
+        assert state.current_trading_date == _TRADING_DAY
+        assert state.next_market_open == _et(date(2024, 1, 9), 9, 30)
+        assert state.next_market_close == _et(_TRADING_DAY, 16, 0)
+        assert state.eod_eligible is False
+        assert state.calendar_source == "historical_weekday"
+
+    def test_historical_calendar_supports_early_close_visibility(self) -> None:
+        cal = HistoricalMarketCalendar(early_closes={_TRADING_DAY: time(13, 0)})
+        state = cal.session_state(_et(_TRADING_DAY, 14, 0))
+
+        assert state.current_market_phase == MarketPhase.POST_MARKET
+        assert state.is_early_close is True
+        assert state.next_market_close == _et(date(2024, 1, 9), 16, 0)
+
+
+class TestRealMarketCalendar:
+    def test_holiday_is_non_trading_day(self) -> None:
+        cal = RealMarketCalendar()
+        christmas = date(2024, 12, 25)
+
+        assert cal.is_trading_day(christmas) is False
+        assert cal.session_state(_et(christmas, 12, 0)).closure_reason == "holiday"
+
+    def test_early_close_uses_exchange_calendar_session_close(self) -> None:
+        cal = RealMarketCalendar()
+        early_close = date(2024, 11, 29)
+
+        assert cal.is_early_close(early_close) is True
+        assert cal.market_close(early_close) == _et(early_close, 13, 0)
+
+    def test_dst_boundary_uses_exchange_calendar_open_time(self) -> None:
+        cal = RealMarketCalendar()
+        first_session_after_dst_start = date(2024, 3, 11)
+
+        assert cal.market_open(first_session_after_dst_start) == datetime(
+            2024,
+            3,
+            11,
+            13,
+            30,
+            tzinfo=UTC,
+        )

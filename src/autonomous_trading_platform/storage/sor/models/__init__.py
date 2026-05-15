@@ -14,6 +14,7 @@ from . import ingestion_runs as ingestion_runs
 from . import market_bars as market_bars
 from . import metrics_summary as metrics_summary
 from . import missing_bar_incidents as missing_bar_incidents
+from . import operational_alerts as operational_alerts
 from . import operator_settings as operator_settings
 from . import order_intents as order_intents
 from . import position_snapshot_items as position_snapshot_items
@@ -48,6 +49,7 @@ __all__ = [
     "market_bars",
     "order_intents",
     "operator_settings",
+    "operational_alerts",
     "position_snapshot_items",
     "position_snapshots",
     "risk_snapshots",

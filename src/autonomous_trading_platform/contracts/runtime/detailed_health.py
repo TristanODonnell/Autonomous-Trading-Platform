@@ -38,6 +38,8 @@ class HealthCheckName(StrEnum):
     DATA_MANIFEST_FRESHNESS = "data_manifest_freshness"
     DATA_INGESTION_LAG = "data_ingestion_lag"
     DATA_FEATURE_LAG = "data_feature_lag"
+    # Market session
+    MARKET_SESSION_STATE = "market_session_state"
     # Broker
     BROKER_CONNECTIVITY = "broker_connectivity"
     BROKER_AUTH = "broker_auth"
