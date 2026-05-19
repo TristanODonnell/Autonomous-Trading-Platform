@@ -1,3 +1,27 @@
+"""
+Runtime Replay Debug Runner
+
+CLASSIFICATION: integration_replay / debug_demo
+    Exercises the runtime trading-cycle infrastructure (settings loading, risk
+    gates, SOR writes, cycle handlers, job recording) using synthetic prices
+    and deterministic buy/sell logic — NOT real strategy implementations.
+
+    Use this to verify:
+      - Risk parameter wiring (drawdown, vol target, risk tolerance multiplier)
+      - Kill-switch and trading-paused gates
+      - Settings/controls snapshot loading from the DB
+      - Cycle handler sequencing
+      - SOR write paths (fills, snapshots, audit logs, runtime jobs)
+
+    DO NOT use this path for strategy research, parameter sweeps, or any result
+    that should inform production decisions.
+
+    All SOR rows written by this runner are tagged with DEBUG_REPLAY metadata.
+    For production replay evidence use ReplayRuntimeService (integration_replay).
+    For strategy research use research/simulation/simulation_runner.py.
+    See docs/architecture/research_execution_paths.md for the full classification.
+"""
+
 from __future__ import annotations
 
 import hashlib
