@@ -67,7 +67,10 @@
       "Bash(sed 's/.*\\\\\\\\//')",
       "Bash(Get-ChildItem C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\storage\\\\sor\\\\models *)",
       "Bash(grep -E \"\\\\.py$\")",
-      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\infra\\\\db\\\\alembic\\\\versions\" -File | Select-Object Name | ForEach-Object { $_.Name })"
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\infra\\\\db\\\\alembic\\\\versions\" -File | Select-Object Name | ForEach-Object { $_.Name })",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\tests\\\\research\" -Recurse)",
+      "Bash(Select-Object -Property FullName)",
+      "Bash(pre-commit run *)"
     ]
   }
 }

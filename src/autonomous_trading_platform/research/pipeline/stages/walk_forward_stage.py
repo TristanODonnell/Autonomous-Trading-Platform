@@ -328,6 +328,7 @@ class WalkForwardStage(BaseStage):
                 end_date=fold.train_end,
                 initial_cash=initial_cash,
                 window_role=window_role_train,
+                stage_name=self.stage_name,
             )
             train_sim_results.append(self._simulation_runner.run(req))
 
@@ -364,6 +365,7 @@ class WalkForwardStage(BaseStage):
                 end_date=fold.test_end,
                 initial_cash=initial_cash,
                 window_role=window_role_test,
+                stage_name=self.stage_name,
             )
             test_sim_results.append(self._simulation_runner.run(req))
 

@@ -48,6 +48,9 @@ from autonomous_trading_platform.research.experiments.filtering.metrics.trade_me
 from autonomous_trading_platform.research.services.research_dataset_resolver_service import (
     ResearchDatasetResolver,
 )
+from autonomous_trading_platform.research.simulation.artifact_identity import (
+    SimulationArtifactIdentity,
+)
 from autonomous_trading_platform.research.simulation.services.result_recorder_service import (
     ResultRecorderService,
 )
@@ -168,6 +171,20 @@ class SimulationRunner:
         run_id = uuid4()
         experiment_id = request.experiment_id or f"adhoc_{run_id}"
 
+        artifact_identity = SimulationArtifactIdentity(
+            run_id=str(run_id),
+            experiment_id=experiment_id,
+            strategy_id=request.strategy_id,
+            dataset_version=request.dataset_version,
+            stage_name=request.stage_name or "adhoc",
+            window_role=request.window_role or "default",
+            seed=request.random_seed,
+            universe_version="v1",
+            price_basis=request.price_basis.value,
+            start_date=request.start_date,
+            end_date=request.end_date,
+        )
+
         resolved_dataset = self.dataset_resolver.resolve_bars_dataset(
             dataset_version=request.dataset_version,
             price_basis=request.price_basis,
@@ -225,8 +242,7 @@ class SimulationRunner:
             )
 
             self.result_recorder.record_results(
-                experiment_id=experiment_id,
-                strategy_id=request.strategy_id,
+                identity=artifact_identity,
                 trade_logs=trade_logs,
                 equity_curve=equity_curve,
                 per_bar_metrics=per_bar_metrics,
@@ -249,6 +265,7 @@ class SimulationRunner:
 
             self._record_run_completed(
                 run_id=run_id,
+                artifact_identity=artifact_identity,
                 trade_count=tm.total_trades,
                 equity_points=len(live_equity_curve),
                 per_bar_metric_points=len(per_bar_metrics),
@@ -455,6 +472,7 @@ class SimulationRunner:
         self,
         *,
         run_id: UUID,
+        artifact_identity: SimulationArtifactIdentity,
         trade_count: int,
         equity_points: int,
         per_bar_metric_points: int,
@@ -515,11 +533,13 @@ class SimulationRunner:
                 manifest.last_successful_step = "record_results"
                 manifest.error_message = None
                 manifest.artifact_manifest = {
+                    "identity": artifact_identity.to_manifest_dict(),
+                    "partition_path": artifact_identity.partition_path(),
                     "summary": {
                         "trade_count": trade_count,
                         "equity_points": equity_points,
                         "per_bar_metric_points": per_bar_metric_points,
-                    }
+                    },
                 }
 
                 self.manifest_service.upsert(manifest)

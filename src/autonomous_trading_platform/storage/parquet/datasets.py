@@ -101,42 +101,49 @@ FEATURE_REGIME_DATASET = ParquetDataset(
     partition_cols=("symbol", "year", "month"),
 )
 
+_SIMULATION_PARTITION_COLS = (
+    "experiment_id",
+    "run_id",
+    "stage_name",
+    "window_role",
+)
+
 SIMULATION_TRADE_LOGS_DATASET = ParquetDataset(
     dataset_key="simulation_trade_logs",
     schema=SIMULATION_TRADE_LOGS_SCHEMA,
-    schema_version="1.0.0",
+    schema_version="2.0.0",
     root_parts=("simulations", "trade_logs"),
-    partition_cols=("experiment_id", "strategy_id", "date"),
+    partition_cols=_SIMULATION_PARTITION_COLS,
 )
 
 SIMULATION_EQUITY_CURVE_DATASET = ParquetDataset(
     dataset_key="simulation_equity_curve",
     root_parts=("simulations", "equity_curve"),
     schema=SIMULATION_EQUITY_CURVE_SCHEMA,
-    schema_version="1.0.0",
-    partition_cols=("experiment_id", "strategy_id", "date"),
+    schema_version="2.0.0",
+    partition_cols=_SIMULATION_PARTITION_COLS,
 )
 
 SIMULATION_PER_BAR_METRICS_DATASET = ParquetDataset(
     dataset_key="simulation_per_bar_metrics",
     root_parts=("simulations", "per_bar_metrics"),
     schema=SIMULATION_PER_BAR_METRICS_SCHEMA,
-    schema_version="1.0.0",
-    partition_cols=("experiment_id", "strategy_id", "date"),
+    schema_version="2.0.0",
+    partition_cols=_SIMULATION_PARTITION_COLS,
 )
 
 SIMULATION_POSITIONS_DATASET = ParquetDataset(
     dataset_key="simulation_positions",
     root_parts=("simulations", "positions"),
     schema=SIMULATION_POSITIONS_SCHEMA,
-    schema_version="1.0.0",
-    partition_cols=("experiment_id", "strategy_id", "date"),
+    schema_version="2.0.0",
+    partition_cols=_SIMULATION_PARTITION_COLS,
 )
 
 SIMULATION_SIGNAL_LOG_DATASET = ParquetDataset(
     dataset_key="simulation_signal_log",
     root_parts=("simulations", "signal_log"),
     schema=SIMULATION_SIGNAL_LOG_SCHEMA,
-    schema_version="1.0.0",
-    partition_cols=("experiment_id", "strategy_id", "date"),
+    schema_version="2.0.0",
+    partition_cols=_SIMULATION_PARTITION_COLS,
 )
