@@ -1,3 +1,7 @@
+# DEPRECATED: UniverseSnapshotRepository has been superseded by UniverseVersionRepository.
+# See: storage/sor/repositories/core/universe_version_repository.py
+# Retained only to preserve the universe_snapshots historical table reference.
+
 from datetime import date, datetime
 from typing import cast
 

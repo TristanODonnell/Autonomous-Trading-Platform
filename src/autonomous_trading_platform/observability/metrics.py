@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 from opentelemetry import metrics
+
+from autonomous_trading_platform.observability.runtime_context import get_runtime_context
 
 meter = metrics.get_meter("autonomous_trading_platform")
 
@@ -850,3 +853,193 @@ allocation_cycle_duration = meter.create_histogram(
     description="Allocation cycle execution duration",
     unit="s",
 )
+
+# =========================
+# UNIVERSE METRICS
+# =========================
+
+universe_candidate_count = meter.create_histogram(
+    name="ratp_universe_candidate_count",
+    description="Number of symbols considered during candidate universe generation",
+    unit="1",
+)
+
+universe_rejected_symbol_count = meter.create_histogram(
+    name="ratp_universe_rejected_symbol_count",
+    description="Number of symbols rejected during candidate universe generation",
+    unit="1",
+)
+
+universe_ranking_duration_seconds = meter.create_histogram(
+    name="ratp_universe_ranking_duration_seconds",
+    description="Duration of universe candidate ranking",
+    unit="s",
+)
+
+universe_rebalance_duration_seconds = meter.create_histogram(
+    name="ratp_universe_rebalance_duration_seconds",
+    description="Duration of universe rebalance proposal generation",
+    unit="s",
+)
+
+universe_rotation_duration_seconds = meter.create_histogram(
+    name="ratp_universe_rotation_duration_seconds",
+    description="Duration of universe rotation or rollback operations",
+    unit="s",
+)
+
+universe_rebalance_churn_pct = meter.create_histogram(
+    name="ratp_universe_rebalance_churn_pct",
+    description="Churn percentage applied in universe rebalance operations",
+    unit="1",
+)
+
+universe_symbols_added_count = meter.create_histogram(
+    name="ratp_universe_symbols_added_count",
+    description="Number of symbols added by universe rebalance or rotation",
+    unit="1",
+)
+
+universe_symbols_removed_count = meter.create_histogram(
+    name="ratp_universe_symbols_removed_count",
+    description="Number of symbols removed by universe rebalance or rotation",
+    unit="1",
+)
+
+universe_symbols_retained_count = meter.create_histogram(
+    name="ratp_universe_symbols_retained_count",
+    description="Number of symbols retained by universe rebalance or rotation",
+    unit="1",
+)
+
+universe_invalid_member_count = meter.create_histogram(
+    name="ratp_universe_invalid_member_count",
+    description="Number of invalid members found during universe validation",
+    unit="1",
+)
+
+universe_validation_failures = meter.create_counter(
+    name="ratp_universe_validation_failures_total",
+    description="Total number of universe validation failures",
+    unit="1",
+)
+
+universe_resolution_latency_seconds = meter.create_histogram(
+    name="ratp_universe_resolution_latency_seconds",
+    description="Latency of universe resolution operations",
+    unit="s",
+)
+
+universe_rejected_trade_count = meter.create_counter(
+    name="ratp_universe_rejected_trade_count_total",
+    description="Total number of trade rejections due to symbol being outside the active universe",
+    unit="1",
+)
+
+universe_rejected_trade_outside_universe_count = universe_rejected_trade_count
+
+_universe_active_size_state: int | None = None
+
+
+def record_universe_active_size(size: int) -> None:
+    global _universe_active_size_state
+    _universe_active_size_state = size
+
+
+def _universe_active_size_callback(options):
+    if _universe_active_size_state is None:
+        return []
+    return [
+        metrics.Observation(
+            _universe_active_size_state,
+            _universe_metric_attrs("universe_resolution"),
+        )
+    ]
+
+
+universe_active_size = meter.create_observable_gauge(
+    name="ratp_universe_active_size",
+    description="Number of symbols in the current active universe",
+    callbacks=[_universe_active_size_callback],
+    unit="1",
+)
+
+
+def _universe_metric_attrs(component: str, **extra: str) -> dict[str, str]:
+    ctx = get_runtime_context()
+    environment = (
+        (ctx.environment if ctx else None)
+        or os.getenv("APP_ENV")
+        or os.getenv("TRADING_ENVIRONMENT")
+        or "unknown"
+    )
+    attrs = {"environment": str(environment), "component": component}
+    attrs.update({key: str(value) for key, value in extra.items() if value is not None})
+    return attrs
+
+
+def record_universe_candidate_generation_metrics(
+    *,
+    candidate_count: int,
+    rejected_count: int,
+    ranking_duration_seconds: float,
+) -> None:
+    attrs = _universe_metric_attrs("universe_candidate_generation")
+    universe_candidate_count.record(max(0, int(candidate_count)), attrs)
+    universe_rejected_symbol_count.record(max(0, int(rejected_count)), attrs)
+    universe_ranking_duration_seconds.record(max(0.0, float(ranking_duration_seconds)), attrs)
+
+
+def record_universe_rebalance_metrics(
+    *,
+    duration_seconds: float,
+    churn_pct: float,
+    added_count: int,
+    removed_count: int,
+    retained_count: int,
+) -> None:
+    attrs = _universe_metric_attrs("universe_rebalance")
+    universe_rebalance_duration_seconds.record(max(0.0, float(duration_seconds)), attrs)
+    universe_rebalance_churn_pct.record(max(0.0, float(churn_pct)), attrs)
+    universe_symbols_added_count.record(max(0, int(added_count)), attrs)
+    universe_symbols_removed_count.record(max(0, int(removed_count)), attrs)
+    universe_symbols_retained_count.record(max(0, int(retained_count)), attrs)
+
+
+def record_universe_rotation_metrics(
+    *,
+    duration_seconds: float,
+    churn_pct: float | None,
+    added_count: int,
+    removed_count: int,
+    retained_count: int,
+    rotation_type: str,
+) -> None:
+    attrs = _universe_metric_attrs("universe_rotation", rotation_type=rotation_type)
+    universe_rotation_duration_seconds.record(max(0.0, float(duration_seconds)), attrs)
+    if churn_pct is not None:
+        universe_rebalance_churn_pct.record(max(0.0, float(churn_pct)), attrs)
+    universe_symbols_added_count.record(max(0, int(added_count)), attrs)
+    universe_symbols_removed_count.record(max(0, int(removed_count)), attrs)
+    universe_symbols_retained_count.record(max(0, int(retained_count)), attrs)
+
+
+def record_universe_validation_metrics(*, invalid_member_count: int, failure_count: int) -> None:
+    attrs = _universe_metric_attrs("universe_validation")
+    universe_invalid_member_count.record(max(0, int(invalid_member_count)), attrs)
+    if failure_count > 0:
+        universe_validation_failures.add(int(failure_count), attrs)
+
+
+def record_universe_resolution_latency(duration_seconds: float) -> None:
+    universe_resolution_latency_seconds.record(
+        max(0.0, float(duration_seconds)),
+        _universe_metric_attrs("universe_resolution"),
+    )
+
+
+def record_rejected_trade_outside_universe(count: int = 1) -> None:
+    universe_rejected_trade_count.add(
+        max(0, int(count)),
+        _universe_metric_attrs("universe_runtime_guard"),
+    )

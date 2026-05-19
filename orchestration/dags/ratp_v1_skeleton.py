@@ -14,7 +14,7 @@ with DAG(
     tags=["ratp", "v1"],
 ) as dag:
     ingest = EmptyOperator(task_id="ingest_market_bars")
-    snapshot = EmptyOperator(task_id="build_universe_snapshot")
+    snapshot = EmptyOperator(task_id="build_universe_version")
     evaluate = EmptyOperator(task_id="evaluate_strategy")
     intents = EmptyOperator(task_id="emit_order_intents")
     reconcile = EmptyOperator(task_id="reconcile")

@@ -44,6 +44,15 @@ from autonomous_trading_platform.contracts.runtime.ingestion_run import (
 from autonomous_trading_platform.contracts.runtime.metrics_summary import (
     MetricsSummary as MetricsSummaryContract,
 )
+from autonomous_trading_platform.contracts.runtime.raw_market_symbol import (
+    RawMarketPoolMembership as RawMarketPoolMembershipContract,
+)
+from autonomous_trading_platform.contracts.runtime.raw_market_symbol import (
+    RawMarketPoolSnapshot as RawMarketPoolSnapshotContract,
+)
+from autonomous_trading_platform.contracts.runtime.raw_market_symbol import (
+    RawMarketSymbol as RawMarketSymbolContract,
+)
 from autonomous_trading_platform.contracts.runtime.run_manifest import (
     RunManifest as RunManifestContract,
 )
@@ -61,6 +70,12 @@ from autonomous_trading_platform.contracts.runtime.ticker_lifecycle_event import
 )
 from autonomous_trading_platform.contracts.runtime.universe_snapshot import (
     UniverseSnapshot as UniverseSnapshotContract,
+)
+from autonomous_trading_platform.contracts.runtime.universe_version import (
+    UniverseMember as UniverseMemberContract,
+)
+from autonomous_trading_platform.contracts.runtime.universe_version import (
+    UniverseVersion as UniverseVersionContract,
 )
 from autonomous_trading_platform.contracts.trading.broker_order import (
     BrokerOrder as BrokerOrderContract,
@@ -101,6 +116,15 @@ from autonomous_trading_platform.storage.sor.models.metrics_summary import (
     MetricsSummary as MetricsSummaryOrm,
 )
 from autonomous_trading_platform.storage.sor.models.order_intents import OrderIntents
+from autonomous_trading_platform.storage.sor.models.raw_market_pool import (
+    RawMarketPoolMembership as RawMarketPoolMembershipOrm,
+)
+from autonomous_trading_platform.storage.sor.models.raw_market_pool import (
+    RawMarketPoolSnapshot as RawMarketPoolSnapshotOrm,
+)
+from autonomous_trading_platform.storage.sor.models.raw_market_pool import (
+    RawMarketSymbol as RawMarketSymbolOrm,
+)
 from autonomous_trading_platform.storage.sor.models.risk_snapshots import (
     RiskSnapshot as RiskSnapshotOrm,
 )
@@ -119,6 +143,12 @@ from autonomous_trading_platform.storage.sor.models.ticker_lifecycle_event impor
 )
 from autonomous_trading_platform.storage.sor.models.universe_snapshots import (
     UniverseSnapshot as UniverseSnapshotOrm,
+)
+from autonomous_trading_platform.storage.sor.models.universe_versions import (
+    UniverseMember as UniverseMemberOrm,
+)
+from autonomous_trading_platform.storage.sor.models.universe_versions import (
+    UniverseVersion as UniverseVersionOrm,
 )
 
 from .schema_drift_helpers import (
@@ -219,6 +249,16 @@ SCHEMA_PAIRS: tuple[ContractOrmSchemaPair, ...] = (
         expected_fields=tuple(UniverseSnapshotContract.model_fields),
     ),
     ContractOrmSchemaPair(
+        contract=UniverseVersionContract,
+        orm_model=UniverseVersionOrm,
+        expected_fields=tuple(UniverseVersionContract.model_fields),
+    ),
+    ContractOrmSchemaPair(
+        contract=UniverseMemberContract,
+        orm_model=UniverseMemberOrm,
+        expected_fields=tuple(UniverseMemberContract.model_fields),
+    ),
+    ContractOrmSchemaPair(
         contract=BrokerOrderContract,
         orm_model=BrokerOrderOrm,
         expected_fields=tuple(BrokerOrderContract.model_fields),
@@ -237,6 +277,21 @@ SCHEMA_PAIRS: tuple[ContractOrmSchemaPair, ...] = (
         contract=SignalContract,
         orm_model=SignalOrm,
         expected_fields=tuple(SignalContract.model_fields),
+    ),
+    ContractOrmSchemaPair(
+        contract=RawMarketSymbolContract,
+        orm_model=RawMarketSymbolOrm,
+        expected_fields=tuple(RawMarketSymbolContract.model_fields),
+    ),
+    ContractOrmSchemaPair(
+        contract=RawMarketPoolSnapshotContract,
+        orm_model=RawMarketPoolSnapshotOrm,
+        expected_fields=tuple(RawMarketPoolSnapshotContract.model_fields),
+    ),
+    ContractOrmSchemaPair(
+        contract=RawMarketPoolMembershipContract,
+        orm_model=RawMarketPoolMembershipOrm,
+        expected_fields=tuple(RawMarketPoolMembershipContract.model_fields),
     ),
 )
 
@@ -320,6 +375,10 @@ UNMAPPED_NOT_TESTED: tuple[tuple[str, str], ...] = (
     (
         "storage.sor.models.symbol_date_coverage.SymbolDateCoverage",
         "Coverage metadata table; no matching runtime contract found.",
+    ),
+    (
+        "storage.sor.models.universe_snapshots.UniverseSnapshot (DEPRECATED)",
+        "Superseded by UniverseVersion + UniverseMember. Retained for historical data only.",
     ),
     (
         "storage.sor.models.tracked_orders.TrackedOrder",

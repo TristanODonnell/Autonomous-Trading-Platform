@@ -42,11 +42,17 @@ from autonomous_trading_platform.storage.sor.repositories.core.capital_allocatio
 from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_repository import (
     PromotionRulesRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
+    UniverseVersionRepository,
+)
 from autonomous_trading_platform.strategy.contexts.build_strategy_runtime_context import (
     StrategyRuntimeContext,
     build_strategy_runtime_context,
 )
 from autonomous_trading_platform.strategy.implementations.stub_strategy import StubStrategy
+from autonomous_trading_platform.universe.services.universe_resolution_service import (
+    UniverseResolutionService,
+)
 
 
 @dataclass(slots=True)
@@ -158,6 +164,9 @@ def build_trading_run_manifest(
     cycle_end: datetime,
     trading_environment: TradingEnvironment = TradingEnvironment.PAPER,
     created_at: datetime | None = None,
+    universe_version_id: str | None = None,
+    universe_source: str | None = None,
+    universe_member_count: int | None = None,
 ) -> RunManifest:
     run_type = RunType.LIVE if trading_environment is TradingEnvironment.LIVE else RunType.PAPER
     return RunManifest(
@@ -175,12 +184,38 @@ def build_trading_run_manifest(
         start_date=cycle_start.date(),
         end_date=cycle_end.date(),
         dataset_version="v1",
-        universe_version="v1",
+        universe_version=universe_version_id or "v1",
+        universe_version_id=universe_version_id,
+        universe_source=universe_source,
+        universe_member_count=universe_member_count,
         git_commit="dev",
         python_version=platform.python_version(),
         notes="5-minute trading cycle",
         price_basis=PriceBasis.ADJUSTED,
         governance_state=GovernanceState.APPROVED_PAPER,
+    )
+
+
+def resolve_trading_universe(
+    session,
+    now_utc: datetime,
+) -> tuple[set[str], str | None, str | None, int | None]:
+    """
+    Resolve the active universe for a trading cycle.
+
+    Returns (symbols, universe_version_id, universe_source, member_count).
+    Raises ``NoActiveUniverseError`` if no active universe exists.
+    """
+
+    resolution_service = UniverseResolutionService(UniverseVersionRepository(session))
+    resolution_service.assert_active_universe_exists(now_utc)
+    active_version = resolution_service.resolve_active(now_utc)
+    members = resolution_service.resolve_active_members(now_utc)
+    return (
+        set(members),
+        active_version.universe_version_id,
+        active_version.source,
+        len(members),
     )
 
 

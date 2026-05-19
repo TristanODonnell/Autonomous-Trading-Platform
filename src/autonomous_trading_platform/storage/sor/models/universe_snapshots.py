@@ -1,4 +1,8 @@
 # autonomous_trading_platform/storage/sor/models/universe_snapshots.py
+# DEPRECATED: UniverseSnapshot has been superseded by UniverseVersion + UniverseMember.
+# See: storage/sor/models/universe_versions.py
+# This file and the universe_snapshots table are retained for historical data only.
+# Do not use UniverseSnapshot in new code.
 
 from __future__ import annotations
 

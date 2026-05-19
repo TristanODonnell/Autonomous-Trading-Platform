@@ -1,0 +1,193 @@
+{
+  "uid": "ratp-universe-management",
+  "title": "RATP Universe Management",
+  "tags": ["ratp", "universe"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-24h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "query": "label_values(environment)",
+        "includeAll": true,
+        "allValue": ".*",
+        "refresh": 1,
+        "current": {"text": "All", "value": "$__all"}
+      },
+      {
+        "name": "correlation_id",
+        "type": "textbox",
+        "query": "",
+        "current": {"text": "", "value": ""}
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {"name": "Annotations & Alerts", "type": "dashboard", "builtIn": 1, "hide": true, "enable": true}
+    ]
+  },
+  "links": [
+    {
+      "title": "Tempo by correlation_id",
+      "type": "link",
+      "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+    },
+    {
+      "title": "Loki by correlation_id",
+      "type": "link",
+      "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Active universe size",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "ratp_universe_active_size{environment=~\"$environment\"}", "legendFormat": "active"}],
+      "fieldConfig": {"defaults": {"unit": "short", "links": [{"title": "Loki by correlation_id", "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"}]}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}}
+    },
+    {
+      "id": 2,
+      "title": "Candidate count history",
+      "type": "timeseries",
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (component) (rate(ratp_universe_candidate_count_sum{environment=~\"$environment\"}[5m])) / clamp_min(sum by (component) (rate(ratp_universe_candidate_count_count{environment=~\"$environment\"}[5m])), 1)", "legendFormat": "{{component}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Rejected symbol count",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(ratp_universe_rejected_symbol_count_sum{environment=~\"$environment\"}[5m])) / clamp_min(sum(rate(ratp_universe_rejected_symbol_count_count{environment=~\"$environment\"}[5m])), 1)", "legendFormat": "rejected"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "options": {}
+    },
+    {
+      "id": 4,
+      "title": "Universe validation failures",
+      "type": "timeseries",
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(ratp_universe_validation_failures_total{environment=~\"$environment\"}[5m]))", "legendFormat": "failures"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "options": {}
+    },
+    {
+      "id": 5,
+      "title": "Ranking duration p95",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 4, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, sum by (le) (rate(ratp_universe_ranking_duration_seconds_bucket{environment=~\"$environment\"}[5m])))", "legendFormat": "p95"}],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "options": {}
+    },
+    {
+      "id": 6,
+      "title": "Rebalance duration p95",
+      "type": "timeseries",
+      "gridPos": {"x": 8, "y": 4, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, sum by (le) (rate(ratp_universe_rebalance_duration_seconds_bucket{environment=~\"$environment\"}[5m])))", "legendFormat": "p95"}],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "options": {}
+    },
+    {
+      "id": 7,
+      "title": "Rotation duration p95",
+      "type": "timeseries",
+      "gridPos": {"x": 16, "y": 4, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, sum by (le, rotation_type) (rate(ratp_universe_rotation_duration_seconds_bucket{environment=~\"$environment\"}[5m])))", "legendFormat": "{{rotation_type}}"}],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "options": {}
+    },
+    {
+      "id": 8,
+      "title": "Churn percentage over time",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 10, "w": 12, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(ratp_universe_rebalance_churn_pct_sum{environment=~\"$environment\"}[5m])) / clamp_min(sum(rate(ratp_universe_rebalance_churn_pct_count{environment=~\"$environment\"}[5m])), 1)", "legendFormat": "churn"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "options": {}
+    },
+    {
+      "id": 9,
+      "title": "Added / removed / retained symbol counts",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 10, "w": 12, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(ratp_universe_symbols_added_count_sum{environment=~\"$environment\"}[5m])) / clamp_min(sum(rate(ratp_universe_symbols_added_count_count{environment=~\"$environment\"}[5m])), 1)", "legendFormat": "added"},
+        {"refId": "B", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(ratp_universe_symbols_removed_count_sum{environment=~\"$environment\"}[5m])) / clamp_min(sum(rate(ratp_universe_symbols_removed_count_count{environment=~\"$environment\"}[5m])), 1)", "legendFormat": "removed"},
+        {"refId": "C", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(ratp_universe_symbols_retained_count_sum{environment=~\"$environment\"}[5m])) / clamp_min(sum(rate(ratp_universe_symbols_retained_count_count{environment=~\"$environment\"}[5m])), 1)", "legendFormat": "retained"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "options": {}
+    },
+    {
+      "id": 10,
+      "title": "Universe rotation records table",
+      "type": "table",
+      "gridPos": {"x": 0, "y": 16, "w": 12, "h": 7},
+      "datasource": {"type": "postgres", "uid": "ratp-postgres"},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "ratp-postgres"}, "rawSql": "SELECT rotation_id, rotation_type, status, previous_universe_version_id, candidate_universe_version_id, new_universe_version_id, rebalance_run_id, churn_pct, force_rotation, created_at, rejection_reason FROM universe_rotation_records ORDER BY created_at DESC LIMIT 50", "format": "table"}],
+      "fieldConfig": {"defaults": {"links": [{"title": "Tempo by correlation_id", "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"}]}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm"}
+    },
+    {
+      "id": 11,
+      "title": "Universe rebalance records table",
+      "type": "table",
+      "gridPos": {"x": 12, "y": 16, "w": 12, "h": 7},
+      "datasource": {"type": "postgres", "uid": "ratp-postgres"},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "ratp-postgres"}, "rawSql": "SELECT rebalance_run_id, previous_universe_version_id, candidate_universe_version_id, proposed_universe_version_id, churn_pct, target_universe_size, max_churn_pct, status, created_at, rejection_reason FROM universe_rebalance_runs ORDER BY created_at DESC LIMIT 50", "format": "table"}],
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm"}
+    },
+    {
+      "id": 12,
+      "title": "Latest active universe table",
+      "type": "table",
+      "gridPos": {"x": 0, "y": 23, "w": 8, "h": 7},
+      "datasource": {"type": "postgres", "uid": "ratp-postgres"},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "ratp-postgres"}, "rawSql": "SELECT v.universe_version_id, v.name, v.source, v.status, v.effective_from, v.effective_to, COUNT(m.symbol) AS member_count FROM universe_versions v LEFT JOIN universe_members m ON m.universe_version_id = v.universe_version_id AND m.excluded_reason IS NULL WHERE v.status = 'active' GROUP BY v.universe_version_id, v.name, v.source, v.status, v.effective_from, v.effective_to ORDER BY v.effective_from DESC LIMIT 10", "format": "table"}],
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm"}
+    },
+    {
+      "id": 13,
+      "title": "Runtime jobs linked to universe_version_id",
+      "type": "table",
+      "gridPos": {"x": 8, "y": 23, "w": 8, "h": 7},
+      "datasource": {"type": "postgres", "uid": "ratp-postgres"},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "ratp-postgres"}, "rawSql": "SELECT job_run_id, job_name, status, started_at, completed_at, correlation_id, input_summary_json->>'universe_version_id' AS input_universe_version_id, output_summary_json->>'universe_version_id' AS output_universe_version_id FROM runtime_job_runs WHERE input_summary_json ? 'universe_version_id' OR output_summary_json ? 'universe_version_id' ORDER BY started_at DESC LIMIT 50", "format": "table"}],
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "options": {"showHeader": true, "cellHeight": "sm"}
+    },
+    {
+      "id": 14,
+      "title": "Universe logs by correlation_id",
+      "type": "logs",
+      "gridPos": {"x": 16, "y": 23, "w": 8, "h": 7},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [{"refId": "A", "datasource": {"type": "loki", "uid": "loki"}, "expr": "{} | json | component=~\"universe.*\" |~ \"$correlation_id\"", "queryType": "range"}],
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "options": {}
+    }
+  ]
+}

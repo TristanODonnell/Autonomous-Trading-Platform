@@ -139,3 +139,36 @@ class CheckpointStatus(enum.StrEnum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class UniverseStatus(enum.StrEnum):
+    CANDIDATE = "candidate"
+    PROPOSED = "proposed"
+    ACTIVE = "active"
+    RETIRED = "retired"
+
+
+class UniverseSource(enum.StrEnum):
+    IEX_TOP500 = "iex_top500"
+    CUSTOM = "custom"
+    SECTOR_FILTERED = "sector_filtered"
+    VOLATILITY_FILTERED = "volatility_filtered"
+    REBALANCE = "rebalance"
+
+
+class RawSymbolStatus(enum.StrEnum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    HALTED = "halted"
+    DELISTED = "delisted"
+
+
+class AssetType(enum.StrEnum):
+    US_EQUITY = "us_equity"
+    CRYPTO = "crypto"
+    OTHER = "other"
+
+
+class RawPoolRefreshCadence(enum.StrEnum):
+    DAILY = "daily"
+    WEEKLY = "weekly"

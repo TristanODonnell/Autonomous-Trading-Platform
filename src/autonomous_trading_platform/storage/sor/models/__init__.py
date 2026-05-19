@@ -20,6 +20,8 @@ from . import order_intents as order_intents
 from . import position_snapshot_items as position_snapshot_items
 from . import position_snapshots as position_snapshots
 from . import promotion_rules as promotion_rules
+from . import raw_market_pool as raw_market_pool
+from . import rebalance_runs as rebalance_runs
 from . import reconciliation_snapshots as reconciliation_snapshots
 from . import risk_snapshots as risk_snapshots
 from . import run_manifests as run_manifests
@@ -36,7 +38,9 @@ from . import strategy_runtime_states as strategy_runtime_states
 from . import symbol_date_coverage as symbol_date_coverage
 from . import ticker_lifecycle_event as ticker_lifecycle_events
 from . import tracked_orders as tracked_orders
+from . import universe_rotation_records as universe_rotation_records
 from . import universe_snapshots as universe_snapshots
+from . import universe_versions as universe_versions
 from .base import Base as Base
 
 __all__ = [
@@ -56,6 +60,8 @@ __all__ = [
     "run_manifests",
     "signals",
     "universe_snapshots",
+    "universe_versions",
+    "raw_market_pool",
     "strategy_runtime_states",
     "audit_logs",
     "tracked_orders",
@@ -80,4 +86,6 @@ __all__ = [
     "runtime_control_state",
     "reconciliation_snapshots",
     "runtime_soak_reports",
+    "rebalance_runs",
+    "universe_rotation_records",
 ]

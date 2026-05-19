@@ -45,6 +45,7 @@ from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_cycle_window,
     build_trading_run_manifest,
     new_trading_run_id,
+    resolve_trading_universe,
 )
 from autonomous_trading_platform.scheduler.jobs.check_ingestion_readiness_job import (
     check_ingestion_readiness_job,
@@ -121,7 +122,13 @@ def run_trading_cycle(now_utc: datetime | None = None):
     safety_context = trading_cycle_dependencies.safety_context
     freeze_service = TradingFreezeService()
     component = "scheduler.run_trading_cycle"
-    expected_symbols = {"SPY"}
+
+    (
+        expected_symbols,
+        resolved_universe_version_id,
+        resolved_universe_source,
+        resolved_universe_member_count,
+    ) = resolve_trading_universe(session=session, now_utc=now_utc)
 
     cycle_wall_start = perf_counter()
 
@@ -202,6 +209,9 @@ def run_trading_cycle(now_utc: datetime | None = None):
         cycle_start=trading_cycle_window.cycle_start,
         cycle_end=trading_cycle_window.cycle_end,
         trading_environment=settings.trading_environment,
+        universe_version_id=resolved_universe_version_id,
+        universe_source=resolved_universe_source,
+        universe_member_count=resolved_universe_member_count,
     )
     manifest.status = "running"
     manifest.current_step = "starting"

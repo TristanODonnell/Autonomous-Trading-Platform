@@ -1,3 +1,6 @@
+# DEPRECATED: UniverseSnapshotService (build service) has been superseded by UniverseVersionService.
+# See: universe/services/universe_version_service.py
+
 from __future__ import annotations
 
 import hashlib
