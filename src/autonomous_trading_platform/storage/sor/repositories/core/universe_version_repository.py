@@ -60,6 +60,47 @@ class UniverseVersionRepository(BaseRepository):
         members = self.get_members(version_id)
         return [m.symbol for m in members]
 
+    def get_included_members(self, version_id: str) -> list[UniverseMember]:
+        """Return only included (non-rejected) members — members without excluded_reason."""
+        stmt = (
+            select(UniverseMember)
+            .where(
+                UniverseMember.universe_version_id == version_id,
+                UniverseMember.excluded_reason.is_(None),
+            )
+            .order_by(UniverseMember.rank.asc().nullsfirst(), UniverseMember.symbol.asc())
+        )
+        return list(self.session.execute(stmt).scalars().all())
+
+    def get_included_symbols(self, version_id: str) -> list[str]:
+        """Return only included (non-rejected) symbol strings."""
+        members = self.get_included_members(version_id)
+        return [m.symbol for m in members]
+
+    def get_active_versions_in_window(
+        self, start: datetime, end: datetime
+    ) -> list[UniverseVersion]:
+        """Return ACTIVE or RETIRED versions whose effective range overlaps [start, end]."""
+        stmt = (
+            select(UniverseVersion)
+            .where(
+                UniverseVersion.status.in_([UniverseStatus.ACTIVE, UniverseStatus.RETIRED]),
+                UniverseVersion.effective_from < end,
+                (UniverseVersion.effective_to.is_(None)) | (UniverseVersion.effective_to > start),
+            )
+            .order_by(UniverseVersion.effective_from.asc())
+        )
+        return list(self.session.execute(stmt).scalars().all())
+
+    def get_candidate_versions(self, limit: int = 20) -> list[UniverseVersion]:
+        stmt = (
+            select(UniverseVersion)
+            .where(UniverseVersion.status == UniverseStatus.CANDIDATE)
+            .order_by(UniverseVersion.effective_from.desc())
+            .limit(limit)
+        )
+        return list(self.session.execute(stmt).scalars().all())
+
     def insert_version(self, row: UniverseVersion) -> None:
         if row.status == UniverseStatus.ACTIVE:
             raise ValueError(

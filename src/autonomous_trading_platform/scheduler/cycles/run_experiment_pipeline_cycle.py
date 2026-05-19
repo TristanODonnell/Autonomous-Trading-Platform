@@ -52,6 +52,19 @@ from autonomous_trading_platform.storage.sor.models.strategy_governance import S
 from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_repository import (
     RuntimeJobRunRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.universe_rotation_repository import (
+    UniverseRotationRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
+    UniverseVersionRepository,
+)
+from autonomous_trading_platform.universe.services.experiment_universe_resolver import (
+    ExperimentUniverseResolver,
+)
+from autonomous_trading_platform.universe.services.survivorship_guard import SurvivorshipGuard
+from autonomous_trading_platform.universe.services.universe_history_service import (
+    UniverseHistoryService,
+)
 
 logger = get_logger(__name__)
 
@@ -155,12 +168,31 @@ def run_experiment_pipeline_cycle(
                 simulation_runner=simulation_context.simulation_runner,
             )
 
+        version_repo = UniverseVersionRepository(session)
+        rotation_repo = UniverseRotationRepository(session)
+        history_service = UniverseHistoryService(
+            version_repo=version_repo, rotation_repo=rotation_repo
+        )
+        resolver = ExperimentUniverseResolver(
+            history_service=history_service, version_repo=version_repo
+        )
+        universe_scope = resolver.resolve(experiment_plan, now_utc)
+
+        guard = SurvivorshipGuard()
+        guard.validate_experiment_scope(
+            scope=universe_scope,
+            experiment_start=experiment_plan.start_date,
+            experiment_end=experiment_plan.end_date,
+        )
+
         base_metadata = {
             "experiment_id": experiment_plan.experiment_id,
             "experiment_type": str(experiment_plan.experiment_type),
             "dataset_version": experiment_plan.dataset_version,
             "price_basis": experiment_plan.price_basis.value,
             "symbols": experiment_plan.symbols,
+            "universe_version_id": universe_scope.universe_version_id,
+            "universe_resolution_mode": universe_scope.mode.value,
             "config_path": config_path,
         }
 
@@ -180,7 +212,15 @@ def run_experiment_pipeline_cycle(
             end_date=experiment_plan.end_date,
             dataset_version=experiment_plan.dataset_version,
             price_basis=experiment_plan.price_basis,
-            universe_version=experiment_plan.universe_version,
+            universe_version=universe_scope.universe_version_id or experiment_plan.universe_version,
+            universe_version_id=universe_scope.universe_version_id,
+            universe_source=universe_scope.source,
+            universe_member_count=universe_scope.member_count
+            if universe_scope.member_count > 0
+            else None,
+            universe_resolution_mode=universe_scope.mode.value,
+            universe_effective_timestamp=universe_scope.effective_timestamp,
+            replay_rotation_enabled=universe_scope.replay_rotation_enabled,
             git_commit="dev",
             python_version=platform.python_version(),
             notes=f"Experiment pipeline cycle: {experiment_plan.experiment_id}",

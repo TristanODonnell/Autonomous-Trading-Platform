@@ -29,6 +29,12 @@ class RunManifest(BaseModel):
     dataset_version: str
     price_basis: PriceBasis
     universe_version: str
+    universe_version_id: str | None = None
+    universe_source: str | None = None
+    universe_member_count: int | None = None
+    universe_resolution_mode: str | None = None
+    universe_effective_timestamp: UTCDateTime | None = None
+    replay_rotation_enabled: bool = False
     cost_model: dict[str, Any] | None = None
     fill_model: dict[str, Any] | None = None
     random_seed: int | None = None

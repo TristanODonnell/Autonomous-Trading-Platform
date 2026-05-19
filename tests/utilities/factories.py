@@ -4,16 +4,24 @@ from typing import Any, cast
 from uuid import UUID
 
 from autonomous_trading_platform.contracts.common.enums import (
+    AssetType,
     BarInterval,
     MarketSession,
     OrderType,
     PriceBasis,
+    RawPoolRefreshCadence,
+    RawSymbolStatus,
     Side,
     TimeInForce,
     UniverseSource,
     UniverseStatus,
 )
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
+from autonomous_trading_platform.contracts.runtime.raw_market_symbol import (
+    RawMarketPoolMembership,
+    RawMarketPoolSnapshot,
+    RawMarketSymbol,
+)
 from autonomous_trading_platform.contracts.runtime.universe_snapshot import (
     UniverseSnapshot,
 )
@@ -64,6 +72,7 @@ def make_universe_version(
     status: str = UniverseStatus.ACTIVE,
     rebalance_reason: str | None = None,
     config_hash: str = "testhash",
+    generation_metadata_json: dict | None = None,
 ) -> UniverseVersion:
     return UniverseVersion(
         universe_version_id=universe_version_id,
@@ -75,6 +84,7 @@ def make_universe_version(
         status=status,
         rebalance_reason=rebalance_reason,
         config_hash=config_hash,
+        generation_metadata_json=generation_metadata_json,
     )
 
 
@@ -255,6 +265,93 @@ def make_fill(
         side=side,
         quantity=Decimal(quantity),
         price=Decimal(price),
+    )
+
+
+def make_raw_market_symbol(
+    *,
+    symbol: str = "AAPL",
+    exchange: str | None = "NASDAQ",
+    asset_type: str = AssetType.US_EQUITY,
+    status: str = RawSymbolStatus.ACTIVE,
+    is_tradable: bool = True,
+    name: str | None = "Apple Inc.",
+    currency: str | None = "USD",
+    country: str | None = "US",
+    marginable: bool | None = True,
+    shortable: bool | None = True,
+    fractionable: bool | None = True,
+    easy_to_borrow: bool | None = True,
+    provider_symbol: str | None = None,
+    provider_asset_id: str | None = None,
+    source: str = "alpaca",
+    first_seen: datetime = datetime(2025, 1, 15, 14, 30, tzinfo=UTC),
+    last_seen: datetime = datetime(2025, 1, 15, 14, 30, tzinfo=UTC),
+    metadata_json: dict | None = None,
+    created_at: datetime = datetime(2025, 1, 15, 14, 30, tzinfo=UTC),
+    updated_at: datetime = datetime(2025, 1, 15, 14, 30, tzinfo=UTC),
+) -> RawMarketSymbol:
+    return RawMarketSymbol(
+        symbol=symbol,
+        exchange=exchange,
+        asset_type=asset_type,
+        status=status,
+        is_tradable=is_tradable,
+        name=name,
+        currency=currency,
+        country=country,
+        marginable=marginable,
+        shortable=shortable,
+        fractionable=fractionable,
+        easy_to_borrow=easy_to_borrow,
+        provider_symbol=provider_symbol or symbol,
+        provider_asset_id=provider_asset_id,
+        source=source,
+        first_seen=first_seen,
+        last_seen=last_seen,
+        metadata_json=metadata_json,
+        created_at=created_at,
+        updated_at=updated_at,
+    )
+
+
+def make_raw_market_pool_snapshot(
+    *,
+    snapshot_id: str = "snap-00000000000001",
+    captured_at: datetime = datetime(2025, 1, 15, 14, 30, tzinfo=UTC),
+    source: str = "alpaca",
+    symbol_count: int = 2,
+    cadence: str = RawPoolRefreshCadence.DAILY,
+    is_complete: bool = True,
+    metadata_json: dict | None = None,
+) -> RawMarketPoolSnapshot:
+    return RawMarketPoolSnapshot(
+        snapshot_id=snapshot_id,
+        captured_at=captured_at,
+        source=source,
+        symbol_count=symbol_count,
+        cadence=cadence,
+        is_complete=is_complete,
+        metadata_json=metadata_json,
+    )
+
+
+def make_raw_market_pool_membership(
+    *,
+    snapshot_id: str = "snap-00000000000001",
+    symbol: str = "AAPL",
+    is_tradable: bool = True,
+    status: str = RawSymbolStatus.ACTIVE,
+    asset_type: str = AssetType.US_EQUITY,
+    exchange: str | None = "NASDAQ",
+) -> RawMarketPoolMembership:
+    return RawMarketPoolMembership(
+        snapshot_id=snapshot_id,
+        symbol=symbol,
+        is_tradable=is_tradable,
+        status=status,
+        asset_type=asset_type,
+        exchange=exchange,
     )
 
 

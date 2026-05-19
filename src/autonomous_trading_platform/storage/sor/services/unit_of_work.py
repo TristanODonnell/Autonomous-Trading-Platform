@@ -51,6 +51,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.order_intent_repo
 from autonomous_trading_platform.storage.sor.repositories.core.position_snapshot_repository import (
     PositionSnapshotRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.raw_market_pool_repository import (
+    RawMarketPoolRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.reconciliation_snapshot_repository import (
     ReconciliationSnapshotRepository,
 )
@@ -98,6 +101,7 @@ class SorUnitOfWork:
         self.corporate_actions = CorporateActionRepository(session)
         self.universe_snapshots = UniverseSnapshotRepository(session)
         self.universe_versions = UniverseVersionRepository(session)
+        self.raw_market_pool = RawMarketPoolRepository(session)
         self.signals = SignalRepository(session)
         self.order_intents = OrderIntentRepository(session)
         self.broker_account_snapshots = BrokerAccountSnapshotRepository(session)

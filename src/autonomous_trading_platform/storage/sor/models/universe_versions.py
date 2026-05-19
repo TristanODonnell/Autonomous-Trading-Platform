@@ -27,6 +27,8 @@ class UniverseVersion(Base):
     rebalance_reason: Mapped[str | None] = mapped_column(String, nullable=True)
     config_hash: Mapped[str] = mapped_column(String, nullable=False)
 
+    generation_metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+
     members: Mapped[list[UniverseMember]] = relationship(
         "UniverseMember",
         back_populates="version",

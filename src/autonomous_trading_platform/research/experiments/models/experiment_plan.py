@@ -7,6 +7,7 @@ from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.research.pipeline.pipeline_runner import StagedPipelineConfig
+from autonomous_trading_platform.universe.types import UniverseResolutionMode
 
 
 class ExperimentType(enum.StrEnum):
@@ -41,3 +42,4 @@ class ExperimentDefinition:
     # CROSS_UNIVERSE
     universe_set: list[list[str]] | None = None
     staged_pipeline_config: StagedPipelineConfig | None = None
+    universe_resolution_mode: UniverseResolutionMode | None = None

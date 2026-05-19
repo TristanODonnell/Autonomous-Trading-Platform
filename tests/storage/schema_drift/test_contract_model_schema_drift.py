@@ -44,6 +44,15 @@ from autonomous_trading_platform.contracts.runtime.ingestion_run import (
 from autonomous_trading_platform.contracts.runtime.metrics_summary import (
     MetricsSummary as MetricsSummaryContract,
 )
+from autonomous_trading_platform.contracts.runtime.raw_market_symbol import (
+    RawMarketPoolMembership as RawMarketPoolMembershipContract,
+)
+from autonomous_trading_platform.contracts.runtime.raw_market_symbol import (
+    RawMarketPoolSnapshot as RawMarketPoolSnapshotContract,
+)
+from autonomous_trading_platform.contracts.runtime.raw_market_symbol import (
+    RawMarketSymbol as RawMarketSymbolContract,
+)
 from autonomous_trading_platform.contracts.runtime.run_manifest import (
     RunManifest as RunManifestContract,
 )
@@ -107,6 +116,15 @@ from autonomous_trading_platform.storage.sor.models.metrics_summary import (
     MetricsSummary as MetricsSummaryOrm,
 )
 from autonomous_trading_platform.storage.sor.models.order_intents import OrderIntents
+from autonomous_trading_platform.storage.sor.models.raw_market_pool import (
+    RawMarketPoolMembership as RawMarketPoolMembershipOrm,
+)
+from autonomous_trading_platform.storage.sor.models.raw_market_pool import (
+    RawMarketPoolSnapshot as RawMarketPoolSnapshotOrm,
+)
+from autonomous_trading_platform.storage.sor.models.raw_market_pool import (
+    RawMarketSymbol as RawMarketSymbolOrm,
+)
 from autonomous_trading_platform.storage.sor.models.risk_snapshots import (
     RiskSnapshot as RiskSnapshotOrm,
 )
@@ -259,6 +277,21 @@ SCHEMA_PAIRS: tuple[ContractOrmSchemaPair, ...] = (
         contract=SignalContract,
         orm_model=SignalOrm,
         expected_fields=tuple(SignalContract.model_fields),
+    ),
+    ContractOrmSchemaPair(
+        contract=RawMarketSymbolContract,
+        orm_model=RawMarketSymbolOrm,
+        expected_fields=tuple(RawMarketSymbolContract.model_fields),
+    ),
+    ContractOrmSchemaPair(
+        contract=RawMarketPoolSnapshotContract,
+        orm_model=RawMarketPoolSnapshotOrm,
+        expected_fields=tuple(RawMarketPoolSnapshotContract.model_fields),
+    ),
+    ContractOrmSchemaPair(
+        contract=RawMarketPoolMembershipContract,
+        orm_model=RawMarketPoolMembershipOrm,
+        expected_fields=tuple(RawMarketPoolMembershipContract.model_fields),
     ),
 )
 

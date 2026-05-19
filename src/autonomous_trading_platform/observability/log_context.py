@@ -11,6 +11,12 @@ class LogContext:
     cycle_timestamp: datetime | str | None = None
     dataset_version: str | None = None
     universe_version: str | None = None
+    universe_version_id: str | None = None
+    candidate_universe_version_id: str | None = None
+    active_universe_version_id: str | None = None
+    rebalance_run_id: str | None = None
+    rotation_record_id: str | None = None
+    job_run_id: str | None = None
     order_intent_id: str | None = None
     incident_type: str | None = None
     component: str | None = None

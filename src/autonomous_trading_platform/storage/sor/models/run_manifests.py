@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from sqlalchemy import Date, Integer, String
+from sqlalchemy import Boolean, Date, Integer, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -45,6 +45,16 @@ class RunManifestRow(Base):
         nullable=False,
     )
     universe_version: Mapped[str] = mapped_column(String, nullable=False)
+    universe_version_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    universe_source: Mapped[str | None] = mapped_column(String, nullable=True)
+    universe_member_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    universe_resolution_mode: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    universe_effective_timestamp: Mapped[UTCDateTime | None] = mapped_column(
+        UTCDateTimeType(), nullable=True
+    )
+    replay_rotation_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
     cost_model: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     fill_model: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     random_seed: Mapped[int | None] = mapped_column(Integer, nullable=True)

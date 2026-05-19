@@ -19,6 +19,7 @@ class UniverseVersion(BaseModel):
     status: str
     rebalance_reason: str | None = None
     config_hash: str
+    generation_metadata_json: dict[str, Any] | None = None
 
 
 class UniverseMember(BaseModel):

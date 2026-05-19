@@ -94,6 +94,12 @@ from autonomous_trading_platform.storage.sor.repositories.core.feature_dataset_v
 from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_repository import (
     RuntimeJobRunRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
+    UniverseVersionRepository,
+)
+from autonomous_trading_platform.universe.services.universe_resolution_service import (
+    UniverseResolutionService,
+)
 
 logger = get_logger(__name__)
 
@@ -163,6 +169,7 @@ def run_feature_pipeline_cycle(
     price_basis: PriceBasis = PriceBasis.RAW,
     dataset_version_id: str | None = None,
     symbols: list[str] | None = None,
+    universe_version_id: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
     include_returns: bool = True,
@@ -179,6 +186,26 @@ def run_feature_pipeline_cycle(
     audit_logger = AuditLoggingService(session=session)
     manifest_service = RunManifestService(session=session)
     dataset_registration_service = DatasetRegistrationService(session=session)
+
+    resolved_universe_version_id = universe_version_id
+    resolved_universe_source: str | None = None
+    resolved_universe_member_count: int | None = None
+
+    if symbols is None and universe_version_id is None:
+        resolution_service = UniverseResolutionService(UniverseVersionRepository(session))
+        active_version = resolution_service.resolve_active_or_none(now_utc)
+        if active_version is not None:
+            resolved_universe_version_id = active_version.universe_version_id
+            resolved_universe_source = active_version.source
+            universe_members = resolution_service.resolve_active_members(now_utc)
+            resolved_universe_member_count = len(universe_members)
+            symbols = universe_members if universe_members else None
+    elif universe_version_id is not None:
+        resolution_service = UniverseResolutionService(UniverseVersionRepository(session))
+        active_version = resolution_service.resolve_active_or_none(now_utc)
+        if active_version is not None and active_version.universe_version_id == universe_version_id:
+            resolved_universe_source = active_version.source
+            resolved_universe_member_count = resolution_service.resolve_member_count(now_utc)
 
     run_id = uuid.uuid4()
     component = "scheduler.run_feature_pipeline_cycle"
@@ -252,7 +279,10 @@ def run_feature_pipeline_cycle(
             start_date=start_date or now_utc.date(),
             end_date=end_date or now_utc.date(),
             dataset_version=dataset_version_id or "latest_validated",
-            universe_version="v1",
+            universe_version=resolved_universe_version_id or "v1",
+            universe_version_id=resolved_universe_version_id,
+            universe_source=resolved_universe_source,
+            universe_member_count=resolved_universe_member_count,
             git_commit="dev",
             python_version=platform.python_version(),
             notes="Feature engineering pipeline cycle",
@@ -265,6 +295,8 @@ def run_feature_pipeline_cycle(
             "price_basis": price_basis.value,
             "dataset_version_id": dataset_version_id,
             "symbols": symbols,
+            "universe_version_id": resolved_universe_version_id,
+            "universe_member_count": resolved_universe_member_count,
             "start_date": start_date.isoformat() if start_date else None,
             "end_date": end_date.isoformat() if end_date else None,
             "include_returns": include_returns,

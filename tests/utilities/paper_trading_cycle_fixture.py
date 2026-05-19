@@ -52,6 +52,12 @@ from autonomous_trading_platform.storage.sor.models.strategy_runtime_states impo
 from autonomous_trading_platform.storage.sor.models.symbol_date_coverage import (
     SymbolDateCoverage,
 )
+from autonomous_trading_platform.storage.sor.models.universe_versions import (
+    UniverseMember as UniverseMemberRow,
+)
+from autonomous_trading_platform.storage.sor.models.universe_versions import (
+    UniverseVersion as UniverseVersionRow,
+)
 from autonomous_trading_platform.strategy.contracts.strategy_evaluation_result import (
     StrategyEvaluationResult,
 )
@@ -307,7 +313,43 @@ def _seed_database(*, session: Session, data_root: Path) -> None:
     _upsert_capital_allocation_policy(session=session)
     _upsert_account_state(session=session)
     _reset_runtime_control_state(session=session)
+    _seed_universe(session=session)
     session.flush()
+
+
+def _seed_universe(*, session: Session) -> None:
+    version_id = str(_fixture_uuid("paper-cycle-universe-version"))
+    effective_from = PAPER_CYCLE_NOW_UTC.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    existing = session.get(UniverseVersionRow, version_id)
+    if existing is None:
+        session.add(
+            UniverseVersionRow(
+                universe_version_id=version_id,
+                name="fixture_paper_universe",
+                source="custom",
+                created_at=effective_from,
+                effective_from=effective_from,
+                effective_to=None,
+                status="active",
+                rebalance_reason="fixture_seed",
+                config_hash=_stable_checksum(f"universe:{PAPER_CYCLE_SYMBOL}"),
+                generation_metadata_json={"fixture": "paper_trading_cycle"},
+            )
+        )
+        session.add(
+            UniverseMemberRow(
+                universe_version_id=version_id,
+                symbol=PAPER_CYCLE_SYMBOL,
+                rank=1,
+                score=None,
+                included_reason="fixture_seed",
+                excluded_reason=None,
+                liquidity_metrics_json=None,
+                quality_metrics_json=None,
+            )
+        )
+        session.flush()
 
 
 def _upsert_capital_allocation_policy(*, session: Session) -> None:

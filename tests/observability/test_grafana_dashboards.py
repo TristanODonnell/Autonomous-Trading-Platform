@@ -16,6 +16,7 @@ EXPECTED_DASHBOARDS = {
     "broker-operations.json",
     "reconciliation.json",
     "runtime-verification.json",
+    "universe-management.json",
 }
 
 BANNED_PROM_LABEL_RE = re.compile(

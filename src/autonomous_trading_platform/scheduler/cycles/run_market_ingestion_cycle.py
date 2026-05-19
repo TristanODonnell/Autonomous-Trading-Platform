@@ -169,6 +169,10 @@ def run_market_ingestion_cycle(
     )
 
     try:
+        resolved_universe_version_id: str | None = None
+        resolved_universe_source: str | None = None
+        resolved_universe_member_count: int | None = None
+
         if symbols_override is not None:
             if not symbols_override:
                 raise RuntimeError("symbols_override was provided but is empty")
@@ -189,6 +193,12 @@ def run_market_ingestion_cycle(
                 raise RuntimeError(
                     f"No active universe symbols found for {now_utc.date().isoformat()}"
                 )
+
+            active_version = version_repository.get_active_version(now_utc)
+            if active_version is not None:
+                resolved_universe_version_id = active_version.universe_version_id
+                resolved_universe_source = active_version.source
+                resolved_universe_member_count = len(expected_symbols)
 
         cycle_end = floor_to_five_minutes(now_utc)
         cycle_start = cycle_end - timedelta(minutes=5)
@@ -243,7 +253,10 @@ def run_market_ingestion_cycle(
             start_date=cycle_start.date(),
             end_date=cycle_end.date(),
             dataset_version=str(dataset_version_id),
-            universe_version="v1",
+            universe_version=resolved_universe_version_id or "v1",
+            universe_version_id=resolved_universe_version_id,
+            universe_source=resolved_universe_source,
+            universe_member_count=resolved_universe_member_count,
             git_commit="dev",
             python_version=platform.python_version(),
             notes="5-minute market bar ingestion cycle",
