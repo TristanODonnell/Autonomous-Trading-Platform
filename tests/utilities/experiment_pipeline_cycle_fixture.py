@@ -228,6 +228,9 @@ start_date: "{EXPERIMENT_START_DATE.isoformat()}"
 end_date: "{EXPERIMENT_END_DATE.isoformat()}"
 strategy_set:
   - type: moving_average_crossover
+symbols:
+  - AAPL
+  - SPY
 parameter_space:
   short_window: [5]
   long_window: [20]

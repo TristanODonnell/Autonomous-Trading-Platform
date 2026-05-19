@@ -49,11 +49,16 @@ def test_structured_log_fields_present_for_candidate_generation(caplog) -> None:
         bars_by_symbol={"AAPL": _bars_for_symbol("AAPL", close="50.00", volume=500_000)},
     )
 
-    with caplog.at_level("INFO"):
+    with caplog.at_level(
+        "INFO",
+        logger="autonomous_trading_platform.universe.services.universe_candidate_builder",
+    ):
         result = builder.build_candidate(config=_default_config(), name="observability")
 
     completed = [
-        record for record in caplog.records if record.message == "candidate generation completed"
+        record
+        for record in caplog.records
+        if record.getMessage() == "candidate generation completed"
     ][0]
     assert completed.universe_version_id == result.version.universe_version_id
     assert completed.candidate_universe_version_id == result.version.universe_version_id
