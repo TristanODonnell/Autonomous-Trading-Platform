@@ -46,6 +46,17 @@ class StrategyRegistry:
             )
         if defn.strategy_type in self._definitions:
             raise ValueError(f"Strategy type {defn.strategy_type!r} is already registered")
+        from autonomous_trading_platform.strategy.components import (
+            ComponentType,
+            get_component_registry,
+        )
+
+        component_registry = get_component_registry()
+        for indicator_name in defn.required_indicators:
+            component_registry.validate_component_reference(
+                indicator_name,
+                expected_type=ComponentType.INDICATOR,
+            )
         self._definitions[defn.strategy_type] = defn
         self._order.append(defn.strategy_type)
 

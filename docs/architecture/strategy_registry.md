@@ -30,6 +30,10 @@ src/autonomous_trading_platform/strategy/registry/
   _registrations.py        # All strategy registrations (runs once on import)
 ```
 
+Related reusable primitive metadata lives in
+`src/autonomous_trading_platform/strategy/components/` and is documented in
+`docs/architecture/component_registry.md`.
+
 ---
 
 ## StrategyDefinition Fields
@@ -170,7 +174,8 @@ Use `defn.compute_warmup_bars(parameters)` or `defn.compute_warmup_bars()` to ge
 The registry separates two dependency types:
 
 - `required_indicators`: in-memory functions under `strategy/indicators/` used
-  directly by a strategy.
+  directly by a strategy. These names must exist as `indicator` components in
+  `ComponentRegistry`.
 - `required_persisted_features`: persisted feature datasets loaded into
   `StrategyContext.features`.
 
@@ -197,6 +202,11 @@ feature table.
 
 The architecture boundary and overlap audit live in
 `docs/architecture/indicator_vs_feature_architecture.md`.
+
+Reusable construction primitive metadata lives in
+`docs/architecture/component_registry.md`. `StrategyRegistry` validates that
+declared `required_indicators` point at registered indicator components, but it
+does not route current strategy execution through the component registry.
 
 ---
 
@@ -304,6 +314,7 @@ The registry exposes generation-friendly metadata without containing generation 
 | Concern | Owner |
 |---|---|
 | Strategy metadata, defaults, validation | `strategy.registry` |
+| Reusable indicator/rule/aggregator/filter/exit/sizing metadata | `strategy.components` |
 | Strategy instantiation | `strategy.factories.StrategyFactory` |
 | Strategy evaluation | `strategy.services.StrategyEvaluationService` |
 | Simulation orchestration | `research.simulation.SimulationRunner` |
@@ -330,13 +341,13 @@ The following are **not yet implemented** but the registry is designed to suppor
 
 - **Composite strategies**: `family=COMPOSITE`, `required_persisted_features` populated
 - **Ensemble orchestration**: new family `ENSEMBLE`, multi-strategy builder signature
-- **Indicator registry**: `required_indicators` consumed by indicator dependency resolver
+- **Indicator dependency resolver**: `required_indicators` consumed by a future execution resolver
 - **Feature dependency execution**: `required_persisted_features` consumed by data loader
 - **Automatic feature dependency resolution**: map persisted feature declarations to `SimulationFeatureDatasetRequest`
 - **Persisted feature consumption by factor strategies**: migrate only after equivalence contracts and loader resolution are explicit
 - **Search-space generation engines**: consume `parameter_specs` from `get_generation_candidates()`
 - **Dynamic plugin discovery**: call `registry.register()` before `lock()` from plugin entrypoints
-- **Automated strategy assembly**: use `family`, `required_indicators`, and `parameter_specs` to compose strategies programmatically
+- **Automated strategy assembly**: use `family`, `required_indicators`, `parameter_specs`, and `ComponentRegistry` metadata to compose strategies programmatically
 
 ---
 
@@ -346,6 +357,8 @@ The following are **not yet implemented** but the registry is designed to suppor
 2. Add a schema class to `strategy/registry/parameter_schemas.py`.
 3. Add/keep compatibility validator wiring in `strategy/registry/validators.py`.
 4. Add `ParameterSpec` entries, a builder, and a `StrategyDefinition` registration to `strategy/registry/_registrations.py` **before** `_REGISTRY.lock()`.
-5. Keep schema defaults, `default_parameters`, `ParameterSpec.default`, and constructor defaults aligned.
-6. Update `tests/strategy/test_strategy_registry.py` expected sets if needed.
-7. Run `python -m pytest tests/strategy/` to verify.
+5. If the strategy declares `required_indicators`, make sure each name is
+   registered in `ComponentRegistry` as an `indicator`.
+6. Keep schema defaults, `default_parameters`, `ParameterSpec.default`, and constructor defaults aligned.
+7. Update `tests/strategy/test_strategy_registry.py` expected sets if needed.
+8. Run `python -m pytest tests/strategy/` to verify.

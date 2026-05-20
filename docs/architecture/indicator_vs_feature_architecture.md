@@ -72,7 +72,9 @@ reproducibility requirement justifies persisted feature consumption.
 ## Strategy Registry Dependency Metadata
 
 `StrategyDefinition.required_indicators` declares the strategy-level indicator
-functions needed by a strategy. This field is metadata only today. It supports:
+functions needed by a strategy. These names are validated against indicator
+components in `ComponentRegistry`. This field is still dependency metadata, not
+an execution path. It supports:
 
 - auditability
 - warmup/lookback review
@@ -149,6 +151,8 @@ to a future feature dependency resolver.
   `StrategyContext.features`.
 - Simple strategies should not be forced onto persisted feature datasets.
 - Feature dependencies are declarations for now, not automatic execution.
+- ComponentRegistry validates strategy indicator names and describes reusable
+  primitives, but it does not execute indicators.
 
 ---
 
@@ -156,8 +160,7 @@ to a future feature dependency resolver.
 
 - Automatic feature dependency resolution from `StrategyRegistry` metadata into
   `SimulationFeatureDatasetRequest` objects.
-- Indicator registry for validating and resolving `required_indicators`.
+- Indicator execution resolver for computing `required_indicators`.
 - Persisted feature consumption by factor strategies when the feature contracts
   and loader resolution are ready.
-- Component registry for broader reusable strategy building blocks.
 - Composite strategy construction.
