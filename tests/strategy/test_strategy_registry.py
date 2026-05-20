@@ -87,6 +87,7 @@ _EXPECTED_ALL = {
     "momentum",
     "mean_reversion",
     "factor_based",
+    "composite_rule",
 }
 
 _EXPECTED_DEBUG = {"stub", "intentional_loser", "random"}
@@ -172,6 +173,7 @@ _EXPECTED_FAMILIES = {
     "momentum": StrategyFamily.MOMENTUM,
     "mean_reversion": StrategyFamily.MEAN_REVERSION,
     "factor_based": StrategyFamily.FACTOR,
+    "composite_rule": StrategyFamily.COMPOSITE,
 }
 
 
@@ -188,6 +190,7 @@ def test_list_families_contains_expected() -> None:
     assert StrategyFamily.MOMENTUM in families
     assert StrategyFamily.MEAN_REVERSION in families
     assert StrategyFamily.FACTOR in families
+    assert StrategyFamily.COMPOSITE in families
 
 
 def test_get_family_strategies_debug() -> None:
@@ -203,6 +206,11 @@ def test_get_family_strategies_trend() -> None:
 def test_get_family_strategies_momentum() -> None:
     momentum = get_registry().get_family_strategies(StrategyFamily.MOMENTUM)
     assert {d.strategy_type for d in momentum} == {"momentum"}
+
+
+def test_get_family_strategies_composite() -> None:
+    composite = get_registry().get_family_strategies(StrategyFamily.COMPOSITE)
+    assert {d.strategy_type for d in composite} == {"composite_rule"}
 
 
 # ---------------------------------------------------------------------------

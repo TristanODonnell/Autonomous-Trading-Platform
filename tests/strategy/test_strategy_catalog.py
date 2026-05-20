@@ -28,6 +28,7 @@ _EXPECTED_ALL = {
     "momentum",
     "mean_reversion",
     "factor_based",
+    "composite_rule",
 }
 
 _EXPECTED_DEBUG = {"stub", "intentional_loser", "random"}
@@ -103,6 +104,7 @@ _STRATEGY_IDS = {
     "momentum": "mom-1",
     "mean_reversion": "mr-1",
     "factor_based": "fb-1",
+    "composite_rule": "composite-1",
 }
 
 

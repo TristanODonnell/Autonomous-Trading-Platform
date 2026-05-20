@@ -98,6 +98,7 @@ Each registered strategy has one schema in `parameter_schemas.py`:
 | `momentum` | `MomentumParameters` |
 | `mean_reversion` | `MeanReversionParameters` |
 | `factor_based` | `FactorBasedParameters` |
+| `composite_rule` | `CompositeStrategyConfig` |
 | `random` | `RandomParameters` |
 | `stub` | `StubParameters` |
 | `intentional_loser` | `IntentionalLoserParameters` |
@@ -131,6 +132,7 @@ Current constraints:
 | `momentum` | positive integer `lookback`, numeric `buy_above` and `sell_below`, `sell_below <= buy_above` |
 | `mean_reversion` | positive integer `window`, numeric z-thresholds, `buy_below_z < sell_above_z` |
 | `factor_based` | positive integer lookback/window fields, `volatility_window > 1`, non-negative weights, `sell_score_threshold < buy_score_threshold` |
+| `composite_rule` | unique indicator IDs, valid component references, valid rule input mappings, executable rules and aggregators |
 
 ---
 
@@ -145,6 +147,7 @@ Current constraints:
 | `momentum` | `MOMENTUM` | No | Yes |
 | `mean_reversion` | `MEAN_REVERSION` | No | Yes |
 | `factor_based` | `FACTOR` | No | Yes |
+| `composite_rule` | `COMPOSITE` | No | Yes |
 
 Available families (enum `StrategyFamily`):
 `MOMENTUM`, `MEAN_REVERSION`, `TREND`, `FACTOR`, `COMPOSITE`, `ENSEMBLE`, `DEBUG`
@@ -164,6 +167,7 @@ Warmup bars are computed at runtime from strategy parameters via `warmup_bars_fn
 | `momentum` | `lookback + 1` |
 | `mean_reversion` | `window` |
 | `factor_based` | `max(momentum_lookback+1, mean_reversion_window, volatility_window, volume_window)` |
+| `composite_rule` | max component warmup derived from declared indicators, rule warmup, and negative input offsets |
 
 Use `defn.compute_warmup_bars(parameters)` or `defn.compute_warmup_bars()` to get the warmup for default parameters.
 
@@ -194,6 +198,7 @@ Current declarations:
 | `momentum` | `momentum` | none |
 | `mean_reversion` | `z_score`, `simple_moving_average`, `rolling_standard_deviation` | none |
 | `factor_based` | `momentum`, `z_score`, `rolling_standard_deviation`, `volume_ratio` | none |
+| `composite_rule` | config-dependent; default uses `momentum` | none |
 
 No current built-in strategy reads `StrategyContext.features`, so no built-in
 strategy declares persisted feature requirements. A strategy must only add a
@@ -339,7 +344,7 @@ Persisted feature resolution is explicit for now:
 
 The following are **not yet implemented** but the registry is designed to support them:
 
-- **Composite strategies**: `family=COMPOSITE`, `required_persisted_features` populated
+- **Composite strategies**: `composite_rule` is registered as `family=COMPOSITE`; future work can add persisted feature dependencies when composites consume persisted features
 - **Ensemble orchestration**: new family `ENSEMBLE`, multi-strategy builder signature
 - **Indicator dependency resolver**: `required_indicators` consumed by a future execution resolver
 - **Feature dependency execution**: `required_persisted_features` consumed by data loader

@@ -9,8 +9,13 @@ Add new strategies at the bottom of their family group.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
+from autonomous_trading_platform.strategy.composite import (
+    CompositeRuleStrategy,
+    CompositeStrategyConfig,
+    build_composite_rule_strategy,
+)
 from autonomous_trading_platform.strategy.implementations.factor_based_strategy import (
     FactorBasedStrategy,
 )
@@ -39,6 +44,7 @@ from .parameter_schemas import (
     MomentumParameters,
     MovingAverageCrossoverParameters,
     RandomParameters,
+    StrategyParameterSchema,
     StubParameters,
 )
 from .strategy_definition import StrategyDefinition
@@ -126,6 +132,10 @@ def _build_factor_based(strategy_id: str, params: dict[str, Any]) -> FactorBased
     )
 
 
+def _build_composite_rule(strategy_id: str, params: dict[str, Any]) -> CompositeRuleStrategy:
+    return build_composite_rule_strategy(strategy_id, params)
+
+
 # ---------------------------------------------------------------------------
 # Warmup bar functions — compute minimum bars needed from parameters
 # ---------------------------------------------------------------------------
@@ -166,6 +176,41 @@ def _warmup_factor_based(p: dict[str, Any]) -> int:
         int(p.get("volatility_window", 20)),
         int(p.get("volume_window", 20)),
     )
+
+
+def _warmup_composite_rule(p: dict[str, Any]) -> int:
+    return int(CompositeStrategyConfig.model_validate(p).warmup_bars())
+
+
+def _validate_composite_rule(p: dict[str, Any]) -> None:
+    CompositeStrategyConfig.model_validate(p)
+
+
+_DEFAULT_COMPOSITE_RULE_PARAMETERS: dict[str, Any] = {
+    "strategy_type": "composite_rule",
+    "indicators": [
+        {
+            "id": "momentum_5",
+            "component": "momentum",
+            "parameters": {"lookback": 5},
+        }
+    ],
+    "entry_rules": [
+        {
+            "id": "momentum_threshold",
+            "component": "threshold",
+            "inputs": {"value": {"indicator_id": "momentum_5", "offset": 0}},
+            "parameters": {"buy_above": 0.0, "sell_below": 0.0, "confidence": 0.55},
+            "weight": 1.0,
+        }
+    ],
+    "filters": [],
+    "confirmations": [],
+    "aggregator": {"component": "voting", "parameters": {"min_votes": 1}},
+    "confidence_scoring": {"mode": "aggregation", "floor": 0.0, "cap": 1.0},
+    "sizing": {},
+    "metadata": {},
+}
 
 
 # ---------------------------------------------------------------------------
@@ -602,4 +647,35 @@ _REGISTRY.register(
 )
 
 # Seal the registry — no further registrations permitted at runtime.
+_REGISTRY.register(
+    StrategyDefinition(
+        strategy_type="composite_rule",
+        display_name="Composite Rule",
+        description="Config-driven composition of registered indicators, rules, filters, and aggregators.",
+        family=StrategyFamily.COMPOSITE,
+        implementation_class=CompositeRuleStrategy,
+        debug=False,
+        production_ready=True,
+        default_parameters=_DEFAULT_COMPOSITE_RULE_PARAMETERS,
+        parameter_validator=_validate_composite_rule,
+        parameter_schema=cast(type[StrategyParameterSchema], CompositeStrategyConfig),
+        warmup_bars_fn=_warmup_composite_rule,
+        required_indicators=("momentum",),
+        required_persisted_features=(),
+        parameter_specs=(
+            ParameterSpec(
+                name="strategy_type",
+                parameter_type=ParameterType.STRING,
+                default="composite_rule",
+                description="Composite strategy discriminator.",
+                discrete=True,
+                tunable=False,
+                mutation_strategy="fixed",
+            ),
+        ),
+        builder=_build_composite_rule,
+        deterministic=True,
+    )
+)
+
 _REGISTRY.lock()

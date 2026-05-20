@@ -7,9 +7,10 @@ construction primitives. It records metadata for the pieces future strategies
 can assemble from without requiring one concrete Python strategy class for every
 idea.
 
-The registry is metadata-first. It does not introduce a component execution
-engine, does not rewrite existing strategies, and does not generate strategies
-automatically.
+The registry is metadata-first. `CompositeRuleStrategy` now consumes executable
+indicator, signal-rule, and aggregator definitions for local composition. The
+registry still does not generate strategies automatically and existing
+non-composite strategies continue to call their existing logic directly.
 
 ---
 
@@ -34,7 +35,7 @@ src/autonomous_trading_platform/strategy/components/
 | Whole strategy identity, defaults, schema, builder, warmup | `StrategyRegistry` |
 | Reusable primitive metadata | `ComponentRegistry` |
 | Current strategy instantiation | `StrategyFactory` through `StrategyRegistry.builder` |
-| Future rule composition | Future `CompositeRuleStrategy` consuming `ComponentRegistry` |
+| Rule composition | `CompositeRuleStrategy` consuming `ComponentRegistry` |
 | Future search/generation | Generators consuming both registries |
 
 `StrategyDefinition.required_indicators` now validates against
@@ -57,7 +58,9 @@ functions and signal classes directly.
 
 Indicators, signal rules, and aggregators are registered against existing code.
 Filters, exits, and sizing components are represented as metadata-only
-placeholders until real implementations exist.
+placeholders until real implementations exist. Composite strategies can use the
+registered filter metadata with lightweight local comparison filters; exits and
+sizing remain metadata-only.
 
 ---
 
@@ -139,17 +142,18 @@ after registration; duplicate registrations and post-lock registrations fail.
 
 ---
 
-## Future Consumption
+## Composite Consumption
 
-Future `CompositeRuleStrategy` work should use component metadata to assemble
-indicator components, signal-rule components, an aggregator, and optional
-filter, exit, and sizing components once those implementations exist.
+`CompositeRuleStrategy` uses component metadata to validate declarative
+indicator, signal-rule, filter, and aggregator references before execution.
+Indicator warmup is derived from `warmup_formula`, `warmup_parameter`, or
+`warmup_bars` metadata. Rule input mappings are validated against deterministic
+indicator IDs in the composite config.
 
 Future strategy generation can use component parameter specs, input/output
 metadata, compatibility fields, and production/experimental flags to select
 valid construction candidates. By default, generation candidates exclude
 metadata-only placeholders.
 
-Out of scope for the current registry: `CompositeRuleStrategy`, automatic
-strategy generation, evolutionary mutation, persisted feature dependency
-resolution, and indicator execution orchestration.
+Out of scope for the current registry: automatic strategy generation,
+evolutionary mutation, and persisted feature dependency resolution.
