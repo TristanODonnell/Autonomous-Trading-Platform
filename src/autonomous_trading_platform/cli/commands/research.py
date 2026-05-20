@@ -42,8 +42,14 @@ from autonomous_trading_platform.research.simulation.contexts.build_simulation_c
 from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunRequest,
 )
+from autonomous_trading_platform.research.strategy_generation.generation_result import (
+    GenerationOptions,
+)
 from autonomous_trading_platform.research.strategy_generation.generators.base_generator import (
     BaseStrategyGenerator,
+)
+from autonomous_trading_platform.research.strategy_generation.generators.evolutionary_generator import (
+    EvolutionaryGenerator,
 )
 from autonomous_trading_platform.research.strategy_generation.generators.grid_search_generator import (
     GridSearchGenerator,
@@ -55,6 +61,7 @@ from autonomous_trading_platform.research.strategy_generation.strategy_generatio
     StrategyGenerationEngine,
 )
 from autonomous_trading_platform.strategy.catalog import list_strategy_types
+from autonomous_trading_platform.strategy.registry import get_registry
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -578,21 +585,22 @@ def _register_generate_strategies(subparsers) -> None:
         "generate-strategies",
         help="Dry-run strategy generation — no DB, no simulation",
     )
+    parser.add_argument("--strategy-type", choices=STRATEGY_TYPE_CHOICES)
     parser.add_argument(
-        "--strategy-type",
-        required=True,
-        choices=STRATEGY_TYPE_CHOICES,
+        "--family", choices=[family.value for family in get_registry().list_families()]
     )
     parser.add_argument(
         "--parameter-space",
-        required=True,
+        default=None,
         help="JSON object mapping param names to lists of values, e.g. '{\"short_window\": [5,10,20]}'",
     )
     parser.add_argument(
         "--generator",
-        choices=["grid", "random"],
+        "--method",
+        dest="generator",
+        choices=["grid", "random", "evolutionary"],
         default="grid",
-        help="grid: exhaustive combinations. random: sample n configs from the space.",
+        help="grid: exhaustive combinations. random/evolutionary: seed-driven sampling.",
     )
     parser.add_argument(
         "--n-samples",
@@ -611,6 +619,14 @@ def _register_generate_strategies(subparsers) -> None:
         action="store_true",
         help="Print each config in full before the summary (omit for large spaces)",
     )
+    parser.add_argument("--population-size", type=int, default=20)
+    parser.add_argument("--generations", type=int, default=3)
+    parser.add_argument("--mutation-rate", type=float, default=0.25)
+    parser.add_argument("--include-debug", action="store_true")
+    parser.add_argument("--include-experimental", action="store_true")
+    parser.add_argument(
+        "--composite", action="store_true", help="Generate composite_rule templates."
+    )
     parser.set_defaults(func=handle_generate_strategies)
 
 
@@ -624,29 +640,55 @@ def handle_generate_strategies(args: argparse.Namespace) -> int:
     differ from your expectations the parameter space or generator config
     needs adjustment before running a full experiment.
     """
-    parameter_space = json.loads(args.parameter_space)
+    parameter_space = json.loads(args.parameter_space) if args.parameter_space else None
 
-    if not isinstance(parameter_space, dict):
+    if parameter_space is not None and not isinstance(parameter_space, dict):
         raise ValueError("--parameter-space must be a JSON object")
+    if args.composite:
+        args.strategy_type = "composite_rule"
+    if not args.strategy_type and not args.family:
+        raise ValueError("Provide --strategy-type, --family, or --composite")
 
     # Select generator — grid is deterministic and exhaustive, random samples
     # n_samples from the space and relies on the engine to deduplicate.
     generator: BaseStrategyGenerator
     if args.generator == "grid":
         generator = GridSearchGenerator()
-    else:
+    elif args.generator == "random":
         generator = RandomSamplingGenerator(
             n_samples=args.n_samples,
             seed=args.random_seed,
         )
+    else:
+        generator = EvolutionaryGenerator(
+            seed=args.random_seed,
+            population_size=args.population_size,
+            generations=args.generations,
+            mutation_rate=args.mutation_rate,
+        )
 
     engine = StrategyGenerationEngine(generator=generator)
-    configs = engine.generate(
-        strategy_type=args.strategy_type,
-        parameter_space=parameter_space,
+    options = GenerationOptions(
+        seed=args.random_seed,
+        n_samples=args.n_samples,
+        population_size=args.population_size,
+        generations=args.generations,
+        mutation_rate=args.mutation_rate,
+        include_debug=args.include_debug,
+        include_experimental=args.include_experimental,
     )
+    if args.family:
+        result = engine.generate_for_family(args.family, method=args.generator, options=options)
+    else:
+        result = engine.generate_result(
+            strategy_type=args.strategy_type,
+            method=args.generator,
+            parameter_space=parameter_space,
+            options=options,
+        )
+    configs = result.configs
 
-    print_header(f"Strategy generation — {args.generator} — {args.strategy_type}")
+    print_header(f"Strategy generation - {args.generator} - {args.family or args.strategy_type}")
 
     if args.show_configs:
         for config in configs:
@@ -664,13 +706,16 @@ def handle_generate_strategies(args: argparse.Namespace) -> int:
             "generator": args.generator,
             "strategy_type": args.strategy_type,
             "parameter_space": parameter_space,
-            "total_generated": len(configs),
+            "family": args.family,
+            "generated_count": result.summary.generated_count,
+            "accepted_count": result.summary.accepted_count,
+            "duplicate_count": result.summary.duplicate_count,
+            "rejected_count": result.summary.rejected_count,
+            "rejection_reasons": dict(result.summary.rejection_reasons),
             "unique_hashes": len({c.config_hash() for c in configs}),
+            "strategy_type_distribution": dict(result.summary.strategy_type_distribution),
+            "family_distribution": dict(result.summary.family_distribution),
             # duplicates_skipped is only meaningful for random — grid never
-            # produces duplicates since it iterates the sorted cartesian product
-            "duplicates_skipped": (
-                args.n_samples - len(configs) if args.generator == "random" else 0
-            ),
             "config_hashes": [c.config_hash() for c in configs],
         }
     )

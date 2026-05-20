@@ -157,3 +157,10 @@ metadata-only placeholders.
 
 Out of scope for the current registry: automatic strategy generation,
 evolutionary mutation, and persisted feature dependency resolution.
+## Strategy Generation Usage
+
+Strategy generation uses `ComponentRegistry` for `composite_rule` templates.
+Generated templates only use executable indicators, signal rules, and
+aggregators as executable components. Metadata-only filter definitions can be
+referenced by composite-local comparison gates, which are evaluated by
+`CompositeRuleStrategy`.

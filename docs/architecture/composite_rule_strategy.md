@@ -241,3 +241,15 @@ Composite strategies do not yet implement automatic strategy generation,
 persisted feature dependency execution, mutation/evolution metadata consumers,
 distributed orchestration, portfolio-level ensembles, or automatic conversion
 of existing concrete strategies into composite configs.
+## Generated Templates
+
+`StrategyGenerationEngine.generate_composite()` emits a small deterministic set
+of `composite_rule` templates:
+
+- trend filter + mean-reversion entry + volume confirmation;
+- momentum entry + volatility filter + weighted-score aggregation;
+- SMA crossover entry + volume confirmation.
+
+The templates validate with `CompositeStrategyConfig`, reference registered
+components, use deterministic indicator IDs, and rely on the normal composite
+warmup calculation.

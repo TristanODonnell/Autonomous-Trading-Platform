@@ -310,7 +310,10 @@ The registry exposes generation-friendly metadata without containing generation 
 
 - `parameter_specs` declares the search space declaratively
 - `get_generation_candidates()` returns strategies with non-empty specs
-- Generation engines (RandomSamplingGenerator, GridSearchGenerator, EvolutionaryGenerator) query the registry for parameter specs and ranges
+- Generation engines (`GridSearchGenerator`, `RandomSamplingGenerator`, and
+  `EvolutionaryGenerator`) query the registry through
+  `ParameterSpaceResolver`, normalize candidates through the registered
+  parameter schemas, and de-duplicate by normalized `config_hash`.
 
 ---
 
