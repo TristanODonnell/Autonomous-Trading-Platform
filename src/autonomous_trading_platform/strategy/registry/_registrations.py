@@ -32,6 +32,15 @@ from autonomous_trading_platform.strategy.implementations.random_debug_strategy 
 from autonomous_trading_platform.strategy.implementations.stub_strategy import StubStrategy
 
 from .parameter_metadata import ParameterSpec, ParameterType
+from .parameter_schemas import (
+    FactorBasedParameters,
+    IntentionalLoserParameters,
+    MeanReversionParameters,
+    MomentumParameters,
+    MovingAverageCrossoverParameters,
+    RandomParameters,
+    StubParameters,
+)
 from .strategy_definition import StrategyDefinition
 from .strategy_family import StrategyFamily
 from .strategy_registry import _REGISTRY
@@ -53,23 +62,23 @@ from .validators import (
 def _build_stub(strategy_id: str, params: dict[str, Any]) -> StubStrategy:
     return StubStrategy(
         strategy_id=strategy_id,
-        price_change_threshold=float(params.get("price_change_threshold", 0.0)),
+        price_change_threshold=params["price_change_threshold"],
     )
 
 
 def _build_intentional_loser(strategy_id: str, params: dict[str, Any]) -> IntentionalLoserStrategy:
     return IntentionalLoserStrategy(
         strategy_id=strategy_id,
-        price_change_threshold=float(params.get("price_change_threshold", 0.0)),
+        price_change_threshold=params["price_change_threshold"],
     )
 
 
 def _build_random(strategy_id: str, params: dict[str, Any]) -> RandomStrategy:
     return RandomStrategy(
         strategy_id=strategy_id,
-        signal_probability=float(params.get("signal_probability", 0.33)),
-        buy_probability=float(params.get("buy_probability", 0.5)),
-        random_seed=(int(params["random_seed"]) if "random_seed" in params else None),
+        signal_probability=params["signal_probability"],
+        buy_probability=params["buy_probability"],
+        random_seed=params["random_seed"],
     )
 
 
@@ -78,42 +87,42 @@ def _build_moving_average_crossover(
 ) -> MovingAverageCrossoverStrategy:
     return MovingAverageCrossoverStrategy(
         strategy_id=strategy_id,
-        short_window=int(params.get("short_window", 10)),
-        long_window=int(params.get("long_window", 30)),
+        short_window=params["short_window"],
+        long_window=params["long_window"],
     )
 
 
 def _build_momentum(strategy_id: str, params: dict[str, Any]) -> MomentumStrategy:
     return MomentumStrategy(
         strategy_id=strategy_id,
-        lookback=int(params.get("lookback", 5)),
-        buy_above=float(params.get("buy_above", 0.0)),
-        sell_below=float(params.get("sell_below", 0.0)),
+        lookback=params["lookback"],
+        buy_above=params["buy_above"],
+        sell_below=params["sell_below"],
     )
 
 
 def _build_mean_reversion(strategy_id: str, params: dict[str, Any]) -> MeanReversionStrategy:
     return MeanReversionStrategy(
         strategy_id=strategy_id,
-        window=int(params.get("window", 20)),
-        buy_below_z=float(params.get("buy_below_z", -2.0)),
-        sell_above_z=float(params.get("sell_above_z", 2.0)),
+        window=params["window"],
+        buy_below_z=params["buy_below_z"],
+        sell_above_z=params["sell_above_z"],
     )
 
 
 def _build_factor_based(strategy_id: str, params: dict[str, Any]) -> FactorBasedStrategy:
     return FactorBasedStrategy(
         strategy_id=strategy_id,
-        momentum_lookback=int(params.get("momentum_lookback", 5)),
-        mean_reversion_window=int(params.get("mean_reversion_window", 20)),
-        volatility_window=int(params.get("volatility_window", 20)),
-        volume_window=int(params.get("volume_window", 20)),
-        buy_score_threshold=float(params.get("buy_score_threshold", 0.5)),
-        sell_score_threshold=float(params.get("sell_score_threshold", -0.5)),
-        momentum_weight=float(params.get("momentum_weight", 0.4)),
-        mean_reversion_weight=float(params.get("mean_reversion_weight", 0.3)),
-        volume_weight=float(params.get("volume_weight", 0.2)),
-        volatility_weight=float(params.get("volatility_weight", 0.1)),
+        momentum_lookback=params["momentum_lookback"],
+        mean_reversion_window=params["mean_reversion_window"],
+        volatility_window=params["volatility_window"],
+        volume_window=params["volume_window"],
+        buy_score_threshold=params["buy_score_threshold"],
+        sell_score_threshold=params["sell_score_threshold"],
+        momentum_weight=params["momentum_weight"],
+        mean_reversion_weight=params["mean_reversion_weight"],
+        volume_weight=params["volume_weight"],
+        volatility_weight=params["volatility_weight"],
     )
 
 
@@ -174,6 +183,7 @@ _REGISTRY.register(
         production_ready=False,
         default_parameters={"price_change_threshold": 0.0},
         parameter_validator=_validate_stub,
+        parameter_schema=StubParameters,
         warmup_bars_fn=_warmup_stub,
         required_indicators=(),
         required_persisted_features=(),
@@ -187,6 +197,7 @@ _REGISTRY.register(
                 max_value=1.0,
                 discrete=False,
                 tunable=False,
+                mutation_strategy="fixed",
             ),
         ),
         builder=_build_stub,
@@ -205,6 +216,7 @@ _REGISTRY.register(
         production_ready=False,
         default_parameters={"price_change_threshold": 0.0},
         parameter_validator=_validate_intentional_loser,
+        parameter_schema=IntentionalLoserParameters,
         warmup_bars_fn=_warmup_intentional_loser,
         required_indicators=(),
         required_persisted_features=(),
@@ -218,6 +230,7 @@ _REGISTRY.register(
                 max_value=1.0,
                 discrete=False,
                 tunable=False,
+                mutation_strategy="fixed",
             ),
         ),
         builder=_build_intentional_loser,
@@ -234,8 +247,13 @@ _REGISTRY.register(
         implementation_class=RandomStrategy,
         debug=True,
         production_ready=False,
-        default_parameters={"signal_probability": 0.33, "buy_probability": 0.5},
+        default_parameters={
+            "signal_probability": 0.33,
+            "buy_probability": 0.5,
+            "random_seed": None,
+        },
         parameter_validator=_validate_random,
+        parameter_schema=RandomParameters,
         warmup_bars_fn=_warmup_random,
         required_indicators=(),
         required_persisted_features=(),
@@ -249,6 +267,7 @@ _REGISTRY.register(
                 max_value=1.0,
                 discrete=False,
                 tunable=False,
+                mutation_strategy="fixed",
             ),
             ParameterSpec(
                 name="buy_probability",
@@ -259,6 +278,17 @@ _REGISTRY.register(
                 max_value=1.0,
                 discrete=False,
                 tunable=False,
+                mutation_strategy="fixed",
+            ),
+            ParameterSpec(
+                name="random_seed",
+                parameter_type=ParameterType.INT,
+                default=None,
+                description="Optional deterministic seed for the strategy-local random generator.",
+                discrete=True,
+                step=1,
+                tunable=False,
+                mutation_strategy="fixed",
             ),
         ),
         builder=_build_random,
@@ -277,6 +307,7 @@ _REGISTRY.register(
         production_ready=True,
         default_parameters={"short_window": 10, "long_window": 30},
         parameter_validator=_validate_moving_average_crossover,
+        parameter_schema=MovingAverageCrossoverParameters,
         warmup_bars_fn=_warmup_moving_average_crossover,
         required_indicators=("simple_moving_average",),
         required_persisted_features=(),
@@ -291,6 +322,7 @@ _REGISTRY.register(
                 discrete=True,
                 step=1,
                 tunable=True,
+                mutation_strategy="step",
             ),
             ParameterSpec(
                 name="long_window",
@@ -302,6 +334,7 @@ _REGISTRY.register(
                 discrete=True,
                 step=1,
                 tunable=True,
+                mutation_strategy="step",
             ),
         ),
         builder=_build_moving_average_crossover,
@@ -320,6 +353,7 @@ _REGISTRY.register(
         production_ready=True,
         default_parameters={"lookback": 5, "buy_above": 0.0, "sell_below": 0.0},
         parameter_validator=_validate_momentum,
+        parameter_schema=MomentumParameters,
         warmup_bars_fn=_warmup_momentum,
         required_indicators=("momentum",),
         required_persisted_features=(),
@@ -334,6 +368,7 @@ _REGISTRY.register(
                 discrete=True,
                 step=1,
                 tunable=True,
+                mutation_strategy="step",
             ),
             ParameterSpec(
                 name="buy_above",
@@ -344,6 +379,7 @@ _REGISTRY.register(
                 max_value=0.1,
                 discrete=False,
                 tunable=True,
+                mutation_strategy="gaussian",
             ),
             ParameterSpec(
                 name="sell_below",
@@ -354,6 +390,7 @@ _REGISTRY.register(
                 max_value=0.1,
                 discrete=False,
                 tunable=True,
+                mutation_strategy="gaussian",
             ),
         ),
         builder=_build_momentum,
@@ -372,6 +409,7 @@ _REGISTRY.register(
         production_ready=True,
         default_parameters={"window": 20, "buy_below_z": -2.0, "sell_above_z": 2.0},
         parameter_validator=_validate_mean_reversion,
+        parameter_schema=MeanReversionParameters,
         warmup_bars_fn=_warmup_mean_reversion,
         required_indicators=("z_score", "simple_moving_average", "rolling_standard_deviation"),
         required_persisted_features=(),
@@ -386,6 +424,7 @@ _REGISTRY.register(
                 discrete=True,
                 step=1,
                 tunable=True,
+                mutation_strategy="step",
             ),
             ParameterSpec(
                 name="buy_below_z",
@@ -396,6 +435,7 @@ _REGISTRY.register(
                 max_value=-0.5,
                 discrete=False,
                 tunable=True,
+                mutation_strategy="gaussian",
             ),
             ParameterSpec(
                 name="sell_above_z",
@@ -406,6 +446,7 @@ _REGISTRY.register(
                 max_value=4.0,
                 discrete=False,
                 tunable=True,
+                mutation_strategy="gaussian",
             ),
         ),
         builder=_build_mean_reversion,
@@ -435,6 +476,7 @@ _REGISTRY.register(
             "volatility_weight": 0.1,
         },
         parameter_validator=_validate_factor_based,
+        parameter_schema=FactorBasedParameters,
         warmup_bars_fn=_warmup_factor_based,
         required_indicators=("momentum", "z_score", "rolling_standard_deviation", "volume_ratio"),
         required_persisted_features=(),
@@ -449,6 +491,7 @@ _REGISTRY.register(
                 discrete=True,
                 step=1,
                 tunable=True,
+                mutation_strategy="step",
             ),
             ParameterSpec(
                 name="mean_reversion_window",
@@ -460,6 +503,7 @@ _REGISTRY.register(
                 discrete=True,
                 step=1,
                 tunable=True,
+                mutation_strategy="step",
             ),
             ParameterSpec(
                 name="volatility_window",
@@ -471,6 +515,7 @@ _REGISTRY.register(
                 discrete=True,
                 step=1,
                 tunable=True,
+                mutation_strategy="step",
             ),
             ParameterSpec(
                 name="volume_window",
@@ -482,6 +527,7 @@ _REGISTRY.register(
                 discrete=True,
                 step=1,
                 tunable=True,
+                mutation_strategy="step",
             ),
             ParameterSpec(
                 name="buy_score_threshold",
@@ -492,6 +538,7 @@ _REGISTRY.register(
                 max_value=1.0,
                 discrete=False,
                 tunable=True,
+                mutation_strategy="gaussian",
             ),
             ParameterSpec(
                 name="sell_score_threshold",
@@ -502,6 +549,7 @@ _REGISTRY.register(
                 max_value=-0.1,
                 discrete=False,
                 tunable=True,
+                mutation_strategy="gaussian",
             ),
             ParameterSpec(
                 name="momentum_weight",
@@ -512,6 +560,7 @@ _REGISTRY.register(
                 max_value=1.0,
                 discrete=False,
                 tunable=True,
+                mutation_strategy="gaussian",
             ),
             ParameterSpec(
                 name="mean_reversion_weight",
@@ -522,6 +571,7 @@ _REGISTRY.register(
                 max_value=1.0,
                 discrete=False,
                 tunable=True,
+                mutation_strategy="gaussian",
             ),
             ParameterSpec(
                 name="volume_weight",
@@ -532,6 +582,7 @@ _REGISTRY.register(
                 max_value=1.0,
                 discrete=False,
                 tunable=True,
+                mutation_strategy="gaussian",
             ),
             ParameterSpec(
                 name="volatility_weight",
@@ -542,6 +593,7 @@ _REGISTRY.register(
                 max_value=1.0,
                 discrete=False,
                 tunable=True,
+                mutation_strategy="gaussian",
             ),
         ),
         builder=_build_factor_based,

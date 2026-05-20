@@ -10,6 +10,9 @@ Usage
 
 from __future__ import annotations
 
+from typing import Any
+
+from .parameter_schemas import StrategyParameterSchema
 from .strategy_definition import StrategyDefinition
 from .strategy_family import StrategyFamily
 
@@ -66,6 +69,23 @@ class StrategyRegistry:
             return self._definitions[strategy_type]
         except KeyError:
             raise KeyError(f"Unknown strategy type: {strategy_type!r}") from None
+
+    def get_parameter_schema(self, strategy_type: str) -> type[StrategyParameterSchema]:
+        return self.get_definition(strategy_type).parameter_schema
+
+    def get_default_parameters(self, strategy_type: str) -> dict[str, Any]:
+        return self.get_definition(strategy_type).normalize_parameters()
+
+    def validate_parameters(self, strategy_type: str, parameters: dict[str, Any] | None) -> None:
+        self.get_definition(strategy_type).validate_parameters(parameters)
+
+    def normalize_parameters(
+        self, strategy_type: str, parameters: dict[str, Any] | None
+    ) -> dict[str, Any]:
+        return self.get_definition(strategy_type).normalize_parameters(parameters)
+
+    def export_parameter_schema(self, strategy_type: str) -> dict[str, Any]:
+        return self.get_definition(strategy_type).export_parameter_schema()
 
     def strategy_exists(self, strategy_type: str) -> bool:
         return strategy_type in self._definitions

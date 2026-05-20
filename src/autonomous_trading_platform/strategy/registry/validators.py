@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .parameter_schemas import SCHEMAS_BY_STRATEGY
+
 
 def validate_strategy_parameters(strategy_type: str, parameters: dict[str, Any]) -> None:
     """Validate *parameters* for *strategy_type*.
@@ -19,7 +21,11 @@ def validate_strategy_parameters(strategy_type: str, parameters: dict[str, Any])
     or an invalid combination exists.  Does nothing for unknown strategy
     types — registry existence checking is handled separately.
     """
-    VALIDATORS.get(strategy_type, _noop)(parameters)
+    schema = SCHEMAS_BY_STRATEGY.get(strategy_type)
+    if schema is None:
+        _noop(parameters)
+        return
+    schema.model_validate(parameters)
 
 
 # ---------------------------------------------------------------------------
@@ -67,68 +73,31 @@ def _noop(_params: dict) -> None:
 
 
 def _validate_moving_average_crossover(params: dict[str, Any]) -> None:
-    _require_positive_int(params, "short_window")
-    _require_positive_int(params, "long_window")
-
-    short = params.get("short_window")
-    long_ = params.get("long_window")
-    if short is not None and long_ is not None:
-        if not isinstance(short, int) or not isinstance(long_, int):
-            return
-        if short >= long_:
-            raise ValueError(
-                f"short_window ({short}) must be strictly less than long_window ({long_})"
-            )
+    SCHEMAS_BY_STRATEGY["moving_average_crossover"].model_validate(params)
 
 
 def _validate_momentum(params: dict[str, Any]) -> None:
-    _require_positive_int(params, "lookback")
+    SCHEMAS_BY_STRATEGY["momentum"].model_validate(params)
 
 
 def _validate_mean_reversion(params: dict[str, Any]) -> None:
-    _require_positive_int(params, "window")
-
-    buy_z = params.get("buy_below_z")
-    sell_z = params.get("sell_above_z")
-    if buy_z is not None and sell_z is not None:
-        if not isinstance(buy_z, (int, float)) or not isinstance(sell_z, (int, float)):
-            return
-        if float(buy_z) >= float(sell_z):
-            raise ValueError(
-                f"buy_below_z ({buy_z}) must be strictly less than sell_above_z ({sell_z})"
-            )
+    SCHEMAS_BY_STRATEGY["mean_reversion"].model_validate(params)
 
 
 def _validate_factor_based(params: dict[str, Any]) -> None:
-    for key in ("momentum_lookback", "mean_reversion_window", "volatility_window", "volume_window"):
-        _require_positive_int(params, key)
-
-    for key in ("momentum_weight", "mean_reversion_weight", "volume_weight", "volatility_weight"):
-        _require_non_negative_float(params, key)
-
-    buy_thresh = params.get("buy_score_threshold")
-    sell_thresh = params.get("sell_score_threshold")
-    if buy_thresh is not None and sell_thresh is not None:
-        if not isinstance(buy_thresh, (int, float)) or not isinstance(sell_thresh, (int, float)):
-            return
-        if float(sell_thresh) >= float(buy_thresh):
-            raise ValueError(
-                f"sell_score_threshold ({sell_thresh}) must be strictly less than "
-                f"buy_score_threshold ({buy_thresh})"
-            )
+    SCHEMAS_BY_STRATEGY["factor_based"].model_validate(params)
 
 
 def _validate_random(params: dict[str, Any]) -> None:
-    _require_float_range(params, "signal_probability", 0.0, 1.0)
-    _require_float_range(params, "buy_probability", 0.0, 1.0)
+    SCHEMAS_BY_STRATEGY["random"].model_validate(params)
 
 
 def _validate_intentional_loser(params: dict[str, Any]) -> None:
-    _require_non_negative_float(params, "price_change_threshold")
+    SCHEMAS_BY_STRATEGY["intentional_loser"].model_validate(params)
 
 
 def _validate_stub(params: dict[str, Any]) -> None:
-    _require_non_negative_float(params, "price_change_threshold")
+    SCHEMAS_BY_STRATEGY["stub"].model_validate(params)
 
 
 # ---------------------------------------------------------------------------

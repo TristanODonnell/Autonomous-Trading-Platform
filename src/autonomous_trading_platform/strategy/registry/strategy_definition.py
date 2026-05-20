@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from .parameter_metadata import ParameterSpec
+from .parameter_schemas import StrategyParameterSchema
 from .strategy_family import StrategyFamily
 
 if TYPE_CHECKING:
@@ -63,11 +64,27 @@ class StrategyDefinition:
 
     # -- Operational metadata --
     deterministic: bool = True
+    parameter_schema: type[StrategyParameterSchema] = StrategyParameterSchema
+
+    def normalize_parameters(self, parameters: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Validate parameters and return a deterministic, default-filled dict."""
+        return cast(
+            dict[str, Any],
+            self.parameter_schema.model_validate(parameters or {}).canonical_dict(),
+        )
+
+    def validate_parameters(self, parameters: dict[str, Any] | None = None) -> None:
+        """Validate parameters via the registered schema."""
+        self.normalize_parameters(parameters)
+
+    def export_parameter_schema(self) -> dict[str, Any]:
+        """Return a JSON-schema representation of the registered parameter schema."""
+        return cast(dict[str, Any], self.parameter_schema.model_json_schema())
 
     def compute_warmup_bars(self, parameters: dict[str, Any] | None = None) -> int:
         """Return warmup bars required for the given parameters.
 
         Falls back to default_parameters when *parameters* is None.
         """
-        params = parameters if parameters is not None else self.default_parameters
+        params = self.normalize_parameters(parameters)
         return self.warmup_bars_fn(params)

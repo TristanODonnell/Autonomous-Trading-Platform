@@ -23,6 +23,7 @@ src/autonomous_trading_platform/strategy/registry/
   __init__.py              # Public API; triggers registration on import
   strategy_family.py       # StrategyFamily enum
   parameter_metadata.py    # ParameterType, ParameterSpec
+  parameter_schemas.py     # Per-strategy Pydantic schemas
   strategy_definition.py   # StrategyDefinition dataclass
   strategy_registry.py     # StrategyRegistry class + singleton
   validators.py            # Per-strategy parameter validator functions
@@ -44,6 +45,7 @@ src/autonomous_trading_platform/strategy/registry/
 | | `production_ready` | `bool` | Production flag |
 | **Parameters** | `default_parameters` | `dict[str, Any]` | Canonical defaults |
 | | `parameter_validator` | `Callable` | Validates a parameters dict |
+| | `parameter_schema` | `type[StrategyParameterSchema]` | Canonical schema model |
 | **Warmup/deps** | `warmup_bars_fn` | `Callable` | Returns minimum bars from params |
 | | `required_indicators` | `tuple[str, ...]` | Indicator function names used |
 | | `required_persisted_features` | `tuple[str, ...]` | Parquet features (empty now) |
@@ -74,6 +76,57 @@ Each `ParameterSpec` describes one tunable parameter's search space:
 | `discrete` | `bool` | True for integer grid search |
 | `step` | `float \| None` | Grid step size (discrete only) |
 | `tunable` | `bool` | Whether to include in optimization |
+| `mutation_strategy` | `str \| None` | Placeholder hint for future mutation engines |
+
+`ParameterSpec` is generation-facing metadata, not the primary validator.
+Every spec name and default must match the registered schema field and
+`default_parameters`. Tests enforce this drift check.
+
+---
+
+## Parameter Schemas
+
+Each registered strategy has one schema in `parameter_schemas.py`:
+
+| Strategy Type | Schema |
+|---|---|
+| `moving_average_crossover` | `MovingAverageCrossoverParameters` |
+| `momentum` | `MomentumParameters` |
+| `mean_reversion` | `MeanReversionParameters` |
+| `factor_based` | `FactorBasedParameters` |
+| `random` | `RandomParameters` |
+| `stub` | `StubParameters` |
+| `intentional_loser` | `IntentionalLoserParameters` |
+
+The schema lifecycle is:
+
+1. `StrategyConfig` validates `type` through the registry.
+2. `StrategyConfig` calls `registry.normalize_parameters(type, parameters)`.
+3. The registered schema applies defaults, validates types and ranges, rejects
+   unknown fields, and enforces cross-field constraints.
+4. `StrategyConfig.parameters` stores the normalized canonical dict.
+5. `StrategyFactory` re-normalizes defensively and passes the canonical dict to
+   the registry builder.
+
+Unknown strategy parameters are rejected. This is intentional: strategy configs
+are persisted and hashed, so misspelled or unused fields should fail early.
+
+Defaults resolve from the schema first. `_registrations.py` stores the same
+default dict on `StrategyDefinition` for fast introspection and compatibility;
+tests require schema defaults, `default_parameters`, `ParameterSpec.default`,
+and constructor defaults to stay aligned.
+
+Current constraints:
+
+| Strategy | Parameters / Constraints |
+|---|---|
+| `stub` | `price_change_threshold >= 0` |
+| `intentional_loser` | `price_change_threshold >= 0` |
+| `random` | `signal_probability` and `buy_probability` in `[0, 1]`; optional integer `random_seed` |
+| `moving_average_crossover` | positive integer `short_window`, positive integer `long_window`, `short_window < long_window` |
+| `momentum` | positive integer `lookback`, numeric `buy_above` and `sell_below`, `sell_below <= buy_above` |
+| `mean_reversion` | positive integer `window`, numeric z-thresholds, `buy_below_z < sell_above_z` |
+| `factor_based` | positive integer lookback/window fields, `volatility_window > 1`, non-negative weights, `sell_score_threshold < buy_score_threshold` |
 
 ---
 
@@ -135,6 +188,11 @@ reg = get_registry()
 # Lookup
 reg.get_definition("momentum")            # -> StrategyDefinition
 reg.strategy_exists("momentum")           # -> bool
+reg.get_parameter_schema("momentum")      # -> type[StrategyParameterSchema]
+reg.get_default_parameters("momentum")    # -> normalized defaults
+reg.normalize_parameters("momentum", {})  # -> default-filled dict
+reg.validate_parameters("momentum", {})   # -> None or ValidationError
+reg.export_parameter_schema("momentum")   # -> JSON schema dict
 
 # Listings
 reg.list_definitions()                    # -> list[StrategyDefinition]
@@ -177,7 +235,8 @@ from autonomous_trading_platform.strategy.catalog import (
 ```python
 def build(self, config: StrategyConfig) -> BaseStrategy:
     defn = get_registry().get_definition(config.type)
-    return defn.builder(config.strategy_id, config.parameters)
+    parameters = defn.normalize_parameters(config.parameters)
+    return defn.builder(config.strategy_id, parameters)
 ```
 
 **StrategyConfig** validates via the registry:
@@ -186,10 +245,12 @@ def build(self, config: StrategyConfig) -> BaseStrategy:
 # Type validation
 registry.strategy_exists(v)
 
-# Parameter validation
-defn = registry.get_definition(self.type)
-defn.parameter_validator(self.parameters)
+# Parameter normalization
+self.parameters = registry.normalize_parameters(self.type, self.parameters)
 ```
+
+`canonical_json()` and `config_hash()` include the normalized parameters, so
+equivalent omitted-default and explicit-default configs hash identically.
 
 ---
 
@@ -232,7 +293,9 @@ The following are **not yet implemented** but the registry is designed to suppor
 ## Adding a New Strategy
 
 1. Implement the strategy class in `strategy/implementations/`.
-2. Add validator function(s) to `strategy/registry/validators.py` and the `VALIDATORS` dict.
-3. Add a builder function and `StrategyDefinition` registration to `strategy/registry/_registrations.py` **before** the `_REGISTRY.lock()` call.
-4. Update `tests/strategy/test_strategy_registry.py` expected sets if needed.
-5. Run `python -m pytest tests/strategy/` to verify.
+2. Add a schema class to `strategy/registry/parameter_schemas.py`.
+3. Add/keep compatibility validator wiring in `strategy/registry/validators.py`.
+4. Add `ParameterSpec` entries, a builder, and a `StrategyDefinition` registration to `strategy/registry/_registrations.py` **before** `_REGISTRY.lock()`.
+5. Keep schema defaults, `default_parameters`, `ParameterSpec.default`, and constructor defaults aligned.
+6. Update `tests/strategy/test_strategy_registry.py` expected sets if needed.
+7. Run `python -m pytest tests/strategy/` to verify.

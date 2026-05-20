@@ -27,8 +27,7 @@ class StrategyConfig(BaseModel):
 
     @model_validator(mode="after")
     def _parameters_must_be_valid(self) -> StrategyConfig:
-        defn = get_registry().get_definition(self.type)
-        defn.parameter_validator(self.parameters)
+        self.parameters = get_registry().normalize_parameters(self.type, self.parameters)
         return self
 
     def canonical_json(self) -> str:

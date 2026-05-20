@@ -27,3 +27,4 @@ class ParameterSpec:
     discrete: bool = False
     step: float | None = None
     tunable: bool = True
+    mutation_strategy: str | None = None

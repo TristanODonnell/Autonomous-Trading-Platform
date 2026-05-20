@@ -10,4 +10,5 @@ from autonomous_trading_platform.strategy.registry import get_registry
 class StrategyFactory:
     def build(self, config: StrategyConfig) -> BaseStrategy:
         defn = get_registry().get_definition(config.type)
-        return cast(BaseStrategy, defn.builder(config.strategy_id, config.parameters))
+        parameters = defn.normalize_parameters(config.parameters)
+        return cast(BaseStrategy, defn.builder(config.strategy_id, parameters))
