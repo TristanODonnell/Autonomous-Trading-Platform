@@ -72,29 +72,19 @@ class SimulationStage(BaseStage):
         raw: dict[str, Any],
         simulation_runner: SimulationRunner,
     ) -> SimulationStage:
-        fc = raw["filter_config"]
-        sw = raw["scoring_weights"]
+        from autonomous_trading_platform.research.config.stage_configs import (
+            SimulationStageConfigModel,
+        )
+
+        validated = SimulationStageConfigModel.model_validate(raw)
         stage_cfg = SimulationStageConfig(
-            name=raw["name"],
-            start_date=date.fromisoformat(raw["start_date"]),
-            end_date=date.fromisoformat(raw["end_date"]),
-            symbols=raw["symbols"],
-            window_role=raw.get("window_role"),
-            filter_config=FilterConfig(
-                min_sharpe=fc.get("min_sharpe", 1.0),
-                max_drawdown=fc.get("max_drawdown", -0.20),
-                min_trades=fc.get("min_trades", 30),
-                min_consistency_score=fc.get("min_consistency_score", 0.5),
-                min_profit_factor=fc.get("min_profit_factor", 1.0),
-                min_win_rate=fc.get("min_win_rate", 0.0),
-                min_total_return=fc.get("min_total_return", 0.0),
-            ),
-            scoring_weights=ScoringWeights(
-                w_sharpe=sw.get("w_sharpe", 0.4),
-                w_return=sw.get("w_return", 0.3),
-                w_drawdown=sw.get("w_drawdown", 0.2),
-                w_consistency=sw.get("w_consistency", 0.1),
-            ),
+            name=validated.name,
+            start_date=validated.start_date,
+            end_date=validated.end_date,
+            symbols=list(validated.symbols),
+            window_role=validated.window_role,
+            filter_config=validated.filter_config.to_dataclass(),
+            scoring_weights=validated.scoring_weights.to_dataclass(),
         )
         return cls(stage_config=stage_cfg, simulation_runner=simulation_runner)
 

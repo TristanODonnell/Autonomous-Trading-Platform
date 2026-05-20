@@ -71,7 +71,11 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\tests\\\\research\" -Recurse)",
       "Bash(Select-Object -Property FullName)",
       "Bash(pre-commit run *)",
-      "Bash(mypy tests/research/simulation/test_simulation_execution_engine_golden_path.py tests/research/simulation/test_reproducibility.py tests/strategy/test_factor_based_strategy.py --ignore-missing-imports)"
+      "Bash(mypy tests/research/simulation/test_simulation_execution_engine_golden_path.py tests/research/simulation/test_reproducibility.py tests/strategy/test_factor_based_strategy.py --ignore-missing-imports)",
+      "Bash(xargs grep -l \"\\\\.get\\\\\\(\")",
+      "Bash(mypy src/autonomous_trading_platform/cli/commands/research.py)",
+      "Bash(where mypy *)",
+      "Bash(D:\\\\PythonVenvs\\\\autonomous-trading-platform\\\\.venv\\\\Scripts\\\\mypy.exe *)"
     ]
   }
 }

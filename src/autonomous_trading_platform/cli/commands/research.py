@@ -29,6 +29,7 @@ import yaml
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.research.config.experiment_config import ExperimentConfig
 from autonomous_trading_platform.research.experiments.models.experiment_plan import (
     ExperimentDefinition,
     ExperimentType,
@@ -480,31 +481,77 @@ def _load_experiment_from_yaml(
     with open(config_path) as f:
         raw = yaml.safe_load(f)
 
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"YAML file {config_path!r} must contain a mapping, got {type(raw).__name__}"
+        )
+
     staged_pipeline_config = None
     pipeline_raw = raw.get("staged_pipeline_config")
 
     if pipeline_raw:
+        if "stages" not in pipeline_raw:
+            raise ValueError("staged_pipeline_config must contain a 'stages' list")
         stages = [
             StageRegistry.load(stage_raw, simulation_context.simulation_runner)
             for stage_raw in pipeline_raw["stages"]
         ]
         staged_pipeline_config = StagedPipelineConfig(stages=stages)
 
+    # Validate all experiment-level fields through ExperimentConfig before
+    # constructing ExperimentDefinition. This rejects date.today() fallbacks,
+    # empty symbols, invalid enums, and out-of-range values with clear messages.
+    # model_validate raises on any violation; we re-raise with the config path.
+    fields: dict = {
+        "experiment_id": raw.get("experiment_id"),
+        "experiment_type": raw.get("experiment_type", "sweep"),
+        "description": raw.get("description"),
+        "strategy_set": raw.get("strategy_set", []),
+        "parameter_grid": raw.get("parameter_grid", []),
+        "parameter_space": raw.get("parameter_space"),
+        "dataset_version": raw.get("dataset_version"),
+        "universe_version": raw.get("universe_version", "v1"),
+        "price_basis": raw.get("price_basis"),
+        "symbols": raw.get("symbols"),
+        "start_date": raw.get("start_date"),
+        "end_date": raw.get("end_date"),
+        "random_seed": raw.get("random_seed", 42),
+        "initial_cash": raw.get("initial_cash", 100_000.0),
+        "train_ratio": raw.get("train_ratio"),
+        "window_size_days": raw.get("window_size_days"),
+        "step_size_days": raw.get("step_size_days"),
+        "universe_set": raw.get("universe_set"),
+        "universe_resolution_mode": raw.get("universe_resolution_mode"),
+    }
+    try:
+        ExperimentConfig.model_validate(fields)
+    except Exception as exc:
+        raise ValueError(f"Invalid experiment config in {config_path!r}: {exc}") from exc
+
+    # Construct ExperimentDefinition directly so mypy can verify the return type
+    # without relying on Pydantic's Self inference through model_validate.
+    from datetime import date as _date
+
     return ExperimentDefinition(
-        experiment_id=raw["experiment_id"],
-        experiment_type=ExperimentType(raw.get("experiment_type", "sweep")),
-        description=raw.get("description"),
-        strategy_set=raw.get("strategy_set", []),
-        parameter_grid=raw.get("parameter_grid", []),
-        parameter_space=raw.get("parameter_space"),
-        dataset_version=raw["dataset_version"],
-        universe_version=raw.get("universe_version", "v1"),
-        price_basis=PriceBasis(raw["price_basis"]),
-        symbols=raw.get("symbols", []),
-        start_date=date.fromisoformat(raw["start_date"]) if "start_date" in raw else date.today(),
-        end_date=date.fromisoformat(raw["end_date"]) if "end_date" in raw else date.today(),
-        random_seed=raw.get("random_seed", 42),
-        initial_cash=raw.get("initial_cash", 100_000.0),
+        experiment_id=fields["experiment_id"],
+        experiment_type=ExperimentType(fields["experiment_type"]),
+        description=fields["description"],
+        strategy_set=fields["strategy_set"] or [],
+        parameter_grid=fields["parameter_grid"] or [],
+        parameter_space=fields["parameter_space"],
+        dataset_version=fields["dataset_version"],
+        universe_version=fields["universe_version"],
+        price_basis=PriceBasis(fields["price_basis"]),
+        symbols=[s.strip().upper() for s in fields["symbols"] if s.strip()],
+        start_date=_date.fromisoformat(str(fields["start_date"])),
+        end_date=_date.fromisoformat(str(fields["end_date"])),
+        random_seed=fields["random_seed"],
+        initial_cash=fields["initial_cash"],
+        train_ratio=fields["train_ratio"],
+        window_size_days=fields["window_size_days"],
+        step_size_days=fields["step_size_days"],
+        universe_set=fields["universe_set"],
+        universe_resolution_mode=fields["universe_resolution_mode"],
         staged_pipeline_config=staged_pipeline_config,
     )
 

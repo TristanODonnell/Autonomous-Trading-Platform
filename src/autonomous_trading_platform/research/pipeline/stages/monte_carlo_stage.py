@@ -178,15 +178,20 @@ class MonteCarloStage(BaseStage):
         raw: dict[str, Any],
         simulation_runner: SimulationRunner,
     ) -> MonteCarloStage:
+        from autonomous_trading_platform.research.config.stage_configs import (
+            MonteCarloStageConfigModel,
+        )
+
+        validated = MonteCarloStageConfigModel.model_validate(raw)
         stage_cfg = MonteCarloStageConfig(
-            name=raw["name"],
-            symbols=raw["symbols"],
-            start_date=date.fromisoformat(raw["start_date"]),
-            end_date=date.fromisoformat(raw["end_date"]),
-            n_runs=raw.get("n_runs", 30),
-            min_pass_rate=raw.get("min_pass_rate", 0.70),
-            filter_config=_parse_filter_config(raw.get("filter_config", {})),
-            scoring_weights=_parse_scoring_weights(raw.get("scoring_weights", {})),
+            name=validated.name,
+            symbols=list(validated.symbols),
+            start_date=validated.start_date,
+            end_date=validated.end_date,
+            n_runs=validated.n_runs,
+            min_pass_rate=validated.min_pass_rate,
+            filter_config=validated.filter_config.to_dataclass(),
+            scoring_weights=validated.scoring_weights.to_dataclass(),
         )
         return cls(stage_config=stage_cfg, simulation_runner=simulation_runner)
 

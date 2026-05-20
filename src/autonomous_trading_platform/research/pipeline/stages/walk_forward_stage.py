@@ -153,20 +153,25 @@ class WalkForwardStage(BaseStage):
         raw: dict[str, Any],
         simulation_runner: SimulationRunner,
     ) -> WalkForwardStage:
+        from autonomous_trading_platform.research.config.stage_configs import (
+            WalkForwardStageConfigModel,
+        )
+
+        validated = WalkForwardStageConfigModel.model_validate(raw)
         stage_cfg = WalkForwardStageConfig(
-            name=raw["name"],
-            symbols=raw["symbols"],
-            start_date=date.fromisoformat(raw["start_date"]),
-            end_date=date.fromisoformat(raw["end_date"]),
-            train_days=raw["train_days"],
-            test_days=raw["test_days"],
-            step_days=raw["step_days"],
-            require_all_folds=raw.get("require_all_folds", True),
-            min_folds_passed=raw.get("min_folds_passed", 1),
-            train_filter_config=_parse_filter_config(raw["train_filter_config"]),
-            train_scoring_weights=_parse_scoring_weights(raw["train_scoring_weights"]),
-            test_filter_config=_parse_filter_config(raw["test_filter_config"]),
-            test_scoring_weights=_parse_scoring_weights(raw["test_scoring_weights"]),
+            name=validated.name,
+            symbols=list(validated.symbols),
+            start_date=validated.start_date,
+            end_date=validated.end_date,
+            train_days=validated.train_days,
+            test_days=validated.test_days,
+            step_days=validated.step_days,
+            require_all_folds=validated.require_all_folds,
+            min_folds_passed=validated.min_folds_passed,
+            train_filter_config=validated.train_filter_config.to_dataclass(),
+            train_scoring_weights=validated.train_scoring_weights.to_dataclass(),
+            test_filter_config=validated.test_filter_config.to_dataclass(),
+            test_scoring_weights=validated.test_scoring_weights.to_dataclass(),
         )
         return cls(stage_config=stage_cfg, simulation_runner=simulation_runner)
 
