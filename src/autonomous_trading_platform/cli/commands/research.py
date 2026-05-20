@@ -53,22 +53,14 @@ from autonomous_trading_platform.research.strategy_generation.generators.random_
 from autonomous_trading_platform.research.strategy_generation.strategy_generation_engine import (
     StrategyGenerationEngine,
 )
+from autonomous_trading_platform.strategy.catalog import list_strategy_types
 
 # ---------------------------------------------------------------------------
 # Shared constants
 # ---------------------------------------------------------------------------
 
-# Canonical list of supported strategy types. Referenced by every subcommand
-# that accepts --strategy-type so additions only need to happen in one place.
-STRATEGY_TYPE_CHOICES = [
-    "stub",
-    "intentional_loser",
-    "random",
-    "moving_average_crossover",
-    "mean_reversion",
-    "momentum",
-    "factor_based",
-]
+# Derived from the strategy catalog — do not edit this list directly.
+STRATEGY_TYPE_CHOICES = list_strategy_types()
 
 # ---------------------------------------------------------------------------
 # Helpers

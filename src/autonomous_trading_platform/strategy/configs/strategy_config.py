@@ -2,25 +2,29 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from autonomous_trading_platform.strategy.catalog import strategy_type_exists
 
 
 class StrategyConfig(BaseModel):
-    type: Literal[
-        "stub",
-        "intentional_loser",
-        "moving_average_crossover",
-        "mean_reversion",
-        "momentum",
-        "factor_based",
-        "random",
-    ]
+    type: str
 
     strategy_id: str
 
     parameters: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("type")
+    @classmethod
+    def _type_must_be_cataloged(cls, v: str) -> str:
+        if not strategy_type_exists(v):
+            from autonomous_trading_platform.strategy.catalog import list_strategy_types
+
+            known = list_strategy_types()
+            raise ValueError(f"Unknown strategy type {v!r}. Known types: {known}")
+        return v
 
     def canonical_json(self) -> str:
         return json.dumps(

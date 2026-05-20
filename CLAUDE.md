@@ -1,123 +1,152 @@
-# WeTrade — Claude Code Context
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
-Autonomous quantitative trading platform. FastAPI backend, React frontend.
-Frontend is a **static mockup first** — no API calls yet, all mock data.
-Wire up APIs later once all pages and components exist.
 
-## Tech Stack
+Autonomous quantitative trading platform. FastAPI backend + React/TypeScript frontend. The frontend is a **static mockup** — no real API calls yet, all mock data. Wire up APIs only when told.
+
+## Commands
+
+### Backend
+
+```bash
+# Install (from repo root, with venv active)
+pip install -r requirements.txt
+pip install -e .
+
+# Run all tests
+python -m pytest
+
+# Run a single test file
+python -m pytest tests/path/to/test_file.py
+
+# Run only integration tests (require Postgres)
+python -m pytest -m integration
+
+# Skip slow/external tests
+python -m pytest -m "not integration and not external and not alpaca"
+
+# Lint + format
+ruff check src/ tests/
+ruff format src/ tests/
+
+# Type check
+mypy src/
+
+# Run pre-commit (ruff + mypy) on staged files
+pre-commit run
+
+# DB migrations (from repo root)
+alembic -c infra/db/alembic.ini upgrade head
+alembic -c infra/db/alembic.ini revision --autogenerate -m "description"
+
+# Dev JWT for manual API testing
+python scripts/generate_dev_jwt.py
+
+# Start infrastructure (Postgres, Airflow, Grafana, OTel)
+docker compose up -d
+```
 
 ### Frontend
-- React + Vite + TypeScript
-- TanStack Router (routing)
-- TanStack Query (data fetching — not wired yet)
-- Zustand (global state)
-- Tailwind CSS
-- shadcn/ui (component primitives)
-- Recharts (charts)
-- TanStack Table (tables)
-- Axios + Zod (API layer — not wired yet)
-- Framer Motion (animations)
 
-### Backend (separate — do not touch unless asked)
-- FastAPI + Uvicorn
-- SQLAlchemy + Alembic
-- Pydantic + mypy
-
-## Frontend Folder Structure
-```
-src/
-  components/
-    ui/              ← shadcn primitives (Button, Badge, Card, etc.)
-    shared/          ← our reusable components (MetricCard, StatusBadge, etc.)
-  pages/
-    Dashboard.tsx
-    Portfolio.tsx
-    StrategyLab.tsx
-    Controls.tsx
-    Settings.tsx
-  layouts/
-    AppShell.tsx     ← persistent wrapper (nav + topbar)
-    TopNav.tsx
-  store/
-    useAppStore.ts   ← Zustand store
-  services/          ← empty for now, API services go here later
-  types/
-    index.ts         ← shared TypeScript types
-  lib/
-    utils.ts         ← cn() helper and misc utils
-  mock/
-    data.ts          ← ALL mock data lives here
+```bash
+cd frontend
+npm install
+npm run dev        # Vite dev server
+npm run build      # Production build
+npm run lint       # ESLint
 ```
 
-## Design System — Theme Tokens (defined in index.css)
+## Backend Architecture
+
+The backend follows a strict layered architecture. **Always flow inward: interfaces → application → domain → storage → contracts.**
+
 ```
---bg: #070B0F
---surface: #0D1117
---surface2: #111820
---border: #1C2532
---border2: #243040
---text: #C9D1D9
---text2: #8B949E
---text3: #4A5568
---accent: #00E5A0        ← primary green
---accent2: #00B37D
---red: #FF4D6D
---yellow: #E8A838
---blue: #3B9EFF
---purple: #9B72FF
---font-mono: 'IBM Plex Mono', monospace
---font-sans: 'IBM Plex Sans', sans-serif
+contracts/     ← Pydantic models (immutable data shapes; no business logic)
+storage/       ← Persistence: PostgreSQL (SQLAlchemy) + Parquet datasets
+application/   ← Service layer: orchestrates domain logic, no I/O
+interfaces/    ← REST API (FastAPI), CLI
 ```
 
-## UI Reference
-The file `trading_platform_screens.html` at the project root is the
-full visual reference. Match it exactly for layout, colors, spacing,
-and component structure. Do not invent new layouts — use that file as
-the source of truth.
+**Key directories:**
 
-## Key Patterns
+| Path | Purpose |
+|------|---------|
+| `src/autonomous_trading_platform/contracts/` | Pydantic data contracts for every domain (market, execution, governance, runtime) |
+| `src/autonomous_trading_platform/storage/sor/` | System-of-Record: SQLAlchemy ORM models + UnitOfWork repositories |
+| `src/autonomous_trading_platform/storage/parquet/` | Versioned Parquet datasets for market bars and features |
+| `src/autonomous_trading_platform/application/services/` | 30+ service classes: portfolio analytics, strategy management, system health, controls |
+| `src/autonomous_trading_platform/interfaces/rest/` | FastAPI app factory, middleware stack, route modules |
+| `src/autonomous_trading_platform/interfaces/rest/routes/` | One file per API domain: portfolio, strategies, controls, audit_log, system, settings |
+| `src/autonomous_trading_platform/strategy/` | BaseStrategy + concrete implementations (Momentum, MeanReversion, MACD, etc.) |
+| `src/autonomous_trading_platform/execution/` | Order lifecycle: broker client, fill accounting, position/cash ledgers, reconciliation |
+| `src/autonomous_trading_platform/safety/` | Multi-layer trading gates, kill switch, environment isolation (paper vs live) |
+| `src/autonomous_trading_platform/universe/` | Universe snapshot versioning, symbol lifecycle, survivorship bias elimination |
+| `src/autonomous_trading_platform/research/` | Experiment pipeline: simulation, metrics computation, artifact persistence |
+| `src/autonomous_trading_platform/ingestion/` | Alpaca market data + corporate actions ingestion pipeline |
+| `src/autonomous_trading_platform/scheduler/airflow/` | Airflow DAGs for ingestion, backtesting, universe governance |
+| `src/autonomous_trading_platform/observability/` | OpenTelemetry instrumentation |
 
-### Mock data
-All mock data lives in `src/mock/data.ts`. Pages import from there.
-Never hardcode data inside a component or page file.
+**FastAPI middleware order** (defined in `interfaces/rest/app.py`):
+`RequestID → Logging → JWT → Deprecation`
 
-### Component naming
-- Shared reusable components: PascalCase in `src/components/shared/`
-- Page files: PascalCase in `src/pages/`
-- shadcn primitives: live in `src/components/ui/` — do not edit these
+**Database:** PostgreSQL 16 on port 5433 (Docker). Test overrides use SQLite in-memory. Alembic migrations live in `infra/db/alembic/versions/` (65+ versions).
 
-### Tailwind + CSS variables
-Use Tailwind for spacing and layout. Use CSS variables (via inline style
-or arbitrary Tailwind values like `bg-[var(--surface)]`) for colors so
-the theme stays in one place.
+**Key patterns:**
+- All domain data shapes are Pydantic contracts in `contracts/` — never define data shapes in services or routes
+- Repositories follow UnitOfWork pattern; never call ORM directly from services
+- Parquet datasets are versioned (`storage/parquet/versioning.py`) — do not write raw files
+- `NO_LIVE_TRADING=true` must be set in all non-live environments; the safety layer enforces this at runtime
 
-### TypeScript
-Strict mode. All props typed. No `any`. Types defined in `src/types/index.ts`.
+## Test Setup
 
-### Zustand store
-`useAppStore` holds:
-- `activeEnv: 'simulation' | 'paper' | 'live'`
-- `killSwitchActive: boolean`
-- `viewMode: 'basic' | 'pro'` (reserved for later)
+- Framework: pytest + pytest-asyncio, SQLite in-memory for unit/service tests
+- Markers: `integration` (requires Postgres), `external` (network), `alpaca`, `smoke`, `paper_runtime`
+- Shared fixtures in `tests/conftest.py` and `tests/utilities/` (cycle fixtures for ingestion, paper trading, research pipelines)
+- Test env vars auto-set in conftest: `APP_ENV=test`, `DATABASE_URL=sqlite:///:memory:`, `NO_LIVE_TRADING=true`
 
-### TanStack Router
-Each page is a route. Route definitions live in `src/main.tsx` or a
-dedicated `src/router.ts`. Use `<Link>` for nav, not `<a>`.
+## Frontend
 
-## Pages Summary
+### Stack
+React 19 + Vite + TypeScript (strict), TanStack Router + Query, Zustand, Tailwind CSS, shadcn/ui, Recharts, TanStack Table, Framer Motion.
 
-| Page | Route | Description |
-|------|-------|-------------|
-| Dashboard | `/` | Portfolio value, equity curve, active strategies, system health, activity feed |
-| Portfolio | `/portfolio` | Holdings table, drawdown chart, allocation bars, risk metrics, sector exposure |
-| Strategy Lab | `/strategy` | Strategy cards grid, filter bar, comparison table at bottom |
-| Controls | `/controls` | Kill switch, strategy toggles, allocation overrides, alert thresholds, audit log |
-| Settings | `/settings` | Risk sliders, governance config, data version info, notification toggles |
+### Key Rules
+- All mock data lives in `frontend/src/mock/data.ts` — never hardcode data in components
+- Do not edit `frontend/src/components/ui/` (shadcn primitives)
+- Do not wire real API calls — mock data only until told otherwise
+- Colors: use CSS variables (`bg-[var(--surface)]`), not hardcoded hex
+- The file `trading_platform_screens.html` at the project root is the visual reference — match it exactly
 
-## What NOT to do
-- Do not wire up real API calls — use mock data only until told otherwise
-- Do not install libraries not listed in the stack above without asking
-- Do not edit files in `src/components/ui/` (shadcn) unless explicitly asked
-- Do not create new pages or routes not listed above
-- Do not change the color tokens — match the reference HTML exactly
+### Design Tokens (defined in `frontend/src/index.css`)
+```
+--bg: #070B0F       --surface: #0D1117    --surface2: #111820
+--border: #1C2532   --text: #C9D1D9       --text2: #8B949E
+--accent: #00E5A0   --red: #FF4D6D        --yellow: #E8A838
+--blue: #3B9EFF     --purple: #9B72FF
+```
+
+### Pages
+| Route | Page | Description |
+|-------|------|-------------|
+| `/` | Dashboard | Portfolio value, equity curve, active strategies, system health, activity feed |
+| `/portfolio` | Portfolio | Holdings table, drawdown chart, allocation bars, risk metrics |
+| `/strategy` | Strategy Lab | Strategy cards grid, filter bar, comparison table |
+| `/controls` | Controls | Kill switch, strategy toggles, allocation overrides, audit log |
+| `/settings` | Settings | Risk sliders, governance config, notification toggles |
+
+## Infrastructure
+
+Docker Compose services (all local dev):
+- **postgres** port 5433 — system-of-record DB
+- **airflow-webserver** port 8080 — DAG orchestration UI
+- **lgtm** port 3000 — Grafana observability (metrics + traces)
+- **otel-collector** ports 4317/4318 — OpenTelemetry ingestion
+
+## Docs
+
+Canonical architecture docs live in `docs/`. Key references:
+- `docs/architecture/v1-boundaries.md` — system boundary decisions
+- `docs/architecture/safety-doctrine.md` — safety invariants (read before touching safety/ or execution/)
+- `docs/architecture/invariants.md` — hard invariants that must not be violated
+- `docs/storage/` — Parquet dataset versioning, Postgres SoR design
