@@ -204,7 +204,10 @@ class FeatureDatasetVersionsRepository(BaseRepository):
             .order_by(FeatureDatasetVersions.created_at.desc())
         )
 
-        rows = list(self.session.scalars(stmt).all())
+        rows = cast(
+            list[FeatureDatasetVersions],
+            list(self.session.scalars(stmt).all()),
+        )
 
         for row in rows:
             if start_date is not None and row.date_coverage_start > start_date:
@@ -221,6 +224,48 @@ class FeatureDatasetVersionsRepository(BaseRepository):
                     continue
 
             return self.to_contract(row)
+
+        return None
+
+    def find_for_simulation(
+        self,
+        *,
+        feature_name: str,
+        source_dataset_version: str,
+        price_basis: PriceBasis,
+        start_date,
+        end_date,
+        min_symbol_count: int,
+    ) -> FeatureDatasetVersions | None:
+        """Return the most-recent validated feature dataset that satisfies all
+        simulation lineage requirements: source version, price basis, date
+        coverage, and minimum symbol count.
+
+        Intentionally omits computation_parameters so strategies that declare
+        a feature by name (not by specific computation parameters) can resolve
+        any validated variant of that feature.
+        """
+        stmt = (
+            select(FeatureDatasetVersions)
+            .where(
+                FeatureDatasetVersions.feature_name == feature_name,
+                FeatureDatasetVersions.source_dataset_version == source_dataset_version,
+                FeatureDatasetVersions.underlying_price_basis == price_basis,
+                FeatureDatasetVersions.validation_status == "validated",
+                FeatureDatasetVersions.date_coverage_start <= start_date,
+                FeatureDatasetVersions.date_coverage_end >= end_date,
+            )
+            .order_by(FeatureDatasetVersions.created_at.desc())
+        )
+
+        rows = cast(
+            list[FeatureDatasetVersions],
+            list(self.session.scalars(stmt).all()),
+        )
+
+        for row in rows:
+            if (row.symbol_coverage or 0) >= min_symbol_count:
+                return row
 
         return None
 

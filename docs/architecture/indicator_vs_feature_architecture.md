@@ -103,23 +103,27 @@ current strategy declares persisted feature requirements.
 
 ---
 
-## Simulation Feature Flow
+## Simulation Feature Flow (TASK-2.1 — automatic resolution)
 
-The current simulation feature path is explicit rather than automatic:
+As of TASK-2.1, the simulation feature path is automatic when
+`FeatureDependencyResolverService` is wired into `SimulationRunner`:
 
-1. A caller creates `SimulationFeatureDatasetRequest` objects.
-2. `SimulationWindowLoader.load_window(..., feature_datasets=...)` loads those
-   feature datasets with the configured `feature_reader`.
+1. `FeatureDependencyResolverService.resolve()` reads `required_persisted_features`
+   from the `StrategyDefinition`, queries the SoR for a validated
+   `FeatureDatasetVersion` for each feature, and returns
+   `SimulationFeatureDatasetRequest` objects.
+2. `SimulationRunner` passes those requests to
+   `SimulationWindowLoader.load_window(feature_datasets=...)`.
 3. Loaded feature tables are stored in
    `SimulationWindowData.feature_tables_by_symbol`.
 4. `StrategyContextBuilder.build_from_window()` exposes the current symbol's
    tables through `StrategyContext.features`.
-5. Strategies may read `context.features` only when their registry definition
-   declares matching `required_persisted_features`.
+5. Strategies may read `context.features[feature_name]` as a PyArrow table.
 
-The registry does not yet automatically translate
-`required_persisted_features` into simulation loader requests. That is deferred
-to a future feature dependency resolver.
+Strategies that declare no `required_persisted_features` are unaffected —
+no feature requests are generated and no feature loading occurs.
+
+See `docs/architecture/feature_dependency_resolution.md` for the full flow.
 
 ---
 
@@ -158,9 +162,8 @@ to a future feature dependency resolver.
 
 ## Deferred Follow-Ups
 
-- Automatic feature dependency resolution from `StrategyRegistry` metadata into
-  `SimulationFeatureDatasetRequest` objects.
+- Exact symbol-set lineage validation (currently only symbol count is checked).
+- Universe-version enforcement (FeatureDatasetVersion does not persist universe_version_id).
+- Computation-parameter specificity in feature resolution.
+- Persisted feature consumption by built-in strategies (none currently declare requirements).
 - Indicator execution resolver for computing `required_indicators`.
-- Persisted feature consumption by factor strategies when the feature contracts
-  and loader resolution are ready.
-- Composite strategy construction.

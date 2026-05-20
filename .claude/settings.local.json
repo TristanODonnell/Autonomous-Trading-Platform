@@ -80,7 +80,13 @@
       "Bash(Sort-Object FullName)",
       "PowerShell(Get-ChildItem \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\docs\" -ErrorAction SilentlyContinue | Select-Object Name; if \\(-not $?\\) { \"no docs dir\" })",
       "PowerShell(dir \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\docs\" -ErrorAction SilentlyContinue; if \\(-not \\(Test-Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\docs\"\\)\\) { \"docs dir does not exist\" })",
-      "PowerShell(cd \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\"; python -m pytest -m \"not integration and not external and not alpaca\" -q 2>&1 | Where-Object { $_ -match \"passed|failed|error\" } | Select-Object -Last 5)"
+      "PowerShell(cd \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\"; python -m pytest -m \"not integration and not external and not alpaca\" -q 2>&1 | Where-Object { $_ -match \"passed|failed|error\" } | Select-Object -Last 5)",
+      "Bash(xargs grep -l \"required_persisted_features\")",
+      "Bash(Select-String -Path \"C:\\\\Users\\\\Tristan\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Tristan-PycharmProjects-Autonomous-Trading-Platform\\\\029e2ec9-af3b-4571-89e2-a65c3774986c\\\\tasks\\\\b4vfo2612.output\" -Pattern \"\\\\d+ passed\")",
+      "Bash(Select-Object -Last 1)",
+      "Bash(xargs grep -l \"class.*AllocationResult\")",
+      "Bash(xargs grep -l \"simulation.*allocation\\\\|SimulationAllocation\")",
+      "Bash(xargs head -100)"
     ]
   }
 }

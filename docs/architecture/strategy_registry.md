@@ -183,9 +183,9 @@ The registry separates two dependency types:
 - `required_persisted_features`: persisted feature datasets loaded into
   `StrategyContext.features`.
 
-This metadata is declarative today. It supports auditability, warmup review,
-and future dependency resolution, but the registry does not yet execute
-indicators or load feature datasets automatically.
+Indicator metadata is still declarative. Persisted feature metadata is now
+**automatically resolved** by `FeatureDependencyResolverService` (TASK-2.1)
+when wired into `SimulationRunner`.
 
 Current declarations:
 
@@ -341,16 +341,19 @@ compatibility flags directly from `StrategyRegistry`.
 | Per-symbol feature table exposure | `strategy.contexts.StrategyContextBuilder` and `StrategyContext.features` |
 | Artifact persistence | `research.artifacts` |
 
-Persisted feature resolution is explicit for now:
+As of TASK-2.1, `FeatureDependencyResolverService` automatically translates
+`required_persisted_features` declarations into `SimulationFeatureDatasetRequest`
+objects. The flow:
 
-1. The caller supplies `SimulationFeatureDatasetRequest` values to
+1. `FeatureDependencyResolverService.resolve()` reads `required_persisted_features`
+   and queries the SoR for validated feature dataset versions.
+2. `SimulationRunner` passes those requests to
    `SimulationWindowLoader.load_window()`.
-2. The loader stores loaded tables in
-   `SimulationWindowData.feature_tables_by_symbol`.
-3. `StrategyContextBuilder.build_from_window()` passes the symbol's tables into
+3. The loader stores loaded tables in `SimulationWindowData.feature_tables_by_symbol`.
+4. `StrategyContextBuilder.build_from_window()` passes the symbol's tables into
    `StrategyContext.features`.
-4. A future resolver can use `required_persisted_features` to create those
-   requests automatically.
+
+See `docs/architecture/feature_dependency_resolution.md` for the full flow.
 
 ---
 
@@ -361,8 +364,7 @@ The following are **not yet implemented** but the registry is designed to suppor
 - **Composite strategies**: `composite_rule` is registered as `family=COMPOSITE`; future work can add persisted feature dependencies when composites consume persisted features
 - **Ensemble orchestration**: new family `ENSEMBLE`, multi-strategy builder signature
 - **Indicator dependency resolver**: `required_indicators` consumed by a future execution resolver
-- **Feature dependency execution**: `required_persisted_features` consumed by data loader
-- **Automatic feature dependency resolution**: map persisted feature declarations to `SimulationFeatureDatasetRequest`
+- **Feature dependency execution**: ✅ `required_persisted_features` automatically resolved by `FeatureDependencyResolverService` (TASK-2.1)
 - **Persisted feature consumption by factor strategies**: migrate only after equivalence contracts and loader resolution are explicit
 - **Search-space generation engines**: consume `parameter_specs` from `get_generation_candidates()`
 - **Dynamic plugin discovery**: call `registry.register()` before `lock()` from plugin entrypoints

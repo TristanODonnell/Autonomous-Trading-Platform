@@ -235,12 +235,27 @@ Examples:
 }
 ```
 
+## Feature Dependency Aggregation (TASK-2.1)
+
+`CompositeRuleStrategy` does not currently declare `required_persisted_features`
+in its registry definition. The architecture supports this: the
+`FeatureDependencyResolverService` will aggregate feature requirements for any
+strategy type by reading `required_persisted_features` from its
+`StrategyDefinition`. When a composite strategy gains persisted feature
+dependencies, declare them in `_registrations.py` and the resolver handles the
+rest.
+
+The `StrategyDefinition.compute_warmup_bars()` for `composite_rule` is
+correctly derived from component metadata via `CompositeStrategyConfig.warmup_bars()`
+and is used by `SimulationRunner` as of TASK-2.1 (replacing the old
+parameter-name heuristic).
+
 ## Current Boundaries
 
-Composite strategies do not yet implement automatic strategy generation,
-persisted feature dependency execution, mutation/evolution metadata consumers,
-distributed orchestration, portfolio-level ensembles, or automatic conversion
-of existing concrete strategies into composite configs.
+Composite strategies do not yet implement persisted feature dependency
+declarations, mutation/evolution metadata consumers, distributed orchestration,
+portfolio-level ensembles, or automatic conversion of existing concrete
+strategies into composite configs.
 ## Generated Templates
 
 `StrategyGenerationEngine.generate_composite()` emits a small deterministic set

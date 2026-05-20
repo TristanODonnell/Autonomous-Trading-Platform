@@ -91,6 +91,51 @@ def test_strategy_context_exposes_loaded_simulation_feature_tables() -> None:
     assert context.features == {"returns": feature_table}
 
 
+def test_strategy_context_features_populated_via_window_data() -> None:
+    """Feature tables placed in SimulationWindowData reach StrategyContext regardless
+    of how they got there (manual or via the automatic resolver path).  The
+    StrategyContextBuilder is the final step in both flows.
+    """
+    ts0 = datetime(2024, 1, 2, 14, 30, tzinfo=UTC)
+    ts1 = ts0 + timedelta(minutes=5)
+    volatility_table = pa.table(
+        {
+            "symbol": ["AAPL"],
+            "timestamp": [ts0],
+            "volatility_value": [0.02],
+        }
+    )
+    window = SimulationWindowData(
+        start_date=date(2024, 1, 2),
+        end_date=date(2024, 1, 2),
+        dataset_version="bars-v1",
+        symbols=["AAPL"],
+        timeline=[ts0, ts1],
+        bars_by_symbol={"AAPL": [_bar(ts0, 100.0), _bar(ts1, 101.0)]},
+        bars_by_timestamp={ts0: {"AAPL": _bar(ts0, 100.0)}, ts1: {"AAPL": _bar(ts1, 101.0)}},
+        feature_tables_by_symbol={"AAPL": {"volatility": volatility_table}},
+    )
+    builder = StrategyContextBuilder(
+        market_bar_reader=cast(HistoricalBarDatasetReader, _UnusedReader()),
+        bars_dataset=RAW_BARS_DATASET,
+        lookback_bars=1,
+    )
+
+    context = builder.build_from_window(
+        run_id=uuid4(),
+        strategy_id="strategy-2",
+        symbol="AAPL",
+        timestamp=ts1,
+        window=window,
+        positions={},
+        state={},
+    )
+
+    assert context is not None
+    assert "volatility" in context.features
+    assert context.features["volatility"] is volatility_table
+
+
 def test_strategy_context_features_defaults_to_empty_when_absent() -> None:
     ts0 = datetime(2024, 1, 2, 14, 30, tzinfo=UTC)
     ts1 = ts0 + timedelta(minutes=5)

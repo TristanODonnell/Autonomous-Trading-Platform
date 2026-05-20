@@ -45,3 +45,23 @@ def test_dependency_metadata_is_deterministic() -> None:
     ]
 
     assert first == second
+
+
+def test_strategies_with_persisted_features_only_declare_supported_names() -> None:
+    """Any strategy that declares required_persisted_features must use names
+    that have a Parquet dataset mapping.  This prevents silent runtime failures
+    when the resolver tries to look up the dataset.
+    """
+    from autonomous_trading_platform.storage.parquet.repositories.parquet_feature_repository import (
+        FEATURE_DATASETS_BY_NAME,
+    )
+
+    supported = frozenset(FEATURE_DATASETS_BY_NAME)
+
+    for defn in get_registry().list_definitions():
+        for feature_name in defn.required_persisted_features:
+            assert feature_name in supported, (
+                f"Strategy {defn.strategy_type!r} declares persisted feature "
+                f"{feature_name!r} which has no dataset mapping. "
+                f"Supported: {sorted(supported)}"
+            )
