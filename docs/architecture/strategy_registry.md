@@ -48,7 +48,7 @@ src/autonomous_trading_platform/strategy/registry/
 | | `parameter_schema` | `type[StrategyParameterSchema]` | Canonical schema model |
 | **Warmup/deps** | `warmup_bars_fn` | `Callable` | Returns minimum bars from params |
 | | `required_indicators` | `tuple[str, ...]` | Indicator function names used |
-| | `required_persisted_features` | `tuple[str, ...]` | Parquet features (empty now) |
+| | `required_persisted_features` | `tuple[str, ...]` | Persisted feature tables consumed through `StrategyContext.features` |
 | **Generation** | `parameter_specs` | `tuple[ParameterSpec, ...]` | Search-space specs per param |
 | **Compatibility** | `supports_long_only` | `bool` | Default: `True` |
 | | `supports_shorting` | `bool` | Default: `True` |
@@ -165,6 +165,41 @@ Use `defn.compute_warmup_bars(parameters)` or `defn.compute_warmup_bars()` to ge
 
 ---
 
+## Indicator and Persisted Feature Dependencies
+
+The registry separates two dependency types:
+
+- `required_indicators`: in-memory functions under `strategy/indicators/` used
+  directly by a strategy.
+- `required_persisted_features`: persisted feature datasets loaded into
+  `StrategyContext.features`.
+
+This metadata is declarative today. It supports auditability, warmup review,
+and future dependency resolution, but the registry does not yet execute
+indicators or load feature datasets automatically.
+
+Current declarations:
+
+| Strategy | Required Indicators | Required Persisted Features |
+|---|---|---|
+| `stub` | none | none |
+| `intentional_loser` | none | none |
+| `random` | none | none |
+| `moving_average_crossover` | `simple_moving_average` | none |
+| `momentum` | `momentum` | none |
+| `mean_reversion` | `z_score`, `simple_moving_average`, `rolling_standard_deviation` | none |
+| `factor_based` | `momentum`, `z_score`, `rolling_standard_deviation`, `volume_ratio` | none |
+
+No current built-in strategy reads `StrategyContext.features`, so no built-in
+strategy declares persisted feature requirements. A strategy must only add a
+persisted feature dependency when its implementation actually consumes that
+feature table.
+
+The architecture boundary and overlap audit live in
+`docs/architecture/indicator_vs_feature_architecture.md`.
+
+---
+
 ## Registration Lifecycle
 
 1. `strategy.registry.__init__` is imported.
@@ -272,7 +307,20 @@ The registry exposes generation-friendly metadata without containing generation 
 | Strategy instantiation | `strategy.factories.StrategyFactory` |
 | Strategy evaluation | `strategy.services.StrategyEvaluationService` |
 | Simulation orchestration | `research.simulation.SimulationRunner` |
+| Explicit persisted feature loading | `research.simulation.services.SimulationWindowLoader` |
+| Per-symbol feature table exposure | `strategy.contexts.StrategyContextBuilder` and `StrategyContext.features` |
 | Artifact persistence | `research.artifacts` |
+
+Persisted feature resolution is explicit for now:
+
+1. The caller supplies `SimulationFeatureDatasetRequest` values to
+   `SimulationWindowLoader.load_window()`.
+2. The loader stores loaded tables in
+   `SimulationWindowData.feature_tables_by_symbol`.
+3. `StrategyContextBuilder.build_from_window()` passes the symbol's tables into
+   `StrategyContext.features`.
+4. A future resolver can use `required_persisted_features` to create those
+   requests automatically.
 
 ---
 
@@ -284,6 +332,8 @@ The following are **not yet implemented** but the registry is designed to suppor
 - **Ensemble orchestration**: new family `ENSEMBLE`, multi-strategy builder signature
 - **Indicator registry**: `required_indicators` consumed by indicator dependency resolver
 - **Feature dependency execution**: `required_persisted_features` consumed by data loader
+- **Automatic feature dependency resolution**: map persisted feature declarations to `SimulationFeatureDatasetRequest`
+- **Persisted feature consumption by factor strategies**: migrate only after equivalence contracts and loader resolution are explicit
 - **Search-space generation engines**: consume `parameter_specs` from `get_generation_candidates()`
 - **Dynamic plugin discovery**: call `registry.register()` before `lock()` from plugin entrypoints
 - **Automated strategy assembly**: use `family`, `required_indicators`, and `parameter_specs` to compose strategies programmatically

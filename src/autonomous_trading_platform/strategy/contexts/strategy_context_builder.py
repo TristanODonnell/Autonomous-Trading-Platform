@@ -147,6 +147,7 @@ class StrategyContextBuilder:
             f"DEBUG context_bars for {symbol} at {timestamp}: "
             f"{len(bars_up_to)} available, {len(context_bars)} passed to strategy"
         )
+        feature_tables_by_symbol = getattr(window, "feature_tables_by_symbol", {})
 
         return StrategyContext(
             run_id=run_id,
@@ -155,4 +156,5 @@ class StrategyContextBuilder:
             bar_timestamp=timestamp,
             evaluation_timestamp=timestamp,
             bars=context_bars,
+            features=feature_tables_by_symbol.get(symbol, {}),
         )
