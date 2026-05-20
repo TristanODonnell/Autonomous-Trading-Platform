@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from autonomous_trading_platform.strategy.catalog import strategy_type_exists
+from autonomous_trading_platform.strategy.registry import get_registry
 
 
 class StrategyConfig(BaseModel):
@@ -18,21 +18,17 @@ class StrategyConfig(BaseModel):
 
     @field_validator("type")
     @classmethod
-    def _type_must_be_cataloged(cls, v: str) -> str:
-        if not strategy_type_exists(v):
-            from autonomous_trading_platform.strategy.catalog import list_strategy_types
-
-            known = list_strategy_types()
+    def _type_must_be_registered(cls, v: str) -> str:
+        registry = get_registry()
+        if not registry.strategy_exists(v):
+            known = registry.list_strategy_types()
             raise ValueError(f"Unknown strategy type {v!r}. Known types: {known}")
         return v
 
     @model_validator(mode="after")
     def _parameters_must_be_valid(self) -> StrategyConfig:
-        from autonomous_trading_platform.research.config.strategy_parameter_validators import (
-            validate_strategy_parameters,
-        )
-
-        validate_strategy_parameters(self.type, self.parameters)
+        defn = get_registry().get_definition(self.type)
+        defn.parameter_validator(self.parameters)
         return self
 
     def canonical_json(self) -> str:

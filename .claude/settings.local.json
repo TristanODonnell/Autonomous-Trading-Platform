@@ -75,7 +75,12 @@
       "Bash(xargs grep -l \"\\\\.get\\\\\\(\")",
       "Bash(mypy src/autonomous_trading_platform/cli/commands/research.py)",
       "Bash(where mypy *)",
-      "Bash(D:\\\\PythonVenvs\\\\autonomous-trading-platform\\\\.venv\\\\Scripts\\\\mypy.exe *)"
+      "Bash(D:\\\\PythonVenvs\\\\autonomous-trading-platform\\\\.venv\\\\Scripts\\\\mypy.exe *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\strategy\" -Recurse -Force)",
+      "Bash(Sort-Object FullName)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\docs\" -ErrorAction SilentlyContinue | Select-Object Name; if \\(-not $?\\) { \"no docs dir\" })",
+      "PowerShell(dir \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\docs\" -ErrorAction SilentlyContinue; if \\(-not \\(Test-Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\docs\"\\)\\) { \"docs dir does not exist\" })",
+      "PowerShell(cd \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\"; python -m pytest -m \"not integration and not external and not alpaca\" -q 2>&1 | Where-Object { $_ -match \"passed|failed|error\" } | Select-Object -Last 5)"
     ]
   }
 }
