@@ -28,11 +28,21 @@ def generate_composite_rule_configs(
             _validate_template_components(template)
             config = make_config("composite_rule", template)
         except ValueError as exc:
-            summary.reject(str(exc))
+            summary.reject(
+                str(exc),
+                strategy_type="composite_rule",
+                parameters=template,
+                generator=method,
+            )
             continue
         config_hash = config.config_hash()
         if config_hash in seen:
-            summary.duplicate_count += 1
+            summary.duplicate(
+                strategy_type="composite_rule",
+                config_hash=config_hash,
+                generator=method,
+                parameters=template,
+            )
             continue
         seen.add(config_hash)
         summary.accepted_count += 1

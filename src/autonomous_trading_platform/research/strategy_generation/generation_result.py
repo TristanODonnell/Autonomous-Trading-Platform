@@ -33,10 +33,49 @@ class GenerationSummary:
     rejection_reasons: Counter[str] = field(default_factory=Counter)
     strategy_type_distribution: Counter[str] = field(default_factory=Counter)
     family_distribution: Counter[str] = field(default_factory=Counter)
+    rejected_details: list[dict[str, object]] = field(default_factory=list)
+    duplicate_details: list[dict[str, object]] = field(default_factory=list)
 
-    def reject(self, reason: str) -> None:
+    def reject(
+        self,
+        reason: str,
+        *,
+        strategy_type: str | None = None,
+        parameters: dict | None = None,
+        generator: str | None = None,
+        config_hash: str | None = None,
+    ) -> None:
         self.rejected_count += 1
         self.rejection_reasons[reason] += 1
+        self.rejected_details.append(
+            {
+                "reason": reason,
+                "strategy_type": strategy_type,
+                "parameters": parameters,
+                "generator": generator,
+                "config_hash": config_hash,
+            }
+        )
+
+    def duplicate(
+        self,
+        *,
+        strategy_type: str,
+        config_hash: str,
+        generator: str | None = None,
+        parameters: dict | None = None,
+    ) -> None:
+        self.duplicate_count += 1
+        self.duplicate_details.append(
+            {
+                "strategy_type": strategy_type,
+                "config_hash": config_hash,
+                "duplicate_hash": config_hash,
+                "generator": generator,
+                "parameters": parameters,
+                "reason": "duplicate_config_hash",
+            }
+        )
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -47,6 +86,8 @@ class GenerationSummary:
             "rejection_reasons": dict(sorted(self.rejection_reasons.items())),
             "strategy_type_distribution": dict(sorted(self.strategy_type_distribution.items())),
             "family_distribution": dict(sorted(self.family_distribution.items())),
+            "rejected_details": self.rejected_details,
+            "duplicate_details": self.duplicate_details,
         }
 
 

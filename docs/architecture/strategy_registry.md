@@ -315,6 +315,17 @@ The registry exposes generation-friendly metadata without containing generation 
   `ParameterSpaceResolver`, normalize candidates through the registered
   parameter schemas, and de-duplicate by normalized `config_hash`.
 
+Registry metadata is inspectable from the CLI:
+
+```bash
+atp research list-strategy-types
+atp research inspect-strategy --strategy-type momentum
+```
+
+These commands derive display names, families, defaults, `ParameterSpec`
+search-space metadata, warmup requirements, dependencies, schema, and
+compatibility flags directly from `StrategyRegistry`.
+
 ---
 
 ## Distinction: Registry vs Execution

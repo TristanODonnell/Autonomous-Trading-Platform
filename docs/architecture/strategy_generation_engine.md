@@ -46,6 +46,11 @@ The engine de-duplicates candidates by normalized `config_hash()`. The richer
 - rejected candidates;
 - rejection reasons;
 - strategy type and family distributions.
+- rejected candidate details;
+- duplicate candidate details, including duplicate hashes.
+
+The CLI exposes aggregate counts by default and candidate-level details with
+`--verbose`.
 
 ## Composite Rule Generation
 
@@ -71,6 +76,21 @@ Generation options support:
 - price basis (`raw` or `adjusted`).
 
 Debug and non-production strategies are excluded by default.
+
+## CLI Tooling
+
+Generation and inspection commands live under `research`:
+
+- `research list-strategy-types`
+- `research inspect-strategy`
+- `research list-components`
+- `research inspect-component`
+- `research generate-strategies`
+- `research summarize-generated-configs`
+
+`generate-strategies` can export JSON or YAML artifacts containing normalized
+configs, config hashes, generation options, summary metadata, component usage,
+and composite template usage. See `docs/cli/strategy_generation.md`.
 
 ## Current Limitations
 

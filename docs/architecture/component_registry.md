@@ -140,6 +140,19 @@ registry.get_component_parameter_specs("momentum")
 Registration is deterministic and order-preserving. The built-in registry locks
 after registration; duplicate registrations and post-lock registrations fail.
 
+Component metadata is inspectable from the CLI:
+
+```bash
+atp research list-components
+atp research list-components --component-type indicator --executable-only
+atp research list-components --metadata-only
+atp research inspect-component --component-name momentum
+```
+
+The CLI explicitly distinguishes executable components from metadata-only
+placeholders and reads required inputs, parameter specs, warmup hints, and
+compatibility metadata directly from `ComponentRegistry`.
+
 ---
 
 ## Composite Consumption

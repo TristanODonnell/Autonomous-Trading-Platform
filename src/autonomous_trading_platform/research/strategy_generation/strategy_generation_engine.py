@@ -65,7 +65,11 @@ class StrategyGenerationEngine:
         compatible, reason = strategy_is_generation_compatible(defn, opts)
         if not compatible:
             summary = GenerationSummary()
-            summary.reject(reason or "incompatible_strategy")
+            summary.reject(
+                reason or "incompatible_strategy",
+                strategy_type=strategy_type,
+                generator=method or _method_for_generator(self.generator),
+            )
             return GenerationResult(configs=[], summary=summary)
 
         selected_method = method or _method_for_generator(self.generator)
@@ -84,7 +88,12 @@ class StrategyGenerationEngine:
         for config in generator.generate(strategy_type, parameter_space, generator_options):
             config_hash = config.config_hash()
             if config_hash in seen:
-                summary.duplicate_count += 1
+                summary.duplicate(
+                    strategy_type=config.type,
+                    config_hash=config_hash,
+                    generator=selected_method,
+                    parameters=config.parameters,
+                )
                 continue
             seen.add(config_hash)
             configs.append(config)
@@ -95,6 +104,8 @@ class StrategyGenerationEngine:
         summary.generated_count += generator.last_summary.generated_count
         summary.rejected_count += generator.last_summary.rejected_count
         summary.rejection_reasons.update(generator.last_summary.rejection_reasons)
+        summary.rejected_details.extend(generator.last_summary.rejected_details)
+        summary.duplicate_details.extend(generator.last_summary.duplicate_details)
         return GenerationResult(configs=configs, summary=summary)
 
     def generate_for_family(
@@ -173,3 +184,5 @@ def _merge_summary(target: GenerationSummary, source: GenerationSummary) -> None
     target.rejection_reasons.update(source.rejection_reasons)
     target.strategy_type_distribution.update(source.strategy_type_distribution)
     target.family_distribution.update(source.family_distribution)
+    target.rejected_details.extend(source.rejected_details)
+    target.duplicate_details.extend(source.duplicate_details)

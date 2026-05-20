@@ -35,7 +35,12 @@ class GridSearchGenerator(BaseStrategyGenerator):
             try:
                 yield make_config(strategy_type, {})
             except ValueError as exc:
-                self.last_summary.reject(str(exc))
+                self.last_summary.reject(
+                    str(exc),
+                    strategy_type=strategy_type,
+                    parameters={},
+                    generator="grid",
+                )
             return
 
         sorted_keys = sorted(resolved_space.keys())
@@ -47,4 +52,9 @@ class GridSearchGenerator(BaseStrategyGenerator):
             try:
                 yield make_config(strategy_type, params)
             except ValueError as exc:
-                self.last_summary.reject(str(exc))
+                self.last_summary.reject(
+                    str(exc),
+                    strategy_type=strategy_type,
+                    parameters=params,
+                    generator="grid",
+                )
