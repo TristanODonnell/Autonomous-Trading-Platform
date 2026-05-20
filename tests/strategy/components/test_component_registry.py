@@ -99,3 +99,28 @@ def test_validate_component_reference_checks_expected_type() -> None:
 
     with pytest.raises(ValueError, match="expected 'signal_rule'"):
         registry.validate_component_reference("momentum", expected_type=ComponentType.SIGNAL_RULE)
+
+
+def test_all_components_have_complete_metadata_and_valid_classification() -> None:
+    registry = get_component_registry()
+
+    for defn in registry.list_components():
+        assert defn.component_name
+        assert defn.display_name
+        assert defn.description
+        assert isinstance(defn.component_type, ComponentType)
+        assert not (defn.metadata_only and defn.is_executable)
+        if defn.is_executable:
+            assert defn.implementation is not None
+        else:
+            assert defn.metadata_only
+
+
+def test_executable_component_parameter_specs_have_valid_defaults() -> None:
+    for defn in get_component_registry().list_executable_components():
+        for spec in defn.parameter_specs:
+            assert spec.name
+            if spec.min_value is not None and spec.default is not None:
+                assert spec.default >= spec.min_value
+            if spec.max_value is not None and spec.default is not None:
+                assert spec.default <= spec.max_value

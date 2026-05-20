@@ -38,3 +38,56 @@ def test_config_hash_is_stable_for_equivalent_normalized_configs() -> None:
     assert explicit.parameters == omitted.parameters
     assert explicit.canonical_json() == omitted.canonical_json()
     assert explicit.config_hash() == omitted.config_hash()
+
+
+def test_config_hash_is_independent_of_parameter_order() -> None:
+    first = StrategyConfig(
+        type="factor_based",
+        strategy_id="factor-test",
+        parameters={
+            "momentum_lookback": 5,
+            "mean_reversion_window": 20,
+            "volatility_window": 20,
+            "volume_window": 20,
+            "buy_score_threshold": 0.5,
+            "sell_score_threshold": -0.5,
+            "momentum_weight": 0.4,
+            "mean_reversion_weight": 0.3,
+            "volume_weight": 0.2,
+            "volatility_weight": 0.1,
+        },
+    )
+    second = StrategyConfig(
+        type="factor_based",
+        strategy_id="factor-test",
+        parameters={
+            "volatility_weight": 0.1,
+            "volume_weight": 0.2,
+            "mean_reversion_weight": 0.3,
+            "momentum_weight": 0.4,
+            "sell_score_threshold": -0.5,
+            "buy_score_threshold": 0.5,
+            "volume_window": 20,
+            "volatility_window": 20,
+            "mean_reversion_window": 20,
+            "momentum_lookback": 5,
+        },
+    )
+
+    assert first.parameters == second.parameters
+    assert first.config_hash() == second.config_hash()
+
+
+def test_distinct_normalized_configs_have_distinct_hashes() -> None:
+    first = StrategyConfig(
+        type="momentum",
+        strategy_id="momentum-test",
+        parameters={"lookback": 5},
+    )
+    second = StrategyConfig(
+        type="momentum",
+        strategy_id="momentum-test",
+        parameters={"lookback": 6},
+    )
+
+    assert first.config_hash() != second.config_hash()

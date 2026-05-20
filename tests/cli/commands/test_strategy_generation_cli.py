@@ -165,6 +165,47 @@ def test_generation_artifact_and_summary_command(tmp_path: Path, capsys) -> None
     assert summary["config_hashes"] == artifact["config_hashes"]
 
 
+def test_yaml_generation_artifact_and_summary_command(tmp_path: Path, capsys) -> None:
+    output = tmp_path / "generated.yaml"
+    payloads = _invoke(
+        [
+            "research",
+            "generate-strategies",
+            "--strategy-type",
+            "momentum",
+            "--parameter-space",
+            '{"lookback":[5],"buy_above":[0],"sell_below":[0]}',
+            "--output",
+            str(output),
+            "--output-format",
+            "yaml",
+            "--verbose",
+        ],
+        capsys,
+    )
+
+    summary = payloads[0]
+    details = payloads[2]
+    artifact_notice = payloads[-1]
+    assert summary["accepted_count"] == 1
+    assert details["rejected_details"] == []
+    assert details["duplicate_details"] == []
+    assert artifact_notice == {"artifact_path": str(output), "artifact_format": "yaml"}
+
+    summarized = _invoke(
+        [
+            "research",
+            "summarize-generated-configs",
+            "--input",
+            str(output),
+            "--show-hashes",
+        ],
+        capsys,
+    )[0]
+    assert summarized["accepted_count"] == 1
+    assert summarized["config_hashes"] == summary["config_hashes"]
+
+
 def test_invalid_component_errors() -> None:
     parser = build_parser()
     args = parser.parse_args(

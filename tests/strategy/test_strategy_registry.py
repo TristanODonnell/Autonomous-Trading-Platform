@@ -258,3 +258,33 @@ def test_get_generation_candidates_excludes_no_specs() -> None:
 def test_all_definitions_have_parameter_specs() -> None:
     for defn in get_registry().list_definitions():
         assert defn.parameter_specs is not None
+
+
+def test_all_registered_strategies_have_complete_metadata_and_valid_defaults() -> None:
+    for defn in get_registry().list_definitions():
+        assert defn.strategy_type
+        assert defn.display_name
+        assert defn.description
+        assert defn.implementation_class is not None
+        assert callable(defn.builder)
+        assert callable(defn.warmup_bars_fn)
+        assert defn.parameter_schema is not None
+
+        normalized_defaults = defn.normalize_parameters(defn.default_parameters)
+
+        assert normalized_defaults == defn.default_parameters
+        assert isinstance(defn.compute_warmup_bars(normalized_defaults), int)
+        assert defn.compute_warmup_bars(normalized_defaults) >= 0
+
+
+def test_parameter_specs_match_schema_defaults() -> None:
+    for defn in get_registry().list_definitions():
+        schema_fields = set(defn.normalize_parameters({}))
+        spec_names = {spec.name for spec in defn.parameter_specs}
+
+        assert spec_names <= schema_fields
+        for spec in defn.parameter_specs:
+            if spec.default is not None:
+                assert (
+                    defn.normalize_parameters({spec.name: spec.default})[spec.name] == spec.default
+                )
