@@ -13,11 +13,14 @@ from .schemas import (
     FEATURE_REGIME_SCHEMA,
     FEATURE_RETURNS_SCHEMA,
     FEATURE_VOLATILITY_SCHEMA,
+    REGIME_ANALYSIS_METRICS_SCHEMA,
+    REGIME_TRANSITION_SUMMARY_SCHEMA,
     SIMULATION_EQUITY_CURVE_SCHEMA,
     SIMULATION_PER_BAR_METRICS_SCHEMA,
     SIMULATION_POSITIONS_SCHEMA,
     SIMULATION_SIGNAL_LOG_SCHEMA,
     SIMULATION_TRADE_LOGS_SCHEMA,
+    STRATEGY_REGIME_PROFILE_SCHEMA,
 )
 
 
@@ -154,5 +157,29 @@ SIMULATION_SIGNAL_LOG_DATASET = ParquetDataset(
     root_parts=("simulations", "signal_log"),
     schema=SIMULATION_SIGNAL_LOG_SCHEMA,
     schema_version="2.0.0",
+    partition_cols=_SIMULATION_PARTITION_COLS,
+)
+
+REGIME_ANALYSIS_METRICS_DATASET = ParquetDataset(
+    dataset_key="regime_analysis_metrics",
+    root_parts=("simulations", "regime_analysis", "metrics"),
+    schema=REGIME_ANALYSIS_METRICS_SCHEMA,
+    schema_version="1.0.0",
+    partition_cols=_SIMULATION_PARTITION_COLS,
+)
+
+REGIME_TRANSITION_SUMMARY_DATASET = ParquetDataset(
+    dataset_key="regime_transition_summary",
+    root_parts=("simulations", "regime_analysis", "transitions"),
+    schema=REGIME_TRANSITION_SUMMARY_SCHEMA,
+    schema_version="1.0.0",
+    partition_cols=_SIMULATION_PARTITION_COLS,
+)
+
+STRATEGY_REGIME_PROFILE_DATASET = ParquetDataset(
+    dataset_key="strategy_regime_profile",
+    root_parts=("simulations", "regime_analysis", "profiles"),
+    schema=STRATEGY_REGIME_PROFILE_SCHEMA,
+    schema_version="1.0.0",
     partition_cols=_SIMULATION_PARTITION_COLS,
 )

@@ -247,3 +247,66 @@ SIMULATION_SIGNAL_LOG_SCHEMA = pa.schema(
         pa.field("date", pa.date32()),
     ]
 )
+
+_REGIME_ANALYSIS_IDENTITY = [
+    pa.field("run_id", pa.string()),
+    pa.field("experiment_id", pa.string()),
+    pa.field("strategy_id", pa.string()),
+    pa.field("stage_name", pa.string()),
+    pa.field("window_role", pa.string()),
+    pa.field("dataset_version", pa.string()),
+]
+
+REGIME_ANALYSIS_METRICS_SCHEMA = pa.schema(
+    _REGIME_ANALYSIS_IDENTITY
+    + [
+        pa.field("regime_dimension", pa.string()),
+        pa.field("regime_label", pa.string()),
+        pa.field("bar_count", pa.int64()),
+        pa.field("exposure_fraction", pa.float64()),
+        pa.field("total_return", pa.float64(), nullable=True),
+        pa.field("cagr", pa.float64(), nullable=True),
+        pa.field("sharpe", pa.float64(), nullable=True),
+        pa.field("sortino", pa.float64(), nullable=True),
+        pa.field("volatility", pa.float64(), nullable=True),
+        pa.field("max_drawdown", pa.float64(), nullable=True),
+        pa.field("trade_count", pa.int64()),
+        pa.field("win_rate", pa.float64(), nullable=True),
+        pa.field("expectancy", pa.float64(), nullable=True),
+        pa.field("profit_factor", pa.float64(), nullable=True),
+        pa.field("avg_win", pa.float64(), nullable=True),
+        pa.field("avg_loss", pa.float64(), nullable=True),
+        pa.field("trade_frequency", pa.float64(), nullable=True),
+        pa.field("avg_bar_return", pa.float64(), nullable=True),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+REGIME_TRANSITION_SUMMARY_SCHEMA = pa.schema(
+    _REGIME_ANALYSIS_IDENTITY
+    + [
+        pa.field("regime_dimension", pa.string()),
+        pa.field("from_regime", pa.string()),
+        pa.field("to_regime", pa.string()),
+        pa.field("transition_count", pa.int64()),
+        pa.field("avg_duration_before", pa.float64(), nullable=True),
+        pa.field("avg_pre_return", pa.float64(), nullable=True),
+        pa.field("avg_post_return", pa.float64(), nullable=True),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+STRATEGY_REGIME_PROFILE_SCHEMA = pa.schema(
+    _REGIME_ANALYSIS_IDENTITY
+    + [
+        pa.field("regime_dimension", pa.string()),
+        pa.field("sharpe_std", pa.float64()),
+        pa.field("sharpe_range", pa.float64()),
+        pa.field("best_regime", pa.string(), nullable=True),
+        pa.field("worst_regime", pa.string(), nullable=True),
+        pa.field("regime_robustness", pa.float64()),
+        pa.field("overall_sensitivity", pa.float64()),
+        pa.field("is_regime_robust", pa.bool_()),
+        pa.field("date", pa.date32()),
+    ]
+)
