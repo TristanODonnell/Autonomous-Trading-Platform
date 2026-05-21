@@ -90,7 +90,8 @@
       "Bash(mkdir -p \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\feature_engineering\\\\regimes\\\\classifiers\")",
       "Bash(mkdir -p \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\tests\\\\feature_engineering\\\\regimes\")",
       "Bash(ruff check *)",
-      "PowerShell(& \"D:\\\\PythonVenvs\\\\autonomous-trading-platform\\\\.venv\\\\Scripts\\\\ruff.exe\" check src/autonomous_trading_platform/research/analysis/ tests/research/regimes/ scripts/analyze_regimes.py 2>&1)"
+      "PowerShell(& \"D:\\\\PythonVenvs\\\\autonomous-trading-platform\\\\.venv\\\\Scripts\\\\ruff.exe\" check src/autonomous_trading_platform/research/analysis/ tests/research/regimes/ scripts/analyze_regimes.py 2>&1)",
+      "PowerShell(python -m ruff check src/autonomous_trading_platform/research/validation/ scripts/analyze_validation.py 2>&1)"
     ]
   }
 }

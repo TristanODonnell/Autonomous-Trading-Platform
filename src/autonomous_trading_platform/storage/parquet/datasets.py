@@ -21,6 +21,11 @@ from .schemas import (
     SIMULATION_SIGNAL_LOG_SCHEMA,
     SIMULATION_TRADE_LOGS_SCHEMA,
     STRATEGY_REGIME_PROFILE_SCHEMA,
+    VALIDATION_OVERFITTING_SCHEMA,
+    VALIDATION_ROBUSTNESS_SCORE_SCHEMA,
+    VALIDATION_SENSITIVITY_SCHEMA,
+    VALIDATION_STRESS_TEST_SCHEMA,
+    VALIDATION_WALK_FORWARD_SCHEMA,
 )
 
 
@@ -182,4 +187,50 @@ STRATEGY_REGIME_PROFILE_DATASET = ParquetDataset(
     schema=STRATEGY_REGIME_PROFILE_SCHEMA,
     schema_version="1.0.0",
     partition_cols=_SIMULATION_PARTITION_COLS,
+)
+
+# ---------------------------------------------------------------------------
+# Validation framework datasets (TASK-2.4)
+# ---------------------------------------------------------------------------
+
+_VALIDATION_PARTITION_COLS = ("experiment_id", "strategy_id")
+
+VALIDATION_ROBUSTNESS_SCORE_DATASET = ParquetDataset(
+    dataset_key="validation_robustness_score",
+    root_parts=("validation", "robustness_scores"),
+    schema=VALIDATION_ROBUSTNESS_SCORE_SCHEMA,
+    schema_version="1.0.0",
+    partition_cols=_VALIDATION_PARTITION_COLS,
+)
+
+VALIDATION_STRESS_TEST_DATASET = ParquetDataset(
+    dataset_key="validation_stress_test",
+    root_parts=("validation", "stress_test_results"),
+    schema=VALIDATION_STRESS_TEST_SCHEMA,
+    schema_version="1.0.0",
+    partition_cols=_VALIDATION_PARTITION_COLS,
+)
+
+VALIDATION_WALK_FORWARD_DATASET = ParquetDataset(
+    dataset_key="validation_walk_forward",
+    root_parts=("validation", "walk_forward_results"),
+    schema=VALIDATION_WALK_FORWARD_SCHEMA,
+    schema_version="1.0.0",
+    partition_cols=_VALIDATION_PARTITION_COLS,
+)
+
+VALIDATION_OVERFITTING_DATASET = ParquetDataset(
+    dataset_key="validation_overfitting",
+    root_parts=("validation", "overfitting_analysis"),
+    schema=VALIDATION_OVERFITTING_SCHEMA,
+    schema_version="1.0.0",
+    partition_cols=_VALIDATION_PARTITION_COLS,
+)
+
+VALIDATION_SENSITIVITY_DATASET = ParquetDataset(
+    dataset_key="validation_sensitivity",
+    root_parts=("validation", "sensitivity_profiles"),
+    schema=VALIDATION_SENSITIVITY_SCHEMA,
+    schema_version="1.0.0",
+    partition_cols=_VALIDATION_PARTITION_COLS,
 )

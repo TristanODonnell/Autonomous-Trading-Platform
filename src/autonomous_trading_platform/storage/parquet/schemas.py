@@ -310,3 +310,91 @@ STRATEGY_REGIME_PROFILE_SCHEMA = pa.schema(
         pa.field("date", pa.date32()),
     ]
 )
+
+# ---------------------------------------------------------------------------
+# Validation framework schemas (TASK-2.4)
+# ---------------------------------------------------------------------------
+
+_VALIDATION_IDENTITY = [
+    pa.field("validation_run_id", pa.string(), nullable=False),
+    pa.field("experiment_id", pa.string(), nullable=False),
+    pa.field("strategy_id", pa.string(), nullable=False),
+    pa.field("dataset_version", pa.string(), nullable=False),
+]
+
+VALIDATION_ROBUSTNESS_SCORE_SCHEMA = pa.schema(
+    _VALIDATION_IDENTITY
+    + [
+        pa.field("overall_score", pa.float64()),
+        pa.field("walk_forward_consistency", pa.float64(), nullable=True),
+        pa.field("mc_stability", pa.float64(), nullable=True),
+        pa.field("regime_robustness", pa.float64(), nullable=True),
+        pa.field("parameter_stability", pa.float64(), nullable=True),
+        pa.field("stress_resilience", pa.float64(), nullable=True),
+        pa.field("overfitting_resistance", pa.float64(), nullable=True),
+        pa.field("overall_passed", pa.bool_()),
+        pa.field("computed_at", UTC_TIMESTAMP),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+VALIDATION_STRESS_TEST_SCHEMA = pa.schema(
+    _VALIDATION_IDENTITY
+    + [
+        pa.field("scenario_name", pa.string()),
+        pa.field("description", pa.string()),
+        pa.field("original_sharpe", pa.float64()),
+        pa.field("stressed_sharpe", pa.float64()),
+        pa.field("original_drawdown", pa.float64()),
+        pa.field("stressed_drawdown", pa.float64()),
+        pa.field("sharpe_degradation", pa.float64()),
+        pa.field("survived", pa.bool_()),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+VALIDATION_WALK_FORWARD_SCHEMA = pa.schema(
+    _VALIDATION_IDENTITY
+    + [
+        pa.field("n_folds", pa.int64()),
+        pa.field("n_folds_passed", pa.int64()),
+        pa.field("fold_consistency", pa.float64()),
+        pa.field("avg_train_sharpe", pa.float64()),
+        pa.field("avg_test_sharpe", pa.float64()),
+        pa.field("train_test_degradation", pa.float64()),
+        pa.field("fold_sharpe_cv", pa.float64()),
+        pa.field("fold_sharpe_stability", pa.float64()),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+VALIDATION_OVERFITTING_SCHEMA = pa.schema(
+    _VALIDATION_IDENTITY
+    + [
+        pa.field("overfitting_probability", pa.float64()),
+        pa.field("resistance_score", pa.float64()),
+        pa.field("train_test_degradation", pa.float64(), nullable=True),
+        pa.field("fold_instability", pa.float64(), nullable=True),
+        pa.field("mc_instability", pa.float64(), nullable=True),
+        pa.field("regime_concentration", pa.float64(), nullable=True),
+        pa.field("low_trade_count_flag", pa.bool_(), nullable=True),
+        pa.field("narrow_period_alpha", pa.float64(), nullable=True),
+        pa.field("parameter_fragility", pa.float64(), nullable=True),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+VALIDATION_SENSITIVITY_SCHEMA = pa.schema(
+    _VALIDATION_IDENTITY
+    + [
+        pa.field("parameter_name", pa.string()),
+        pa.field("reference_value", pa.float64()),
+        pa.field("sensitivity_score", pa.float64()),
+        pa.field("stability_score", pa.float64()),
+        pa.field("is_stable", pa.bool_()),
+        pa.field("stability_region_min", pa.float64(), nullable=True),
+        pa.field("stability_region_max", pa.float64(), nullable=True),
+        pa.field("overall_stability_score", pa.float64()),
+        pa.field("date", pa.date32()),
+    ]
+)
