@@ -86,7 +86,9 @@
       "Bash(Select-Object -Last 1)",
       "Bash(xargs grep -l \"class.*AllocationResult\")",
       "Bash(xargs grep -l \"simulation.*allocation\\\\|SimulationAllocation\")",
-      "Bash(xargs head -100)"
+      "Bash(xargs head -100)",
+      "Bash(mkdir -p \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\feature_engineering\\\\regimes\\\\classifiers\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\tests\\\\feature_engineering\\\\regimes\")"
     ]
   }
 }

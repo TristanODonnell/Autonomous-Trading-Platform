@@ -146,3 +146,20 @@ multiplier in the runner.
 - Built-in strategies do not currently declare `required_persisted_features`. The
   resolver path is proven via synthetic test registrations and is ready for any
   strategy that adds feature declarations.
+
+
+## TASK-2.2 Addition: regime_classification Dataset
+
+The `regime_classification` feature (TASK-2.2) integrates cleanly into this
+resolution flow without any resolver changes:
+
+- **Registration**: `"regime_classification"` was added to `FEATURE_DATASETS_BY_NAME`
+  in `storage/parquet/repositories/parquet_feature_repository.py`.
+- **Strategy declaration**: `required_persisted_features=("regime_classification",)`
+  triggers standard resolution.
+- **Validation**: `FeatureDependencyResolverService.resolve()` selects a validated
+  `regime_classification` dataset version matching `source_dataset_version`,
+  `price_basis`, date coverage, and symbol count — same rules as all other features.
+- **StrategyContext access**: `context.features["regime_classification"]` returns a
+  `pa.Table` with columns `regime_trend`, `regime_volatility`, `regime_liquidity`,
+  `regime_mean_reversion`, `regime_risk`, and explainability metadata.

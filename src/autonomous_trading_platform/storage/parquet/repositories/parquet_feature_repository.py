@@ -12,6 +12,7 @@ from autonomous_trading_platform.storage.parquet import paths as _parquet_paths
 from autonomous_trading_platform.storage.parquet.datasets import (
     FEATURE_LIQUIDITY_DATASET,
     FEATURE_MOVING_AVERAGE_DATASET,
+    FEATURE_REGIME_CLASSIFICATION_DATASET,
     FEATURE_REGIME_DATASET,
     FEATURE_RETURNS_DATASET,
     FEATURE_VOLATILITY_DATASET,
@@ -28,6 +29,7 @@ FEATURE_DATASETS_BY_NAME = {
     "moving_average": FEATURE_MOVING_AVERAGE_DATASET,
     "liquidity": FEATURE_LIQUIDITY_DATASET,
     "regime": FEATURE_REGIME_DATASET,
+    "regime_classification": FEATURE_REGIME_CLASSIFICATION_DATASET,
 }
 
 

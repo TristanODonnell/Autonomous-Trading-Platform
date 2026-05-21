@@ -121,6 +121,44 @@ FEATURE_REGIME_SCHEMA = pa.schema(
     ]
 )
 
+FEATURE_REGIME_CLASSIFICATION_SCHEMA = pa.schema(
+    [
+        pa.field("symbol", pa.string(), nullable=False),
+        pa.field("timestamp", UTC_TIMESTAMP, nullable=False),
+        pa.field("date", pa.date32(), nullable=False),
+        # Trend dimension
+        pa.field("regime_trend", pa.string(), nullable=True),
+        pa.field("regime_trend_confidence", pa.float64(), nullable=True),
+        pa.field("trend_ma_short", pa.float64(), nullable=True),
+        pa.field("trend_ma_long", pa.float64(), nullable=True),
+        pa.field("trend_rolling_return_20d", pa.float64(), nullable=True),
+        # Volatility dimension
+        pa.field("regime_volatility", pa.string(), nullable=True),
+        pa.field("regime_volatility_confidence", pa.float64(), nullable=True),
+        pa.field("volatility_realized", pa.float64(), nullable=True),
+        pa.field("volatility_percentile", pa.float64(), nullable=True),
+        pa.field("volatility_threshold_high", pa.float64(), nullable=True),
+        pa.field("volatility_threshold_low", pa.float64(), nullable=True),
+        # Liquidity dimension
+        pa.field("regime_liquidity", pa.string(), nullable=True),
+        pa.field("regime_liquidity_confidence", pa.float64(), nullable=True),
+        pa.field("liquidity_avg_dollar_volume", pa.float64(), nullable=True),
+        pa.field("liquidity_percentile", pa.float64(), nullable=True),
+        # Mean-reversion dimension
+        pa.field("regime_mean_reversion", pa.string(), nullable=True),
+        pa.field("regime_mean_reversion_confidence", pa.float64(), nullable=True),
+        pa.field("mean_reversion_zscore_std", pa.float64(), nullable=True),
+        pa.field("mean_reversion_trend_strength", pa.float64(), nullable=True),
+        # Composite risk dimension
+        pa.field("regime_risk", pa.string(), nullable=True),
+        # Lineage
+        pa.field("underlying_dataset_version", pa.string(), nullable=False),
+        pa.field("price_basis", pa.string(), nullable=False),
+        pa.field("year", pa.string(), nullable=False),
+        pa.field("month", pa.string(), nullable=False),
+    ]
+)
+
 SIMULATION_TRADE_LOGS_SCHEMA = pa.schema(
     [
         pa.field("run_id", pa.string()),

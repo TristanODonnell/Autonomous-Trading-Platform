@@ -101,3 +101,18 @@ class FeatureValidationService:
             frame,
             required_columns=["symbol", "timestamp", column_name],
         )
+
+    def validate_regime_classification(self, frame: pd.DataFrame) -> None:
+        self.validate_not_empty(frame)
+        self.validate_required_columns(
+            frame,
+            required_columns=[
+                "symbol",
+                "timestamp",
+                "regime_trend",
+                "regime_volatility",
+                "regime_liquidity",
+                "regime_mean_reversion",
+                "regime_risk",
+            ],
+        )

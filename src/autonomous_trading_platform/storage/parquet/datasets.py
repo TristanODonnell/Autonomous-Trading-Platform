@@ -9,6 +9,7 @@ from .schemas import (
     CORPORATE_ACTION_SCHEMA,
     FEATURE_LIQUIDITY_SCHEMA,
     FEATURE_MOVING_AVERAGE_SCHEMA,
+    FEATURE_REGIME_CLASSIFICATION_SCHEMA,
     FEATURE_REGIME_SCHEMA,
     FEATURE_RETURNS_SCHEMA,
     FEATURE_VOLATILITY_SCHEMA,
@@ -98,6 +99,14 @@ FEATURE_REGIME_DATASET = ParquetDataset(
     schema=FEATURE_REGIME_SCHEMA,
     schema_version="1.0.0",
     root_parts=("features", "regime"),
+    partition_cols=("symbol", "year", "month"),
+)
+
+FEATURE_REGIME_CLASSIFICATION_DATASET = ParquetDataset(
+    dataset_key="feature_regime_classification",
+    schema=FEATURE_REGIME_CLASSIFICATION_SCHEMA,
+    schema_version="1.0.0",
+    root_parts=("features", "regime_classification"),
     partition_cols=("symbol", "year", "month"),
 )
 

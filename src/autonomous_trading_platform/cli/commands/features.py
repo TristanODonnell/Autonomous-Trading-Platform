@@ -30,6 +30,7 @@ def run_features(args) -> int:
         include_moving_average=args.include_moving_average,
         include_liquidity=args.include_liquidity,
         include_regime=args.include_regime,
+        include_regime_classification=args.include_regime_classification,
     )
 
     return 0
@@ -64,5 +65,6 @@ def register(subparsers) -> None:
     run_parser.add_argument("--include-moving-average", action="store_true", default=True)
     run_parser.add_argument("--include-liquidity", action="store_true", default=True)
     run_parser.add_argument("--include-regime", action="store_true", default=True)
+    run_parser.add_argument("--include-regime-classification", action="store_true", default=True)
 
     run_parser.set_defaults(func=run_features)
