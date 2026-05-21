@@ -398,3 +398,65 @@ VALIDATION_SENSITIVITY_SCHEMA = pa.schema(
         pa.field("date", pa.date32()),
     ]
 )
+
+# ---------------------------------------------------------------------------
+# Research intelligence schemas (TASK-2.5)
+# ---------------------------------------------------------------------------
+
+_INTELLIGENCE_IDENTITY = [
+    pa.field("experiment_id", pa.string(), nullable=False),
+    pa.field("strategy_id", pa.string(), nullable=False),
+    pa.field("dataset_version", pa.string(), nullable=False),
+    pa.field("run_id", pa.string(), nullable=False),
+]
+
+INTELLIGENCE_CANDIDATE_RANKING_SCHEMA = pa.schema(
+    _INTELLIGENCE_IDENTITY
+    + [
+        pa.field("computed_at", UTC_TIMESTAMP),
+        pa.field("rank", pa.int64()),
+        pa.field("composite_score", pa.float64()),
+        pa.field("deployability_score", pa.float64()),
+        pa.field("is_deployable", pa.bool_()),
+        pa.field("data_completeness", pa.float64()),
+        pa.field("config_hash", pa.string()),
+        pa.field("robustness_probability", pa.float64()),
+        pa.field("fragility_score", pa.float64()),
+        pa.field("robustness_confidence", pa.float64()),
+        pa.field("deployment_suitability", pa.string()),
+        pa.field("overfit_probability", pa.float64()),
+        pa.field("overfit_risk_band", pa.string()),
+        pa.field("cluster_id", pa.string()),
+        pa.field("weakness_count", pa.int64()),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+INTELLIGENCE_REGIME_FINGERPRINT_SCHEMA = pa.schema(
+    _INTELLIGENCE_IDENTITY
+    + [
+        pa.field("regime_dimension", pa.string()),
+        pa.field("dimension_sensitivity", pa.float64()),
+        pa.field("regime_diversity", pa.float64()),
+        pa.field("overall_robustness", pa.float64()),
+        pa.field("dominant_regime_dimension", pa.string()),
+        pa.field("is_regime_specialist", pa.bool_()),
+        pa.field("label_sharpe_json", pa.string()),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+INTELLIGENCE_CLUSTER_ASSIGNMENT_SCHEMA = pa.schema(
+    _INTELLIGENCE_IDENTITY
+    + [
+        pa.field("cluster_id", pa.string()),
+        pa.field("representative_strategy_id", pa.string()),
+        pa.field("distance_to_centroid", pa.float64()),
+        pa.field("cluster_size", pa.int64()),
+        pa.field("is_parameter_spam", pa.bool_()),
+        pa.field("dominant_family", pa.string()),
+        pa.field("regime_bias", pa.string()),
+        pa.field("intra_cluster_variance", pa.float64()),
+        pa.field("date", pa.date32()),
+    ]
+)

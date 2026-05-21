@@ -13,6 +13,9 @@ from .schemas import (
     FEATURE_REGIME_SCHEMA,
     FEATURE_RETURNS_SCHEMA,
     FEATURE_VOLATILITY_SCHEMA,
+    INTELLIGENCE_CANDIDATE_RANKING_SCHEMA,
+    INTELLIGENCE_CLUSTER_ASSIGNMENT_SCHEMA,
+    INTELLIGENCE_REGIME_FINGERPRINT_SCHEMA,
     REGIME_ANALYSIS_METRICS_SCHEMA,
     REGIME_TRANSITION_SUMMARY_SCHEMA,
     SIMULATION_EQUITY_CURVE_SCHEMA,
@@ -233,4 +236,34 @@ VALIDATION_SENSITIVITY_DATASET = ParquetDataset(
     schema=VALIDATION_SENSITIVITY_SCHEMA,
     schema_version="1.0.0",
     partition_cols=_VALIDATION_PARTITION_COLS,
+)
+
+# ---------------------------------------------------------------------------
+# Research intelligence datasets (TASK-2.5)
+# ---------------------------------------------------------------------------
+
+_INTELLIGENCE_PARTITION_COLS = ("experiment_id", "strategy_id")
+
+INTELLIGENCE_CANDIDATE_RANKING_DATASET = ParquetDataset(
+    dataset_key="intelligence_candidate_ranking",
+    root_parts=("intelligence", "candidate_rankings"),
+    schema=INTELLIGENCE_CANDIDATE_RANKING_SCHEMA,
+    schema_version="1.0.0",
+    partition_cols=_INTELLIGENCE_PARTITION_COLS,
+)
+
+INTELLIGENCE_REGIME_FINGERPRINT_DATASET = ParquetDataset(
+    dataset_key="intelligence_regime_fingerprint",
+    root_parts=("intelligence", "regime_fingerprints"),
+    schema=INTELLIGENCE_REGIME_FINGERPRINT_SCHEMA,
+    schema_version="1.0.0",
+    partition_cols=_INTELLIGENCE_PARTITION_COLS,
+)
+
+INTELLIGENCE_CLUSTER_ASSIGNMENT_DATASET = ParquetDataset(
+    dataset_key="intelligence_cluster_assignments",
+    root_parts=("intelligence", "cluster_assignments"),
+    schema=INTELLIGENCE_CLUSTER_ASSIGNMENT_SCHEMA,
+    schema_version="1.0.0",
+    partition_cols=("experiment_id",),
 )
