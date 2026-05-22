@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -8,6 +9,12 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol
 
+from autonomous_trading_platform.observability.log_context import LogContext
+from autonomous_trading_platform.observability.metric_labels import observability_environment
+from autonomous_trading_platform.observability.metrics import (
+    research_checkpoint_duration,
+    research_checkpoint_transitions,
+)
 from autonomous_trading_platform.research.cache.cache_key_builder import build_simulation_cache_key
 from autonomous_trading_platform.research.cache.cache_lookup_result import CacheLookupResult
 from autonomous_trading_platform.research.cache.simulation_result_cache import SimulationResultCache
@@ -27,6 +34,8 @@ from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunResult,
 )
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
+
+logger = logging.getLogger(__name__)
 
 
 class ResumeMode(StrEnum):
@@ -250,6 +259,7 @@ class ResearchCheckpointService:
     ) -> ResearchCheckpoint:
         with self._lock:
             existing = self._checkpoints.get(identity.checkpoint_id)
+            from_status = existing.status.value if existing is not None else None
             now = datetime.now(UTC)
             if existing is None:
                 checkpoint = ResearchCheckpoint(identity=identity, status=status)
@@ -274,6 +284,8 @@ class ResearchCheckpointService:
                 checkpoint.metadata = {**checkpoint.metadata, **metadata}
             self._checkpoints[identity.checkpoint_id] = checkpoint
             self._persist()
+
+            _emit_checkpoint_transition(checkpoint, from_status=from_status)
             return checkpoint
 
     def _persist(self) -> None:
@@ -298,6 +310,58 @@ class ResearchCheckpointService:
                 checkpoint_id: ResearchCheckpoint.from_dict(payload)
                 for checkpoint_id, payload in raw.items()
             }
+
+
+_TERMINAL_STATUSES = frozenset(
+    [
+        ResearchCheckpointStatus.COMPLETED,
+        ResearchCheckpointStatus.FAILED,
+        ResearchCheckpointStatus.CACHE_HIT,
+    ]
+)
+
+
+def _emit_checkpoint_transition(
+    checkpoint: ResearchCheckpoint,
+    *,
+    from_status: str | None,
+) -> None:
+    """Emit a structured log event and OTel metrics for a checkpoint state change."""
+    identity = checkpoint.identity
+    to_status = checkpoint.status.value
+    env = observability_environment()
+
+    logger.info(
+        "checkpoint_state_transition",
+        extra=LogContext(
+            component="research.checkpoint_service",
+            experiment_id=identity.experiment_id,
+            stage_name=identity.stage_name,
+            strategy_id=identity.strategy_id,
+            checkpoint_id=identity.checkpoint_id,
+            task_type=identity.task_type.value,
+            cache_result=to_status,
+        ).to_extra(),
+    )
+
+    research_checkpoint_transitions.add(
+        1,
+        {
+            "environment": env,
+            "task_type": identity.task_type.value,
+            "to_status": to_status,
+        },
+    )
+
+    if checkpoint.status in _TERMINAL_STATUSES:
+        duration = (checkpoint.updated_at - checkpoint.created_at).total_seconds()
+        research_checkpoint_duration.record(
+            max(0.0, duration),
+            {
+                "environment": env,
+                "task_type": identity.task_type.value,
+            },
+        )
 
 
 def simulation_request_checkpoint_identity(

@@ -27,6 +27,7 @@ Stage execution order
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
@@ -35,6 +36,13 @@ from uuid import uuid4
 
 import pandas as pd
 
+from autonomous_trading_platform.observability.log_context import LogContext
+from autonomous_trading_platform.observability.metric_labels import observability_environment
+from autonomous_trading_platform.observability.metrics import (
+    research_robustness_score,
+    research_validation_stage_duration,
+    research_validation_stage_runs,
+)
 from autonomous_trading_platform.research.validation.overfitting_analysis import (
     OverfittingAnalyzer,
 )
@@ -172,19 +180,28 @@ class ValidationOrchestrator:
         score_builder = RobustnessScoreBuilder(weights=config.robustness_weights)
         sensitivity_profile: SensitivityProfile | None = None
         overfit_result = None
+        _t0 = time.perf_counter()
+        _env = observability_environment()
+        _base_log_ctx = LogContext(
+            run_id=validation_run_id,
+            experiment_id=request.experiment_id,
+            strategy_id=request.strategy_id,
+            dataset_version=request.dataset_version,
+            component="research.validation_orchestrator",
+        )
 
         logger.info(
-            "Validation run %s | strategy=%s | experiment=%s",
-            validation_run_id,
-            request.strategy_id,
-            request.experiment_id,
+            "validation_started",
+            extra=_base_log_ctx.to_extra(),
         )
 
         # ------------------------------------------------------------------
         # Stage 1: Survivorship validation
         # ------------------------------------------------------------------
         if config.enable_survivorship_check:
+            _ts = time.perf_counter()
             surv_result = self._run_survivorship(request)
+            _stage_dur = time.perf_counter() - _ts
             score = 1.0 if surv_result.is_safe else 0.0
             stage_results["survivorship"] = ValidationStageResult(
                 stage_name="survivorship",
@@ -192,6 +209,13 @@ class ValidationOrchestrator:
                 score=score,
                 summary=surv_result.as_dict(),
                 warnings=surv_result.warnings + surv_result.errors,
+            )
+            _vstatus = "passed" if surv_result.is_safe else "failed"
+            research_validation_stage_runs.add(
+                1, {"environment": _env, "stage_name": "survivorship", "status": _vstatus}
+            )
+            research_validation_stage_duration.record(
+                _stage_dur, {"environment": _env, "stage_name": "survivorship"}
             )
             logger.info(
                 "  survivorship: safe=%s errors=%d", surv_result.is_safe, len(surv_result.errors)
@@ -201,7 +225,9 @@ class ValidationOrchestrator:
         # Stage 2: Walk-forward validation
         # ------------------------------------------------------------------
         if config.enable_walk_forward and request.wf_fold_inputs:
+            _ts = time.perf_counter()
             wf_result = self._wf_service.analyze(request.wf_fold_inputs)
+            _stage_dur = time.perf_counter() - _ts
             passed = wf_result.is_consistent
             stage_results["walk_forward"] = ValidationStageResult(
                 stage_name="walk_forward",
@@ -223,6 +249,13 @@ class ValidationOrchestrator:
                 total_folds=wf_result.n_folds,
                 train_test_degradation=wf_result.train_test_degradation,
             )
+            _vstatus = "passed" if passed else "failed"
+            research_validation_stage_runs.add(
+                1, {"environment": _env, "stage_name": "walk_forward", "status": _vstatus}
+            )
+            research_validation_stage_duration.record(
+                _stage_dur, {"environment": _env, "stage_name": "walk_forward"}
+            )
             logger.info(
                 "  walk_forward: %d/%d folds, degradation=%.3f",
                 wf_result.n_folds_passed,
@@ -234,7 +267,9 @@ class ValidationOrchestrator:
         # Stage 3: Regime validation
         # ------------------------------------------------------------------
         if request.regime_profile is not None:
+            _ts = time.perf_counter()
             regime_result = self._run_regime_validation(request.regime_profile)
+            _stage_dur = time.perf_counter() - _ts
             stage_results["regime"] = ValidationStageResult(
                 stage_name="regime",
                 passed=regime_result["passed"],
@@ -246,6 +281,13 @@ class ValidationOrchestrator:
                 is_regime_robust=request.regime_profile.is_regime_robust,
                 worst_regime_sharpe=regime_result["worst_sharpe"],
                 overall_sensitivity=request.regime_profile.overall_sensitivity,
+            )
+            _vstatus = "passed" if regime_result["passed"] else "failed"
+            research_validation_stage_runs.add(
+                1, {"environment": _env, "stage_name": "regime", "status": _vstatus}
+            )
+            research_validation_stage_duration.record(
+                _stage_dur, {"environment": _env, "stage_name": "regime"}
             )
 
         # ------------------------------------------------------------------
@@ -273,6 +315,10 @@ class ValidationOrchestrator:
                 ),
             )
             score_builder.with_monte_carlo(sharpe_cv=mc_cv)
+            _vstatus = "passed" if mc_passed else "failed"
+            research_validation_stage_runs.add(
+                1, {"environment": _env, "stage_name": "monte_carlo", "status": _vstatus}
+            )
             logger.info(
                 "  monte_carlo: pass_rate=%.2f sharpe_cv=%.3f",
                 request.mc_aggregation.pass_rate,
@@ -283,6 +329,7 @@ class ValidationOrchestrator:
         # Stage 5: Overfitting analysis
         # ------------------------------------------------------------------
         if config.enable_overfitting_analysis:
+            _ts = time.perf_counter()
             wf_for_overfit = (
                 self._wf_service.analyze(request.wf_fold_inputs) if request.wf_fold_inputs else None
             )
@@ -295,15 +342,24 @@ class ValidationOrchestrator:
                 equity_curve=request.equity_curve,
                 sensitivity_score=None,  # updated after sensitivity stage
             )
+            _stage_dur = time.perf_counter() - _ts
+            _overfit_passed = overfit_result.overfitting_probability < 0.6
             stage_results["overfitting"] = ValidationStageResult(
                 stage_name="overfitting",
-                passed=overfit_result.overfitting_probability < 0.6,
+                passed=_overfit_passed,
                 score=overfit_result.resistance_score,
                 summary=overfit_result.as_dict(),
                 warnings=overfit_result.warnings,
             )
             score_builder.with_overfitting(
                 overfitting_probability=overfit_result.overfitting_probability
+            )
+            _vstatus = "passed" if _overfit_passed else "failed"
+            research_validation_stage_runs.add(
+                1, {"environment": _env, "stage_name": "overfitting", "status": _vstatus}
+            )
+            research_validation_stage_duration.record(
+                _stage_dur, {"environment": _env, "stage_name": "overfitting"}
             )
             logger.info(
                 "  overfitting: P=%.3f resistance=%.3f",
@@ -315,6 +371,7 @@ class ValidationOrchestrator:
         # Stage 6: Stress testing
         # ------------------------------------------------------------------
         if config.enable_stress_tests and not request.equity_curve.empty:
+            _ts = time.perf_counter()
             stress_svc = self._stress_service
             if config.stress_scenarios:
                 stress_svc = StressTestService(
@@ -326,6 +383,7 @@ class ValidationOrchestrator:
                 equity_curve=request.equity_curve,
                 strategy_id=request.strategy_id,
             )
+            _stage_dur = time.perf_counter() - _ts
             stress_passed = stress_summary.survival_rate >= config.min_stress_survival_rate
             stage_results["stress_test"] = ValidationStageResult(
                 stage_name="stress_test",
@@ -341,6 +399,13 @@ class ValidationOrchestrator:
                 warnings=stress_summary.warnings,
             )
             score_builder.with_stress(survival_rate=stress_summary.survival_rate)
+            _vstatus = "passed" if stress_passed else "failed"
+            research_validation_stage_runs.add(
+                1, {"environment": _env, "stage_name": "stress_test", "status": _vstatus}
+            )
+            research_validation_stage_duration.record(
+                _stage_dur, {"environment": _env, "stage_name": "stress_test"}
+            )
             logger.info(
                 "  stress_test: %d/%d survived (%.0f%%)",
                 stress_summary.n_survived,
@@ -357,21 +422,32 @@ class ValidationOrchestrator:
             and request.reference_parameters is not None
             and request.sensitivity_run_fn is not None
         ):
+            _ts = time.perf_counter()
             sensitivity_profile = self._sensitivity_analyzer.build_profile(
                 strategy_id=request.strategy_id,
                 parameter_specs=request.parameter_specs,
                 reference_parameters=request.reference_parameters,
                 run_fn=request.sensitivity_run_fn,
             )
+            _stage_dur = time.perf_counter() - _ts
+            _sens_passed = sensitivity_profile.overall_stability_score >= 0.5
             stage_results["parameter_sensitivity"] = ValidationStageResult(
                 stage_name="parameter_sensitivity",
-                passed=sensitivity_profile.overall_stability_score >= 0.5,
+                passed=_sens_passed,
                 score=sensitivity_profile.overall_stability_score,
                 summary=sensitivity_profile.as_dict(),
                 warnings=sensitivity_profile.warnings,
             )
             score_builder.with_parameter_stability(
                 overall_stability_score=sensitivity_profile.overall_stability_score
+            )
+            _vstatus = "passed" if _sens_passed else "failed"
+            research_validation_stage_runs.add(
+                1,
+                {"environment": _env, "stage_name": "parameter_sensitivity", "status": _vstatus},
+            )
+            research_validation_stage_duration.record(
+                _stage_dur, {"environment": _env, "stage_name": "parameter_sensitivity"}
             )
             logger.info(
                 "  parameter_sensitivity: overall_stability=%.3f",
@@ -393,11 +469,21 @@ class ValidationOrchestrator:
             min_robustness_score=config.min_robustness_score,
         )
 
-        logger.info(
-            "Validation run %s complete | overall_score=%.3f passed=%s",
-            validation_run_id,
+        _total_dur = time.perf_counter() - _t0
+        research_robustness_score.record(
             robustness_score.overall,
-            summary.overall_passed,
+            {"environment": _env},
+        )
+        logger.info(
+            "validation_completed",
+            extra=LogContext(
+                run_id=validation_run_id,
+                experiment_id=request.experiment_id,
+                strategy_id=request.strategy_id,
+                component="research.validation_orchestrator",
+                duration_seconds=_total_dur,
+                robustness_score=robustness_score.overall,
+            ).to_extra(),
         )
 
         if self._repo is not None:

@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
 
 from autonomous_trading_platform.common.annualisation import BARS_PER_YEAR
+from autonomous_trading_platform.observability.log_context import LogContext
+from autonomous_trading_platform.observability.metric_labels import observability_environment
+from autonomous_trading_platform.observability.metrics import (
+    research_regime_analysis_duration,
+    research_regime_dimension_coverage_pct,
+)
 from autonomous_trading_platform.research.simulation.artifact_identity import (
     SimulationArtifactIdentity,
 )
@@ -17,6 +25,10 @@ from .regime_join_service import RegimeJoinService
 from .regime_metrics import RegimeConditionedMetrics, compute_regime_metrics
 from .regime_transition_analysis import RegimeTransitionAnalyzer
 from .strategy_regime_profile import build_strategy_regime_profile
+
+logger = logging.getLogger(__name__)
+
+_COMPONENT = "research.regime_analysis_service"
 
 
 @dataclass(slots=True)
@@ -62,6 +74,17 @@ class RegimeAnalysisService:
         *,
         persist: bool = True,
     ) -> RegimeAnalysisResult:
+        _t0 = time.perf_counter()
+        _env = observability_environment()
+        _log_ctx = LogContext(
+            component=_COMPONENT,
+            experiment_id=request.identity.experiment_id,
+            strategy_id=request.identity.strategy_id,
+            dataset_version=request.identity.dataset_version,
+            stage_name=request.identity.stage_name,
+        )
+        logger.info("regime_analysis_started", extra=_log_ctx.to_extra())
+
         equity_with_regime = self.join_service.join_equity_curve(
             equity_curve=request.equity_curve,
             regime_data=request.regime_data,
@@ -81,8 +104,10 @@ class RegimeAnalysisService:
         for dimension in REGIME_DIMENSIONS:
             col = f"regime_{dimension}"
             metrics_by_label: dict[str, RegimeConditionedMetrics] = {}
+            all_buckets = RegimeBucket.all_for_dimension(dimension)
+            non_empty_buckets = 0
 
-            for bucket in RegimeBucket.all_for_dimension(dimension):
+            for bucket in all_buckets:
                 bar_returns, bar_count = self._filter_returns(
                     bar_returns_with_regime, col, bucket.label
                 )
@@ -98,8 +123,27 @@ class RegimeAnalysisService:
                 )
                 metrics_by_label[bucket.label] = m
                 all_metrics.append(m)
+                if bar_count > 0:
+                    non_empty_buckets += 1
 
             metrics_by_dim[dimension] = metrics_by_label
+
+            coverage_pct = non_empty_buckets / len(all_buckets) if all_buckets else 0.0
+            research_regime_dimension_coverage_pct.record(
+                coverage_pct,
+                {"environment": _env, "dimension": dimension},
+            )
+            if coverage_pct < 0.5:
+                logger.warning(
+                    "regime_dimension_sparse",
+                    extra={
+                        **_log_ctx.to_extra(),
+                        "dimension": dimension,
+                        "coverage_pct": round(coverage_pct, 3),
+                        "non_empty_buckets": non_empty_buckets,
+                        "total_buckets": len(all_buckets),
+                    },
+                )
 
         profile = build_strategy_regime_profile(
             strategy_id=request.identity.strategy_id,
@@ -134,6 +178,18 @@ class RegimeAnalysisService:
 
         if persist and self.repository is not None:
             self.repository.persist(result, identity=request.identity)
+
+        _duration = time.perf_counter() - _t0
+        research_regime_analysis_duration.record(_duration, {"environment": _env})
+        logger.info(
+            "regime_analysis_completed",
+            extra={
+                **_log_ctx.to_extra(),
+                "duration_seconds": round(_duration, 3),
+                "total_bars": total_bars,
+                "dimensions_analyzed": len(REGIME_DIMENSIONS),
+            },
+        )
 
         return result
 

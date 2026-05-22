@@ -27,6 +27,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from autonomous_trading_platform.observability.metrics import research_cache_lookups
 from autonomous_trading_platform.research.cache.cache_identity import (
     CacheInvalidationReason,
     SimulationCacheKey,
@@ -38,6 +39,8 @@ from autonomous_trading_platform.research.cache.cache_lookup_result import (
 from autonomous_trading_platform.research.cache.cache_validation import validate_simulation_lineage
 
 logger = logging.getLogger(__name__)
+
+_CACHE_TYPE = "simulation"
 
 
 class SimulationResultCache:
@@ -78,15 +81,18 @@ class SimulationResultCache:
             entry = self._entries.get(key_id)
             if entry is None:
                 self._misses += 1
+                research_cache_lookups.add(1, {"cache_type": _CACHE_TYPE, "result": "miss"})
                 return CacheLookupResult.miss(CacheInvalidationReason.NOT_FOUND)
 
             stored_key = _entry_to_key(entry["key"])
             lineage = validate_simulation_lineage(stored_key, key)
             if not lineage.compatible:
                 self._misses += 1
+                research_cache_lookups.add(1, {"cache_type": _CACHE_TYPE, "result": "miss"})
                 return CacheLookupResult.miss(lineage.reason or CacheInvalidationReason.NOT_FOUND)
 
             self._hits += 1
+            research_cache_lookups.add(1, {"cache_type": _CACHE_TYPE, "result": "hit"})
             entry["hit_count"] = entry.get("hit_count", 0) + 1
             metadata = CacheHitMetadata(
                 cache_key=key_id,

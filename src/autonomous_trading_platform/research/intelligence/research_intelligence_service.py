@@ -23,6 +23,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from autonomous_trading_platform.observability.log_context import LogContext
+from autonomous_trading_platform.observability.metric_labels import observability_environment
+from autonomous_trading_platform.observability.metrics import (
+    research_intelligence_cluster_count,
+    research_intelligence_overfit_estimate,
+    research_intelligence_ranking_score,
+)
 from autonomous_trading_platform.research.intelligence.candidate_ranking_service import (
     CandidateRankingService,
     RankingWeights,
@@ -48,6 +55,8 @@ from autonomous_trading_platform.research.intelligence.strategy_clustering_servi
 )
 
 logger = logging.getLogger(__name__)
+
+_COMPONENT = "research.intelligence_service"
 
 
 @dataclass
@@ -126,10 +135,15 @@ class ResearchIntelligenceService:
         request: ResearchIntelligenceRequest,
     ) -> ResearchIntelligenceSummary:
         """Produce a full intelligence summary for a single strategy candidate."""
+        _env = observability_environment()
         logger.info(
-            "Research intelligence: strategy=%s experiment=%s",
-            request.strategy_id,
-            request.experiment_id,
+            "intelligence_analysis_started",
+            extra=LogContext(
+                component=_COMPONENT,
+                experiment_id=request.experiment_id,
+                strategy_id=request.strategy_id,
+                dataset_version=request.dataset_version,
+            ).to_extra(),
         )
 
         # Feature vector
@@ -174,12 +188,22 @@ class ResearchIntelligenceService:
             regime_fingerprint=regime_fp,
         )
 
+        research_intelligence_ranking_score.record(
+            candidate_score.composite_score, {"environment": _env}
+        )
+        research_intelligence_overfit_estimate.record(
+            overfit_est.overfit_probability, {"environment": _env}
+        )
+
         logger.info(
-            "  score=%.3f robustness=%.3f overfit=%.3f suitability=%s",
-            candidate_score.composite_score,
-            robustness_est.robustness_probability,
-            overfit_est.overfit_probability,
-            robustness_est.deployment_suitability.value,
+            "intelligence_analysis_completed",
+            extra=LogContext(
+                component=_COMPONENT,
+                experiment_id=request.experiment_id,
+                strategy_id=request.strategy_id,
+                robustness_score=robustness_est.robustness_probability,
+                overfit_probability=overfit_est.overfit_probability,
+            ).to_extra(),
         )
 
         if request.persist and self._repo is not None:
@@ -255,6 +279,16 @@ class ResearchIntelligenceService:
                     if s.strategy_id == member.strategy_id:
                         s.cluster_id = cluster.cluster_id
 
+        _env = observability_environment()
+        research_intelligence_cluster_count.record(len(clusters), {"environment": _env})
+        logger.info(
+            "intelligence_clustering_completed",
+            extra={
+                **LogContext(component=_COMPONENT).to_extra(),
+                "candidate_count": len(summaries),
+                "cluster_count": len(clusters),
+            },
+        )
         return clusters
 
     def analyze_regime_diversity(
