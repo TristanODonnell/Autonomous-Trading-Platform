@@ -3,6 +3,7 @@ import logging
 
 def get_logger(name: str):
     logger = logging.getLogger(name)
+    logger.disabled = False
     logger.setLevel(logging.INFO)
     logger.propagate = True
 

@@ -55,6 +55,11 @@ from datetime import date
 from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.research.checkpoints.research_checkpoint import ResearchTaskType
+from autonomous_trading_platform.research.checkpoints.research_checkpoint_service import (
+    ResearchCheckpointService,
+    ResumeMode,
+)
 from autonomous_trading_platform.research.experiments.filtering.config import (
     FilterConfig,
     ScoringWeights,
@@ -153,9 +158,17 @@ class MonteCarloStage(BaseStage):
         *,
         stage_config: MonteCarloStageConfig,
         simulation_runner: SimulationRunner,
+        checkpoint_service: ResearchCheckpointService | None = None,
+        resume_mode: ResumeMode = ResumeMode.ALL,
+        force_rerun: bool = False,
+        dry_run: bool = False,
     ) -> None:
         self._cfg = stage_config
         self._simulation_runner = simulation_runner
+        self._checkpoint_service = checkpoint_service
+        self._resume_mode = resume_mode
+        self._force_rerun = force_rerun
+        self._dry_run = dry_run
         self._aggregator = MonteCarloAggregator(
             filter_config=stage_config.filter_config,
             min_pass_rate=stage_config.min_pass_rate,
@@ -237,6 +250,9 @@ class MonteCarloStage(BaseStage):
                 price_basis=price_basis,
                 initial_cash=initial_cash,
             )
+            if aggregation is None:
+                final_survivors.append(config)
+                continue
 
             # All N raw results flow into the stage output
             all_sim_results.extend(aggregation.run_results)
@@ -316,7 +332,7 @@ class MonteCarloStage(BaseStage):
         base_seed: int,
         price_basis: PriceBasis,
         initial_cash: float,
-    ) -> MonteCarloAggregation:
+    ) -> MonteCarloAggregation | None:
         """
         Run the strategy N times with seeds [base_seed, base_seed+1, …,
         base_seed+n_runs-1] and aggregate the results.
@@ -339,7 +355,12 @@ class MonteCarloStage(BaseStage):
                 window_role=f"mc_run_{run_index}",
                 stage_name=self.stage_name,
             )
-            run_results.append(self._simulation_runner.run(req))
+            result = self._run_resumable_trial(req)
+            if result is not None:
+                run_results.append(result)
+
+        if not run_results:
+            return None
 
         return self._aggregator.aggregate(
             strategy_id=config.strategy_id,
@@ -366,3 +387,16 @@ class MonteCarloStage(BaseStage):
                 (r.risk_metrics.sharpe_ratio if r.risk_metrics else 0.0) - median_sharpe
             ),
         )
+
+    def _run_resumable_trial(self, request: SimulationRunRequest) -> SimulationRunResult | None:
+        if self._checkpoint_service is None:
+            return self._simulation_runner.run(request)
+        execution = self._checkpoint_service.run_simulation_unit(
+            request=request,
+            runner=self._simulation_runner,
+            task_type=ResearchTaskType.MONTE_CARLO_TRIAL,
+            resume_mode=self._resume_mode,
+            force_rerun=self._force_rerun,
+            dry_run=self._dry_run,
+        )
+        return execution.result

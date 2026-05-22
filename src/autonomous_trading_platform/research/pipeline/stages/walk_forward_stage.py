@@ -15,6 +15,11 @@ from datetime import date, timedelta
 from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.research.checkpoints.research_checkpoint import ResearchTaskType
+from autonomous_trading_platform.research.checkpoints.research_checkpoint_service import (
+    ResearchCheckpointService,
+    ResumeMode,
+)
 from autonomous_trading_platform.research.experiments.filtering.config import (
     FilterConfig,
     ScoringWeights,
@@ -131,9 +136,17 @@ class WalkForwardStage(BaseStage):
         *,
         stage_config: WalkForwardStageConfig,
         simulation_runner: SimulationRunner,
+        checkpoint_service: ResearchCheckpointService | None = None,
+        resume_mode: ResumeMode = ResumeMode.ALL,
+        force_rerun: bool = False,
+        dry_run: bool = False,
     ) -> None:
         self._cfg = stage_config
         self._simulation_runner = simulation_runner
+        self._checkpoint_service = checkpoint_service
+        self._resume_mode = resume_mode
+        self._force_rerun = force_rerun
+        self._dry_run = dry_run
         self._train_filter_service = FilterScoreService(
             filter_config=stage_config.train_filter_config,
             scoring_weights=stage_config.train_scoring_weights,
@@ -244,6 +257,14 @@ class WalkForwardStage(BaseStage):
                 len(fold_results),
             )
 
+        if not all_sim_results:
+            return StageResult(
+                stage_name=self.stage_name,
+                simulation_results=[],
+                filter_outputs=[],
+                survivors=survivors,
+            )
+
         n_folds = len(folds)
         final_survivors: list[StrategyConfig] = []
 
@@ -335,7 +356,12 @@ class WalkForwardStage(BaseStage):
                 window_role=window_role_train,
                 stage_name=self.stage_name,
             )
-            train_sim_results.append(self._simulation_runner.run(req))
+            result = self._run_resumable_fold_simulation(req)
+            if result is not None:
+                train_sim_results.append(result)
+
+        if not train_sim_results:
+            return []
 
         # ---- train filter -------------------------------------------------
         train_filter_inputs = [
@@ -372,7 +398,9 @@ class WalkForwardStage(BaseStage):
                 window_role=window_role_test,
                 stage_name=self.stage_name,
             )
-            test_sim_results.append(self._simulation_runner.run(req))
+            result = self._run_resumable_fold_simulation(req)
+            if result is not None:
+                test_sim_results.append(result)
 
         # ---- test filter -------------------------------------------------
         test_filter_inputs = [
@@ -424,3 +452,19 @@ class WalkForwardStage(BaseStage):
                 )
 
         return fold_results
+
+    def _run_resumable_fold_simulation(
+        self,
+        request: SimulationRunRequest,
+    ) -> SimulationRunResult | None:
+        if self._checkpoint_service is None:
+            return self._simulation_runner.run(request)
+        execution = self._checkpoint_service.run_simulation_unit(
+            request=request,
+            runner=self._simulation_runner,
+            task_type=ResearchTaskType.WALK_FORWARD_FOLD,
+            resume_mode=self._resume_mode,
+            force_rerun=self._force_rerun,
+            dry_run=self._dry_run,
+        )
+        return execution.result

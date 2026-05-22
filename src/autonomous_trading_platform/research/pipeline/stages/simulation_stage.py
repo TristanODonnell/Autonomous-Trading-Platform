@@ -14,6 +14,11 @@ from datetime import date
 from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.research.checkpoints.research_checkpoint import ResearchTaskType
+from autonomous_trading_platform.research.checkpoints.research_checkpoint_service import (
+    ResearchCheckpointService,
+    ResumeMode,
+)
 from autonomous_trading_platform.research.experiments.filtering.config import (
     FilterConfig,
     ScoringWeights,
@@ -50,9 +55,17 @@ class SimulationStage(BaseStage):
         *,
         stage_config: SimulationStageConfig,
         simulation_runner: SimulationRunner,
+        checkpoint_service: ResearchCheckpointService | None = None,
+        resume_mode: ResumeMode = ResumeMode.ALL,
+        force_rerun: bool = False,
+        dry_run: bool = False,
     ) -> None:
         self._stage_config = stage_config
         self._simulation_runner = simulation_runner
+        self._checkpoint_service = checkpoint_service
+        self._resume_mode = resume_mode
+        self._force_rerun = force_rerun
+        self._dry_run = dry_run
         self._filter_score_service = FilterScoreService(
             filter_config=stage_config.filter_config,
             scoring_weights=stage_config.scoring_weights,
@@ -120,9 +133,29 @@ class SimulationStage(BaseStage):
                 window_role=cfg.window_role,
                 stage_name=self.stage_name,
             )
-            sim_results.append(self._simulation_runner.run(request))
+            if self._checkpoint_service is None:
+                sim_results.append(self._simulation_runner.run(request))
+            else:
+                execution = self._checkpoint_service.run_simulation_unit(
+                    request=request,
+                    runner=self._simulation_runner,
+                    task_type=ResearchTaskType.SIMULATION,
+                    resume_mode=self._resume_mode,
+                    force_rerun=self._force_rerun,
+                    dry_run=self._dry_run,
+                )
+                if execution.result is not None:
+                    sim_results.append(execution.result)
 
         # --- filter and score -------------------------------------------------
+        if not sim_results:
+            return StageResult(
+                stage_name=self.stage_name,
+                simulation_results=[],
+                filter_outputs=[],
+                survivors=survivors,
+            )
+
         filter_inputs = [
             FilterScoreInput(
                 strategy_id=result.strategy_id,

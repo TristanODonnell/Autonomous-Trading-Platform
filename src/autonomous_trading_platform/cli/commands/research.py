@@ -33,6 +33,12 @@ import yaml
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.research.checkpoints.research_checkpoint import (
+    ResearchCheckpointIdentity,
+)
+from autonomous_trading_platform.research.checkpoints.research_checkpoint_service import (
+    ResearchCheckpointService,
+)
 from autonomous_trading_platform.research.config.experiment_config import ExperimentConfig
 from autonomous_trading_platform.research.experiments.models.experiment_plan import (
     ExperimentDefinition,
@@ -372,6 +378,9 @@ def register(subparsers) -> None:
     _register_inspect_component(research_subparsers)
     _register_generate_strategies(research_subparsers)
     _register_summarize_generated_configs(research_subparsers)
+    _register_inspect_checkpoints(research_subparsers)
+    _register_plan_restart(research_subparsers)
+    _register_resume_experiment(research_subparsers)
 
 
 # ---------------------------------------------------------------------------
@@ -449,6 +458,91 @@ def _register_run_simulation(subparsers) -> None:
         help="Fail if any requested symbol has no bars in the requested window",
     )
     parser.set_defaults(func=handle_run_simulation)
+
+
+def _register_inspect_checkpoints(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "inspect-checkpoints",
+        help="Inspect research checkpoint store entries",
+    )
+    parser.add_argument("--checkpoint-store", required=True)
+    parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    parser.set_defaults(func=handle_inspect_checkpoints)
+
+
+def _register_plan_restart(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "plan-restart",
+        help="Build a dry-run research restart plan from expected unit identities",
+    )
+    parser.add_argument("--checkpoint-store", required=True)
+    parser.add_argument(
+        "--units-file",
+        required=True,
+        help="JSON/YAML file containing a list of ResearchCheckpointIdentity mappings",
+    )
+    parser.add_argument("--resume-failed-only", action="store_true")
+    parser.add_argument("--resume-missing-only", action="store_true")
+    parser.add_argument("--force-rerun", action="store_true")
+    parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    parser.set_defaults(func=handle_plan_restart)
+
+
+def _register_resume_experiment(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "resume-experiment",
+        help="Research-only resume planner; use --execute from pipeline code paths",
+    )
+    parser.add_argument("--checkpoint-store", required=True)
+    parser.add_argument("--units-file", required=True)
+    parser.add_argument("--dry-run", action="store_true", default=True)
+    parser.add_argument("--resume-failed-only", action="store_true")
+    parser.add_argument("--resume-missing-only", action="store_true")
+    parser.add_argument("--force-rerun", action="store_true")
+    parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    parser.set_defaults(func=handle_resume_experiment)
+
+
+def _load_checkpoint_units(path: str) -> list[ResearchCheckpointIdentity]:
+    payload = _load_artifact(path)
+    raw_units = payload.get("units", payload.get("expected_units"))
+    if raw_units is None and isinstance(payload.get("identity"), dict):
+        raw_units = [payload["identity"]]
+    if not isinstance(raw_units, list):
+        raise ValueError("--units-file must contain a 'units' list")
+    return [ResearchCheckpointIdentity.from_dict(item) for item in raw_units]
+
+
+def handle_inspect_checkpoints(args: argparse.Namespace) -> int:
+    service = ResearchCheckpointService(persist_path=args.checkpoint_store)
+    checkpoints = [checkpoint.to_dict() for checkpoint in service.list_checkpoints()]
+    _print_payload(
+        "Research Checkpoints",
+        {"count": len(checkpoints), "checkpoints": checkpoints},
+        args.format,
+    )
+    return 0
+
+
+def handle_plan_restart(args: argparse.Namespace) -> int:
+    if args.resume_failed_only and args.resume_missing_only:
+        raise ValueError("Choose at most one of --resume-failed-only and --resume-missing-only")
+    service = ResearchCheckpointService(persist_path=args.checkpoint_store)
+    plan = service.plan_restart(
+        _load_checkpoint_units(args.units_file),
+        dry_run=True,
+        resume_failed=not args.resume_missing_only,
+        resume_missing=not args.resume_failed_only,
+        force_rerun=args.force_rerun,
+    )
+    _print_payload("Research Restart Plan", plan.to_dict(), args.format)
+    return 0
+
+
+def handle_resume_experiment(args: argparse.Namespace) -> int:
+    # This CLI command intentionally plans only. Execution happens inside
+    # research pipeline stages so live/paper runtime orchestration is untouched.
+    return handle_plan_restart(args)
 
 
 def handle_run_simulation(args: argparse.Namespace) -> int:
