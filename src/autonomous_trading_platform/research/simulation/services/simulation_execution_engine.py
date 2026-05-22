@@ -22,6 +22,7 @@ from autonomous_trading_platform.execution.services.cash_ledger_service import C
 from autonomous_trading_platform.execution.services.position_ledger_service import (
     PositionLedgerService,
 )
+from autonomous_trading_platform.research.simulation.models.fill_model import MarketFillPolicy
 from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
     LookaheadGuardService,
 )
@@ -81,9 +82,24 @@ class SimulationExecutionEngine:
 
         self.lookahead_guard_service.assert_timeline_strictly_increasing(timeline=timeline)
 
+        fill_policy = simulated_execution_service.fill_model_config.market_fill_policy
+        # Orders generated during bar N that must execute at bar N+1 open (NEXT_OPEN only).
+        pending_orders: list[OrderIntent] = []
+
         for timestamp in timeline:
             bars_at_timestamp = window.bars_by_timestamp[timestamp]
             is_warmup = window.is_warmup(timestamp)
+
+            # Phase 1 (NEXT_OPEN): fill orders queued from the previous bar using this
+            # bar's open price.  Runs before signal evaluation so positions are current.
+            deferred_fills: list[Any] = []
+            if not is_warmup and pending_orders and fill_policy == MarketFillPolicy.NEXT_OPEN:
+                deferred_fills = self._simulate_fills(
+                    order_intents=pending_orders,
+                    bars_at_timestamp=bars_at_timestamp,
+                    simulated_execution_service=simulated_execution_service,
+                )
+                pending_orders = []
 
             signals = self._evaluate_signals(
                 run_id=run_id,
@@ -110,6 +126,18 @@ class SimulationExecutionEngine:
 
             prices = self._extract_prices(bars_at_timestamp)
 
+            # Apply deferred fills (NEXT_OPEN) so positions are updated before mark-to-market.
+            if deferred_fills:
+                cash = self._apply_fills(
+                    run_id=run_id,
+                    timestamp=timestamp,
+                    fills=deferred_fills,
+                    positions=positions,
+                    cash=cash,
+                    prices=prices,
+                    realized_pnl_by_symbol=realized_pnl_by_symbol,
+                )
+
             order_intents = self._construct_orders(
                 signals=signals,
                 positions=positions,
@@ -119,21 +147,28 @@ class SimulationExecutionEngine:
                 timestamp=timestamp,
             )
 
-            fills = self._simulate_fills(
-                order_intents=order_intents,
-                bars_at_timestamp=bars_at_timestamp,
-                simulated_execution_service=simulated_execution_service,
-            )
+            # Phase 2: execute or queue orders based on fill policy.
+            immediate_fills: list[Any] = []
+            if fill_policy == MarketFillPolicy.CURRENT_CLOSE:
+                immediate_fills = self._simulate_fills(
+                    order_intents=order_intents,
+                    bars_at_timestamp=bars_at_timestamp,
+                    simulated_execution_service=simulated_execution_service,
+                )
+                cash = self._apply_fills(
+                    run_id=run_id,
+                    timestamp=timestamp,
+                    fills=immediate_fills,
+                    positions=positions,
+                    cash=cash,
+                    prices=prices,
+                    realized_pnl_by_symbol=realized_pnl_by_symbol,
+                )
+            elif fill_policy == MarketFillPolicy.NEXT_OPEN:
+                # Defer: orders execute at next bar's open, not this bar's close.
+                pending_orders = list(order_intents)
 
-            cash = self._apply_fills(
-                run_id=run_id,
-                timestamp=timestamp,
-                fills=fills,
-                positions=positions,
-                cash=cash,
-                prices=prices,
-                realized_pnl_by_symbol=realized_pnl_by_symbol,
-            )
+            fills = deferred_fills + immediate_fills
 
             position_rows.extend(
                 self._build_position_rows(

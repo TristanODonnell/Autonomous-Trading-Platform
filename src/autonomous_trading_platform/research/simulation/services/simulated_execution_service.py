@@ -81,7 +81,11 @@ class SimulatedExecutionService:
             )
 
         if self.fill_model_config.market_fill_policy == MarketFillPolicy.NEXT_OPEN:
-            raise NotImplementedError("next_open market fill policy is deferred")
+            return self._create_fill(
+                intent=intent,
+                bar=bar,
+                reference_price=bar.open,
+            )
 
         raise ValueError(
             f"unsupported market_fill_policy={self.fill_model_config.market_fill_policy}"
