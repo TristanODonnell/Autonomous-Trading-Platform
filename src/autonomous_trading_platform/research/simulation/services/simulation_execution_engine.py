@@ -22,7 +22,6 @@ from autonomous_trading_platform.execution.services.cash_ledger_service import C
 from autonomous_trading_platform.execution.services.position_ledger_service import (
     PositionLedgerService,
 )
-from autonomous_trading_platform.research.simulation.models.fill_model import MarketFillPolicy
 from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
     LookaheadGuardService,
 )
@@ -82,24 +81,25 @@ class SimulationExecutionEngine:
 
         self.lookahead_guard_service.assert_timeline_strictly_increasing(timeline=timeline)
 
-        fill_policy = simulated_execution_service.fill_model_config.market_fill_policy
-        # Orders generated during bar N that must execute at bar N+1 open (NEXT_OPEN only).
-        pending_orders: list[OrderIntent] = []
+        latency_bars = simulated_execution_service.fill_model_config.latency_bars
+        # Execution scheduler: maps target_bar_index → orders to execute on that bar.
+        # latency_bars=0 → orders execute immediately (same bar, at close).
+        # latency_bars=N → orders execute N bars later (at that bar's open).
+        scheduled: dict[int, list[OrderIntent]] = {}
 
-        for timestamp in timeline:
+        for bar_index, timestamp in enumerate(timeline):
             bars_at_timestamp = window.bars_by_timestamp[timestamp]
             is_warmup = window.is_warmup(timestamp)
 
-            # Phase 1 (NEXT_OPEN): fill orders queued from the previous bar using this
-            # bar's open price.  Runs before signal evaluation so positions are current.
+            # Phase 1: Execute any orders scheduled for this bar index (latency>=1 only).
+            # These were generated N bars ago and execute at this bar's open price.
             deferred_fills: list[Any] = []
-            if not is_warmup and pending_orders and fill_policy == MarketFillPolicy.NEXT_OPEN:
+            if not is_warmup and bar_index in scheduled:
                 deferred_fills = self._simulate_fills(
-                    order_intents=pending_orders,
+                    order_intents=scheduled.pop(bar_index),
                     bars_at_timestamp=bars_at_timestamp,
                     simulated_execution_service=simulated_execution_service,
                 )
-                pending_orders = []
 
             signals = self._evaluate_signals(
                 run_id=run_id,
@@ -126,7 +126,7 @@ class SimulationExecutionEngine:
 
             prices = self._extract_prices(bars_at_timestamp)
 
-            # Apply deferred fills (NEXT_OPEN) so positions are updated before mark-to-market.
+            # Apply deferred fills so positions are current before mark-to-market.
             if deferred_fills:
                 cash = self._apply_fills(
                     run_id=run_id,
@@ -147,9 +147,11 @@ class SimulationExecutionEngine:
                 timestamp=timestamp,
             )
 
-            # Phase 2: execute or queue orders based on fill policy.
+            # Phase 2: schedule orders for execution.
+            # latency_bars=0 → execute immediately this bar (close price).
+            # latency_bars>=1 → defer to bar bar_index+latency_bars (open price).
             immediate_fills: list[Any] = []
-            if fill_policy == MarketFillPolicy.CURRENT_CLOSE:
+            if latency_bars == 0:
                 immediate_fills = self._simulate_fills(
                     order_intents=order_intents,
                     bars_at_timestamp=bars_at_timestamp,
@@ -164,9 +166,10 @@ class SimulationExecutionEngine:
                     prices=prices,
                     realized_pnl_by_symbol=realized_pnl_by_symbol,
                 )
-            elif fill_policy == MarketFillPolicy.NEXT_OPEN:
-                # Defer: orders execute at next bar's open, not this bar's close.
-                pending_orders = list(order_intents)
+            else:
+                target = bar_index + latency_bars
+                if order_intents:
+                    scheduled.setdefault(target, []).extend(order_intents)
 
             fills = deferred_fills + immediate_fills
 

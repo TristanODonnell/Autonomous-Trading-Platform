@@ -88,6 +88,7 @@ def build_simulation_cache_key(
         stage_name=run_config.stage_name or "default",
         window_role=run_config.window_role or "default",
         fill_policy=fill.market_fill_policy.value,
+        latency_bars=fill.latency_bars,
         slippage_rate=str(slippage.slippage_rate),
         commission_per_share=str(cost.commission_per_share),
         regime_dataset_version=regime_dataset_version or "",

@@ -16,7 +16,6 @@ from autonomous_trading_platform.research.cache.cache_key_builder import (
 from autonomous_trading_platform.research.cache.simulation_result_cache import SimulationResultCache
 from autonomous_trading_platform.research.config.simulation_run_config import SimulationRunConfig
 from autonomous_trading_platform.research.simulation.models.fill_model import (
-    MarketFillPolicy,
     SimulatedFillModelConfig,
 )
 from autonomous_trading_platform.research.simulation.models.slippage_model import (
@@ -67,6 +66,7 @@ def _make_sim_key(**overrides: Any) -> SimulationCacheKey:
         stage_name="default",
         window_role="default",
         fill_policy="current_close",
+        latency_bars=0,
         slippage_rate="0.0001",
         commission_per_share="0.0000",
         regime_dataset_version="",
@@ -229,8 +229,8 @@ class TestSimulationCacheKeyBuilder:
     def test_fill_model_included(self):
         cfg = _make_strategy_config()
         run = _make_run_config()
-        f1 = SimulatedFillModelConfig(market_fill_policy=MarketFillPolicy.CURRENT_CLOSE)
-        f2 = SimulatedFillModelConfig(market_fill_policy=MarketFillPolicy.NEXT_OPEN)
+        f1 = SimulatedFillModelConfig(latency_bars=0)
+        f2 = SimulatedFillModelConfig(latency_bars=1)
         k1 = build_simulation_cache_key(strategy_config=cfg, run_config=run, fill_model=f1)
         k2 = build_simulation_cache_key(strategy_config=cfg, run_config=run, fill_model=f2)
         assert k1.key_id != k2.key_id

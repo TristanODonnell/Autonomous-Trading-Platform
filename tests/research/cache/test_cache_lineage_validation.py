@@ -27,6 +27,7 @@ def _base_key(**overrides: Any) -> SimulationCacheKey:
         stage_name="train",
         window_role="default",
         fill_policy="current_close",
+        latency_bars=0,
         slippage_rate="0.0001",
         commission_per_share="0.0000",
         regime_dataset_version="",

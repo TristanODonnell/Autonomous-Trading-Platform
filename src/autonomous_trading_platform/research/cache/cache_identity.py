@@ -81,6 +81,7 @@ class SimulationCacheKey:
     stage_name: str
     window_role: str
     fill_policy: str
+    latency_bars: int
     slippage_rate: str
     commission_per_share: str
     regime_dataset_version: str
@@ -105,6 +106,7 @@ class SimulationCacheKey:
             "end_date": self.end_date,
             "feature_versions_hash": self.feature_versions_hash,
             "fill_policy": self.fill_policy,
+            "latency_bars": self.latency_bars,
             "price_basis": self.price_basis,
             "random_seed": self.random_seed,
             "regime_dataset_version": self.regime_dataset_version,

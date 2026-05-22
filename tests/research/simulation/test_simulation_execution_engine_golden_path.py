@@ -27,7 +27,6 @@ from autonomous_trading_platform.execution.services.position_ledger_service impo
     PositionLedgerService,
 )
 from autonomous_trading_platform.research.simulation.models.fill_model import (
-    MarketFillPolicy,
     SimulatedFillModelConfig,
 )
 from autonomous_trading_platform.research.simulation.models.slippage_model import (
@@ -95,7 +94,7 @@ def _build_window(prices: list[float], warmup_count: int = 0):
 
 def _build_engine(
     universe_size: int = 1,
-    fill_policy: MarketFillPolicy = MarketFillPolicy.CURRENT_CLOSE,
+    latency_bars: int = 0,
 ) -> tuple[SimulationExecutionEngine, SimulatedExecutionService]:
     cost_config = SimulationCostModelConfig(
         commission_per_share=Decimal("0"),
@@ -114,7 +113,7 @@ def _build_engine(
         ),
     ), SimulatedExecutionService(
         simulation_cost_model_service=cost_service,
-        fill_model_config=SimulatedFillModelConfig(market_fill_policy=fill_policy),
+        fill_model_config=SimulatedFillModelConfig(latency_bars=latency_bars),
     )
 
 
@@ -415,7 +414,7 @@ _EXECUTION_BAR_CLOSE = 103.0
 
 class TestNextOpenFillSemantics:
     """
-    Verify that NEXT_OPEN policy executes fills at bar N+1 open,
+    Verify that latency_bars=1 executes fills at bar N+1 open,
     not at bar N close (the signal bar).
 
     Timeline (lookback=2, strictly-before filtering in context builder):
@@ -432,7 +431,7 @@ class TestNextOpenFillSemantics:
             (97.0, _SIGNAL_BAR_CLOSE),  # bar 2 — signal fires, order queued
             (_EXECUTION_BAR_OPEN, _EXECUTION_BAR_CLOSE),  # bar 3 — fill lands here
         ]
-        engine, exec_svc = _build_engine(fill_policy=MarketFillPolicy.NEXT_OPEN)
+        engine, exec_svc = _build_engine(latency_bars=1)
         window = _build_ohlc_window(ohlc)
         strategy = StubStrategy(strategy_id="stub", price_change_threshold=0.0)
         ctx_builder = _build_context_builder(lookback_bars=2)
@@ -477,7 +476,7 @@ class TestNextOpenFillSemantics:
         # Signal fires on the very last bar — no next bar exists, so no fill.
         # Need 3 bars: bars 0 and 1 provide history, signal fires at bar 2 (last).
         ohlc = [(99.0, 100.0), (98.0, 101.0), (97.0, 102.0)]
-        engine, exec_svc = _build_engine(fill_policy=MarketFillPolicy.NEXT_OPEN)
+        engine, exec_svc = _build_engine(latency_bars=1)
         window = _build_ohlc_window(ohlc)
         strategy = StubStrategy(strategy_id="stub", price_change_threshold=0.0)
         ctx_builder = _build_context_builder(lookback_bars=2)
@@ -503,7 +502,7 @@ class TestNextOpenFillSemantics:
             (97.0, _SIGNAL_BAR_CLOSE),  # signal fires here
             (_EXECUTION_BAR_OPEN, _EXECUTION_BAR_CLOSE),  # fill here
         ]
-        engine, exec_svc = _build_engine(fill_policy=MarketFillPolicy.NEXT_OPEN)
+        engine, exec_svc = _build_engine(latency_bars=1)
         window = _build_ohlc_window(ohlc)
         strategy = StubStrategy(strategy_id="stub", price_change_threshold=0.0)
         ctx_builder = _build_context_builder(lookback_bars=2)
@@ -533,7 +532,7 @@ class TestNextOpenFillSemantics:
             (97.0, _SIGNAL_BAR_CLOSE),  # signal fires, order queued
             (_EXECUTION_BAR_OPEN, _EXECUTION_BAR_CLOSE),  # fill lands here
         ]
-        engine, exec_svc = _build_engine(fill_policy=MarketFillPolicy.NEXT_OPEN)
+        engine, exec_svc = _build_engine(latency_bars=1)
         window = _build_ohlc_window(ohlc)
         strategy = StubStrategy(strategy_id="stub", price_change_threshold=0.0)
         ctx_builder = _build_context_builder(lookback_bars=2)
@@ -575,7 +574,7 @@ class TestNextOpenDeterminism:
         ]
 
         def _run_once() -> Any:
-            engine, exec_svc = _build_engine(fill_policy=MarketFillPolicy.NEXT_OPEN)
+            engine, exec_svc = _build_engine(latency_bars=1)
             window = _build_ohlc_window(ohlc)
             strategy = StubStrategy(strategy_id="stub", price_change_threshold=0.0)
             ctx_builder = _build_context_builder(lookback_bars=2)
@@ -600,3 +599,156 @@ class TestNextOpenDeterminism:
         assert list(r1.equity_curve["equity"]) == list(r2.equity_curve["equity"]), (
             "equity curve must be identical across repeated runs"
         )
+
+
+# ---------------------------------------------------------------------------
+# latency_bars=0 — explicit same-bar execution
+# ---------------------------------------------------------------------------
+
+
+class TestLatencyZeroSameBarExecution:
+    """latency_bars=0 must fill at the signal bar's close (backward-compatible semantics)."""
+
+    def test_immediate_fill_at_current_bar_close(self) -> None:
+        # With latency=0 and 0-slippage, fill price should equal the bar's close.
+        ohlc = [
+            (99.0, 100.0),
+            (98.0, 101.0),
+            (97.0, 102.0),  # signal fires, fill at close=102
+            (55.0, 103.0),
+        ]
+        engine, exec_svc = _build_engine(latency_bars=0)
+        window = _build_ohlc_window(ohlc)
+        strategy = StubStrategy(strategy_id="stub", price_change_threshold=0.0)
+        ctx_builder = _build_context_builder(lookback_bars=2)
+
+        result = engine.execute(
+            run_id=_RUN_ID,
+            strategy=strategy,
+            window=window,
+            context_builder=ctx_builder,
+            simulated_execution_service=exec_svc,
+            initial_cash=_INITIAL_CASH,
+        )
+
+        assert not result.trade_logs.empty
+        fill_price = float(result.trade_logs["price"].iloc[0])
+        signal_bar_close = 102.0
+        assert fill_price == pytest.approx(signal_bar_close), (
+            f"latency_bars=0 must fill at signal bar close={signal_bar_close}, got {fill_price}"
+        )
+
+    def test_fill_timestamp_equals_signal_bar_timestamp(self) -> None:
+        ohlc = [
+            (99.0, 100.0),
+            (98.0, 101.0),
+            (97.0, 102.0),
+        ]
+        engine, exec_svc = _build_engine(latency_bars=0)
+        window = _build_ohlc_window(ohlc)
+        strategy = StubStrategy(strategy_id="stub", price_change_threshold=0.0)
+        ctx_builder = _build_context_builder(lookback_bars=2)
+
+        result = engine.execute(
+            run_id=_RUN_ID,
+            strategy=strategy,
+            window=window,
+            context_builder=ctx_builder,
+            simulated_execution_service=exec_svc,
+            initial_cash=_INITIAL_CASH,
+        )
+
+        if not result.trade_logs.empty:
+            signal_bar_ts = _BASE_TS + timedelta(minutes=10)  # bar index 2
+            fill_ts = result.trade_logs["timestamp"].iloc[0]
+            assert fill_ts == signal_bar_ts
+
+
+# ---------------------------------------------------------------------------
+# latency_bars=2 — multi-bar deferred execution
+# ---------------------------------------------------------------------------
+
+
+class TestLatencyTwoExecution:
+    """
+    latency_bars=2: order generated at bar N executes at bar N+2 open.
+
+    Timeline (lookback=2):
+      bar 0 (09:30): close=100 — no context
+      bar 1 (09:35): close=101 — no context
+      bar 2 (09:40): close=102 — signal → order queued for bar 4
+      bar 3 (09:45): open=80, close=103 — bar 3, no fill yet
+      bar 4 (09:50): open=77, close=104 — fill at open=77
+    """
+
+    _OHLC = [
+        (99.0, 100.0),
+        (98.0, 101.0),
+        (97.0, 102.0),  # bar 2: signal
+        (80.0, 103.0),  # bar 3: no fill
+        (77.0, 104.0),  # bar 4: fill at open=77
+    ]
+
+    def _run(self) -> Any:
+        engine, exec_svc = _build_engine(latency_bars=2)
+        window = _build_ohlc_window(self._OHLC)
+        strategy = StubStrategy(strategy_id="stub", price_change_threshold=0.0)
+        ctx_builder = _build_context_builder(lookback_bars=2)
+        return engine.execute(
+            run_id=_RUN_ID,
+            strategy=strategy,
+            window=window,
+            context_builder=ctx_builder,
+            simulated_execution_service=exec_svc,
+            initial_cash=_INITIAL_CASH,
+        )
+
+    def test_fill_occurs_at_bar_n_plus_2_open(self) -> None:
+        result = self._run()
+        assert not result.trade_logs.empty, "expected a fill at bar 4"
+        # The first fill should be at bar 4's open=77
+        fill_price = float(result.trade_logs["price"].iloc[0])
+        assert fill_price == pytest.approx(77.0), (
+            f"latency_bars=2 fill should be at bar 4 open=77, got {fill_price}"
+        )
+
+    def test_no_fill_at_intermediate_bar(self) -> None:
+        result = self._run()
+        bar3_ts = _BASE_TS + timedelta(minutes=15)
+        if not result.trade_logs.empty:
+            fills_at_bar3 = result.trade_logs[result.trade_logs["timestamp"] == bar3_ts]
+            assert fills_at_bar3.empty, "no fill should occur at bar 3 (intermediate bar)"
+
+    def test_fill_timestamp_is_bar_4(self) -> None:
+        result = self._run()
+        if not result.trade_logs.empty:
+            fill_ts = result.trade_logs["timestamp"].iloc[0]
+            bar4_ts = _BASE_TS + timedelta(minutes=20)
+            assert fill_ts == bar4_ts
+
+    def test_determinism_with_latency_2(self) -> None:
+        r1 = self._run()
+        r2 = self._run()
+        assert list(r1.trade_logs["price"]) == list(r2.trade_logs["price"])
+        assert list(r1.trade_logs["timestamp"]) == list(r2.trade_logs["timestamp"])
+
+
+# ---------------------------------------------------------------------------
+# latency_bars config validation
+# ---------------------------------------------------------------------------
+
+
+class TestLatencyBarsValidation:
+    def test_negative_latency_raises(self) -> None:
+        import pytest as _pytest
+
+        with _pytest.raises(ValueError, match="latency_bars must be >= 0"):
+            SimulatedFillModelConfig(latency_bars=-1)
+
+    def test_zero_latency_is_valid(self) -> None:
+        cfg = SimulatedFillModelConfig(latency_bars=0)
+        assert cfg.latency_bars == 0
+
+    def test_large_latency_is_valid(self) -> None:
+        cfg = SimulatedFillModelConfig(latency_bars=10)
+        assert cfg.latency_bars == 10

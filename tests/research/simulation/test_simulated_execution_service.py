@@ -5,7 +5,6 @@ from uuid import uuid4
 
 from autonomous_trading_platform.contracts.common.enums import Side
 from autonomous_trading_platform.research.simulation.models.fill_model import (
-    MarketFillPolicy,
     SimulatedFillModelConfig,
 )
 from autonomous_trading_platform.research.simulation.models.slippage_model import (
@@ -164,7 +163,7 @@ def make_next_open_service() -> SimulatedExecutionService:
     )
     return SimulatedExecutionService(
         simulation_cost_model_service=cost_model,
-        fill_model_config=SimulatedFillModelConfig(market_fill_policy=MarketFillPolicy.NEXT_OPEN),
+        fill_model_config=SimulatedFillModelConfig(latency_bars=1),
     )
 
 
@@ -228,3 +227,49 @@ def test_next_open_fill_timestamp_is_bar_timestamp():
 
     assert len(fills) == 1
     assert fills[0].timestamp == bar.timestamp
+
+
+# ---------------------------------------------------------------------------
+# latency_bars config validation in SimulatedFillModelConfig
+# ---------------------------------------------------------------------------
+
+
+def test_negative_latency_bars_raises():
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="latency_bars must be >= 0"):
+        SimulatedFillModelConfig(latency_bars=-1)
+
+
+def test_latency_zero_uses_close():
+    service = SimulatedExecutionService(
+        simulation_cost_model_service=SimulationCostModelService(
+            config=SimulationCostModelConfig(
+                commission_per_share=Decimal("0"),
+                min_commission=Decimal("0"),
+            ),
+            slippage_model=SlippageModel(config=SlippageModelConfig(slippage_rate=Decimal("0"))),
+        ),
+        fill_model_config=SimulatedFillModelConfig(latency_bars=0),
+    )
+    bar = make_bar(open=Decimal("50"), close=Decimal("100"))
+    intent = make_intent(side=Side.BUY)
+    fills = service.fill(order_intents=[intent], bars_at_timestamp={"AAPL": bar})
+    assert fills[0].price == Decimal("100")  # close, not open
+
+
+def test_latency_nonzero_uses_open():
+    service = SimulatedExecutionService(
+        simulation_cost_model_service=SimulationCostModelService(
+            config=SimulationCostModelConfig(
+                commission_per_share=Decimal("0"),
+                min_commission=Decimal("0"),
+            ),
+            slippage_model=SlippageModel(config=SlippageModelConfig(slippage_rate=Decimal("0"))),
+        ),
+        fill_model_config=SimulatedFillModelConfig(latency_bars=2),
+    )
+    bar = make_bar(open=Decimal("50"), close=Decimal("100"))
+    intent = make_intent(side=Side.BUY)
+    fills = service.fill(order_intents=[intent], bars_at_timestamp={"AAPL": bar})
+    assert fills[0].price == Decimal("50")  # open, not close

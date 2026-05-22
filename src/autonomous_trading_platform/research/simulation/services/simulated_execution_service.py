@@ -5,7 +5,6 @@ from typing import Any
 
 from autonomous_trading_platform.contracts.trading.fill import Fill
 from autonomous_trading_platform.research.simulation.models.fill_model import (
-    MarketFillPolicy,
     SimulatedFillModelConfig,
 )
 from autonomous_trading_platform.research.simulation.services.simulation_cost_model_service import (
@@ -73,23 +72,11 @@ class SimulatedExecutionService:
         return None
 
     def _fill_market_order(self, *, intent: Any, bar: Any) -> Fill:
-        if self.fill_model_config.market_fill_policy == MarketFillPolicy.CURRENT_CLOSE:
-            return self._create_fill(
-                intent=intent,
-                bar=bar,
-                reference_price=bar.close,
-            )
-
-        if self.fill_model_config.market_fill_policy == MarketFillPolicy.NEXT_OPEN:
-            return self._create_fill(
-                intent=intent,
-                bar=bar,
-                reference_price=bar.open,
-            )
-
-        raise ValueError(
-            f"unsupported market_fill_policy={self.fill_model_config.market_fill_policy}"
-        )
+        # latency_bars=0 → order executes this bar, priced at close.
+        # latency_bars>=1 → order was deferred; the engine passes the execution bar's
+        #   data, so price at open reflects entry after bar N closes.
+        reference_price = bar.close if self.fill_model_config.latency_bars == 0 else bar.open
+        return self._create_fill(intent=intent, bar=bar, reference_price=reference_price)
 
     def _fill_limit_order(self, *, intent: Any, bar: Any) -> Fill | None:
         limit_price = getattr(intent, "limit_price", None)
