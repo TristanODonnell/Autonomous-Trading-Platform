@@ -148,12 +148,32 @@ class ScoringWeightsModel(BaseModel):
         )
 
 
+class ParallelStageConfigMixin(BaseModel):
+    execution_mode: str = "serial"
+    max_workers: int = 1
+    fail_fast: bool = False
+
+    @field_validator("execution_mode")
+    @classmethod
+    def _execution_mode_valid(cls, v: str) -> str:
+        if v not in {"serial", "parallel"}:
+            raise ValueError("execution_mode must be 'serial' or 'parallel'")
+        return v
+
+    @field_validator("max_workers")
+    @classmethod
+    def _max_workers_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("max_workers must be >= 1")
+        return v
+
+
 # ---------------------------------------------------------------------------
 # SimulationStage
 # ---------------------------------------------------------------------------
 
 
-class SimulationStageConfigModel(BaseModel):
+class SimulationStageConfigModel(ParallelStageConfigMixin):
     """Validated YAML input for SimulationStage."""
 
     model_config = ConfigDict(frozen=True)
@@ -195,7 +215,7 @@ class SimulationStageConfigModel(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class WalkForwardStageConfigModel(BaseModel):
+class WalkForwardStageConfigModel(ParallelStageConfigMixin):
     """Validated YAML input for WalkForwardStage."""
 
     model_config = ConfigDict(frozen=True)
@@ -264,7 +284,7 @@ class WalkForwardStageConfigModel(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class MonteCarloStageConfigModel(BaseModel):
+class MonteCarloStageConfigModel(ParallelStageConfigMixin):
     """Validated YAML input for MonteCarloStage."""
 
     model_config = ConfigDict(frozen=True)

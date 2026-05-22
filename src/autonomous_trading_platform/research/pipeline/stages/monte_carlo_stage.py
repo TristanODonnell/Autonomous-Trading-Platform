@@ -50,6 +50,7 @@ YAML block example
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -59,6 +60,12 @@ from autonomous_trading_platform.research.checkpoints.research_checkpoint import
 from autonomous_trading_platform.research.checkpoints.research_checkpoint_service import (
     ResearchCheckpointService,
     ResumeMode,
+)
+from autonomous_trading_platform.research.execution import (
+    ExecutionMode,
+    ExecutionUnit,
+    ParallelExecutionConfig,
+    ParallelExecutionService,
 )
 from autonomous_trading_platform.research.experiments.filtering.config import (
     FilterConfig,
@@ -123,6 +130,9 @@ class MonteCarloStageConfig:
     min_pass_rate: float
     filter_config: FilterConfig
     scoring_weights: ScoringWeights
+    execution_mode: ExecutionMode = ExecutionMode.SERIAL
+    max_workers: int = 1
+    fail_fast: bool = False
 
     def __post_init__(self) -> None:
         if self.n_runs < 2:
@@ -169,6 +179,13 @@ class MonteCarloStage(BaseStage):
         self._resume_mode = resume_mode
         self._force_rerun = force_rerun
         self._dry_run = dry_run
+        self._execution_service = ParallelExecutionService(
+            ParallelExecutionConfig(
+                mode=stage_config.execution_mode,
+                max_workers=stage_config.max_workers,
+                fail_fast=stage_config.fail_fast,
+            )
+        )
         self._aggregator = MonteCarloAggregator(
             filter_config=stage_config.filter_config,
             min_pass_rate=stage_config.min_pass_rate,
@@ -203,6 +220,9 @@ class MonteCarloStage(BaseStage):
             end_date=validated.end_date,
             n_runs=validated.n_runs,
             min_pass_rate=validated.min_pass_rate,
+            execution_mode=ExecutionMode(validated.execution_mode),
+            max_workers=validated.max_workers,
+            fail_fast=validated.fail_fast,
             filter_config=validated.filter_config.to_dataclass(),
             scoring_weights=validated.scoring_weights.to_dataclass(),
         )
@@ -337,7 +357,7 @@ class MonteCarloStage(BaseStage):
         Run the strategy N times with seeds [base_seed, base_seed+1, …,
         base_seed+n_runs-1] and aggregate the results.
         """
-        run_results: list[SimulationRunResult] = []
+        units: list[ExecutionUnit[SimulationRunResult | None]] = []
 
         for run_index in range(self._cfg.n_runs):
             seed = base_seed + run_index
@@ -355,9 +375,22 @@ class MonteCarloStage(BaseStage):
                 window_role=f"mc_run_{run_index}",
                 stage_name=self.stage_name,
             )
-            result = self._run_resumable_trial(req)
-            if result is not None:
-                run_results.append(result)
+            units.append(
+                ExecutionUnit(
+                    unit_id=f"{self.stage_name}:mc_run_{run_index}:{config.strategy_id}",
+                    sort_key=(config.strategy_id, run_index),
+                    run=self._trial_runner_for(req),
+                    metadata={
+                        "strategy_id": config.strategy_id,
+                        "stage_name": self.stage_name,
+                        "window_role": f"mc_run_{run_index}",
+                        "trial_id": run_index,
+                        "seed": seed,
+                    },
+                )
+            )
+        maybe_run_results = self._execution_service.values(units)
+        run_results = [result for result in maybe_run_results if result is not None]
 
         if not run_results:
             return None
@@ -366,6 +399,15 @@ class MonteCarloStage(BaseStage):
             strategy_id=config.strategy_id,
             run_results=run_results,
         )
+
+    def _trial_runner_for(
+        self,
+        request: SimulationRunRequest,
+    ) -> Callable[[], SimulationRunResult | None]:
+        def run() -> SimulationRunResult | None:
+            return self._run_resumable_trial(request)
+
+        return run
 
     # ------------------------------------------------------------------
     # Representative run selection

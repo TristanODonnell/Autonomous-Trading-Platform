@@ -9,6 +9,7 @@ Survivors are the strategies whose filter_result.passed == True.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -18,6 +19,14 @@ from autonomous_trading_platform.research.checkpoints.research_checkpoint import
 from autonomous_trading_platform.research.checkpoints.research_checkpoint_service import (
     ResearchCheckpointService,
     ResumeMode,
+)
+from autonomous_trading_platform.research.execution import (
+    DeterministicSeedInputs,
+    DeterministicSeedService,
+    ExecutionMode,
+    ExecutionUnit,
+    ParallelExecutionConfig,
+    ParallelExecutionService,
 )
 from autonomous_trading_platform.research.experiments.filtering.config import (
     FilterConfig,
@@ -30,6 +39,7 @@ from autonomous_trading_platform.research.experiments.filtering.services.filter_
 from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunner,
     SimulationRunRequest,
+    SimulationRunResult,
 )
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
@@ -47,6 +57,9 @@ class SimulationStageConfig:
     filter_config: FilterConfig
     scoring_weights: ScoringWeights
     window_role: str | None = None
+    execution_mode: ExecutionMode = ExecutionMode.SERIAL
+    max_workers: int = 1
+    fail_fast: bool = False
 
 
 class SimulationStage(BaseStage):
@@ -66,6 +79,14 @@ class SimulationStage(BaseStage):
         self._resume_mode = resume_mode
         self._force_rerun = force_rerun
         self._dry_run = dry_run
+        self._seed_service = DeterministicSeedService()
+        self._execution_service = ParallelExecutionService(
+            ParallelExecutionConfig(
+                mode=stage_config.execution_mode,
+                max_workers=stage_config.max_workers,
+                fail_fast=stage_config.fail_fast,
+            )
+        )
         self._filter_score_service = FilterScoreService(
             filter_config=stage_config.filter_config,
             scoring_weights=stage_config.scoring_weights,
@@ -96,6 +117,9 @@ class SimulationStage(BaseStage):
             end_date=validated.end_date,
             symbols=list(validated.symbols),
             window_role=validated.window_role,
+            execution_mode=ExecutionMode(validated.execution_mode),
+            max_workers=validated.max_workers,
+            fail_fast=validated.fail_fast,
             filter_config=validated.filter_config.to_dataclass(),
             scoring_weights=validated.scoring_weights.to_dataclass(),
         )
@@ -117,14 +141,24 @@ class SimulationStage(BaseStage):
         cfg = self._stage_config
 
         # --- run simulation once per survivor ---------------------------------
-        sim_results = []
-        for config in survivors:
+        units: list[ExecutionUnit[SimulationRunResult | None]] = []
+        for index, config in enumerate(survivors):
+            seed = self._seed_service.derive_seed(
+                DeterministicSeedInputs(
+                    base_seed=random_seed,
+                    experiment_id=experiment_id,
+                    strategy_id=config.strategy_id,
+                    config_hash=config.config_hash(),
+                    stage_name=self.stage_name,
+                    window_role=cfg.window_role or "default",
+                )
+            )
             request = SimulationRunRequest(
                 experiment_id=experiment_id,
                 strategy_id=config.strategy_id,
                 strategy_config=config.model_dump(),
                 dataset_version=dataset_version,
-                random_seed=random_seed,
+                random_seed=seed,
                 price_basis=price_basis,
                 symbols=cfg.symbols,
                 start_date=cfg.start_date,
@@ -133,19 +167,21 @@ class SimulationStage(BaseStage):
                 window_role=cfg.window_role,
                 stage_name=self.stage_name,
             )
-            if self._checkpoint_service is None:
-                sim_results.append(self._simulation_runner.run(request))
-            else:
-                execution = self._checkpoint_service.run_simulation_unit(
-                    request=request,
-                    runner=self._simulation_runner,
-                    task_type=ResearchTaskType.SIMULATION,
-                    resume_mode=self._resume_mode,
-                    force_rerun=self._force_rerun,
-                    dry_run=self._dry_run,
+            units.append(
+                ExecutionUnit(
+                    unit_id=f"{self.stage_name}:{cfg.window_role or 'default'}:{config.strategy_id}",
+                    sort_key=(index, config.strategy_id),
+                    run=self._simulation_runner_for(request),
+                    metadata={
+                        "strategy_id": config.strategy_id,
+                        "stage_name": self.stage_name,
+                        "window_role": cfg.window_role or "default",
+                        "seed": seed,
+                    },
                 )
-                if execution.result is not None:
-                    sim_results.append(execution.result)
+            )
+        maybe_sim_results = self._execution_service.values(units)
+        sim_results = [result for result in maybe_sim_results if result is not None]
 
         # --- filter and score -------------------------------------------------
         if not sim_results:
@@ -206,3 +242,28 @@ class SimulationStage(BaseStage):
             filter_outputs=filter_outputs,
             survivors=next_survivors,
         )
+
+    def _simulation_runner_for(
+        self,
+        request: SimulationRunRequest,
+    ) -> Callable[[], SimulationRunResult | None]:
+        def run() -> SimulationRunResult | None:
+            return self._run_resumable_simulation(request)
+
+        return run
+
+    def _run_resumable_simulation(
+        self,
+        request: SimulationRunRequest,
+    ) -> SimulationRunResult | None:
+        if self._checkpoint_service is None:
+            return self._simulation_runner.run(request)
+        execution = self._checkpoint_service.run_simulation_unit(
+            request=request,
+            runner=self._simulation_runner,
+            task_type=ResearchTaskType.SIMULATION,
+            resume_mode=self._resume_mode,
+            force_rerun=self._force_rerun,
+            dry_run=self._dry_run,
+        )
+        return execution.result

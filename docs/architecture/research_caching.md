@@ -220,6 +220,12 @@ Both cache classes use `threading.Lock` around all mutations.  They are safe
 for concurrent use within a single process.  Cross-process coordination is out
 of scope (see Deferred Work below).
 
+Parallel simulation stages perform cache lookups and records per unit. Duplicate
+records for the same cache key remain idempotent, so concurrent units cannot
+replace the canonical first completed entry. Serial and parallel execution use
+the same request fields for cache key construction, including deterministic
+stage/window roles and per-unit seeds.
+
 ---
 
 ## Invariants

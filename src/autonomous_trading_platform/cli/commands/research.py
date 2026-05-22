@@ -712,6 +712,20 @@ def _register_run_experiment(subparsers) -> None:
     )
     parser.add_argument("--universe-version", default="v1")
     parser.add_argument("--initial-cash", type=float, default=100_000.0)
+    parser.add_argument(
+        "--execution-mode",
+        choices=["serial", "parallel"],
+        default="serial",
+        help="Research pipeline execution mode for independent staged units.",
+    )
+    parser.add_argument("--max-workers", type=int, default=1)
+    parser.add_argument(
+        "--base-seed",
+        type=int,
+        default=None,
+        help="Override experiment random_seed for deterministic per-unit seed derivation.",
+    )
+    parser.add_argument("--fail-fast", action="store_true")
     parser.set_defaults(func=handle_run_experiment)
 
 
@@ -741,10 +755,11 @@ def handle_run_experiment(args: argparse.Namespace) -> int:
         simulation_context = build_simulation_context(session=session)
 
         if args.config:
-            plan = _load_experiment_from_yaml(args.config, simulation_context)
+            plan = _load_experiment_from_yaml(args.config, simulation_context, args=args)
         else:
             strategy_parameters = json.loads(args.strategy_parameters)
             parameter_space = json.loads(args.parameter_space) if args.parameter_space else None
+            random_seed = args.base_seed if args.base_seed is not None else args.random_seed
 
             plan = ExperimentDefinition(
                 experiment_id=args.experiment_id,
@@ -765,7 +780,7 @@ def handle_run_experiment(args: argparse.Namespace) -> int:
                 symbols=_parse_symbols(args.symbols),
                 start_date=_parse_date(args.start_date),
                 end_date=_parse_date(args.end_date),
-                random_seed=args.random_seed,
+                random_seed=random_seed,
                 initial_cash=args.initial_cash,
             )
 
@@ -842,6 +857,7 @@ def handle_run_experiment(args: argparse.Namespace) -> int:
 def _load_experiment_from_yaml(
     config_path: str,
     simulation_context,
+    args: argparse.Namespace | None = None,
 ) -> ExperimentDefinition:
     with open(config_path) as f:
         raw = yaml.safe_load(f)
@@ -857,9 +873,20 @@ def _load_experiment_from_yaml(
     if pipeline_raw:
         if "stages" not in pipeline_raw:
             raise ValueError("staged_pipeline_config must contain a 'stages' list")
+        stage_raws = list(pipeline_raw["stages"])
+        if args is not None:
+            stage_raws = [
+                {
+                    **stage_raw,
+                    "execution_mode": stage_raw.get("execution_mode", args.execution_mode),
+                    "max_workers": stage_raw.get("max_workers", args.max_workers),
+                    "fail_fast": stage_raw.get("fail_fast", args.fail_fast),
+                }
+                for stage_raw in stage_raws
+            ]
         stages = [
             StageRegistry.load(stage_raw, simulation_context.simulation_runner)
-            for stage_raw in pipeline_raw["stages"]
+            for stage_raw in stage_raws
         ]
         staged_pipeline_config = StagedPipelineConfig(stages=stages)
 
@@ -880,7 +907,9 @@ def _load_experiment_from_yaml(
         "symbols": raw.get("symbols"),
         "start_date": raw.get("start_date"),
         "end_date": raw.get("end_date"),
-        "random_seed": raw.get("random_seed", 42),
+        "random_seed": args.base_seed
+        if args and args.base_seed is not None
+        else raw.get("random_seed", 42),
         "initial_cash": raw.get("initial_cash", 100_000.0),
         "train_ratio": raw.get("train_ratio"),
         "window_size_days": raw.get("window_size_days"),

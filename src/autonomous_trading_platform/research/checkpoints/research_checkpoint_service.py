@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -58,14 +59,17 @@ class ResearchCheckpointService:
         self._persist_path = Path(persist_path) if persist_path else None
         self._checkpoints: dict[str, ResearchCheckpoint] = {}
         self._simulation_cache = simulation_cache
+        self._lock = threading.RLock()
         if self._persist_path and self._persist_path.exists():
             self._load()
 
     def list_checkpoints(self) -> list[ResearchCheckpoint]:
-        return [self._checkpoints[key] for key in sorted(self._checkpoints)]
+        with self._lock:
+            return [self._checkpoints[key] for key in sorted(self._checkpoints)]
 
     def get(self, identity: ResearchCheckpointIdentity) -> ResearchCheckpoint | None:
-        return self._checkpoints.get(identity.checkpoint_id)
+        with self._lock:
+            return self._checkpoints.get(identity.checkpoint_id)
 
     def mark_running(self, identity: ResearchCheckpointIdentity) -> ResearchCheckpoint:
         return self._upsert(identity=identity, status=ResearchCheckpointStatus.RUNNING)
@@ -244,51 +248,56 @@ class ResearchCheckpointService:
         cached_run_id: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> ResearchCheckpoint:
-        existing = self._checkpoints.get(identity.checkpoint_id)
-        now = datetime.now(UTC)
-        if existing is None:
-            checkpoint = ResearchCheckpoint(identity=identity, status=status)
-        else:
-            if existing.identity.to_dict() != identity.to_dict():
-                raise ValueError(
-                    f"Unsafe checkpoint identity mismatch for {identity.checkpoint_id}"
-                )
-            checkpoint = existing
-            checkpoint.status = status
-            checkpoint.updated_at = now
+        with self._lock:
+            existing = self._checkpoints.get(identity.checkpoint_id)
+            now = datetime.now(UTC)
+            if existing is None:
+                checkpoint = ResearchCheckpoint(identity=identity, status=status)
+            else:
+                if existing.identity.to_dict() != identity.to_dict():
+                    raise ValueError(
+                        f"Unsafe checkpoint identity mismatch for {identity.checkpoint_id}"
+                    )
+                checkpoint = existing
+                checkpoint.status = status
+                checkpoint.updated_at = now
 
-        checkpoint.error_message = error_message
-        checkpoint.artifact_uri = (
-            artifact_uri if artifact_uri is not None else checkpoint.artifact_uri
-        )
-        checkpoint.cache_key = cache_key if cache_key is not None else checkpoint.cache_key
-        checkpoint.cached_run_id = (
-            cached_run_id if cached_run_id is not None else checkpoint.cached_run_id
-        )
-        if metadata:
-            checkpoint.metadata = {**checkpoint.metadata, **metadata}
-        self._checkpoints[identity.checkpoint_id] = checkpoint
-        self._persist()
-        return checkpoint
+            checkpoint.error_message = error_message
+            checkpoint.artifact_uri = (
+                artifact_uri if artifact_uri is not None else checkpoint.artifact_uri
+            )
+            checkpoint.cache_key = cache_key if cache_key is not None else checkpoint.cache_key
+            checkpoint.cached_run_id = (
+                cached_run_id if cached_run_id is not None else checkpoint.cached_run_id
+            )
+            if metadata:
+                checkpoint.metadata = {**checkpoint.metadata, **metadata}
+            self._checkpoints[identity.checkpoint_id] = checkpoint
+            self._persist()
+            return checkpoint
 
     def _persist(self) -> None:
         if self._persist_path is None:
             return
-        self._persist_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            checkpoint_id: checkpoint.to_dict()
-            for checkpoint_id, checkpoint in sorted(self._checkpoints.items())
-        }
-        self._persist_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        with self._lock:
+            self._persist_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                checkpoint_id: checkpoint.to_dict()
+                for checkpoint_id, checkpoint in sorted(self._checkpoints.items())
+            }
+            self._persist_path.write_text(
+                json.dumps(payload, indent=2, default=str), encoding="utf-8"
+            )
 
     def _load(self) -> None:
-        raw = json.loads(self._persist_path.read_text(encoding="utf-8"))  # type: ignore[union-attr]
-        if not isinstance(raw, dict):
-            raise ValueError("Checkpoint store must contain a JSON object")
-        self._checkpoints = {
-            checkpoint_id: ResearchCheckpoint.from_dict(payload)
-            for checkpoint_id, payload in raw.items()
-        }
+        with self._lock:
+            raw = json.loads(self._persist_path.read_text(encoding="utf-8"))  # type: ignore[union-attr]
+            if not isinstance(raw, dict):
+                raise ValueError("Checkpoint store must contain a JSON object")
+            self._checkpoints = {
+                checkpoint_id: ResearchCheckpoint.from_dict(payload)
+                for checkpoint_id, payload in raw.items()
+            }
 
 
 def simulation_request_checkpoint_identity(

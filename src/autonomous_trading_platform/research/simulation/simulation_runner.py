@@ -108,6 +108,7 @@ class SimulationRunResult:
     experiment_id: str | None
     strategy_id: str
     dataset_version: str
+    random_seed: int
     symbols: list[str]
     start_date: date
     end_date: date
@@ -310,6 +311,7 @@ class SimulationRunner:
                 experiment_id=experiment_id,
                 strategy_id=request.strategy_id,
                 dataset_version=request.dataset_version,
+                random_seed=request.random_seed,
                 symbols=window.symbols,
                 start_date=request.start_date,
                 end_date=request.end_date,

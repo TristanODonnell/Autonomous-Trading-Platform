@@ -59,3 +59,15 @@ atp research resume-experiment --checkpoint-store artifacts/research/checkpoints
 `resume-experiment` is intentionally a planner entry point. Actual execution
 uses `ResearchCheckpointService` inside research pipeline stages, not global
 runtime orchestration.
+
+## Parallel Execution Notes
+
+Research checkpoints are updated per simulation unit and the checkpoint service
+serializes in-memory status changes and JSON persistence with a lock. In
+parallel research mode, a unit that fails is marked failed before the executor
+returns the structured failure summary. Completed and cache-hit units remain
+available to restart planning, so reruns can continue from completed work.
+
+Parallel execution does not share SQLAlchemy sessions safely by itself. Stages
+should only enable parallel mode when the underlying runner and writers are
+isolated or otherwise safe for local threaded execution.
