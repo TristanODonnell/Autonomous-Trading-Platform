@@ -108,6 +108,8 @@ class UniverseCandidateBuilder:
         source: str = UniverseSource.CUSTOM,
         rebalance_reason: str | None = None,
     ) -> CandidateBuildResult:
+        logger.disabled = False
+        logger.propagate = True
         config = _normalize_config(config)
         ctx = get_runtime_context()
         base_log = LogContext(

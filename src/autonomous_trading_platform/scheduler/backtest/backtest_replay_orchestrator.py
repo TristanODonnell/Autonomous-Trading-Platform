@@ -4,6 +4,19 @@ Backtest Replay Orchestrator
 Walks historical bar data, generates MA-crossover signals, writes synthetic
 fills + position/cash snapshots to the SOR so Portfolio and Dashboard pages
 show realistic data without live trading.
+
+CLASSIFICATION: legacy
+    This orchestrator exists to populate the SOR with plausible fills and
+    snapshots for UI/dashboard development. It uses hard-coded MA crossover
+    logic (see _MASignal) and does NOT use any real strategy implementation,
+    the feature pipeline, or risk gates.
+
+    DO NOT add new features to this path.
+    DO NOT use this path for strategy research or parameter sweeps.
+
+    For high-fidelity historical backtesting use BacktestTradingCycleOrchestrator.
+    For strategy research use research/simulation/simulation_runner.py.
+    See docs/architecture/research_execution_paths.md for the full classification.
 """
 
 from __future__ import annotations

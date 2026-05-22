@@ -1,3 +1,19 @@
+"""
+Replay Runtime Service
+
+CLASSIFICATION: integration_replay
+    Thin wrapper over RuntimeReplayDebugRunner that records replay evidence
+    with non-debug job naming ("runtime_replay" vs "runtime_replay_debug").
+
+    Same execution engine and synthetic-price / synthetic-signal limitations as
+    RuntimeReplayDebugRunner. Use for formally recorded replay verification runs
+    (e.g. CI or scheduled verification pipelines) where you need job-tracking
+    metadata without the debug marker.
+
+    DO NOT use this path for strategy research or production decisions.
+    See docs/architecture/research_execution_paths.md for the full classification.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable

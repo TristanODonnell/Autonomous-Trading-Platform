@@ -195,6 +195,7 @@ def test_returns_feature_pipeline_can_run_by_itself(
         include_moving_average=False,
         include_liquidity=False,
         include_regime=False,
+        include_regime_classification=False,
     )
 
     feature_versions = _feature_dataset_versions_for_source(
@@ -229,6 +230,7 @@ def test_include_flags_skip_disabled_feature_jobs(
         include_moving_average=True,
         include_liquidity=False,
         include_regime=False,
+        include_regime_classification=False,
     )
 
     feature_versions = _feature_dataset_versions_for_source(

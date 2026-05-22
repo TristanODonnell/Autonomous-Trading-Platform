@@ -7,6 +7,9 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.dataset as ds
 
+from autonomous_trading_platform.research.simulation.artifact_identity import (
+    SimulationArtifactIdentity,
+)
 from autonomous_trading_platform.storage.parquet.datasets import (
     SIMULATION_EQUITY_CURVE_DATASET,
     SIMULATION_PER_BAR_METRICS_DATASET,
@@ -31,10 +34,8 @@ class ParquetSimulationRepository:
 
     def _dataset_root(self, dataset: ParquetDataset) -> Path:
         root = self.base_path
-
         for part in dataset.root_parts:
             root = root / part
-
         return root
 
     def _validate_table(self, table: pa.Table, *, dataset: ParquetDataset) -> None:
@@ -63,8 +64,7 @@ class ParquetSimulationRepository:
         *,
         frame: pd.DataFrame,
         dataset: ParquetDataset,
-        experiment_id: str,
-        strategy_id: str,
+        identity: SimulationArtifactIdentity,
     ) -> pd.DataFrame:
         prepared = frame.copy()
 
@@ -77,10 +77,19 @@ class ParquetSimulationRepository:
             prepared["date"] = timestamp.dt.date
 
         if "experiment_id" not in prepared.columns:
-            prepared["experiment_id"] = experiment_id
+            prepared["experiment_id"] = identity.experiment_id
 
         if "strategy_id" not in prepared.columns:
-            prepared["strategy_id"] = strategy_id
+            prepared["strategy_id"] = identity.strategy_id
+
+        if "run_id" not in prepared.columns:
+            prepared["run_id"] = identity.run_id
+
+        # Always overwrite — these are identity-level columns that must match
+        # the artifact identity regardless of what the execution engine emits.
+        prepared["stage_name"] = identity.stage_name
+        prepared["window_role"] = identity.window_role
+        prepared["dataset_version"] = identity.dataset_version
 
         missing_columns = [
             column for column in dataset.schema.names if column not in prepared.columns
@@ -101,8 +110,7 @@ class ParquetSimulationRepository:
         *,
         frame: pd.DataFrame,
         output_name: str,
-        experiment_id: str,
-        strategy_id: str,
+        identity: SimulationArtifactIdentity,
     ) -> None:
         try:
             dataset = SIMULATION_DATASETS_BY_NAME[output_name]
@@ -112,8 +120,7 @@ class ParquetSimulationRepository:
         prepared_frame = self._prepare_simulation_frame_for_write(
             frame=frame,
             dataset=dataset,
-            experiment_id=experiment_id,
-            strategy_id=strategy_id,
+            identity=identity,
         )
 
         table = pa.Table.from_pandas(prepared_frame, preserve_index=False)
@@ -135,11 +142,16 @@ class ParquetSimulationRepository:
         dataset_root = self._dataset_root(dataset)
         dataset_root.mkdir(parents=True, exist_ok=True)
 
+        # Use hive-style partitioning so directories follow key=value naming,
+        # making partition paths self-documenting and readable by standard tools.
+        partition_schema = pa.schema([(col, pa.string()) for col in dataset.partition_cols])
+        partitioning = ds.partitioning(partition_schema, flavor="hive")
+
         ds.write_dataset(
             data=table,
             base_dir=str(dataset_root),
             format="parquet",
-            partitioning=list(dataset.partition_cols),
+            partitioning=partitioning,
             existing_data_behavior="overwrite_or_ignore",
         )
 
@@ -147,29 +159,17 @@ class ParquetSimulationRepository:
         self,
         *,
         frame: pd.DataFrame,
-        experiment_id: str,
-        strategy_id: str,
+        identity: SimulationArtifactIdentity,
     ) -> None:
-        self.write_simulation_frame(
-            frame=frame,
-            output_name="trade_logs",
-            experiment_id=experiment_id,
-            strategy_id=strategy_id,
-        )
+        self.write_simulation_frame(frame=frame, output_name="trade_logs", identity=identity)
 
     def write_equity_curve(
         self,
         *,
         frame: pd.DataFrame,
-        experiment_id: str,
-        strategy_id: str,
+        identity: SimulationArtifactIdentity,
     ) -> None:
-        self.write_simulation_frame(
-            frame=frame,
-            output_name="equity_curve",
-            experiment_id=experiment_id,
-            strategy_id=strategy_id,
-        )
+        self.write_simulation_frame(frame=frame, output_name="equity_curve", identity=identity)
 
     def read_equity_curve(
         self,
@@ -209,40 +209,22 @@ class ParquetSimulationRepository:
         self,
         *,
         frame: pd.DataFrame,
-        experiment_id: str,
-        strategy_id: str,
+        identity: SimulationArtifactIdentity,
     ) -> None:
-        self.write_simulation_frame(
-            frame=frame,
-            output_name="per_bar_metrics",
-            experiment_id=experiment_id,
-            strategy_id=strategy_id,
-        )
+        self.write_simulation_frame(frame=frame, output_name="per_bar_metrics", identity=identity)
 
     def write_positions(
         self,
         *,
         frame: pd.DataFrame,
-        experiment_id: str,
-        strategy_id: str,
+        identity: SimulationArtifactIdentity,
     ) -> None:
-        self.write_simulation_frame(
-            frame=frame,
-            output_name="positions",
-            experiment_id=experiment_id,
-            strategy_id=strategy_id,
-        )
+        self.write_simulation_frame(frame=frame, output_name="positions", identity=identity)
 
     def write_signal_log(
         self,
         *,
         frame: pd.DataFrame,
-        experiment_id: str,
-        strategy_id: str,
+        identity: SimulationArtifactIdentity,
     ) -> None:
-        self.write_simulation_frame(
-            frame=frame,
-            output_name="signal_log",
-            experiment_id=experiment_id,
-            strategy_id=strategy_id,
-        )
+        self.write_simulation_frame(frame=frame, output_name="signal_log", identity=identity)

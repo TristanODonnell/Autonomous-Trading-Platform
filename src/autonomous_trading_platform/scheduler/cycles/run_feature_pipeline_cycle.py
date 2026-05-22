@@ -19,6 +19,9 @@ from autonomous_trading_platform.feature_engineering.jobs.liquidity_feature_job 
 from autonomous_trading_platform.feature_engineering.jobs.moving_average_feature_job import (
     MovingAverageFeatureJob,
 )
+from autonomous_trading_platform.feature_engineering.jobs.regime_classification_feature_job import (
+    RegimeClassificationFeatureJob,
+)
 from autonomous_trading_platform.feature_engineering.jobs.regime_feature_job import (
     RegimeFeatureJob,
 )
@@ -45,6 +48,9 @@ from autonomous_trading_platform.feature_engineering.services.liquidity_feature_
 )
 from autonomous_trading_platform.feature_engineering.services.moving_average_feature_service import (
     MovingAverageFeatureService,
+)
+from autonomous_trading_platform.feature_engineering.services.regime_classification_feature_service import (
+    RegimeClassificationFeatureService,
 )
 from autonomous_trading_platform.feature_engineering.services.regime_feature_service import (
     RegimeFeatureService,
@@ -177,6 +183,7 @@ def run_feature_pipeline_cycle(
     include_moving_average: bool = True,
     include_liquidity: bool = True,
     include_regime: bool = True,
+    include_regime_classification: bool = True,
 ) -> None:
     if now_utc is None:
         now_utc = datetime.now(UTC)
@@ -304,6 +311,7 @@ def run_feature_pipeline_cycle(
             "include_moving_average": include_moving_average,
             "include_liquidity": include_liquidity,
             "include_regime": include_regime,
+            "include_regime_classification": include_regime_classification,
         }
 
         # Shared infrastructure
@@ -336,6 +344,7 @@ def run_feature_pipeline_cycle(
         moving_average_service = MovingAverageFeatureService()
         liquidity_service = LiquidityFeatureService()
         regime_service = RegimeFeatureService()
+        regime_classification_service = RegimeClassificationFeatureService()
 
         # Jobs
         returns_job = ReturnsFeatureJob(
@@ -373,6 +382,13 @@ def run_feature_pipeline_cycle(
             guard_service=guard_service,
             validation_service=validation_service,
             regime_service=regime_service,
+        )
+        regime_classification_job = RegimeClassificationFeatureJob(
+            resolver_service=resolver_service,
+            writer_service=writer_service,
+            guard_service=guard_service,
+            validation_service=validation_service,
+            regime_classification_service=regime_classification_service,
         )
 
         with start_span("feature_pipeline_cycle.run", timespan=SpanTimespan.CYCLE) as cycle_span:
@@ -505,6 +521,18 @@ def run_feature_pipeline_cycle(
                     ),
                 )
 
+            if include_regime_classification:
+                run_step(
+                    "regime_classification_feature",
+                    lambda: regime_classification_job.run(
+                        price_basis=price_basis,
+                        dataset_version_id=dataset_version_id,
+                        symbols=symbols,
+                        start_date=start_date,
+                        end_date=end_date,
+                    ),
+                )
+
             manifest.status = "completed"
             _save_runtime_job_run(
                 status="completed",
@@ -518,6 +546,7 @@ def run_feature_pipeline_cycle(
                     "include_moving_average": include_moving_average,
                     "include_liquidity": include_liquidity,
                     "include_regime": include_regime,
+                    "include_regime_classification": include_regime_classification,
                 },
             )
 

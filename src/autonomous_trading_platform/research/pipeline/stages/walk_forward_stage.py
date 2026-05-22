@@ -10,11 +10,25 @@ windows. A strategy survives the stage only if it passes ALL folds
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.research.checkpoints.research_checkpoint import ResearchTaskType
+from autonomous_trading_platform.research.checkpoints.research_checkpoint_service import (
+    ResearchCheckpointService,
+    ResumeMode,
+)
+from autonomous_trading_platform.research.execution import (
+    DeterministicSeedInputs,
+    DeterministicSeedService,
+    ExecutionMode,
+    ExecutionUnit,
+    ParallelExecutionConfig,
+    ParallelExecutionService,
+)
 from autonomous_trading_platform.research.experiments.filtering.config import (
     FilterConfig,
     ScoringWeights,
@@ -72,6 +86,9 @@ class WalkForwardStageConfig:
     test_scoring_weights: ScoringWeights
     require_all_folds: bool = True
     min_folds_passed: int = 1
+    execution_mode: ExecutionMode = ExecutionMode.SERIAL
+    max_workers: int = 1
+    fail_fast: bool = False
 
     def __post_init__(self) -> None:
         if self.train_days <= 0:
@@ -131,9 +148,25 @@ class WalkForwardStage(BaseStage):
         *,
         stage_config: WalkForwardStageConfig,
         simulation_runner: SimulationRunner,
+        checkpoint_service: ResearchCheckpointService | None = None,
+        resume_mode: ResumeMode = ResumeMode.ALL,
+        force_rerun: bool = False,
+        dry_run: bool = False,
     ) -> None:
         self._cfg = stage_config
         self._simulation_runner = simulation_runner
+        self._checkpoint_service = checkpoint_service
+        self._resume_mode = resume_mode
+        self._force_rerun = force_rerun
+        self._dry_run = dry_run
+        self._seed_service = DeterministicSeedService()
+        self._execution_service = ParallelExecutionService(
+            ParallelExecutionConfig(
+                mode=stage_config.execution_mode,
+                max_workers=stage_config.max_workers,
+                fail_fast=stage_config.fail_fast,
+            )
+        )
         self._train_filter_service = FilterScoreService(
             filter_config=stage_config.train_filter_config,
             scoring_weights=stage_config.train_scoring_weights,
@@ -153,20 +186,28 @@ class WalkForwardStage(BaseStage):
         raw: dict[str, Any],
         simulation_runner: SimulationRunner,
     ) -> WalkForwardStage:
+        from autonomous_trading_platform.research.config.stage_configs import (
+            WalkForwardStageConfigModel,
+        )
+
+        validated = WalkForwardStageConfigModel.model_validate(raw)
         stage_cfg = WalkForwardStageConfig(
-            name=raw["name"],
-            symbols=raw["symbols"],
-            start_date=date.fromisoformat(raw["start_date"]),
-            end_date=date.fromisoformat(raw["end_date"]),
-            train_days=raw["train_days"],
-            test_days=raw["test_days"],
-            step_days=raw["step_days"],
-            require_all_folds=raw.get("require_all_folds", True),
-            min_folds_passed=raw.get("min_folds_passed", 1),
-            train_filter_config=_parse_filter_config(raw["train_filter_config"]),
-            train_scoring_weights=_parse_scoring_weights(raw["train_scoring_weights"]),
-            test_filter_config=_parse_filter_config(raw["test_filter_config"]),
-            test_scoring_weights=_parse_scoring_weights(raw["test_scoring_weights"]),
+            name=validated.name,
+            symbols=list(validated.symbols),
+            start_date=validated.start_date,
+            end_date=validated.end_date,
+            train_days=validated.train_days,
+            test_days=validated.test_days,
+            step_days=validated.step_days,
+            require_all_folds=validated.require_all_folds,
+            min_folds_passed=validated.min_folds_passed,
+            execution_mode=ExecutionMode(validated.execution_mode),
+            max_workers=validated.max_workers,
+            fail_fast=validated.fail_fast,
+            train_filter_config=validated.train_filter_config.to_dataclass(),
+            train_scoring_weights=validated.train_scoring_weights.to_dataclass(),
+            test_filter_config=validated.test_filter_config.to_dataclass(),
+            test_scoring_weights=validated.test_scoring_weights.to_dataclass(),
         )
         return cls(stage_config=stage_cfg, simulation_runner=simulation_runner)
 
@@ -237,6 +278,14 @@ class WalkForwardStage(BaseStage):
                 fold.test_end,
                 passed_fold,
                 len(fold_results),
+            )
+
+        if not all_sim_results:
+            return StageResult(
+                stage_name=self.stage_name,
+                simulation_results=[],
+                filter_outputs=[],
+                survivors=survivors,
             )
 
         n_folds = len(folds)
@@ -314,22 +363,52 @@ class WalkForwardStage(BaseStage):
         window_role_test = f"fold_{fold.index}_test"
 
         # ---- train simulations -------------------------------------------
-        train_sim_results: list[SimulationRunResult] = []
-        for config in configs:
+        train_units: list[ExecutionUnit[SimulationRunResult | None]] = []
+        for index, config in enumerate(configs):
+            seed = self._seed_service.derive_seed(
+                DeterministicSeedInputs(
+                    base_seed=random_seed,
+                    experiment_id=experiment_id,
+                    strategy_id=config.strategy_id,
+                    config_hash=config.config_hash(),
+                    stage_name=self.stage_name,
+                    window_role=window_role_train,
+                    fold_id=fold.index,
+                )
+            )
             req = SimulationRunRequest(
                 experiment_id=experiment_id,
                 strategy_id=config.strategy_id,
                 strategy_config=config.model_dump(),
                 dataset_version=dataset_version,
-                random_seed=random_seed,
+                random_seed=seed,
                 price_basis=price_basis,
                 symbols=cfg.symbols,
                 start_date=fold.train_start,
                 end_date=fold.train_end,
                 initial_cash=initial_cash,
                 window_role=window_role_train,
+                stage_name=self.stage_name,
             )
-            train_sim_results.append(self._simulation_runner.run(req))
+            train_units.append(
+                ExecutionUnit(
+                    unit_id=f"{self.stage_name}:{window_role_train}:{config.strategy_id}",
+                    sort_key=(fold.index, 0, index, config.strategy_id),
+                    run=self._fold_simulation_runner_for(req),
+                    metadata={
+                        "fold_id": fold.index,
+                        "strategy_id": config.strategy_id,
+                        "stage_name": self.stage_name,
+                        "window_role": window_role_train,
+                        "seed": seed,
+                    },
+                )
+            )
+        maybe_train_sim_results = self._execution_service.values(train_units)
+        train_sim_results = [result for result in maybe_train_sim_results if result is not None]
+
+        if not train_sim_results:
+            return []
 
         # ---- train filter -------------------------------------------------
         train_filter_inputs = [
@@ -350,22 +429,49 @@ class WalkForwardStage(BaseStage):
 
         # ---- test simulations (only train-passers) -----------------------
         test_configs = [c for c in configs if c.strategy_id in train_passed_ids]
-        test_sim_results: list[SimulationRunResult] = []
-        for config in test_configs:
+        test_units: list[ExecutionUnit[SimulationRunResult | None]] = []
+        for index, config in enumerate(test_configs):
+            seed = self._seed_service.derive_seed(
+                DeterministicSeedInputs(
+                    base_seed=random_seed,
+                    experiment_id=experiment_id,
+                    strategy_id=config.strategy_id,
+                    config_hash=config.config_hash(),
+                    stage_name=self.stage_name,
+                    window_role=window_role_test,
+                    fold_id=fold.index,
+                )
+            )
             req = SimulationRunRequest(
                 experiment_id=experiment_id,
                 strategy_id=config.strategy_id,
                 strategy_config=config.model_dump(),
                 dataset_version=dataset_version,
-                random_seed=random_seed,
+                random_seed=seed,
                 price_basis=price_basis,
                 symbols=cfg.symbols,
                 start_date=fold.test_start,
                 end_date=fold.test_end,
                 initial_cash=initial_cash,
                 window_role=window_role_test,
+                stage_name=self.stage_name,
             )
-            test_sim_results.append(self._simulation_runner.run(req))
+            test_units.append(
+                ExecutionUnit(
+                    unit_id=f"{self.stage_name}:{window_role_test}:{config.strategy_id}",
+                    sort_key=(fold.index, 1, index, config.strategy_id),
+                    run=self._fold_simulation_runner_for(req),
+                    metadata={
+                        "fold_id": fold.index,
+                        "strategy_id": config.strategy_id,
+                        "stage_name": self.stage_name,
+                        "window_role": window_role_test,
+                        "seed": seed,
+                    },
+                )
+            )
+        maybe_test_sim_results = self._execution_service.values(test_units)
+        test_sim_results = [result for result in maybe_test_sim_results if result is not None]
 
         # ---- test filter -------------------------------------------------
         test_filter_inputs = [
@@ -417,3 +523,28 @@ class WalkForwardStage(BaseStage):
                 )
 
         return fold_results
+
+    def _fold_simulation_runner_for(
+        self,
+        request: SimulationRunRequest,
+    ) -> Callable[[], SimulationRunResult | None]:
+        def run() -> SimulationRunResult | None:
+            return self._run_resumable_fold_simulation(request)
+
+        return run
+
+    def _run_resumable_fold_simulation(
+        self,
+        request: SimulationRunRequest,
+    ) -> SimulationRunResult | None:
+        if self._checkpoint_service is None:
+            return self._simulation_runner.run(request)
+        execution = self._checkpoint_service.run_simulation_unit(
+            request=request,
+            runner=self._simulation_runner,
+            task_type=ResearchTaskType.WALK_FORWARD_FOLD,
+            resume_mode=self._resume_mode,
+            force_rerun=self._force_rerun,
+            dry_run=self._dry_run,
+        )
+        return execution.result

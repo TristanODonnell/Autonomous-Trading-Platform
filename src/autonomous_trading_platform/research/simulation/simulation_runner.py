@@ -48,6 +48,12 @@ from autonomous_trading_platform.research.experiments.filtering.metrics.trade_me
 from autonomous_trading_platform.research.services.research_dataset_resolver_service import (
     ResearchDatasetResolver,
 )
+from autonomous_trading_platform.research.simulation.artifact_identity import (
+    SimulationArtifactIdentity,
+)
+from autonomous_trading_platform.research.simulation.services.feature_dependency_resolver_service import (
+    FeatureDependencyResolverService,
+)
 from autonomous_trading_platform.research.simulation.services.result_recorder_service import (
     ResultRecorderService,
 )
@@ -75,6 +81,7 @@ from autonomous_trading_platform.strategy.contexts.strategy_context_builder impo
     StrategyContextBuilder,
 )
 from autonomous_trading_platform.strategy.factories.strategy_factory import StrategyFactory
+from autonomous_trading_platform.strategy.registry.strategy_registry import get_registry
 
 
 @dataclass(slots=True)
@@ -101,6 +108,7 @@ class SimulationRunResult:
     experiment_id: str | None
     strategy_id: str
     dataset_version: str
+    random_seed: int
     symbols: list[str]
     start_date: date
     end_date: date
@@ -145,6 +153,7 @@ class SimulationRunner:
         metrics_summary_repository: MetricsSummaryRepository,
         manifest_service: Any | None = None,
         strategy_factory: StrategyFactory,
+        feature_dependency_resolver: FeatureDependencyResolverService | None = None,
     ) -> None:
         self.strategy_factory = strategy_factory
         self.dataset_resolver = dataset_resolver
@@ -158,6 +167,7 @@ class SimulationRunner:
         self.manifest_service = manifest_service
         self.experiment_repository = experiment_repository
         self.metrics_summary_repository = metrics_summary_repository
+        self.feature_dependency_resolver = feature_dependency_resolver
 
     def run(self, request: SimulationRunRequest) -> SimulationRunResult:
         if not isinstance(request.random_seed, int):
@@ -168,36 +178,71 @@ class SimulationRunner:
         run_id = uuid4()
         experiment_id = request.experiment_id or f"adhoc_{run_id}"
 
+        artifact_identity = SimulationArtifactIdentity(
+            run_id=str(run_id),
+            experiment_id=experiment_id,
+            strategy_id=request.strategy_id,
+            dataset_version=request.dataset_version,
+            stage_name=request.stage_name or "adhoc",
+            window_role=request.window_role or "default",
+            seed=request.random_seed,
+            universe_version="v1",
+            price_basis=request.price_basis.value,
+            start_date=request.start_date,
+            end_date=request.end_date,
+        )
+
         resolved_dataset = self.dataset_resolver.resolve_bars_dataset(
             dataset_version=request.dataset_version,
             price_basis=request.price_basis,
         )
+
+        # Resolve feature dependencies and registry-derived warmup before
+        # persisting run metadata so resolved_feature_dataset_ids can be
+        # recorded in execution_config from the start.
+        strategy_type = request.strategy_config["type"]
+        strategy_parameters = request.strategy_config.get("parameters", {})
+
+        if self.feature_dependency_resolver is not None:
+            resolved_deps = self.feature_dependency_resolver.resolve(
+                strategy_type=strategy_type,
+                strategy_parameters=strategy_parameters,
+                simulation_dataset_version=request.dataset_version,
+                price_basis=request.price_basis,
+                symbols=request.symbols,
+                start_date=request.start_date,
+                end_date=request.end_date,
+            )
+            feature_requests = resolved_deps.feature_requests
+            resolved_feature_dataset_ids = resolved_deps.resolved_feature_dataset_ids
+            warmup_bars = resolved_deps.warmup_bars
+        else:
+            # Registry warmup replaces the former parameter-name heuristic
+            # (_long_window * 78).  The registry warmup functions already return
+            # bars directly; no day-to-bar conversion is needed here.
+            registry = get_registry()
+            defn = registry.get_definition(strategy_type)
+            warmup_bars = defn.compute_warmup_bars(strategy_parameters)
+            feature_requests = []
+            resolved_feature_dataset_ids = {}
 
         self._record_run_started(
             run_id=run_id,
             request=request,
             experiment_id=experiment_id,
             resolved_dataset_metadata=resolved_dataset.metadata,
+            resolved_feature_dataset_ids=resolved_feature_dataset_ids,
         )
         self._commit_metadata()
 
         try:
-            # Compute warmup bars from the strategy's longest lookback window so
-            # indicators (MA, RSI, etc.) are fully seeded before the live window
-            # starts. Uses 78 bars/trading day (5-min, 9:30→16:00 session).
-            _BARS_PER_TRADING_DAY = 78
-            _params = request.strategy_config.get("parameters", {})
-            _long_window = int(
-                _params.get("long_window") or _params.get("window") or _params.get("lookback") or 0
-            )
-            warmup_bars = _long_window * _BARS_PER_TRADING_DAY
-
             window = self.window_loader.load_window(
                 dataset_version=request.dataset_version,
                 bars_dataset=resolved_dataset.dataset,
                 symbols=request.symbols,
                 start_date=request.start_date,
                 end_date=request.end_date,
+                feature_datasets=feature_requests or None,
                 strict=request.strict_data_loading,
                 warmup_bars=warmup_bars,
             )
@@ -225,8 +270,7 @@ class SimulationRunner:
             )
 
             self.result_recorder.record_results(
-                experiment_id=experiment_id,
-                strategy_id=request.strategy_id,
+                identity=artifact_identity,
                 trade_logs=trade_logs,
                 equity_curve=equity_curve,
                 per_bar_metrics=per_bar_metrics,
@@ -249,6 +293,7 @@ class SimulationRunner:
 
             self._record_run_completed(
                 run_id=run_id,
+                artifact_identity=artifact_identity,
                 trade_count=tm.total_trades,
                 equity_points=len(live_equity_curve),
                 per_bar_metric_points=len(per_bar_metrics),
@@ -266,6 +311,7 @@ class SimulationRunner:
                 experiment_id=experiment_id,
                 strategy_id=request.strategy_id,
                 dataset_version=request.dataset_version,
+                random_seed=request.random_seed,
                 symbols=window.symbols,
                 start_date=request.start_date,
                 end_date=request.end_date,
@@ -311,6 +357,7 @@ class SimulationRunner:
         request: SimulationRunRequest,
         experiment_id: str,
         resolved_dataset_metadata: dict[str, Any],
+        resolved_feature_dataset_ids: dict[str, str],
     ) -> None:
         now = datetime.now(UTC)
         if self.experiment_repository is not None:
@@ -382,6 +429,7 @@ class SimulationRunner:
                     "strict_data_loading": request.strict_data_loading,
                     "stage_name": request.stage_name,
                     "resolved_dataset_metadata": resolved_dataset_metadata,
+                    "resolved_feature_dataset_ids": resolved_feature_dataset_ids,
                 },
                 status="RUNNING",
                 metrics_snapshot_id=None,
@@ -445,6 +493,9 @@ class SimulationRunner:
                         "symbols": request.symbols,
                         "strict_data_loading": request.strict_data_loading,
                     },
+                    "feature_dependencies": {
+                        "resolved_feature_dataset_ids": resolved_feature_dataset_ids,
+                    },
                 },
                 governance_state=GovernanceState.APPROVED_RESEARCH,
             )
@@ -455,6 +506,7 @@ class SimulationRunner:
         self,
         *,
         run_id: UUID,
+        artifact_identity: SimulationArtifactIdentity,
         trade_count: int,
         equity_points: int,
         per_bar_metric_points: int,
@@ -515,11 +567,13 @@ class SimulationRunner:
                 manifest.last_successful_step = "record_results"
                 manifest.error_message = None
                 manifest.artifact_manifest = {
+                    "identity": artifact_identity.to_manifest_dict(),
+                    "partition_path": artifact_identity.partition_path(),
                     "summary": {
                         "trade_count": trade_count,
                         "equity_points": equity_points,
                         "per_bar_metric_points": per_bar_metric_points,
-                    }
+                    },
                 }
 
                 self.manifest_service.upsert(manifest)

@@ -50,11 +50,23 @@ YAML block example
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.research.checkpoints.research_checkpoint import ResearchTaskType
+from autonomous_trading_platform.research.checkpoints.research_checkpoint_service import (
+    ResearchCheckpointService,
+    ResumeMode,
+)
+from autonomous_trading_platform.research.execution import (
+    ExecutionMode,
+    ExecutionUnit,
+    ParallelExecutionConfig,
+    ParallelExecutionService,
+)
 from autonomous_trading_platform.research.experiments.filtering.config import (
     FilterConfig,
     ScoringWeights,
@@ -118,6 +130,9 @@ class MonteCarloStageConfig:
     min_pass_rate: float
     filter_config: FilterConfig
     scoring_weights: ScoringWeights
+    execution_mode: ExecutionMode = ExecutionMode.SERIAL
+    max_workers: int = 1
+    fail_fast: bool = False
 
     def __post_init__(self) -> None:
         if self.n_runs < 2:
@@ -153,9 +168,24 @@ class MonteCarloStage(BaseStage):
         *,
         stage_config: MonteCarloStageConfig,
         simulation_runner: SimulationRunner,
+        checkpoint_service: ResearchCheckpointService | None = None,
+        resume_mode: ResumeMode = ResumeMode.ALL,
+        force_rerun: bool = False,
+        dry_run: bool = False,
     ) -> None:
         self._cfg = stage_config
         self._simulation_runner = simulation_runner
+        self._checkpoint_service = checkpoint_service
+        self._resume_mode = resume_mode
+        self._force_rerun = force_rerun
+        self._dry_run = dry_run
+        self._execution_service = ParallelExecutionService(
+            ParallelExecutionConfig(
+                mode=stage_config.execution_mode,
+                max_workers=stage_config.max_workers,
+                fail_fast=stage_config.fail_fast,
+            )
+        )
         self._aggregator = MonteCarloAggregator(
             filter_config=stage_config.filter_config,
             min_pass_rate=stage_config.min_pass_rate,
@@ -178,15 +208,23 @@ class MonteCarloStage(BaseStage):
         raw: dict[str, Any],
         simulation_runner: SimulationRunner,
     ) -> MonteCarloStage:
+        from autonomous_trading_platform.research.config.stage_configs import (
+            MonteCarloStageConfigModel,
+        )
+
+        validated = MonteCarloStageConfigModel.model_validate(raw)
         stage_cfg = MonteCarloStageConfig(
-            name=raw["name"],
-            symbols=raw["symbols"],
-            start_date=date.fromisoformat(raw["start_date"]),
-            end_date=date.fromisoformat(raw["end_date"]),
-            n_runs=raw.get("n_runs", 30),
-            min_pass_rate=raw.get("min_pass_rate", 0.70),
-            filter_config=_parse_filter_config(raw.get("filter_config", {})),
-            scoring_weights=_parse_scoring_weights(raw.get("scoring_weights", {})),
+            name=validated.name,
+            symbols=list(validated.symbols),
+            start_date=validated.start_date,
+            end_date=validated.end_date,
+            n_runs=validated.n_runs,
+            min_pass_rate=validated.min_pass_rate,
+            execution_mode=ExecutionMode(validated.execution_mode),
+            max_workers=validated.max_workers,
+            fail_fast=validated.fail_fast,
+            filter_config=validated.filter_config.to_dataclass(),
+            scoring_weights=validated.scoring_weights.to_dataclass(),
         )
         return cls(stage_config=stage_cfg, simulation_runner=simulation_runner)
 
@@ -232,6 +270,9 @@ class MonteCarloStage(BaseStage):
                 price_basis=price_basis,
                 initial_cash=initial_cash,
             )
+            if aggregation is None:
+                final_survivors.append(config)
+                continue
 
             # All N raw results flow into the stage output
             all_sim_results.extend(aggregation.run_results)
@@ -311,12 +352,12 @@ class MonteCarloStage(BaseStage):
         base_seed: int,
         price_basis: PriceBasis,
         initial_cash: float,
-    ) -> MonteCarloAggregation:
+    ) -> MonteCarloAggregation | None:
         """
         Run the strategy N times with seeds [base_seed, base_seed+1, …,
         base_seed+n_runs-1] and aggregate the results.
         """
-        run_results: list[SimulationRunResult] = []
+        units: list[ExecutionUnit[SimulationRunResult | None]] = []
 
         for run_index in range(self._cfg.n_runs):
             seed = base_seed + run_index
@@ -334,12 +375,39 @@ class MonteCarloStage(BaseStage):
                 window_role=f"mc_run_{run_index}",
                 stage_name=self.stage_name,
             )
-            run_results.append(self._simulation_runner.run(req))
+            units.append(
+                ExecutionUnit(
+                    unit_id=f"{self.stage_name}:mc_run_{run_index}:{config.strategy_id}",
+                    sort_key=(config.strategy_id, run_index),
+                    run=self._trial_runner_for(req),
+                    metadata={
+                        "strategy_id": config.strategy_id,
+                        "stage_name": self.stage_name,
+                        "window_role": f"mc_run_{run_index}",
+                        "trial_id": run_index,
+                        "seed": seed,
+                    },
+                )
+            )
+        maybe_run_results = self._execution_service.values(units)
+        run_results = [result for result in maybe_run_results if result is not None]
+
+        if not run_results:
+            return None
 
         return self._aggregator.aggregate(
             strategy_id=config.strategy_id,
             run_results=run_results,
         )
+
+    def _trial_runner_for(
+        self,
+        request: SimulationRunRequest,
+    ) -> Callable[[], SimulationRunResult | None]:
+        def run() -> SimulationRunResult | None:
+            return self._run_resumable_trial(request)
+
+        return run
 
     # ------------------------------------------------------------------
     # Representative run selection
@@ -361,3 +429,16 @@ class MonteCarloStage(BaseStage):
                 (r.risk_metrics.sharpe_ratio if r.risk_metrics else 0.0) - median_sharpe
             ),
         )
+
+    def _run_resumable_trial(self, request: SimulationRunRequest) -> SimulationRunResult | None:
+        if self._checkpoint_service is None:
+            return self._simulation_runner.run(request)
+        execution = self._checkpoint_service.run_simulation_unit(
+            request=request,
+            runner=self._simulation_runner,
+            task_type=ResearchTaskType.MONTE_CARLO_TRIAL,
+            resume_mode=self._resume_mode,
+            force_rerun=self._force_rerun,
+            dry_run=self._dry_run,
+        )
+        return execution.result

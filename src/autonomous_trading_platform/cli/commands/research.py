@@ -22,13 +22,24 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import date
+from collections import Counter, defaultdict
+from dataclasses import asdict
+from datetime import UTC, date, datetime
+from pathlib import Path
+from typing import Any
 
 import yaml
 
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.research.checkpoints.research_checkpoint import (
+    ResearchCheckpointIdentity,
+)
+from autonomous_trading_platform.research.checkpoints.research_checkpoint_service import (
+    ResearchCheckpointService,
+)
+from autonomous_trading_platform.research.config.experiment_config import ExperimentConfig
 from autonomous_trading_platform.research.experiments.models.experiment_plan import (
     ExperimentDefinition,
     ExperimentType,
@@ -41,8 +52,15 @@ from autonomous_trading_platform.research.simulation.contexts.build_simulation_c
 from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunRequest,
 )
+from autonomous_trading_platform.research.strategy_generation.generation_result import (
+    GenerationOptions,
+    GenerationResult,
+)
 from autonomous_trading_platform.research.strategy_generation.generators.base_generator import (
     BaseStrategyGenerator,
+)
+from autonomous_trading_platform.research.strategy_generation.generators.evolutionary_generator import (
+    EvolutionaryGenerator,
 )
 from autonomous_trading_platform.research.strategy_generation.generators.grid_search_generator import (
     GridSearchGenerator,
@@ -53,22 +71,16 @@ from autonomous_trading_platform.research.strategy_generation.generators.random_
 from autonomous_trading_platform.research.strategy_generation.strategy_generation_engine import (
     StrategyGenerationEngine,
 )
+from autonomous_trading_platform.strategy.catalog import list_strategy_types
+from autonomous_trading_platform.strategy.components import ComponentType, get_component_registry
+from autonomous_trading_platform.strategy.registry import get_registry
 
 # ---------------------------------------------------------------------------
 # Shared constants
 # ---------------------------------------------------------------------------
 
-# Canonical list of supported strategy types. Referenced by every subcommand
-# that accepts --strategy-type so additions only need to happen in one place.
-STRATEGY_TYPE_CHOICES = [
-    "stub",
-    "intentional_loser",
-    "random",
-    "moving_average_crossover",
-    "mean_reversion",
-    "momentum",
-    "factor_based",
-]
+# Derived from the strategy catalog — do not edit this list directly.
+STRATEGY_TYPE_CHOICES = list_strategy_types()
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -92,6 +104,259 @@ def _parse_date(raw: str) -> date:
     return date.fromisoformat(raw)
 
 
+def _parse_csv(raw: str | None) -> tuple[str, ...]:
+    if not raw:
+        return ()
+    return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
+def _enum_value(value: Any) -> Any:
+    return value.value if hasattr(value, "value") else value
+
+
+def _parameter_spec_to_dict(spec) -> dict[str, Any]:
+    return {
+        "name": spec.name,
+        "type": _enum_value(spec.parameter_type),
+        "default": spec.default,
+        "description": spec.description,
+        "min_value": spec.min_value,
+        "max_value": spec.max_value,
+        "discrete": spec.discrete,
+        "step": spec.step,
+        "tunable": spec.tunable,
+        "mutation_strategy": spec.mutation_strategy,
+    }
+
+
+def _strategy_definition_to_dict(defn) -> dict[str, Any]:
+    defaults = get_registry().get_default_parameters(defn.strategy_type)
+    return {
+        "strategy_type": defn.strategy_type,
+        "display_name": defn.display_name,
+        "description": defn.description,
+        "family": defn.family.value,
+        "implementation_class": defn.implementation_class.__name__,
+        "debug": defn.debug,
+        "production_ready": defn.production_ready,
+        "deterministic": defn.deterministic,
+        "default_parameters": defaults,
+        "parameter_specs": [_parameter_spec_to_dict(spec) for spec in defn.parameter_specs],
+        "parameter_schema": defn.export_parameter_schema(),
+        "warmup_bars": defn.compute_warmup_bars(defaults),
+        "required_indicators": list(defn.required_indicators),
+        "required_persisted_features": list(defn.required_persisted_features),
+        "compatibility": {
+            "supports_long_only": defn.supports_long_only,
+            "supports_shorting": defn.supports_shorting,
+            "supports_intraday": defn.supports_intraday,
+            "supports_daily": defn.supports_daily,
+            "supports_adjusted_prices": defn.supports_adjusted_prices,
+            "supports_raw_prices": defn.supports_raw_prices,
+        },
+    }
+
+
+def _component_definition_to_dict(defn) -> dict[str, Any]:
+    implementation = None
+    if defn.implementation is not None:
+        implementation = getattr(defn.implementation, "__name__", str(defn.implementation))
+    return {
+        "component_name": defn.component_name,
+        "component_type": defn.component_type.value,
+        "display_name": defn.display_name,
+        "description": defn.description,
+        "implementation": implementation,
+        "is_executable": defn.is_executable,
+        "metadata_only": defn.metadata_only,
+        "required_inputs": list(defn.required_inputs),
+        "input_types": dict(defn.input_types),
+        "required_price_basis": defn.required_price_basis,
+        "required_bar_fields": list(defn.required_bar_fields),
+        "parameters": [_parameter_spec_to_dict(spec) for spec in defn.parameter_specs],
+        "constraints": list(defn.constraints),
+        "optimization_ranges": dict(defn.optimization_ranges),
+        "mutation_metadata": dict(defn.mutation_metadata),
+        "warmup": {
+            "warmup_bars": defn.warmup_bars,
+            "warmup_parameter": defn.warmup_parameter,
+            "warmup_formula": defn.warmup_formula,
+        },
+        "output_type": defn.output_type,
+        "output_domain": defn.output_domain,
+        "compatibility": {
+            "compatible_component_types": [item.value for item in defn.compatible_component_types],
+            "incompatible_components": list(defn.incompatible_components),
+            "allowed_strategy_families": list(defn.allowed_strategy_families),
+            "supports_intraday": defn.supports_intraday,
+            "supports_daily": defn.supports_daily,
+            "supports_raw_prices": defn.supports_raw_prices,
+            "supports_adjusted_prices": defn.supports_adjusted_prices,
+        },
+        "production_ready": defn.production_ready,
+        "debug": defn.debug,
+        "experimental": defn.experimental,
+    }
+
+
+def _config_to_dict(config) -> dict[str, Any]:
+    return {
+        "strategy_id": config.strategy_id,
+        "type": config.type,
+        "parameters": config.parameters,
+        "config_hash": config.config_hash(),
+    }
+
+
+def _component_usage(configs) -> dict[str, int]:
+    usage: Counter[str] = Counter()
+    for config in configs:
+        params = config.parameters
+        for section in ("indicators", "entry_rules", "filters", "confirmations"):
+            for item in params.get(section, []):
+                component = item.get("component")
+                if component:
+                    usage[component] += 1
+        aggregator = params.get("aggregator", {}).get("component")
+        if aggregator:
+            usage[aggregator] += 1
+    return dict(sorted(usage.items()))
+
+
+def _template_usage(configs) -> dict[str, int]:
+    templates: Counter[str] = Counter()
+    for config in configs:
+        template = config.parameters.get("metadata", {}).get("generation_template")
+        if template:
+            templates[template] += 1
+    return dict(sorted(templates.items()))
+
+
+def _summarize_config_dicts(configs: list[dict[str, Any]]) -> dict[str, Any]:
+    strategy_types: Counter[str] = Counter()
+    families: Counter[str] = Counter()
+    parameter_values: dict[str, list[Any]] = defaultdict(list)
+    normalized_configs = []
+    registry = get_registry()
+
+    for raw in configs:
+        strategy_type = raw.get("type")
+        parameters = raw.get("parameters", {})
+        if not strategy_type:
+            continue
+        strategy_types[strategy_type] += 1
+        if registry.strategy_exists(strategy_type):
+            families[registry.get_definition(strategy_type).family.value] += 1
+        normalized_configs.append({"type": strategy_type, "parameters": parameters})
+        if isinstance(parameters, dict):
+            for key, value in parameters.items():
+                if isinstance(value, int | float) and not isinstance(value, bool):
+                    parameter_values[key].append(value)
+
+    parameter_distribution = {}
+    for key, values in parameter_values.items():
+        parameter_distribution[key] = {
+            "min": min(values),
+            "max": max(values),
+            "distinct_count": len(set(values)),
+        }
+
+    return {
+        "total_configs": len(configs),
+        "strategy_type_distribution": dict(sorted(strategy_types.items())),
+        "family_distribution": dict(sorted(families.items())),
+        "parameter_distribution": parameter_distribution,
+        "component_usage": _component_usage(
+            [type("_ConfigView", (), item)() for item in normalized_configs]
+        ),
+        "composite_template_usage": _template_usage(
+            [type("_ConfigView", (), item)() for item in normalized_configs]
+        ),
+    }
+
+
+def _generation_options_from_args(args: argparse.Namespace) -> GenerationOptions:
+    return GenerationOptions(
+        seed=args.random_seed,
+        n_samples=args.n_samples,
+        population_size=args.population_size,
+        generations=args.generations,
+        mutation_rate=args.mutation_rate,
+        include_debug=args.include_debug,
+        include_experimental=args.include_experimental,
+        allowed_families=_parse_csv(args.allowed_families),
+        excluded_families=_parse_csv(args.excluded_families),
+    )
+
+
+def _generation_artifact(
+    *,
+    result: GenerationResult,
+    generator: str,
+    strategy_type: str | None,
+    family: str | None,
+    parameter_space: dict[str, list] | None,
+    options: GenerationOptions,
+    include_run_metadata: bool = False,
+) -> dict[str, Any]:
+    configs = [_config_to_dict(config) for config in result.configs]
+    artifact = {
+        "artifact_type": "strategy_generation_result",
+        "artifact_version": 1,
+        "generation": {
+            "generator": generator,
+            "strategy_type": strategy_type,
+            "family": family,
+            "parameter_space": parameter_space,
+            "options": asdict(options),
+        },
+        "summary": result.summary.to_dict(),
+        "config_hashes": [item["config_hash"] for item in configs],
+        "component_usage": _component_usage(result.configs),
+        "composite_template_usage": _template_usage(result.configs),
+        "configs": configs,
+    }
+    if include_run_metadata:
+        artifact["run_metadata"] = {
+            "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        }
+    return artifact
+
+
+def _write_artifact(path: str, payload: dict[str, Any], output_format: str) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if output_format == "yaml":
+        target.write_text(yaml.safe_dump(payload, sort_keys=True), encoding="utf-8")
+    else:
+        target.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+
+
+def _load_artifact(path: str) -> dict[str, Any]:
+    raw = Path(path).read_text(encoding="utf-8")
+    loaded = yaml.safe_load(raw) if path.endswith((".yaml", ".yml")) else json.loads(raw)
+    if not isinstance(loaded, dict):
+        raise ValueError("--input artifact must contain a mapping")
+    return loaded
+
+
+def _print_payload(title: str, payload: dict[str, Any], output_format: str) -> None:
+    print_header(title)
+    if output_format == "json":
+        print_json(payload)
+        return
+    if output_format == "yaml":
+        print(yaml.safe_dump(payload, sort_keys=False))
+        return
+    for key, value in payload.items():
+        if isinstance(value, dict):
+            print(f"{key}: {json.dumps(value, sort_keys=True)}")
+        elif isinstance(value, list):
+            print(f"{key}: {', '.join(str(item) for item in value)}")
+        else:
+            print(f"{key}: {value}")
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -107,7 +372,15 @@ def register(subparsers) -> None:
 
     _register_run_simulation(research_subparsers)
     _register_run_experiment(research_subparsers)
+    _register_list_strategy_types(research_subparsers)
+    _register_inspect_strategy(research_subparsers)
+    _register_list_components(research_subparsers)
+    _register_inspect_component(research_subparsers)
     _register_generate_strategies(research_subparsers)
+    _register_summarize_generated_configs(research_subparsers)
+    _register_inspect_checkpoints(research_subparsers)
+    _register_plan_restart(research_subparsers)
+    _register_resume_experiment(research_subparsers)
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +458,91 @@ def _register_run_simulation(subparsers) -> None:
         help="Fail if any requested symbol has no bars in the requested window",
     )
     parser.set_defaults(func=handle_run_simulation)
+
+
+def _register_inspect_checkpoints(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "inspect-checkpoints",
+        help="Inspect research checkpoint store entries",
+    )
+    parser.add_argument("--checkpoint-store", required=True)
+    parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    parser.set_defaults(func=handle_inspect_checkpoints)
+
+
+def _register_plan_restart(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "plan-restart",
+        help="Build a dry-run research restart plan from expected unit identities",
+    )
+    parser.add_argument("--checkpoint-store", required=True)
+    parser.add_argument(
+        "--units-file",
+        required=True,
+        help="JSON/YAML file containing a list of ResearchCheckpointIdentity mappings",
+    )
+    parser.add_argument("--resume-failed-only", action="store_true")
+    parser.add_argument("--resume-missing-only", action="store_true")
+    parser.add_argument("--force-rerun", action="store_true")
+    parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    parser.set_defaults(func=handle_plan_restart)
+
+
+def _register_resume_experiment(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "resume-experiment",
+        help="Research-only resume planner; use --execute from pipeline code paths",
+    )
+    parser.add_argument("--checkpoint-store", required=True)
+    parser.add_argument("--units-file", required=True)
+    parser.add_argument("--dry-run", action="store_true", default=True)
+    parser.add_argument("--resume-failed-only", action="store_true")
+    parser.add_argument("--resume-missing-only", action="store_true")
+    parser.add_argument("--force-rerun", action="store_true")
+    parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    parser.set_defaults(func=handle_resume_experiment)
+
+
+def _load_checkpoint_units(path: str) -> list[ResearchCheckpointIdentity]:
+    payload = _load_artifact(path)
+    raw_units = payload.get("units", payload.get("expected_units"))
+    if raw_units is None and isinstance(payload.get("identity"), dict):
+        raw_units = [payload["identity"]]
+    if not isinstance(raw_units, list):
+        raise ValueError("--units-file must contain a 'units' list")
+    return [ResearchCheckpointIdentity.from_dict(item) for item in raw_units]
+
+
+def handle_inspect_checkpoints(args: argparse.Namespace) -> int:
+    service = ResearchCheckpointService(persist_path=args.checkpoint_store)
+    checkpoints = [checkpoint.to_dict() for checkpoint in service.list_checkpoints()]
+    _print_payload(
+        "Research Checkpoints",
+        {"count": len(checkpoints), "checkpoints": checkpoints},
+        args.format,
+    )
+    return 0
+
+
+def handle_plan_restart(args: argparse.Namespace) -> int:
+    if args.resume_failed_only and args.resume_missing_only:
+        raise ValueError("Choose at most one of --resume-failed-only and --resume-missing-only")
+    service = ResearchCheckpointService(persist_path=args.checkpoint_store)
+    plan = service.plan_restart(
+        _load_checkpoint_units(args.units_file),
+        dry_run=True,
+        resume_failed=not args.resume_missing_only,
+        resume_missing=not args.resume_failed_only,
+        force_rerun=args.force_rerun,
+    )
+    _print_payload("Research Restart Plan", plan.to_dict(), args.format)
+    return 0
+
+
+def handle_resume_experiment(args: argparse.Namespace) -> int:
+    # This CLI command intentionally plans only. Execution happens inside
+    # research pipeline stages so live/paper runtime orchestration is untouched.
+    return handle_plan_restart(args)
 
 
 def handle_run_simulation(args: argparse.Namespace) -> int:
@@ -354,6 +712,20 @@ def _register_run_experiment(subparsers) -> None:
     )
     parser.add_argument("--universe-version", default="v1")
     parser.add_argument("--initial-cash", type=float, default=100_000.0)
+    parser.add_argument(
+        "--execution-mode",
+        choices=["serial", "parallel"],
+        default="serial",
+        help="Research pipeline execution mode for independent staged units.",
+    )
+    parser.add_argument("--max-workers", type=int, default=1)
+    parser.add_argument(
+        "--base-seed",
+        type=int,
+        default=None,
+        help="Override experiment random_seed for deterministic per-unit seed derivation.",
+    )
+    parser.add_argument("--fail-fast", action="store_true")
     parser.set_defaults(func=handle_run_experiment)
 
 
@@ -383,10 +755,11 @@ def handle_run_experiment(args: argparse.Namespace) -> int:
         simulation_context = build_simulation_context(session=session)
 
         if args.config:
-            plan = _load_experiment_from_yaml(args.config, simulation_context)
+            plan = _load_experiment_from_yaml(args.config, simulation_context, args=args)
         else:
             strategy_parameters = json.loads(args.strategy_parameters)
             parameter_space = json.loads(args.parameter_space) if args.parameter_space else None
+            random_seed = args.base_seed if args.base_seed is not None else args.random_seed
 
             plan = ExperimentDefinition(
                 experiment_id=args.experiment_id,
@@ -407,7 +780,7 @@ def handle_run_experiment(args: argparse.Namespace) -> int:
                 symbols=_parse_symbols(args.symbols),
                 start_date=_parse_date(args.start_date),
                 end_date=_parse_date(args.end_date),
-                random_seed=args.random_seed,
+                random_seed=random_seed,
                 initial_cash=args.initial_cash,
             )
 
@@ -484,37 +857,249 @@ def handle_run_experiment(args: argparse.Namespace) -> int:
 def _load_experiment_from_yaml(
     config_path: str,
     simulation_context,
+    args: argparse.Namespace | None = None,
 ) -> ExperimentDefinition:
     with open(config_path) as f:
         raw = yaml.safe_load(f)
+
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"YAML file {config_path!r} must contain a mapping, got {type(raw).__name__}"
+        )
 
     staged_pipeline_config = None
     pipeline_raw = raw.get("staged_pipeline_config")
 
     if pipeline_raw:
+        if "stages" not in pipeline_raw:
+            raise ValueError("staged_pipeline_config must contain a 'stages' list")
+        stage_raws = list(pipeline_raw["stages"])
+        if args is not None:
+            stage_raws = [
+                {
+                    **stage_raw,
+                    "execution_mode": stage_raw.get("execution_mode", args.execution_mode),
+                    "max_workers": stage_raw.get("max_workers", args.max_workers),
+                    "fail_fast": stage_raw.get("fail_fast", args.fail_fast),
+                }
+                for stage_raw in stage_raws
+            ]
         stages = [
             StageRegistry.load(stage_raw, simulation_context.simulation_runner)
-            for stage_raw in pipeline_raw["stages"]
+            for stage_raw in stage_raws
         ]
         staged_pipeline_config = StagedPipelineConfig(stages=stages)
 
+    # Validate all experiment-level fields through ExperimentConfig before
+    # constructing ExperimentDefinition. This rejects date.today() fallbacks,
+    # empty symbols, invalid enums, and out-of-range values with clear messages.
+    # model_validate raises on any violation; we re-raise with the config path.
+    fields: dict = {
+        "experiment_id": raw.get("experiment_id"),
+        "experiment_type": raw.get("experiment_type", "sweep"),
+        "description": raw.get("description"),
+        "strategy_set": raw.get("strategy_set", []),
+        "parameter_grid": raw.get("parameter_grid", []),
+        "parameter_space": raw.get("parameter_space"),
+        "dataset_version": raw.get("dataset_version"),
+        "universe_version": raw.get("universe_version", "v1"),
+        "price_basis": raw.get("price_basis"),
+        "symbols": raw.get("symbols"),
+        "start_date": raw.get("start_date"),
+        "end_date": raw.get("end_date"),
+        "random_seed": args.base_seed
+        if args and args.base_seed is not None
+        else raw.get("random_seed", 42),
+        "initial_cash": raw.get("initial_cash", 100_000.0),
+        "train_ratio": raw.get("train_ratio"),
+        "window_size_days": raw.get("window_size_days"),
+        "step_size_days": raw.get("step_size_days"),
+        "universe_set": raw.get("universe_set"),
+        "universe_resolution_mode": raw.get("universe_resolution_mode"),
+    }
+    try:
+        ExperimentConfig.model_validate(fields)
+    except Exception as exc:
+        raise ValueError(f"Invalid experiment config in {config_path!r}: {exc}") from exc
+
+    # Construct ExperimentDefinition directly so mypy can verify the return type
+    # without relying on Pydantic's Self inference through model_validate.
+    from datetime import date as _date
+
     return ExperimentDefinition(
-        experiment_id=raw["experiment_id"],
-        experiment_type=ExperimentType(raw.get("experiment_type", "sweep")),
-        description=raw.get("description"),
-        strategy_set=raw.get("strategy_set", []),
-        parameter_grid=raw.get("parameter_grid", []),
-        parameter_space=raw.get("parameter_space"),
-        dataset_version=raw["dataset_version"],
-        universe_version=raw.get("universe_version", "v1"),
-        price_basis=PriceBasis(raw["price_basis"]),
-        symbols=raw.get("symbols", []),
-        start_date=date.fromisoformat(raw["start_date"]) if "start_date" in raw else date.today(),
-        end_date=date.fromisoformat(raw["end_date"]) if "end_date" in raw else date.today(),
-        random_seed=raw.get("random_seed", 42),
-        initial_cash=raw.get("initial_cash", 100_000.0),
+        experiment_id=fields["experiment_id"],
+        experiment_type=ExperimentType(fields["experiment_type"]),
+        description=fields["description"],
+        strategy_set=fields["strategy_set"] or [],
+        parameter_grid=fields["parameter_grid"] or [],
+        parameter_space=fields["parameter_space"],
+        dataset_version=fields["dataset_version"],
+        universe_version=fields["universe_version"],
+        price_basis=PriceBasis(fields["price_basis"]),
+        symbols=[s.strip().upper() for s in fields["symbols"] if s.strip()],
+        start_date=_date.fromisoformat(str(fields["start_date"])),
+        end_date=_date.fromisoformat(str(fields["end_date"])),
+        random_seed=fields["random_seed"],
+        initial_cash=fields["initial_cash"],
+        train_ratio=fields["train_ratio"],
+        window_size_days=fields["window_size_days"],
+        step_size_days=fields["step_size_days"],
+        universe_set=fields["universe_set"],
+        universe_resolution_mode=fields["universe_resolution_mode"],
         staged_pipeline_config=staged_pipeline_config,
     )
+
+
+# ---------------------------------------------------------------------------
+# registry/component inspection
+# ---------------------------------------------------------------------------
+
+
+def _register_list_strategy_types(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "list-strategy-types",
+        help="List registered strategy types and generation metadata",
+        epilog=(
+            "Examples:\n"
+            "  atp research list-strategy-types\n"
+            "  atp research list-strategy-types --family momentum --format json\n"
+            "  atp research list-strategy-types --include-debug --include-experimental"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--family", choices=[family.value for family in get_registry().list_families()]
+    )
+    parser.add_argument("--include-debug", action="store_true")
+    parser.add_argument("--include-experimental", action="store_true")
+    parser.add_argument("--format", choices=["table", "json", "yaml"], default="table")
+    parser.set_defaults(func=handle_list_strategy_types)
+
+
+def handle_list_strategy_types(args: argparse.Namespace) -> int:
+    registry = get_registry()
+    rows = []
+    for defn in registry.list_definitions():
+        if args.family and defn.family.value != args.family:
+            continue
+        if defn.debug and not args.include_debug:
+            continue
+        if not defn.production_ready and not args.include_experimental:
+            continue
+        rows.append(
+            {
+                "strategy_type": defn.strategy_type,
+                "family": defn.family.value,
+                "display_name": defn.display_name,
+                "production_ready": defn.production_ready,
+                "debug": defn.debug,
+                "parameter_count": len(defn.parameter_specs),
+                "warmup_bars": defn.compute_warmup_bars(),
+                "required_indicators": list(defn.required_indicators),
+            }
+        )
+
+    _print_payload(
+        "Strategy Types",
+        {"count": len(rows), "strategies": rows},
+        args.format,
+    )
+    return 0
+
+
+def _register_inspect_strategy(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "inspect-strategy",
+        help="Inspect one registered strategy definition",
+        epilog=(
+            "Examples:\n"
+            "  atp research inspect-strategy --strategy-type momentum\n"
+            "  atp research inspect-strategy --strategy-type moving_average_crossover --format json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--strategy-type", required=True, choices=STRATEGY_TYPE_CHOICES)
+    parser.add_argument("--format", choices=["table", "json", "yaml"], default="json")
+    parser.set_defaults(func=handle_inspect_strategy)
+
+
+def handle_inspect_strategy(args: argparse.Namespace) -> int:
+    defn = get_registry().get_definition(args.strategy_type)
+    _print_payload("Strategy Metadata", _strategy_definition_to_dict(defn), args.format)
+    return 0
+
+
+def _register_list_components(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "list-components",
+        help="List registered strategy components",
+        epilog=(
+            "Examples:\n"
+            "  atp research list-components\n"
+            "  atp research list-components --component-type indicator --executable-only\n"
+            "  atp research list-components --metadata-only --format json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--component-type", choices=[item.value for item in ComponentType])
+    status = parser.add_mutually_exclusive_group()
+    status.add_argument("--executable-only", action="store_true")
+    status.add_argument("--metadata-only", action="store_true")
+    parser.add_argument("--format", choices=["table", "json", "yaml"], default="table")
+    parser.set_defaults(func=handle_list_components)
+
+
+def handle_list_components(args: argparse.Namespace) -> int:
+    registry = get_component_registry()
+    rows = []
+    for defn in registry.list_components():
+        if args.component_type and defn.component_type.value != args.component_type:
+            continue
+        if args.executable_only and not defn.is_executable:
+            continue
+        if args.metadata_only and not defn.metadata_only:
+            continue
+        rows.append(
+            {
+                "component_name": defn.component_name,
+                "component_type": defn.component_type.value,
+                "display_name": defn.display_name,
+                "is_executable": defn.is_executable,
+                "metadata_only": defn.metadata_only,
+                "parameter_count": len(defn.parameter_specs),
+                "required_inputs": list(defn.required_inputs),
+                "warmup": defn.warmup_formula or defn.warmup_bars,
+            }
+        )
+
+    _print_payload(
+        "Components",
+        {"count": len(rows), "components": rows},
+        args.format,
+    )
+    return 0
+
+
+def _register_inspect_component(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "inspect-component",
+        help="Inspect one registered component definition",
+        epilog=(
+            "Examples:\n"
+            "  atp research inspect-component --component-name momentum\n"
+            "  atp research inspect-component --component-name volatility_filter --format yaml"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--component-name", required=True)
+    parser.add_argument("--format", choices=["table", "json", "yaml"], default="json")
+    parser.set_defaults(func=handle_inspect_component)
+
+
+def handle_inspect_component(args: argparse.Namespace) -> int:
+    defn = get_component_registry().get_component_definition(args.component_name)
+    _print_payload("Component Metadata", _component_definition_to_dict(defn), args.format)
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -537,23 +1122,39 @@ def _register_generate_strategies(subparsers) -> None:
     """
     parser = subparsers.add_parser(
         "generate-strategies",
-        help="Dry-run strategy generation — no DB, no simulation",
+        help="Dry-run strategy generation - no DB, no simulation",
+        epilog=(
+            "Examples:\n"
+            "  atp research generate-strategies --strategy-type momentum --generator grid\n"
+            "  atp research generate-strategies --strategy-type momentum --generator random --seed 7 --n-samples 10\n"
+            "  atp research generate-strategies --strategy-type momentum --generator evolutionary --population-size 8 --generations 2\n"
+            "  atp research generate-strategies --composite --summary\n"
+            "  atp research generate-strategies --strategy-type momentum --output artifacts/momentum.json\n"
+            "  atp research summarize-generated-configs --input artifacts/momentum.json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument("--strategy-type", choices=STRATEGY_TYPE_CHOICES)
     parser.add_argument(
-        "--strategy-type",
-        required=True,
-        choices=STRATEGY_TYPE_CHOICES,
+        "--family", choices=[family.value for family in get_registry().list_families()]
     )
     parser.add_argument(
         "--parameter-space",
-        required=True,
+        default=None,
         help="JSON object mapping param names to lists of values, e.g. '{\"short_window\": [5,10,20]}'",
     )
     parser.add_argument(
+        "--parameter-space-file",
+        default=None,
+        help="Path to JSON/YAML parameter-space mapping. Overrides --parameter-space.",
+    )
+    parser.add_argument(
         "--generator",
-        choices=["grid", "random"],
+        "--method",
+        dest="generator",
+        choices=["grid", "random", "evolutionary"],
         default="grid",
-        help="grid: exhaustive combinations. random: sample n configs from the space.",
+        help="grid: exhaustive combinations. random/evolutionary: seed-driven sampling.",
     )
     parser.add_argument(
         "--n-samples",
@@ -563,6 +1164,8 @@ def _register_generate_strategies(subparsers) -> None:
     )
     parser.add_argument(
         "--random-seed",
+        "--seed",
+        dest="random_seed",
         type=int,
         default=42,
         help="Seed for the random generator — ensures reproducible sampling (ignored for grid)",
@@ -572,7 +1175,85 @@ def _register_generate_strategies(subparsers) -> None:
         action="store_true",
         help="Print each config in full before the summary (omit for large spaces)",
     )
+    parser.add_argument("--population-size", type=int, default=20)
+    parser.add_argument("--generations", type=int, default=3)
+    parser.add_argument("--mutation-rate", type=float, default=0.25)
+    parser.add_argument("--include-debug", action="store_true")
+    parser.add_argument("--include-experimental", action="store_true")
+    parser.add_argument("--allowed-families", default=None, help="Comma-separated family allowlist")
+    parser.add_argument(
+        "--excluded-families", default=None, help="Comma-separated family blocklist"
+    )
+    parser.add_argument(
+        "--composite", action="store_true", help="Generate composite_rule templates."
+    )
+    parser.add_argument("--summary", action="store_true", help="Print summary only")
+    parser.add_argument("--verbose", action="store_true", help="Include rejected/duplicate details")
+    parser.add_argument("--output", default=None, help="Write generation artifact to this path")
+    parser.add_argument(
+        "--output-format",
+        "--format",
+        dest="output_format",
+        choices=["json", "yaml"],
+        default="json",
+    )
+    parser.add_argument(
+        "--include-run-metadata",
+        action="store_true",
+        help="Include generated_at run metadata in exported artifact",
+    )
     parser.set_defaults(func=handle_generate_strategies)
+
+
+def _register_summarize_generated_configs(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "summarize-generated-configs",
+        help="Summarize an exported strategy generation artifact",
+        epilog=(
+            "Examples:\n"
+            "  atp research summarize-generated-configs --input artifacts/momentum.json\n"
+            "  atp research summarize-generated-configs --input artifacts/composite.yaml --format yaml"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--input", required=True, help="JSON/YAML artifact from generate-strategies"
+    )
+    parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    parser.add_argument("--show-hashes", action="store_true")
+    parser.set_defaults(func=handle_summarize_generated_configs)
+
+
+def handle_summarize_generated_configs(args: argparse.Namespace) -> int:
+    artifact = _load_artifact(args.input)
+    configs = artifact.get("configs", [])
+    if not isinstance(configs, list):
+        raise ValueError("Artifact field 'configs' must be a list")
+
+    summary = _summarize_config_dicts(configs)
+    generation_summary = artifact.get("summary", {})
+    if isinstance(generation_summary, dict):
+        summary.update(
+            {
+                "generated_count": generation_summary.get("generated_count"),
+                "accepted_count": generation_summary.get("accepted_count"),
+                "duplicate_count": generation_summary.get("duplicate_count"),
+                "rejected_count": generation_summary.get("rejected_count"),
+                "rejection_reasons": generation_summary.get("rejection_reasons", {}),
+            }
+        )
+    summary["component_usage"] = artifact.get("component_usage", summary["component_usage"])
+    summary["composite_template_usage"] = artifact.get(
+        "composite_template_usage", summary["composite_template_usage"]
+    )
+    if args.show_hashes:
+        summary["config_hashes"] = artifact.get(
+            "config_hashes",
+            [item.get("config_hash") for item in configs if isinstance(item, dict)],
+        )
+
+    _print_payload("Generated Config Summary", summary, args.format)
+    return 0
 
 
 def handle_generate_strategies(args: argparse.Namespace) -> int:
@@ -585,32 +1266,55 @@ def handle_generate_strategies(args: argparse.Namespace) -> int:
     differ from your expectations the parameter space or generator config
     needs adjustment before running a full experiment.
     """
-    parameter_space = json.loads(args.parameter_space)
+    if args.parameter_space_file:
+        loaded_space = _load_artifact(args.parameter_space_file)
+        parameter_space = loaded_space.get("parameter_space", loaded_space)
+    else:
+        parameter_space = json.loads(args.parameter_space) if args.parameter_space else None
 
-    if not isinstance(parameter_space, dict):
+    if parameter_space is not None and not isinstance(parameter_space, dict):
         raise ValueError("--parameter-space must be a JSON object")
+    if args.composite:
+        args.strategy_type = "composite_rule"
+    if not args.strategy_type and not args.family:
+        raise ValueError("Provide --strategy-type, --family, or --composite")
 
     # Select generator — grid is deterministic and exhaustive, random samples
     # n_samples from the space and relies on the engine to deduplicate.
     generator: BaseStrategyGenerator
     if args.generator == "grid":
         generator = GridSearchGenerator()
-    else:
+    elif args.generator == "random":
         generator = RandomSamplingGenerator(
             n_samples=args.n_samples,
             seed=args.random_seed,
         )
+    else:
+        generator = EvolutionaryGenerator(
+            seed=args.random_seed,
+            population_size=args.population_size,
+            generations=args.generations,
+            mutation_rate=args.mutation_rate,
+        )
 
     engine = StrategyGenerationEngine(generator=generator)
-    configs = engine.generate(
-        strategy_type=args.strategy_type,
-        parameter_space=parameter_space,
-    )
+    options = _generation_options_from_args(args)
+    if args.composite:
+        result = engine.generate_composite(method=args.generator, options=options)
+    elif args.family:
+        result = engine.generate_for_family(args.family, method=args.generator, options=options)
+    else:
+        result = engine.generate_result(
+            strategy_type=args.strategy_type,
+            method=args.generator,
+            parameter_space=parameter_space,
+            options=options,
+        )
+    configs = result.configs
+    print_header(f"Strategy generation - {args.generator} - {args.family or args.strategy_type}")
 
-    print_header(f"Strategy generation — {args.generator} — {args.strategy_type}")
-
-    if args.show_configs:
-        for config in configs:
+    if args.show_configs and not args.summary:
+        for config in result.configs:
             print_json(
                 {
                     "strategy_id": config.strategy_id,
@@ -625,15 +1329,44 @@ def handle_generate_strategies(args: argparse.Namespace) -> int:
             "generator": args.generator,
             "strategy_type": args.strategy_type,
             "parameter_space": parameter_space,
-            "total_generated": len(configs),
+            "family": args.family,
+            "generated_count": result.summary.generated_count,
+            "accepted_count": result.summary.accepted_count,
+            "duplicate_count": result.summary.duplicate_count,
+            "rejected_count": result.summary.rejected_count,
+            "rejection_reasons": dict(result.summary.rejection_reasons),
             "unique_hashes": len({c.config_hash() for c in configs}),
+            "strategy_type_distribution": dict(result.summary.strategy_type_distribution),
+            "family_distribution": dict(result.summary.family_distribution),
             # duplicates_skipped is only meaningful for random — grid never
-            # produces duplicates since it iterates the sorted cartesian product
-            "duplicates_skipped": (
-                args.n_samples - len(configs) if args.generator == "random" else 0
-            ),
             "config_hashes": [c.config_hash() for c in configs],
         }
     )
+
+    artifact = _generation_artifact(
+        result=result,
+        generator=args.generator,
+        strategy_type=args.strategy_type,
+        family=args.family,
+        parameter_space=parameter_space,
+        options=options,
+        include_run_metadata=args.include_run_metadata,
+    )
+    print_json(
+        {
+            "component_usage": artifact["component_usage"],
+            "composite_template_usage": artifact["composite_template_usage"],
+        }
+    )
+    if args.verbose:
+        print_json(
+            {
+                "rejected_details": artifact["summary"]["rejected_details"],
+                "duplicate_details": artifact["summary"]["duplicate_details"],
+            }
+        )
+    if args.output:
+        _write_artifact(args.output, artifact, args.output_format)
+        print_json({"artifact_path": args.output, "artifact_format": args.output_format})
 
     return 0

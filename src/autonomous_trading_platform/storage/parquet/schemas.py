@@ -121,11 +121,52 @@ FEATURE_REGIME_SCHEMA = pa.schema(
     ]
 )
 
+FEATURE_REGIME_CLASSIFICATION_SCHEMA = pa.schema(
+    [
+        pa.field("symbol", pa.string(), nullable=False),
+        pa.field("timestamp", UTC_TIMESTAMP, nullable=False),
+        pa.field("date", pa.date32(), nullable=False),
+        # Trend dimension
+        pa.field("regime_trend", pa.string(), nullable=True),
+        pa.field("regime_trend_confidence", pa.float64(), nullable=True),
+        pa.field("trend_ma_short", pa.float64(), nullable=True),
+        pa.field("trend_ma_long", pa.float64(), nullable=True),
+        pa.field("trend_rolling_return_20d", pa.float64(), nullable=True),
+        # Volatility dimension
+        pa.field("regime_volatility", pa.string(), nullable=True),
+        pa.field("regime_volatility_confidence", pa.float64(), nullable=True),
+        pa.field("volatility_realized", pa.float64(), nullable=True),
+        pa.field("volatility_percentile", pa.float64(), nullable=True),
+        pa.field("volatility_threshold_high", pa.float64(), nullable=True),
+        pa.field("volatility_threshold_low", pa.float64(), nullable=True),
+        # Liquidity dimension
+        pa.field("regime_liquidity", pa.string(), nullable=True),
+        pa.field("regime_liquidity_confidence", pa.float64(), nullable=True),
+        pa.field("liquidity_avg_dollar_volume", pa.float64(), nullable=True),
+        pa.field("liquidity_percentile", pa.float64(), nullable=True),
+        # Mean-reversion dimension
+        pa.field("regime_mean_reversion", pa.string(), nullable=True),
+        pa.field("regime_mean_reversion_confidence", pa.float64(), nullable=True),
+        pa.field("mean_reversion_zscore_std", pa.float64(), nullable=True),
+        pa.field("mean_reversion_trend_strength", pa.float64(), nullable=True),
+        # Composite risk dimension
+        pa.field("regime_risk", pa.string(), nullable=True),
+        # Lineage
+        pa.field("underlying_dataset_version", pa.string(), nullable=False),
+        pa.field("price_basis", pa.string(), nullable=False),
+        pa.field("year", pa.string(), nullable=False),
+        pa.field("month", pa.string(), nullable=False),
+    ]
+)
+
 SIMULATION_TRADE_LOGS_SCHEMA = pa.schema(
     [
         pa.field("run_id", pa.string()),
         pa.field("experiment_id", pa.string()),
         pa.field("strategy_id", pa.string()),
+        pa.field("stage_name", pa.string()),
+        pa.field("window_role", pa.string()),
+        pa.field("dataset_version", pa.string()),
         pa.field("symbol", pa.string()),
         pa.field("timestamp", pa.timestamp("us", tz="UTC")),
         pa.field("side", pa.string()),
@@ -142,6 +183,9 @@ SIMULATION_EQUITY_CURVE_SCHEMA = pa.schema(
         pa.field("run_id", pa.string()),
         pa.field("experiment_id", pa.string()),
         pa.field("strategy_id", pa.string()),
+        pa.field("stage_name", pa.string()),
+        pa.field("window_role", pa.string()),
+        pa.field("dataset_version", pa.string()),
         pa.field("timestamp", pa.timestamp("us", tz="UTC")),
         pa.field("equity", pa.float64()),
         pa.field("cash", pa.float64()),
@@ -156,6 +200,9 @@ SIMULATION_PER_BAR_METRICS_SCHEMA = pa.schema(
         pa.field("run_id", pa.string()),
         pa.field("experiment_id", pa.string()),
         pa.field("strategy_id", pa.string()),
+        pa.field("stage_name", pa.string()),
+        pa.field("window_role", pa.string()),
+        pa.field("dataset_version", pa.string()),
         pa.field("symbol", pa.string()),
         pa.field("timestamp", pa.timestamp("us", tz="UTC")),
         pa.field("bar_return", pa.float64()),
@@ -171,6 +218,9 @@ SIMULATION_POSITIONS_SCHEMA = pa.schema(
         pa.field("run_id", pa.string()),
         pa.field("experiment_id", pa.string()),
         pa.field("strategy_id", pa.string()),
+        pa.field("stage_name", pa.string()),
+        pa.field("window_role", pa.string()),
+        pa.field("dataset_version", pa.string()),
         pa.field("symbol", pa.string()),
         pa.field("timestamp", UTC_TIMESTAMP),
         pa.field("quantity", pa.float64()),
@@ -188,9 +238,225 @@ SIMULATION_SIGNAL_LOG_SCHEMA = pa.schema(
         pa.field("run_id", pa.string()),
         pa.field("experiment_id", pa.string()),
         pa.field("strategy_id", pa.string()),
+        pa.field("stage_name", pa.string()),
+        pa.field("window_role", pa.string()),
+        pa.field("dataset_version", pa.string()),
         pa.field("symbol", pa.string()),
         pa.field("timestamp", pa.timestamp("us", tz="UTC")),
         pa.field("direction", pa.string()),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+_REGIME_ANALYSIS_IDENTITY = [
+    pa.field("run_id", pa.string()),
+    pa.field("experiment_id", pa.string()),
+    pa.field("strategy_id", pa.string()),
+    pa.field("stage_name", pa.string()),
+    pa.field("window_role", pa.string()),
+    pa.field("dataset_version", pa.string()),
+]
+
+REGIME_ANALYSIS_METRICS_SCHEMA = pa.schema(
+    _REGIME_ANALYSIS_IDENTITY
+    + [
+        pa.field("regime_dimension", pa.string()),
+        pa.field("regime_label", pa.string()),
+        pa.field("bar_count", pa.int64()),
+        pa.field("exposure_fraction", pa.float64()),
+        pa.field("total_return", pa.float64(), nullable=True),
+        pa.field("cagr", pa.float64(), nullable=True),
+        pa.field("sharpe", pa.float64(), nullable=True),
+        pa.field("sortino", pa.float64(), nullable=True),
+        pa.field("volatility", pa.float64(), nullable=True),
+        pa.field("max_drawdown", pa.float64(), nullable=True),
+        pa.field("trade_count", pa.int64()),
+        pa.field("win_rate", pa.float64(), nullable=True),
+        pa.field("expectancy", pa.float64(), nullable=True),
+        pa.field("profit_factor", pa.float64(), nullable=True),
+        pa.field("avg_win", pa.float64(), nullable=True),
+        pa.field("avg_loss", pa.float64(), nullable=True),
+        pa.field("trade_frequency", pa.float64(), nullable=True),
+        pa.field("avg_bar_return", pa.float64(), nullable=True),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+REGIME_TRANSITION_SUMMARY_SCHEMA = pa.schema(
+    _REGIME_ANALYSIS_IDENTITY
+    + [
+        pa.field("regime_dimension", pa.string()),
+        pa.field("from_regime", pa.string()),
+        pa.field("to_regime", pa.string()),
+        pa.field("transition_count", pa.int64()),
+        pa.field("avg_duration_before", pa.float64(), nullable=True),
+        pa.field("avg_pre_return", pa.float64(), nullable=True),
+        pa.field("avg_post_return", pa.float64(), nullable=True),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+STRATEGY_REGIME_PROFILE_SCHEMA = pa.schema(
+    _REGIME_ANALYSIS_IDENTITY
+    + [
+        pa.field("regime_dimension", pa.string()),
+        pa.field("sharpe_std", pa.float64()),
+        pa.field("sharpe_range", pa.float64()),
+        pa.field("best_regime", pa.string(), nullable=True),
+        pa.field("worst_regime", pa.string(), nullable=True),
+        pa.field("regime_robustness", pa.float64()),
+        pa.field("overall_sensitivity", pa.float64()),
+        pa.field("is_regime_robust", pa.bool_()),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+# ---------------------------------------------------------------------------
+# Validation framework schemas (TASK-2.4)
+# ---------------------------------------------------------------------------
+
+_VALIDATION_IDENTITY = [
+    pa.field("validation_run_id", pa.string(), nullable=False),
+    pa.field("experiment_id", pa.string(), nullable=False),
+    pa.field("strategy_id", pa.string(), nullable=False),
+    pa.field("dataset_version", pa.string(), nullable=False),
+]
+
+VALIDATION_ROBUSTNESS_SCORE_SCHEMA = pa.schema(
+    _VALIDATION_IDENTITY
+    + [
+        pa.field("overall_score", pa.float64()),
+        pa.field("walk_forward_consistency", pa.float64(), nullable=True),
+        pa.field("mc_stability", pa.float64(), nullable=True),
+        pa.field("regime_robustness", pa.float64(), nullable=True),
+        pa.field("parameter_stability", pa.float64(), nullable=True),
+        pa.field("stress_resilience", pa.float64(), nullable=True),
+        pa.field("overfitting_resistance", pa.float64(), nullable=True),
+        pa.field("overall_passed", pa.bool_()),
+        pa.field("computed_at", UTC_TIMESTAMP),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+VALIDATION_STRESS_TEST_SCHEMA = pa.schema(
+    _VALIDATION_IDENTITY
+    + [
+        pa.field("scenario_name", pa.string()),
+        pa.field("description", pa.string()),
+        pa.field("original_sharpe", pa.float64()),
+        pa.field("stressed_sharpe", pa.float64()),
+        pa.field("original_drawdown", pa.float64()),
+        pa.field("stressed_drawdown", pa.float64()),
+        pa.field("sharpe_degradation", pa.float64()),
+        pa.field("survived", pa.bool_()),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+VALIDATION_WALK_FORWARD_SCHEMA = pa.schema(
+    _VALIDATION_IDENTITY
+    + [
+        pa.field("n_folds", pa.int64()),
+        pa.field("n_folds_passed", pa.int64()),
+        pa.field("fold_consistency", pa.float64()),
+        pa.field("avg_train_sharpe", pa.float64()),
+        pa.field("avg_test_sharpe", pa.float64()),
+        pa.field("train_test_degradation", pa.float64()),
+        pa.field("fold_sharpe_cv", pa.float64()),
+        pa.field("fold_sharpe_stability", pa.float64()),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+VALIDATION_OVERFITTING_SCHEMA = pa.schema(
+    _VALIDATION_IDENTITY
+    + [
+        pa.field("overfitting_probability", pa.float64()),
+        pa.field("resistance_score", pa.float64()),
+        pa.field("train_test_degradation", pa.float64(), nullable=True),
+        pa.field("fold_instability", pa.float64(), nullable=True),
+        pa.field("mc_instability", pa.float64(), nullable=True),
+        pa.field("regime_concentration", pa.float64(), nullable=True),
+        pa.field("low_trade_count_flag", pa.bool_(), nullable=True),
+        pa.field("narrow_period_alpha", pa.float64(), nullable=True),
+        pa.field("parameter_fragility", pa.float64(), nullable=True),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+VALIDATION_SENSITIVITY_SCHEMA = pa.schema(
+    _VALIDATION_IDENTITY
+    + [
+        pa.field("parameter_name", pa.string()),
+        pa.field("reference_value", pa.float64()),
+        pa.field("sensitivity_score", pa.float64()),
+        pa.field("stability_score", pa.float64()),
+        pa.field("is_stable", pa.bool_()),
+        pa.field("stability_region_min", pa.float64(), nullable=True),
+        pa.field("stability_region_max", pa.float64(), nullable=True),
+        pa.field("overall_stability_score", pa.float64()),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+# ---------------------------------------------------------------------------
+# Research intelligence schemas (TASK-2.5)
+# ---------------------------------------------------------------------------
+
+_INTELLIGENCE_IDENTITY = [
+    pa.field("experiment_id", pa.string(), nullable=False),
+    pa.field("strategy_id", pa.string(), nullable=False),
+    pa.field("dataset_version", pa.string(), nullable=False),
+    pa.field("run_id", pa.string(), nullable=False),
+]
+
+INTELLIGENCE_CANDIDATE_RANKING_SCHEMA = pa.schema(
+    _INTELLIGENCE_IDENTITY
+    + [
+        pa.field("computed_at", UTC_TIMESTAMP),
+        pa.field("rank", pa.int64()),
+        pa.field("composite_score", pa.float64()),
+        pa.field("deployability_score", pa.float64()),
+        pa.field("is_deployable", pa.bool_()),
+        pa.field("data_completeness", pa.float64()),
+        pa.field("config_hash", pa.string()),
+        pa.field("robustness_probability", pa.float64()),
+        pa.field("fragility_score", pa.float64()),
+        pa.field("robustness_confidence", pa.float64()),
+        pa.field("deployment_suitability", pa.string()),
+        pa.field("overfit_probability", pa.float64()),
+        pa.field("overfit_risk_band", pa.string()),
+        pa.field("cluster_id", pa.string()),
+        pa.field("weakness_count", pa.int64()),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+INTELLIGENCE_REGIME_FINGERPRINT_SCHEMA = pa.schema(
+    _INTELLIGENCE_IDENTITY
+    + [
+        pa.field("regime_dimension", pa.string()),
+        pa.field("dimension_sensitivity", pa.float64()),
+        pa.field("regime_diversity", pa.float64()),
+        pa.field("overall_robustness", pa.float64()),
+        pa.field("dominant_regime_dimension", pa.string()),
+        pa.field("is_regime_specialist", pa.bool_()),
+        pa.field("label_sharpe_json", pa.string()),
+        pa.field("date", pa.date32()),
+    ]
+)
+
+INTELLIGENCE_CLUSTER_ASSIGNMENT_SCHEMA = pa.schema(
+    _INTELLIGENCE_IDENTITY
+    + [
+        pa.field("cluster_id", pa.string()),
+        pa.field("representative_strategy_id", pa.string()),
+        pa.field("distance_to_centroid", pa.float64()),
+        pa.field("cluster_size", pa.int64()),
+        pa.field("is_parameter_spam", pa.bool_()),
+        pa.field("dominant_family", pa.string()),
+        pa.field("regime_bias", pa.string()),
+        pa.field("intra_cluster_variance", pa.float64()),
         pa.field("date", pa.date32()),
     ]
 )

@@ -107,6 +107,7 @@ def test_record_run_started_writes_random_seed_to_manifest(runner, valid_request
         request=valid_request,
         experiment_id="experiment_test",
         resolved_dataset_metadata={},
+        resolved_feature_dataset_ids={},
     )
 
     manifest = runner.manifest_service.get_by_run_id(run_id)

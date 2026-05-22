@@ -45,6 +45,20 @@ class LogContext:
     severity: str | None = None
     broker_endpoint: str | None = None
     status_code: int | None = None
+    # Research orchestration fields
+    experiment_id: str | None = None
+    stage_name: str | None = None
+    n_entered: int | None = None
+    n_passed: int | None = None
+    n_failed: int | None = None
+    checkpoint_id: str | None = None
+    task_type: str | None = None
+    cache_type: str | None = None
+    cache_result: str | None = None
+    validation_stage: str | None = None
+    dimension: str | None = None
+    robustness_score: float | None = None
+    overfit_probability: float | None = None
 
     def to_extra(self) -> dict[str, object]:
         return {key: value for key, value in asdict(self).items() if value is not None}

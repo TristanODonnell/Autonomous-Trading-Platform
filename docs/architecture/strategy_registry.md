@@ -1,0 +1,385 @@
+# Strategy Registry
+
+## Purpose
+
+`strategy.registry` is the canonical single source of truth for all strategy
+metadata.  It replaces the lightweight catalog introduced in Stage 0 and serves
+as the foundation for:
+
+- composable strategy systems
+- parameter-aware strategy generation
+- compatibility-aware generation
+- feature dependency resolution
+- warmup inference
+- search-space generation
+- future composite and ensemble strategies
+
+---
+
+## Location
+
+```
+src/autonomous_trading_platform/strategy/registry/
+  __init__.py              # Public API; triggers registration on import
+  strategy_family.py       # StrategyFamily enum
+  parameter_metadata.py    # ParameterType, ParameterSpec
+  parameter_schemas.py     # Per-strategy Pydantic schemas
+  strategy_definition.py   # StrategyDefinition dataclass
+  strategy_registry.py     # StrategyRegistry class + singleton
+  validators.py            # Per-strategy parameter validator functions
+  _registrations.py        # All strategy registrations (runs once on import)
+```
+
+Related reusable primitive metadata lives in
+`src/autonomous_trading_platform/strategy/components/` and is documented in
+`docs/architecture/component_registry.md`.
+
+---
+
+## StrategyDefinition Fields
+
+| Group | Field | Type | Description |
+|---|---|---|---|
+| **Core identity** | `strategy_type` | `str` | Canonical type key |
+| | `display_name` | `str` | Human-readable name |
+| | `description` | `str` | Strategy purpose |
+| | `family` | `StrategyFamily` | Canonical family enum |
+| | `implementation_class` | `type` | Concrete strategy class |
+| **Classification** | `debug` | `bool` | Test-only flag |
+| | `production_ready` | `bool` | Production flag |
+| **Parameters** | `default_parameters` | `dict[str, Any]` | Canonical defaults |
+| | `parameter_validator` | `Callable` | Validates a parameters dict |
+| | `parameter_schema` | `type[StrategyParameterSchema]` | Canonical schema model |
+| **Warmup/deps** | `warmup_bars_fn` | `Callable` | Returns minimum bars from params |
+| | `required_indicators` | `tuple[str, ...]` | Indicator function names used |
+| | `required_persisted_features` | `tuple[str, ...]` | Persisted feature tables consumed through `StrategyContext.features` |
+| **Generation** | `parameter_specs` | `tuple[ParameterSpec, ...]` | Search-space specs per param |
+| **Compatibility** | `supports_long_only` | `bool` | Default: `True` |
+| | `supports_shorting` | `bool` | Default: `True` |
+| | `supports_intraday` | `bool` | Default: `True` |
+| | `supports_daily` | `bool` | Default: `True` |
+| | `supports_adjusted_prices` | `bool` | Default: `True` |
+| | `supports_raw_prices` | `bool` | Default: `True` |
+| **Operational** | `deterministic` | `bool` | Reproducible given same params |
+| | `builder` | `Callable` | `(strategy_id, params) -> BaseStrategy` |
+
+---
+
+## ParameterSpec Fields
+
+Each `ParameterSpec` describes one tunable parameter's search space:
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `str` | Parameter key (matches `default_parameters`) |
+| `parameter_type` | `ParameterType` | INT, FLOAT, BOOL, STRING |
+| `default` | `Any` | Default value |
+| `description` | `str` | Human description |
+| `min_value` | `float \| None` | Search space lower bound |
+| `max_value` | `float \| None` | Search space upper bound |
+| `discrete` | `bool` | True for integer grid search |
+| `step` | `float \| None` | Grid step size (discrete only) |
+| `tunable` | `bool` | Whether to include in optimization |
+| `mutation_strategy` | `str \| None` | Placeholder hint for future mutation engines |
+
+`ParameterSpec` is generation-facing metadata, not the primary validator.
+Every spec name and default must match the registered schema field and
+`default_parameters`. Tests enforce this drift check.
+
+---
+
+## Parameter Schemas
+
+Each registered strategy has one schema in `parameter_schemas.py`:
+
+| Strategy Type | Schema |
+|---|---|
+| `moving_average_crossover` | `MovingAverageCrossoverParameters` |
+| `momentum` | `MomentumParameters` |
+| `mean_reversion` | `MeanReversionParameters` |
+| `factor_based` | `FactorBasedParameters` |
+| `composite_rule` | `CompositeStrategyConfig` |
+| `random` | `RandomParameters` |
+| `stub` | `StubParameters` |
+| `intentional_loser` | `IntentionalLoserParameters` |
+
+The schema lifecycle is:
+
+1. `StrategyConfig` validates `type` through the registry.
+2. `StrategyConfig` calls `registry.normalize_parameters(type, parameters)`.
+3. The registered schema applies defaults, validates types and ranges, rejects
+   unknown fields, and enforces cross-field constraints.
+4. `StrategyConfig.parameters` stores the normalized canonical dict.
+5. `StrategyFactory` re-normalizes defensively and passes the canonical dict to
+   the registry builder.
+
+Unknown strategy parameters are rejected. This is intentional: strategy configs
+are persisted and hashed, so misspelled or unused fields should fail early.
+
+Defaults resolve from the schema first. `_registrations.py` stores the same
+default dict on `StrategyDefinition` for fast introspection and compatibility;
+tests require schema defaults, `default_parameters`, `ParameterSpec.default`,
+and constructor defaults to stay aligned.
+
+Current constraints:
+
+| Strategy | Parameters / Constraints |
+|---|---|
+| `stub` | `price_change_threshold >= 0` |
+| `intentional_loser` | `price_change_threshold >= 0` |
+| `random` | `signal_probability` and `buy_probability` in `[0, 1]`; optional integer `random_seed` |
+| `moving_average_crossover` | positive integer `short_window`, positive integer `long_window`, `short_window < long_window` |
+| `momentum` | positive integer `lookback`, numeric `buy_above` and `sell_below`, `sell_below <= buy_above` |
+| `mean_reversion` | positive integer `window`, numeric z-thresholds, `buy_below_z < sell_above_z` |
+| `factor_based` | positive integer lookback/window fields, `volatility_window > 1`, non-negative weights, `sell_score_threshold < buy_score_threshold` |
+| `composite_rule` | unique indicator IDs, valid component references, valid rule input mappings, executable rules and aggregators |
+
+---
+
+## Strategy Family Classification
+
+| Strategy Type | Family | Debug | Production Ready |
+|---|---|---|---|
+| `stub` | `DEBUG` | Yes | No |
+| `intentional_loser` | `DEBUG` | Yes | No |
+| `random` | `DEBUG` | Yes | No |
+| `moving_average_crossover` | `TREND` | No | Yes |
+| `momentum` | `MOMENTUM` | No | Yes |
+| `mean_reversion` | `MEAN_REVERSION` | No | Yes |
+| `factor_based` | `FACTOR` | No | Yes |
+| `composite_rule` | `COMPOSITE` | No | Yes |
+
+Available families (enum `StrategyFamily`):
+`MOMENTUM`, `MEAN_REVERSION`, `TREND`, `FACTOR`, `COMPOSITE`, `ENSEMBLE`, `DEBUG`
+
+---
+
+## Warmup Metadata
+
+Warmup bars are computed at runtime from strategy parameters via `warmup_bars_fn`:
+
+| Strategy | Formula |
+|---|---|
+| `stub` | `1` |
+| `intentional_loser` | `1` |
+| `random` | `0` |
+| `moving_average_crossover` | `long_window + 1` |
+| `momentum` | `lookback + 1` |
+| `mean_reversion` | `window` |
+| `factor_based` | `max(momentum_lookback+1, mean_reversion_window, volatility_window, volume_window)` |
+| `composite_rule` | max component warmup derived from declared indicators, rule warmup, and negative input offsets |
+
+Use `defn.compute_warmup_bars(parameters)` or `defn.compute_warmup_bars()` to get the warmup for default parameters.
+
+---
+
+## Indicator and Persisted Feature Dependencies
+
+The registry separates two dependency types:
+
+- `required_indicators`: in-memory functions under `strategy/indicators/` used
+  directly by a strategy. These names must exist as `indicator` components in
+  `ComponentRegistry`.
+- `required_persisted_features`: persisted feature datasets loaded into
+  `StrategyContext.features`.
+
+Indicator metadata is still declarative. Persisted feature metadata is now
+**automatically resolved** by `FeatureDependencyResolverService` (TASK-2.1)
+when wired into `SimulationRunner`.
+
+Current declarations:
+
+| Strategy | Required Indicators | Required Persisted Features |
+|---|---|---|
+| `stub` | none | none |
+| `intentional_loser` | none | none |
+| `random` | none | none |
+| `moving_average_crossover` | `simple_moving_average` | none |
+| `momentum` | `momentum` | none |
+| `mean_reversion` | `z_score`, `simple_moving_average`, `rolling_standard_deviation` | none |
+| `factor_based` | `momentum`, `z_score`, `rolling_standard_deviation`, `volume_ratio` | none |
+| `composite_rule` | config-dependent; default uses `momentum` | none |
+
+No current built-in strategy reads `StrategyContext.features`, so no built-in
+strategy declares persisted feature requirements. A strategy must only add a
+persisted feature dependency when its implementation actually consumes that
+feature table.
+
+The architecture boundary and overlap audit live in
+`docs/architecture/indicator_vs_feature_architecture.md`.
+
+Reusable construction primitive metadata lives in
+`docs/architecture/component_registry.md`. `StrategyRegistry` validates that
+declared `required_indicators` point at registered indicator components, but it
+does not route current strategy execution through the component registry.
+
+---
+
+## Registration Lifecycle
+
+1. `strategy.registry.__init__` is imported.
+2. `__init__` imports `_registrations`, which runs once.
+3. `_registrations` calls `_REGISTRY.register()` for each strategy in order.
+4. After all registrations, `_REGISTRY.lock()` is called.
+5. Any subsequent `register()` call raises `RuntimeError`.
+
+Registration is order-preserving and stable.  All list APIs return results in
+original registration order.
+
+---
+
+## Registry API
+
+```python
+from autonomous_trading_platform.strategy.registry import get_registry
+
+reg = get_registry()
+
+# Lookup
+reg.get_definition("momentum")            # -> StrategyDefinition
+reg.strategy_exists("momentum")           # -> bool
+reg.get_parameter_schema("momentum")      # -> type[StrategyParameterSchema]
+reg.get_default_parameters("momentum")    # -> normalized defaults
+reg.normalize_parameters("momentum", {})  # -> default-filled dict
+reg.validate_parameters("momentum", {})   # -> None or ValidationError
+reg.export_parameter_schema("momentum")   # -> JSON schema dict
+
+# Listings
+reg.list_definitions()                    # -> list[StrategyDefinition]
+reg.list_strategy_types()                 # -> list[str]
+reg.list_families()                       # -> list[StrategyFamily]
+reg.list_debug_strategies()               # -> list[StrategyDefinition]
+reg.list_production_strategies()          # -> list[StrategyDefinition]
+
+# Filtered
+reg.get_family_strategies(StrategyFamily.TREND)   # -> list[StrategyDefinition]
+reg.get_generation_candidates()           # -> list[StrategyDefinition] (non-empty specs)
+```
+
+---
+
+## Backward Compatibility
+
+`strategy.catalog` is a thin shim that re-exports the original public API:
+
+```python
+# These all still work — they delegate to the registry
+from autonomous_trading_platform.strategy.catalog import (
+    StrategyCatalogEntry,      # alias for StrategyDefinition
+    get_strategy_definition,
+    list_strategy_types,
+    list_production_strategy_types,
+    list_debug_strategy_types,
+    strategy_type_exists,
+)
+```
+
+`research.config.strategy_parameter_validators` re-exports from `strategy.registry.validators` for backward compatibility.
+
+---
+
+## Factory & Config Integration
+
+**StrategyFactory** uses the registry builder:
+
+```python
+def build(self, config: StrategyConfig) -> BaseStrategy:
+    defn = get_registry().get_definition(config.type)
+    parameters = defn.normalize_parameters(config.parameters)
+    return defn.builder(config.strategy_id, parameters)
+```
+
+**StrategyConfig** validates via the registry:
+
+```python
+# Type validation
+registry.strategy_exists(v)
+
+# Parameter normalization
+self.parameters = registry.normalize_parameters(self.type, self.parameters)
+```
+
+`canonical_json()` and `config_hash()` include the normalized parameters, so
+equivalent omitted-default and explicit-default configs hash identically.
+
+---
+
+## Relationship to Strategy Generation
+
+The registry exposes generation-friendly metadata without containing generation logic:
+
+- `parameter_specs` declares the search space declaratively
+- `get_generation_candidates()` returns strategies with non-empty specs
+- Generation engines (`GridSearchGenerator`, `RandomSamplingGenerator`, and
+  `EvolutionaryGenerator`) query the registry through
+  `ParameterSpaceResolver`, normalize candidates through the registered
+  parameter schemas, and de-duplicate by normalized `config_hash`.
+
+Registry metadata is inspectable from the CLI:
+
+```bash
+atp research list-strategy-types
+atp research inspect-strategy --strategy-type momentum
+```
+
+These commands derive display names, families, defaults, `ParameterSpec`
+search-space metadata, warmup requirements, dependencies, schema, and
+compatibility flags directly from `StrategyRegistry`.
+
+---
+
+## Distinction: Registry vs Execution
+
+| Concern | Owner |
+|---|---|
+| Strategy metadata, defaults, validation | `strategy.registry` |
+| Reusable indicator/rule/aggregator/filter/exit/sizing metadata | `strategy.components` |
+| Strategy instantiation | `strategy.factories.StrategyFactory` |
+| Strategy evaluation | `strategy.services.StrategyEvaluationService` |
+| Simulation orchestration | `research.simulation.SimulationRunner` |
+| Explicit persisted feature loading | `research.simulation.services.SimulationWindowLoader` |
+| Per-symbol feature table exposure | `strategy.contexts.StrategyContextBuilder` and `StrategyContext.features` |
+| Artifact persistence | `research.artifacts` |
+
+As of TASK-2.1, `FeatureDependencyResolverService` automatically translates
+`required_persisted_features` declarations into `SimulationFeatureDatasetRequest`
+objects. The flow:
+
+1. `FeatureDependencyResolverService.resolve()` reads `required_persisted_features`
+   and queries the SoR for validated feature dataset versions.
+2. `SimulationRunner` passes those requests to
+   `SimulationWindowLoader.load_window()`.
+3. The loader stores loaded tables in `SimulationWindowData.feature_tables_by_symbol`.
+4. `StrategyContextBuilder.build_from_window()` passes the symbol's tables into
+   `StrategyContext.features`.
+
+See `docs/architecture/feature_dependency_resolution.md` for the full flow.
+
+---
+
+## Future Extension Points
+
+The following are **not yet implemented** but the registry is designed to support them:
+
+- **Composite strategies**: `composite_rule` is registered as `family=COMPOSITE`; future work can add persisted feature dependencies when composites consume persisted features
+- **Ensemble orchestration**: new family `ENSEMBLE`, multi-strategy builder signature
+- **Indicator dependency resolver**: `required_indicators` consumed by a future execution resolver
+- **Feature dependency execution**: ✅ `required_persisted_features` automatically resolved by `FeatureDependencyResolverService` (TASK-2.1)
+- **Persisted feature consumption by factor strategies**: migrate only after equivalence contracts and loader resolution are explicit
+- **Search-space generation engines**: consume `parameter_specs` from `get_generation_candidates()`
+- **Dynamic plugin discovery**: call `registry.register()` before `lock()` from plugin entrypoints
+- **Automated strategy assembly**: use `family`, `required_indicators`, `parameter_specs`, and `ComponentRegistry` metadata to compose strategies programmatically
+
+---
+
+## Adding a New Strategy
+
+1. Implement the strategy class in `strategy/implementations/`.
+2. Add a schema class to `strategy/registry/parameter_schemas.py`.
+3. Add/keep compatibility validator wiring in `strategy/registry/validators.py`.
+4. Add `ParameterSpec` entries, a builder, and a `StrategyDefinition` registration to `strategy/registry/_registrations.py` **before** `_REGISTRY.lock()`.
+5. If the strategy declares `required_indicators`, make sure each name is
+   registered in `ComponentRegistry` as an `indicator`.
+6. Keep schema defaults, `default_parameters`, `ParameterSpec.default`, and constructor defaults aligned.
+7. Update `tests/strategy/test_strategy_registry.py` expected sets if needed.
+8. Run `python -m pytest tests/strategy/` to verify.

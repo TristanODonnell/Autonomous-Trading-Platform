@@ -1043,3 +1043,134 @@ def record_rejected_trade_outside_universe(count: int = 1) -> None:
         max(0, int(count)),
         _universe_metric_attrs("universe_runtime_guard"),
     )
+
+
+# =========================
+# RESEARCH PIPELINE METRICS
+# =========================
+
+research_stage_runs = meter.create_counter(
+    name="ratp_research_stage_runs_total",
+    description="Total number of research pipeline stage executions",
+    unit="1",
+)
+
+research_stage_duration = meter.create_histogram(
+    name="ratp_research_stage_duration_seconds",
+    description="Research pipeline stage execution duration",
+    unit="s",
+)
+
+research_stage_survivors_entered = meter.create_histogram(
+    name="ratp_research_stage_survivors_entered",
+    description="Number of strategy candidates entering each research pipeline stage",
+    unit="1",
+)
+
+research_stage_survivors_passed = meter.create_histogram(
+    name="ratp_research_stage_survivors_passed",
+    description="Number of strategy candidates passing each research pipeline stage",
+    unit="1",
+)
+
+# ===================================
+# RESEARCH PARALLEL EXECUTION METRICS
+# ===================================
+
+research_parallel_unit_runs = meter.create_counter(
+    name="ratp_research_parallel_unit_runs_total",
+    description="Total number of research parallel execution unit completions",
+    unit="1",
+)
+
+research_parallel_unit_duration = meter.create_histogram(
+    name="ratp_research_parallel_unit_duration_seconds",
+    description="Research parallel execution unit duration",
+    unit="s",
+)
+
+# ==============================
+# RESEARCH CHECKPOINT METRICS
+# ==============================
+
+research_checkpoint_transitions = meter.create_counter(
+    name="ratp_research_checkpoint_transitions_total",
+    description="Total number of research checkpoint state transitions",
+    unit="1",
+)
+
+research_checkpoint_duration = meter.create_histogram(
+    name="ratp_research_checkpoint_duration_seconds",
+    description="Research checkpoint duration from creation to terminal state",
+    unit="s",
+)
+
+# =========================
+# RESEARCH CACHE METRICS
+# =========================
+
+research_cache_lookups = meter.create_counter(
+    name="ratp_research_cache_lookups_total",
+    description="Total number of research cache lookup attempts",
+    unit="1",
+)
+
+# ==============================
+# RESEARCH VALIDATION METRICS
+# ==============================
+
+research_validation_stage_runs = meter.create_counter(
+    name="ratp_research_validation_stage_runs_total",
+    description="Total number of research validation stage executions",
+    unit="1",
+)
+
+research_validation_stage_duration = meter.create_histogram(
+    name="ratp_research_validation_stage_duration_seconds",
+    description="Research validation stage execution duration",
+    unit="s",
+)
+
+research_robustness_score = meter.create_histogram(
+    name="ratp_research_robustness_score",
+    description="Research strategy robustness scores",
+    unit="1",
+)
+
+# ==================================
+# RESEARCH REGIME ANALYSIS METRICS
+# ==================================
+
+research_regime_analysis_duration = meter.create_histogram(
+    name="ratp_research_regime_analysis_duration_seconds",
+    description="Research regime analysis execution duration",
+    unit="s",
+)
+
+research_regime_dimension_coverage_pct = meter.create_histogram(
+    name="ratp_research_regime_dimension_coverage_pct",
+    description="Fraction of regime buckets with observations per dimension",
+    unit="1",
+)
+
+# ================================
+# RESEARCH INTELLIGENCE METRICS
+# ================================
+
+research_intelligence_ranking_score = meter.create_histogram(
+    name="ratp_research_intelligence_ranking_score",
+    description="Research intelligence candidate composite ranking scores",
+    unit="1",
+)
+
+research_intelligence_cluster_count = meter.create_histogram(
+    name="ratp_research_intelligence_cluster_count",
+    description="Number of strategy clusters produced by intelligence clustering",
+    unit="1",
+)
+
+research_intelligence_overfit_estimate = meter.create_histogram(
+    name="ratp_research_intelligence_overfit_estimate",
+    description="Research intelligence overfitting probability estimates",
+    unit="1",
+)
