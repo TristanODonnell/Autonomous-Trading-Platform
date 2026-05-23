@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -20,6 +21,8 @@ from autonomous_trading_platform.storage.sor.models.broker_orders import (
     BrokerOrder as BrokerOrderRow,
 )
 from autonomous_trading_platform.storage.sor.models.fills import Fill as FillRow
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -145,11 +148,43 @@ class BrokerOrderMapper:
         broker_order: BrokerOrder,
         previous_filled_qty: Decimal,
         previous_avg_fill_price: Decimal | None,
+        received_at: datetime | None = None,
     ) -> FillExtractionResult:
         current_filled_qty = Decimal(str(broker_order.filled_qty))
         delta_qty = current_filled_qty - previous_filled_qty
 
-        if delta_qty <= 0:
+        if delta_qty < Decimal("0"):
+            # Stale or out-of-order broker update. Preserve monotonic state by
+            # returning previous_filled_qty so callers do not rewind tracked qty.
+            logger.critical(
+                "fill.quantity_regression_detected",
+                extra={
+                    "broker_order_id": broker_order.broker_order_id,
+                    "intent_id": str(broker_order.intent_id),
+                    "symbol": broker_order.symbol,
+                    "previous_filled_qty": str(previous_filled_qty),
+                    "current_filled_qty": str(current_filled_qty),
+                    "delta_qty": str(delta_qty),
+                    "broker_status": broker_order.status.value,
+                    "received_at": received_at.isoformat() if received_at is not None else None,
+                    "broker_update_timestamp": broker_order.updated_at.isoformat(),
+                },
+            )
+            return FillExtractionResult(
+                fill=None,
+                new_filled_qty=previous_filled_qty,
+            )
+
+        if delta_qty == Decimal("0"):
+            logger.debug(
+                "fill.duplicate_broker_update",
+                extra={
+                    "broker_order_id": broker_order.broker_order_id,
+                    "intent_id": str(broker_order.intent_id),
+                    "filled_qty": str(current_filled_qty),
+                    "received_at": received_at.isoformat() if received_at is not None else None,
+                },
+            )
             return FillExtractionResult(
                 fill=None,
                 new_filled_qty=current_filled_qty,
@@ -160,6 +195,17 @@ class BrokerOrderMapper:
                 fill=None,
                 new_filled_qty=current_filled_qty,
             )
+
+        snapshot_meta: dict[str, Any] = {
+            "client_order_id": broker_order.client_order_id,
+            "previous_filled_qty": str(previous_filled_qty),
+            "previous_avg_fill_price": (
+                str(previous_avg_fill_price) if previous_avg_fill_price is not None else None
+            ),
+            "broker_update_timestamp": broker_order.updated_at.isoformat(),
+        }
+        if received_at is not None:
+            snapshot_meta["received_at"] = received_at.isoformat()
 
         fill = Fill(
             fill_id=str(uuid4()),
@@ -174,13 +220,7 @@ class BrokerOrderMapper:
             fees=None,
             liquidity=self._infer_liquidity(broker_order),
             venue="alpaca",
-            metadata={
-                "client_order_id": broker_order.client_order_id,
-                "previous_filled_qty": str(previous_filled_qty),
-                "previous_avg_fill_price": (
-                    str(previous_avg_fill_price) if previous_avg_fill_price is not None else None
-                ),
-            },
+            metadata=snapshot_meta,
         )
 
         return FillExtractionResult(

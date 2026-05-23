@@ -104,7 +104,14 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\" -Recurse -Filter \"*.py\")",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\execution\" -Recurse)",
       "Bash(Select-Object FullName, Length)",
-      "Bash(Format-Table -AutoSize)"
+      "Bash(Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\execution\" -Recurse | Select-Object FullName | ForEach-Object { $_.FullName } | Sort-Object)",
+      "Bash(Find \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\execution\" -name \"*.py\" -type f)",
+      "Bash(Head -20)",
+      "Bash(Find \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\" -name \"*job*.py\" -type f)",
+      "Bash(Head -30)",
+      "Bash(Find \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\storage\\\\sor\\\\repositories\" -name \"*.py\" -type f)",
+      "Bash(Find C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform *)"
     ]
   }
 }

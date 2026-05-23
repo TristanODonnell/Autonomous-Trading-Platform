@@ -15,6 +15,11 @@ from autonomous_trading_platform.execution.mappers.broker_order_mapper import (
 from autonomous_trading_platform.execution.services.order_state_machine_service import (
     OrderStateMachineService,
 )
+from autonomous_trading_platform.observability.logging import get_logger
+
+logger = get_logger(__name__)
+
+_TERMINAL_STATUSES = frozenset({OrderStatus.FILLED, OrderStatus.CANCELED, OrderStatus.REJECTED})
 
 
 @dataclass(frozen=True)
@@ -71,9 +76,24 @@ class OrderReconciliationService:
             broker_order=broker_order,
             previous_filled_qty=tracked_order.previous_filled_qty,
             previous_avg_fill_price=tracked_order.previous_avg_fill_price,
+            received_at=timestamp,
         )
 
         event = self.broker_order_mapper.to_order_event(broker_order)
+
+        # Detect status regressions (e.g. FILLED → PARTIALLY_FILLED).
+        prev_status = tracked_order.current_status
+        if prev_status in _TERMINAL_STATUSES and broker_order.status not in _TERMINAL_STATUSES:
+            logger.warning(
+                "reconciliation.status_regression_detected",
+                extra={
+                    "broker_order_id": broker_order.broker_order_id,
+                    "intent_id": str(tracked_order.intent_id),
+                    "symbol": broker_order.symbol,
+                    "previous_status": prev_status.value,
+                    "broker_status": broker_order.status.value,
+                },
+            )
 
         next_status = tracked_order.current_status
         if event is not None and broker_order.status != tracked_order.current_status:
