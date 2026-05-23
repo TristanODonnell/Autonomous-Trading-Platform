@@ -112,7 +112,11 @@
       "Bash(Head -30)",
       "Bash(Find \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\storage\\\\sor\\\\repositories\" -name \"*.py\" -type f)",
       "Bash(Find C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform *)",
-      "Bash(git show *)"
+      "Bash(git show *)",
+      "Bash(Get-ChildItem \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\tests\\\\application\\\\services\\\\\" | Select-Object -First 10 -ExpandProperty Name *)",
+      "PowerShell(& \"C:\\\\Users\\\\Tristan\\\\AppData\\\\Local\\\\pypoetry\\\\Cache\\\\virtualenvs\\\\autonomous-trading-platform-IlAFR7j4-py3.11\\\\Scripts\\\\mypy.exe\" src/autonomous_trading_platform/application/services/simulation_vs_paper_comparison_service.py src/autonomous_trading_platform/contracts/execution/simulation_vs_paper_comparison.py 2>&1 | Select-Object -First 40)",
+      "PowerShell(ruff check *)",
+      "PowerShell(D:\\\\PythonVenvs\\\\autonomous-trading-platform\\\\.venv\\\\Scripts\\\\pre-commit.exe run ruff --files src/autonomous_trading_platform/application/services/simulation_vs_paper_comparison_service.py src/autonomous_trading_platform/contracts/execution/simulation_vs_paper_comparison.py tests/application/services/test_simulation_vs_paper_comparison_service.py 2>&1)"
     ]
   }
 }
