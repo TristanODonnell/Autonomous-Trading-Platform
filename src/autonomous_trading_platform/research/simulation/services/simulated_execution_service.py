@@ -76,6 +76,11 @@ class SimulatedExecutionService:
             original_qty = Decimal(str(intent.qty))
             order_type = self._normalize_enum_value(intent.order_type)
 
+            # F-02: Apply stochastic rejection before any order-type-specific logic.
+            # Rejected orders produce no fill and do not carry forward.
+            if self._is_order_rejected():
+                continue
+
             if order_type == "limit":
                 # R-07: Limit orders check eligibility first (gap-open vs. intrabar touch),
                 # apply touch-probability gate for intrabar touches, then run participation
@@ -194,14 +199,34 @@ class SimulatedExecutionService:
         reference_price = bar.close if self.fill_model_config.latency_bars == 0 else bar.open
         return self._create_fill(intent=intent, bar=bar, reference_price=reference_price, qty=qty)
 
+    def _is_order_rejected(self) -> bool:
+        """Draw from seeded RNG to determine if an order is stochastically rejected (F-02)."""
+        prob = self.fill_model_config.order_rejection_probability
+        if prob is None:
+            return False
+        return self._rng.random() < prob
+
+    def _unfilled_limit_result(self, intent: Any, original_qty: Decimal) -> FillBatch:
+        """Return the appropriate empty-fill result for an eligible-but-unfilled limit order.
+
+        When expire_unfilled_limit_orders is True, the order expires (no carry-forward).
+        Otherwise the full quantity carries forward for re-evaluation on the next bar (R-07).
+        This helper is NOT used for not-price-eligible orders — those are always dropped.
+        """
+        if self.fill_model_config.expire_unfilled_limit_orders:
+            return FillBatch(fills=[], carry_forward=[])
+        return FillBatch(fills=[], carry_forward=[self._make_carry_forward(intent, original_qty)])
+
     def _process_limit_intent(self, intent: Any, bar: Any, original_qty: Decimal) -> FillBatch:
         """Evaluate a limit order for eligibility, price improvement, and touch uncertainty (R-07).
 
         Execution flow:
           1. Determine eligibility: gap-open (bar.open through limit) or intrabar touch.
+             Not-price-eligible orders are dropped (no carry-forward, regardless of expiry).
           2. If intrabar touch and fill_probability_on_touch is set: draw from seeded RNG;
-             rejected → carry full quantity forward (not silently dropped).
+             if rejected → expire or carry forward depending on expire_unfilled_limit_orders.
           3. Apply volume participation cap (R-04).
+             If zero volume → expire or carry forward depending on expire_unfilled_limit_orders.
           4. Apply probabilistic partial-fill reduction (F-01).
           5. Emit fill at realistic price; carry forward any remaining quantity.
         """
@@ -224,7 +249,8 @@ class SimulatedExecutionService:
                 is_gap_open = False
                 fill_price = limit_price_d
             else:
-                # Bar never reached limit; silently drop (strategy re-evaluates next bar).
+                # Bar never reached limit; always drop regardless of expiry flag —
+                # there is no price activity to expire against.
                 return FillBatch(fills=[], carry_forward=[])
         elif side == "sell":
             if bar_open_d >= limit_price_d:
@@ -247,30 +273,27 @@ class SimulatedExecutionService:
         if not is_gap_open:
             touch_prob = self.fill_model_config.fill_probability_on_touch
             if touch_prob is not None and self._rng.random() >= touch_prob:
-                # Rejected by queue uncertainty; carry forward to re-evaluate next bar.
-                return FillBatch(
-                    fills=[], carry_forward=[self._make_carry_forward(intent, original_qty)]
-                )
+                # Touch-rejected: expire or carry forward depending on DAY expiry config.
+                return self._unfilled_limit_result(intent, original_qty)
 
         # Step 1 (R-04): Apply volume participation cap.
         capped_qty = self._cap_by_participation(original_qty, bar)
         if capped_qty <= Decimal("0"):
-            return FillBatch(
-                fills=[], carry_forward=[self._make_carry_forward(intent, original_qty)]
-            )
+            # Zero bar volume: expire or carry forward.
+            return self._unfilled_limit_result(intent, original_qty)
 
         # Step 2 (F-01): Apply probabilistic partial-fill reduction.
         actual_fill_qty = self._apply_probabilistic_fill(capped_qty)
         if actual_fill_qty <= Decimal("0"):
-            return FillBatch(
-                fills=[], carry_forward=[self._make_carry_forward(intent, original_qty)]
-            )
+            return self._unfilled_limit_result(intent, original_qty)
 
         remaining_qty = original_qty - actual_fill_qty
         fill_result = self._create_fill(
             intent=intent, bar=bar, reference_price=fill_price, qty=actual_fill_qty
         )
 
+        # Partial-fill remainder always carries forward — quantity that did execute
+        # is done; only the unfilled portion needs rescheduling.
         cf: list[Any] = []
         if remaining_qty > Decimal("0"):
             cf.append(self._make_carry_forward(intent, remaining_qty))

@@ -40,6 +40,19 @@ class SimulatedFillModelConfig:
     # does not gap through). Gap-open fills are always eligible and bypass this gate.
     # Must be > 0 and <= 1.0 when set.
     fill_probability_on_touch: float | None = field(default=None)
+    # Probability that any order is rejected before execution (F-02).
+    # None → disabled; no stochastic rejections (legacy behavior).
+    # 0.05 → 5% of eligible orders are rejected (no fill, no carry-forward).
+    # Applied BEFORE participation cap, partial fill probability, and limit eligibility.
+    # Uses the same seeded RNG as other probabilistic features.
+    # Must be > 0 and <= 1.0 when set.
+    order_rejection_probability: float | None = field(default=None)
+    # When True, limit orders that do not fill on the current bar expire (DAY semantics).
+    # False → legacy behavior; eligible-but-unfilled limits carry forward to the next bar.
+    # Applies to: touch-probability rejections and participation-capped zero-volume bars.
+    # Does not affect partial fills — remainder of a partial fill still carries forward.
+    # Not-price-eligible limits are always dropped regardless of this flag.
+    expire_unfilled_limit_orders: bool = field(default=False)
 
     def __post_init__(self) -> None:
         if self.latency_bars < 0:
@@ -77,4 +90,10 @@ class SimulatedFillModelConfig:
         ):
             raise ValueError(
                 f"fill_probability_on_touch must be > 0 and <= 1.0, got {self.fill_probability_on_touch}"
+            )
+        if self.order_rejection_probability is not None and (
+            self.order_rejection_probability <= 0 or self.order_rejection_probability > 1.0
+        ):
+            raise ValueError(
+                f"order_rejection_probability must be > 0 and <= 1.0, got {self.order_rejection_probability}"
             )

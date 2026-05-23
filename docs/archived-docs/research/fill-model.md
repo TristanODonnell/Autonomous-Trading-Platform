@@ -98,6 +98,73 @@ Cancel after 1 bar (v1)
 
 ---
 
+## Order Rejection Modeling (F-02)
+
+### Stochastic Rejection
+
+When `order_rejection_probability` is set, each eligible order is subject to a
+stochastic rejection draw before any order-type-specific logic runs.
+
+Draw: `x = rng.random()` from the seeded simulation RNG.
+If `x < order_rejection_probability` → order is **rejected**.
+
+Rejected orders:
+- Produce no fill
+- Do not carry forward
+- Are terminal for simulation purposes
+
+This applies to both market and limit orders. The rejection draw uses the same seeded
+`random.Random` instance as all other probabilistic features, preserving deterministic
+replay.
+
+`order_rejection_probability = None` (default) disables stochastic rejection entirely.
+
+### Execution Order With Rejection
+
+For each eligible order:
+
+1. **Rejection check** (F-02) — if rejected: no fill, no carry-forward, stop.
+2. **Limit eligibility** (R-07) — gap-open or intrabar touch check.
+3. **Touch probability gate** (R-07) — intrabar touch acceptance/rejection.
+4. **Volume participation cap** (R-04).
+5. **Probabilistic partial fill** (F-01).
+6. **Fill emission** — carry forward any remainder.
+
+---
+
+## DAY Limit Order Expiry (F-02)
+
+### Default Behavior (Legacy)
+
+By default (`expire_unfilled_limit_orders = False`), limit orders that are eligible but
+do not fill on the current bar carry their full remaining quantity forward for
+re-evaluation on the next bar. This applies to:
+
+- Touch-probability rejections (R-07)
+- Zero bar volume (participation cap yields 0)
+
+### DAY Expiry Enabled
+
+When `expire_unfilled_limit_orders = True`, limit orders that are eligible but unfilled
+expire at end of bar instead of carrying forward:
+
+| Scenario | Expiry disabled | Expiry enabled |
+|----------|----------------|---------------|
+| Not price-eligible (bar never reaches limit) | dropped | dropped (unchanged) |
+| Touch-probability rejected | carry forward | expire |
+| Zero bar volume (participation cap = 0) | carry forward | expire |
+| Partial fill (some qty executes) | remainder carries forward | remainder carries forward |
+
+Partial-fill remainders always carry forward regardless of the expiry flag — only the
+portion that executed is complete; the unfilled portion needs rescheduling.
+
+### Interaction With Rejection
+
+Order rejection (F-02) fires before limit expiry logic. A rejected order never reaches
+the expiry check and does not carry forward regardless of the expiry flag.
+
+---
+
 ## Terminal State Guarantee
 
 No order may remain in ambiguous state at backtest end.
@@ -105,5 +172,6 @@ No order may remain in ambiguous state at backtest end.
 All orders must end as:
 
 - Filled
-- Canceled
+- Partially filled (remainder expired or carried to next bar)
 - Rejected
+- Expired
