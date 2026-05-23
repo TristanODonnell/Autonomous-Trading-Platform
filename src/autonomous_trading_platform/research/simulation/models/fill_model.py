@@ -33,6 +33,13 @@ class SimulatedFillModelConfig:
     # Must satisfy 0 < min_fraction < max_fraction <= 1.0.
     partial_fill_min_fraction: float = field(default=0.10)
     partial_fill_max_fraction: float = field(default=0.75)
+    # Queue-position uncertainty for intrabar limit-order touches (R-07).
+    # None → legacy behavior; every price touch fills deterministically (no gate).
+    # 0.50 → 50% chance the intrabar touch results in a fill; remainder carries forward.
+    # Applied ONLY to intrabar touches (bar.low/high reaches limit_price but bar.open
+    # does not gap through). Gap-open fills are always eligible and bypass this gate.
+    # Must be > 0 and <= 1.0 when set.
+    fill_probability_on_touch: float | None = field(default=None)
 
     def __post_init__(self) -> None:
         if self.latency_bars < 0:
@@ -64,4 +71,10 @@ class SimulatedFillModelConfig:
             raise ValueError(
                 f"partial_fill_min_fraction ({self.partial_fill_min_fraction}) must be "
                 f"< partial_fill_max_fraction ({self.partial_fill_max_fraction})"
+            )
+        if self.fill_probability_on_touch is not None and (
+            self.fill_probability_on_touch <= 0 or self.fill_probability_on_touch > 1.0
+        ):
+            raise ValueError(
+                f"fill_probability_on_touch must be > 0 and <= 1.0, got {self.fill_probability_on_touch}"
             )

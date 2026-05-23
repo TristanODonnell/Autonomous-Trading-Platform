@@ -74,7 +74,18 @@ class SimulatedExecutionService:
                 continue
 
             original_qty = Decimal(str(intent.qty))
+            order_type = self._normalize_enum_value(intent.order_type)
 
+            if order_type == "limit":
+                # R-07: Limit orders check eligibility first (gap-open vs. intrabar touch),
+                # apply touch-probability gate for intrabar touches, then run participation
+                # cap and probabilistic fill on the eligible quantity.
+                batch = self._process_limit_intent(intent, bar, original_qty)
+                fills.extend(batch.fills)
+                carry_forward.extend(batch.carry_forward)
+                continue
+
+            # Market orders: apply participation cap and probabilistic fill, then execute.
             # Step 1 (R-04): Apply volume participation cap.
             capped_qty = self._cap_by_participation(original_qty, bar)
 
@@ -102,7 +113,6 @@ class SimulatedExecutionService:
                 fills.append(fill_result)
                 if remaining_qty > Decimal("0"):
                     carry_forward.append(self._make_carry_forward(intent, remaining_qty))
-            # Limit orders that don't cross are silently dropped (existing semantics).
 
         return FillBatch(fills=fills, carry_forward=carry_forward)
 
@@ -184,7 +194,93 @@ class SimulatedExecutionService:
         reference_price = bar.close if self.fill_model_config.latency_bars == 0 else bar.open
         return self._create_fill(intent=intent, bar=bar, reference_price=reference_price, qty=qty)
 
+    def _process_limit_intent(self, intent: Any, bar: Any, original_qty: Decimal) -> FillBatch:
+        """Evaluate a limit order for eligibility, price improvement, and touch uncertainty (R-07).
+
+        Execution flow:
+          1. Determine eligibility: gap-open (bar.open through limit) or intrabar touch.
+          2. If intrabar touch and fill_probability_on_touch is set: draw from seeded RNG;
+             rejected → carry full quantity forward (not silently dropped).
+          3. Apply volume participation cap (R-04).
+          4. Apply probabilistic partial-fill reduction (F-01).
+          5. Emit fill at realistic price; carry forward any remaining quantity.
+        """
+        limit_price = getattr(intent, "limit_price", None)
+        if limit_price is None:
+            return FillBatch(fills=[], carry_forward=[])
+
+        limit_price_d = Decimal(str(limit_price))
+        bar_open_d = Decimal(str(bar.open))
+        side = self._normalize_enum_value(intent.side)
+
+        if side == "buy":
+            if bar_open_d <= limit_price_d:
+                # Gap-open: market opened at or below the buy limit.
+                # Fill at bar.open (price improvement over limit_price).
+                is_gap_open = True
+                fill_price = bar_open_d
+            elif Decimal(str(bar.low)) <= limit_price_d:
+                # Intrabar touch: bar.open > limit_price but bar.low reaches it.
+                is_gap_open = False
+                fill_price = limit_price_d
+            else:
+                # Bar never reached limit; silently drop (strategy re-evaluates next bar).
+                return FillBatch(fills=[], carry_forward=[])
+        elif side == "sell":
+            if bar_open_d >= limit_price_d:
+                # Gap-open: market opened at or above the sell limit.
+                # Fill at bar.open (price improvement over limit_price).
+                is_gap_open = True
+                fill_price = bar_open_d
+            elif Decimal(str(bar.high)) >= limit_price_d:
+                # Intrabar touch: bar.open < limit_price but bar.high reaches it.
+                is_gap_open = False
+                fill_price = limit_price_d
+            else:
+                return FillBatch(fills=[], carry_forward=[])
+        else:
+            return FillBatch(fills=[], carry_forward=[])
+
+        # Queue-position uncertainty for intrabar touches (R-07).
+        # Gap-open fills bypass this gate — the market opened through the limit so
+        # the order was at the front of the queue.
+        if not is_gap_open:
+            touch_prob = self.fill_model_config.fill_probability_on_touch
+            if touch_prob is not None and self._rng.random() >= touch_prob:
+                # Rejected by queue uncertainty; carry forward to re-evaluate next bar.
+                return FillBatch(
+                    fills=[], carry_forward=[self._make_carry_forward(intent, original_qty)]
+                )
+
+        # Step 1 (R-04): Apply volume participation cap.
+        capped_qty = self._cap_by_participation(original_qty, bar)
+        if capped_qty <= Decimal("0"):
+            return FillBatch(
+                fills=[], carry_forward=[self._make_carry_forward(intent, original_qty)]
+            )
+
+        # Step 2 (F-01): Apply probabilistic partial-fill reduction.
+        actual_fill_qty = self._apply_probabilistic_fill(capped_qty)
+        if actual_fill_qty <= Decimal("0"):
+            return FillBatch(
+                fills=[], carry_forward=[self._make_carry_forward(intent, original_qty)]
+            )
+
+        remaining_qty = original_qty - actual_fill_qty
+        fill_result = self._create_fill(
+            intent=intent, bar=bar, reference_price=fill_price, qty=actual_fill_qty
+        )
+
+        cf: list[Any] = []
+        if remaining_qty > Decimal("0"):
+            cf.append(self._make_carry_forward(intent, remaining_qty))
+
+        return FillBatch(fills=[fill_result], carry_forward=cf)
+
     def _fill_limit_order(self, *, intent: Any, bar: Any, qty: Decimal) -> Fill | None:
+        # Legacy path retained for _build_fill_for_intent compatibility.
+        # The primary limit-order path is now _process_limit_intent, called directly
+        # from fill() before participation cap and probabilistic fill are applied.
         limit_price = getattr(intent, "limit_price", None)
 
         if limit_price is None:
