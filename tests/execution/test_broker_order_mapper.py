@@ -307,3 +307,98 @@ def test_to_order_event_returns_cancel_for_canceled(mapper: BrokerOrderMapper) -
 
     order = _make_broker_order(status=OrderStatus.CANCELED)
     assert mapper.to_order_event(order) == OrderEvent.CANCEL
+
+
+# ---------------------------------------------------------------------------
+# E-02: new status mappings and order events
+# ---------------------------------------------------------------------------
+
+
+def test_to_order_event_returns_none_for_pending_new(mapper: BrokerOrderMapper) -> None:
+    order = _make_broker_order(status=OrderStatus.PENDING_NEW)
+    assert mapper.to_order_event(order) is None
+
+
+def test_to_order_event_returns_request_cancel_for_pending_cancel(
+    mapper: BrokerOrderMapper,
+) -> None:
+    from autonomous_trading_platform.contracts.common.enums import OrderEvent
+
+    order = _make_broker_order(status=OrderStatus.PENDING_CANCEL)
+    assert mapper.to_order_event(order) == OrderEvent.REQUEST_CANCEL
+
+
+def test_to_order_event_returns_expire_for_expired(mapper: BrokerOrderMapper) -> None:
+    from autonomous_trading_platform.contracts.common.enums import OrderEvent
+
+    order = _make_broker_order(status=OrderStatus.EXPIRED)
+    assert mapper.to_order_event(order) == OrderEvent.EXPIRE
+
+
+@pytest.mark.parametrize(
+    ("broker_status", "expected"),
+    [
+        ("pending_cancel", OrderStatus.PENDING_CANCEL),
+        ("expired", OrderStatus.EXPIRED),
+        ("done_for_day", OrderStatus.EXPIRED),
+        ("canceled", OrderStatus.CANCELED),
+        ("new", OrderStatus.SUBMITTED),
+        ("accepted", OrderStatus.SUBMITTED),
+        ("pending_new", OrderStatus.SUBMITTED),
+        ("partially_filled", OrderStatus.PARTIALLY_FILLED),
+        ("filled", OrderStatus.FILLED),
+        ("rejected", OrderStatus.REJECTED),
+    ],
+)
+def test_map_order_status_covers_all_broker_statuses(
+    mapper: BrokerOrderMapper,
+    broker_status: str,
+    expected: OrderStatus,
+) -> None:
+    payload = {
+        "id": "bo-001",
+        "client_order_id": "co-001",
+        "symbol": "AAPL",
+        "side": "buy",
+        "type": "market",
+        "time_in_force": "day",
+        "status": broker_status,
+        "filled_qty": "0",
+        "qty": "10",
+    }
+    from uuid import UUID
+
+    order = mapper.to_broker_order(
+        payload=payload,
+        intent_id=UUID("00000000-0000-0000-0000-000000000001"),
+        run_id=UUID("00000000-0000-0000-0000-000000000002"),
+        account_id="acct-001",
+    )
+    assert order.status == expected
+
+
+def test_expired_is_distinct_from_canceled(mapper: BrokerOrderMapper) -> None:
+    """expired and done_for_day map to EXPIRED, not CANCELED."""
+    for broker_status in ("expired", "done_for_day"):
+        payload = {
+            "id": "bo-001",
+            "client_order_id": "co-001",
+            "symbol": "AAPL",
+            "side": "buy",
+            "type": "market",
+            "time_in_force": "day",
+            "status": broker_status,
+            "filled_qty": "0",
+            "qty": "10",
+        }
+        from uuid import UUID
+
+        order = mapper.to_broker_order(
+            payload=payload,
+            intent_id=UUID("00000000-0000-0000-0000-000000000001"),
+            run_id=UUID("00000000-0000-0000-0000-000000000002"),
+            account_id="acct-001",
+        )
+        assert order.status == OrderStatus.EXPIRED, (
+            f"Expected EXPIRED for broker status {broker_status!r}"
+        )

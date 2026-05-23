@@ -111,7 +111,8 @@
       "Bash(Find \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\" -name \"*job*.py\" -type f)",
       "Bash(Head -30)",
       "Bash(Find \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\storage\\\\sor\\\\repositories\" -name \"*.py\" -type f)",
-      "Bash(Find C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform *)"
+      "Bash(Find C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform *)",
+      "Bash(git show *)"
     ]
   }
 }

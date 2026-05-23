@@ -29,19 +29,25 @@ class OrderSource(enum.StrEnum):
 
 class OrderStatus(enum.StrEnum):
     NEW = "new"
+    PENDING_NEW = "pending_new"
     SUBMITTED = "submitted"
     PARTIALLY_FILLED = "partially_filled"
     FILLED = "filled"
+    PENDING_CANCEL = "pending_cancel"
     CANCELED = "canceled"
     REJECTED = "rejected"
+    EXPIRED = "expired"
 
 
 class OrderEvent(enum.StrEnum):
+    PENDING_SUBMIT = "pending_submit"
     SUBMIT = "submit"
     PARTIAL_FILL = "partial_fill"
     FULL_FILL = "full_fill"
+    REQUEST_CANCEL = "request_cancel"
     CANCEL = "cancel"
     REJECT = "reject"
+    EXPIRE = "expire"
 
 
 class CorporateActionType(enum.StrEnum):

@@ -24,3 +24,7 @@ class InvalidBrokerCredentialsError(BrokerStartupHealthCheckError):
 
 class BrokerRuntimeSyncError(ExecutionError):
     """Raised when broker runtime synchronization fails closed."""
+
+
+class BrokerOrderNotFoundError(ExecutionError):
+    """Raised when broker returns 404 for a known broker_order_id during reconciliation."""

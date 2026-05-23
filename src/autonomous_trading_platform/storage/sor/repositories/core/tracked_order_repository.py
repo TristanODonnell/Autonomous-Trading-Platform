@@ -30,7 +30,14 @@ class TrackedOrderRepository(BaseRepository):
 
     def list_reconcilable_orders(self) -> list[TrackedOrder]:
         stmt = select(TrackedOrder).where(
-            TrackedOrder.current_status.in_([OrderStatus.SUBMITTED, OrderStatus.PARTIALLY_FILLED])
+            TrackedOrder.current_status.in_(
+                [
+                    OrderStatus.PENDING_NEW,
+                    OrderStatus.SUBMITTED,
+                    OrderStatus.PARTIALLY_FILLED,
+                    OrderStatus.PENDING_CANCEL,
+                ]
+            )
         )
         return cast(list[TrackedOrder], list(self.session.execute(stmt).scalars().all()))
 

@@ -130,14 +130,18 @@ class BrokerOrderMapper:
         )
 
     def to_order_event(self, broker_order: BrokerOrder) -> OrderEvent | None:
-        if broker_order.status == OrderStatus.SUBMITTED:
+        if broker_order.status in {OrderStatus.SUBMITTED, OrderStatus.PENDING_NEW}:
             return None
+        if broker_order.status == OrderStatus.PENDING_CANCEL:
+            return OrderEvent.REQUEST_CANCEL
         if broker_order.status == OrderStatus.PARTIALLY_FILLED:
             return OrderEvent.PARTIAL_FILL
         if broker_order.status == OrderStatus.FILLED:
             return OrderEvent.FULL_FILL
         if broker_order.status == OrderStatus.CANCELED:
             return OrderEvent.CANCEL
+        if broker_order.status == OrderStatus.EXPIRED:
+            return OrderEvent.EXPIRE
         if broker_order.status == OrderStatus.REJECTED:
             return OrderEvent.REJECT
         return None
@@ -231,13 +235,21 @@ class BrokerOrderMapper:
     def _map_order_status(self, status: str) -> OrderStatus:
         normalized = status.lower()
 
-        if normalized in {"new", "accepted", "pending_new", "accepted_for_bidding"}:
+        if normalized in {"new", "accepted", "accepted_for_bidding"}:
             return OrderStatus.SUBMITTED
+        # Broker pending_new = order in broker's queue; treat as submitted for tracking.
+        if normalized == "pending_new":
+            return OrderStatus.SUBMITTED
+        if normalized == "pending_cancel":
+            return OrderStatus.PENDING_CANCEL
         if normalized == "partially_filled":
             return OrderStatus.PARTIALLY_FILLED
         if normalized == "filled":
             return OrderStatus.FILLED
-        if normalized in {"canceled", "expired", "done_for_day"}:
+        # expired and done_for_day are distinct from voluntary cancellation.
+        if normalized in {"expired", "done_for_day"}:
+            return OrderStatus.EXPIRED
+        if normalized == "canceled":
             return OrderStatus.CANCELED
         if normalized in {"rejected", "suspended"}:
             return OrderStatus.REJECTED
