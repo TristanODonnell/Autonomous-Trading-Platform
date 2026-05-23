@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import pandas as pd
 
@@ -31,6 +31,9 @@ from autonomous_trading_platform.research.simulation.services.simple_position_si
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
     StrategyContextBuilder,
 )
+
+# Stable namespace for deterministic intent IDs (P-01).
+_INTENT_NS = uuid5(NAMESPACE_URL, "autonomous-trading-platform:intent")
 
 
 @dataclass(slots=True)
@@ -345,9 +348,15 @@ class SimulationExecutionEngine:
             if price is None:
                 continue
 
+            # Deterministic intent_id (P-01): stable given identical run_id, symbol,
+            # timestamp, side, and delta. Carry-forward copies keep this intent_id so
+            # fill lineage is traceable across bars.
+            _intent_key = (
+                f"{run_id}:{strategy_id}:{symbol}:{timestamp.isoformat()}:{side.value}:{delta}"
+            )
             order_intents.append(
                 OrderIntent(
-                    intent_id=uuid4(),
+                    intent_id=uuid5(_INTENT_NS, _intent_key),
                     idempotency_key=f"{run_id}-{strategy_id}-{symbol}-{timestamp.isoformat()}",
                     run_id=run_id,
                     strategy_id=strategy_id,

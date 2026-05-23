@@ -3,9 +3,9 @@ from __future__ import annotations
 import copy
 import dataclasses
 import random
-import uuid
 from decimal import ROUND_DOWN, Decimal
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 from autonomous_trading_platform.contracts.trading.fill import Fill
 from autonomous_trading_platform.research.simulation.models.fill_model import (
@@ -14,6 +14,11 @@ from autonomous_trading_platform.research.simulation.models.fill_model import (
 from autonomous_trading_platform.research.simulation.services.simulation_cost_model_service import (
     SimulationCostModelService,
 )
+
+# Stable namespaces for deterministic UUID5 generation.
+# These are fixed constants so the same logical key always maps to the same UUID.
+_FILL_NS = uuid5(NAMESPACE_URL, "autonomous-trading-platform:fill")
+_ORDER_NS = uuid5(NAMESPACE_URL, "autonomous-trading-platform:order")
 
 
 @dataclasses.dataclass(slots=True)
@@ -35,10 +40,24 @@ class SimulatedExecutionService:
     ):
         self.simulation_cost_model_service = simulation_cost_model_service
         self.fill_model_config = fill_model_config
-        # RNG used exclusively for probabilistic partial-fill sampling (F-01).
-        # Provide a seeded random.Random instance to guarantee deterministic replay.
-        # None → a default (unseeded) instance is created on first probabilistic use.
+        # Isolated RNG for all stochastic decisions (F-01 partial fills, F-02 rejection,
+        # R-07 touch probability). Caller must provide a seeded instance via reset_for_run()
+        # before each simulation run to guarantee deterministic replay.
         self._rng: random.Random = rng if rng is not None else random.Random()
+        # Monotonic counter reset at the start of each run; used as part of the
+        # deterministic key for fill_id / broker_order_id generation (P-01).
+        self._fill_counter: int = 0
+
+    def reset_for_run(self, rng: random.Random | None = None) -> None:
+        """Reset per-run mutable state before each simulation run.
+
+        Must be called by SimulationRunner at the start of every run to guarantee:
+          - deterministic fill ID generation (fill counter reset to 0)
+          - isolated, seeded RNG (no cross-run state leakage)
+        """
+        self._fill_counter = 0
+        if rng is not None:
+            self._rng = rng
 
     @property
     def cost_model_summary(self) -> dict:
@@ -343,9 +362,17 @@ class SimulatedExecutionService:
             quantity=qty,
         )
 
+        self._fill_counter += 1
+        # Deterministic IDs (P-01): stable across reruns given identical inputs + seed.
+        # Key encodes run identity + intent identity + monotonic fill index to ensure
+        # uniqueness even for fragmented / carry-forward fills from the same intent.
+        _fill_key = f"{intent.run_id}:{intent.intent_id}:{self._fill_counter}"
+        fill_id = str(uuid5(_FILL_NS, _fill_key))
+        broker_order_id = str(uuid5(_ORDER_NS, _fill_key))
+
         return Fill(
-            fill_id=str(uuid.uuid4()),
-            broker_order_id=str(uuid.uuid4()),
+            fill_id=fill_id,
+            broker_order_id=broker_order_id,
             intent_id=intent.intent_id,
             run_id=intent.run_id,
             symbol=intent.symbol,

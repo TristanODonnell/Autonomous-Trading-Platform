@@ -2,7 +2,6 @@ import random
 from datetime import date
 from uuid import uuid4
 
-import numpy as np
 import pytest
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
@@ -84,19 +83,33 @@ def test_run_rejects_non_int_random_seed(runner, valid_request):
         runner.run(valid_request)
 
 
-def test_set_seed_makes_python_and_numpy_deterministic(runner):
-    runner._set_seed(42)
+def test_init_rng_produces_isolated_deterministic_rng(runner):
+    """_init_rng must return an isolated random.Random seeded from the given int."""
+    rng_a = runner._init_rng(42)
+    rng_b = runner._init_rng(42)
 
-    python_value_1 = random.random()
-    numpy_value_1 = np.random.random()
+    # Same seed → same sequence from isolated instances.
+    assert rng_a.random() == rng_b.random()
+    assert rng_a.random() == rng_b.random()
 
-    runner._set_seed(42)
 
-    python_value_2 = random.random()
-    numpy_value_2 = np.random.random()
+def test_init_rng_does_not_mutate_global_random_state(runner):
+    """_init_rng must not call random.seed() or touch the global random module."""
+    before = random.getstate()
+    runner._init_rng(42)
+    after = random.getstate()
 
-    assert python_value_1 == python_value_2
-    assert numpy_value_1 == numpy_value_2
+    assert before == after, "_init_rng must not mutate the global random module state"
+
+
+def test_init_rng_different_seeds_produce_different_sequences(runner):
+    rng_a = runner._init_rng(1)
+    rng_b = runner._init_rng(2)
+
+    values_a = [rng_a.random() for _ in range(5)]
+    values_b = [rng_b.random() for _ in range(5)]
+
+    assert values_a != values_b
 
 
 def test_record_run_started_writes_random_seed_to_manifest(runner, valid_request):
@@ -116,4 +129,8 @@ def test_record_run_started_writes_random_seed_to_manifest(runner, valid_request
     assert manifest.random_seed == valid_request.random_seed
 
     assert manifest.schema_definition is not None
-    assert manifest.schema_definition["determinism"]["random_seed"] == valid_request.random_seed
+    det = manifest.schema_definition["determinism"]
+    assert det["random_seed"] == valid_request.random_seed
+    assert det["isolated_python_rng"] is True
+    assert det["deterministic_run_id"] is True
+    assert det["deterministic_fill_ids"] is True
