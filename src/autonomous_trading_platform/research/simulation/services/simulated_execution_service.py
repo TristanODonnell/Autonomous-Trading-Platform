@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import random
 import uuid
 from decimal import ROUND_DOWN, Decimal
 from typing import Any
@@ -30,9 +31,14 @@ class SimulatedExecutionService:
         self,
         simulation_cost_model_service: SimulationCostModelService,
         fill_model_config: SimulatedFillModelConfig,
+        rng: random.Random | None = None,
     ):
         self.simulation_cost_model_service = simulation_cost_model_service
         self.fill_model_config = fill_model_config
+        # RNG used exclusively for probabilistic partial-fill sampling (F-01).
+        # Provide a seeded random.Random instance to guarantee deterministic replay.
+        # None → a default (unseeded) instance is created on first probabilistic use.
+        self._rng: random.Random = rng if rng is not None else random.Random()
 
     @property
     def cost_model_summary(self) -> dict:
@@ -69,17 +75,27 @@ class SimulatedExecutionService:
 
             original_qty = Decimal(str(intent.qty))
 
-            # Apply volume participation cap when configured.
-            fill_qty = self._cap_by_participation(original_qty, bar)
-            remaining_qty = original_qty - fill_qty
+            # Step 1 (R-04): Apply volume participation cap.
+            capped_qty = self._cap_by_participation(original_qty, bar)
 
-            if fill_qty <= Decimal("0"):
+            if capped_qty <= Decimal("0"):
                 # Bar volume too thin to fill anything; carry the entire order forward.
                 carry_forward.append(self._make_carry_forward(intent, original_qty))
                 continue
 
+            # Step 2 (F-01): Apply probabilistic partial-fill reduction.
+            actual_fill_qty = self._apply_probabilistic_fill(capped_qty)
+
+            if actual_fill_qty <= Decimal("0"):
+                # Probabilistic decision: nothing executes this bar.
+                carry_forward.append(self._make_carry_forward(intent, original_qty))
+                continue
+
+            remaining_qty = original_qty - actual_fill_qty
+
+            # Step 3: Execute with the resolved quantity.
             fill_result = self._build_fill_for_intent(
-                intent=intent, bar=bar, effective_qty=fill_qty
+                intent=intent, bar=bar, effective_qty=actual_fill_qty
             )
 
             if fill_result is not None:
@@ -91,7 +107,7 @@ class SimulatedExecutionService:
         return FillBatch(fills=fills, carry_forward=carry_forward)
 
     # ------------------------------------------------------------------
-    # Volume participation helpers
+    # Volume participation helpers (R-04)
     # ------------------------------------------------------------------
 
     def _cap_by_participation(self, qty: Decimal, bar: Any) -> Decimal:
@@ -108,6 +124,33 @@ class SimulatedExecutionService:
             rounding=ROUND_DOWN
         )
         return min(qty, max_fill)
+
+    # ------------------------------------------------------------------
+    # Probabilistic partial-fill helpers (F-01)
+    # ------------------------------------------------------------------
+
+    def _apply_probabilistic_fill(self, qty: Decimal) -> Decimal:
+        """Optionally reduce fill quantity stochastically to simulate queue fragmentation.
+
+        When partial_fill_probability triggers:
+          - sample a fraction in [partial_fill_min_fraction, partial_fill_max_fraction]
+          - return floor(qty * fraction), at least 1 share
+        Otherwise return qty unchanged.
+        """
+        prob = self.fill_model_config.partial_fill_probability
+        if prob is None:
+            return qty
+
+        if self._rng.random() < prob:
+            fraction = self._rng.uniform(
+                self.fill_model_config.partial_fill_min_fraction,
+                self.fill_model_config.partial_fill_max_fraction,
+            )
+            partial = (qty * Decimal(str(fraction))).to_integral_value(rounding=ROUND_DOWN)
+            # Guarantee at least 1 share so a triggered partial fill always makes progress.
+            return max(partial, Decimal("1"))
+
+        return qty
 
     def _make_carry_forward(self, intent: Any, qty: Decimal) -> Any:
         try:
