@@ -95,11 +95,14 @@ class SimulationExecutionEngine:
             # These were generated N bars ago and execute at this bar's open price.
             deferred_fills: list[Any] = []
             if not is_warmup and bar_index in scheduled:
-                deferred_fills = self._simulate_fills(
+                deferred_fills, deferred_carry_forward = self._simulate_fills(
                     order_intents=scheduled.pop(bar_index),
                     bars_at_timestamp=bars_at_timestamp,
                     simulated_execution_service=simulated_execution_service,
                 )
+                # Partially filled orders carry their remaining quantity to the next bar.
+                if deferred_carry_forward:
+                    scheduled.setdefault(bar_index + 1, []).extend(deferred_carry_forward)
 
             signals = self._evaluate_signals(
                 run_id=run_id,
@@ -152,7 +155,7 @@ class SimulationExecutionEngine:
             # latency_bars>=1 → defer to bar bar_index+latency_bars (open price).
             immediate_fills: list[Any] = []
             if latency_bars == 0:
-                immediate_fills = self._simulate_fills(
+                immediate_fills, immediate_carry_forward = self._simulate_fills(
                     order_intents=order_intents,
                     bars_at_timestamp=bars_at_timestamp,
                     simulated_execution_service=simulated_execution_service,
@@ -166,6 +169,9 @@ class SimulationExecutionEngine:
                     prices=prices,
                     realized_pnl_by_symbol=realized_pnl_by_symbol,
                 )
+                # Partially filled orders carry their remaining quantity to the next bar.
+                if immediate_carry_forward:
+                    scheduled.setdefault(bar_index + 1, []).extend(immediate_carry_forward)
             else:
                 target = bar_index + latency_bars
                 if order_intents:
@@ -369,13 +375,12 @@ class SimulationExecutionEngine:
         order_intents: list[Any],
         bars_at_timestamp: dict[str, Any],
         simulated_execution_service: Any,
-    ) -> list[Any]:
-        return list(
-            simulated_execution_service.fill(
-                order_intents=order_intents,
-                bars_at_timestamp=bars_at_timestamp,
-            )
+    ) -> tuple[list[Any], list[Any]]:
+        batch = simulated_execution_service.fill(
+            order_intents=order_intents,
+            bars_at_timestamp=bars_at_timestamp,
         )
+        return batch.fills, batch.carry_forward
 
     def _apply_fills(
         self,

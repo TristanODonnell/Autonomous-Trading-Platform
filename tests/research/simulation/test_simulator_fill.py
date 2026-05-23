@@ -71,16 +71,16 @@ def test_limit_buy_fills_when_bar_low_crosses_limit():
         close=Decimal("102"),
     )
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": bar},
     )
 
-    assert len(fills) == 1
-    assert fills[0].symbol == "AAPL"
-    assert fills[0].side == "buy"
-    assert fills[0].quantity == Decimal("10")
-    assert fills[0].price == Decimal("100")
+    assert len(batch.fills) == 1
+    assert batch.fills[0].symbol == "AAPL"
+    assert batch.fills[0].side == "buy"
+    assert batch.fills[0].quantity == Decimal("10")
+    assert batch.fills[0].price == Decimal("100")
 
 
 def test_limit_buy_does_not_fill_when_bar_low_does_not_cross_limit():
@@ -108,12 +108,12 @@ def test_limit_buy_does_not_fill_when_bar_low_does_not_cross_limit():
         close=Decimal("102"),
     )
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": bar},
     )
 
-    assert fills == []
+    assert batch.fills == []
 
 
 def test_limit_sell_fills_when_bar_high_crosses_limit():
@@ -141,16 +141,16 @@ def test_limit_sell_fills_when_bar_high_crosses_limit():
         close=Decimal("98"),
     )
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": bar},
     )
 
-    assert len(fills) == 1
-    assert fills[0].symbol == "AAPL"
-    assert fills[0].side == "sell"
-    assert fills[0].quantity == Decimal("10")
-    assert fills[0].price == Decimal("100")
+    assert len(batch.fills) == 1
+    assert batch.fills[0].symbol == "AAPL"
+    assert batch.fills[0].side == "sell"
+    assert batch.fills[0].quantity == Decimal("10")
+    assert batch.fills[0].price == Decimal("100")
 
 
 def test_limit_sell_does_not_fill_when_bar_high_does_not_cross_limit():
@@ -178,9 +178,9 @@ def test_limit_sell_does_not_fill_when_bar_high_does_not_cross_limit():
         close=Decimal("98"),
     )
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": bar},
     )
 
-    assert fills == []
+    assert batch.fills == []

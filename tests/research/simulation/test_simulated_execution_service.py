@@ -73,14 +73,14 @@ def test_fill_applies_buy_slippage_and_fees():
     intent = make_intent(side=Side.BUY)
     bar = make_bar(close=Decimal("100"))
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": bar},
     )
 
-    assert len(fills) == 1
+    assert len(batch.fills) == 1
 
-    fill = fills[0]
+    fill = batch.fills[0]
 
     assert fill.symbol == "AAPL"
     assert fill.side == Side.BUY
@@ -100,14 +100,14 @@ def test_fill_applies_sell_slippage_and_fees():
     intent = make_intent(side=Side.SELL)
     bar = make_bar(close=Decimal("100"))
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": bar},
     )
 
-    assert len(fills) == 1
+    assert len(batch.fills) == 1
 
-    fill = fills[0]
+    fill = batch.fills[0]
 
     assert fill.symbol == "AAPL"
     assert fill.side == Side.SELL
@@ -125,12 +125,12 @@ def test_fill_skips_intent_when_bar_missing():
 
     intent = make_intent(side=Side.BUY, symbol="MSFT")
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": make_bar(symbol="AAPL")},
     )
 
-    assert fills == []
+    assert batch.fills == []
 
 
 def test_fill_skips_intent_when_quantity_missing():
@@ -138,12 +138,12 @@ def test_fill_skips_intent_when_quantity_missing():
 
     intent = make_intent(side=Side.BUY, qty=None)
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": make_bar()},
     )
 
-    assert fills == []
+    assert batch.fills == []
 
 
 # ---------------------------------------------------------------------------
@@ -173,13 +173,13 @@ def test_next_open_fill_uses_bar_open_not_close():
     intent = make_intent(side=Side.BUY)
     bar = make_bar(open=Decimal("88"), close=Decimal("100"))
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": bar},
     )
 
-    assert len(fills) == 1
-    fill = fills[0]
+    assert len(batch.fills) == 1
+    fill = batch.fills[0]
     assert fill.price == Decimal("88"), f"NEXT_OPEN must fill at bar.open=88, got {fill.price}"
     assert fill.price != bar.close, "fill must not use bar.close under NEXT_OPEN policy"
 
@@ -190,13 +190,13 @@ def test_next_open_fill_buy_price_equals_open():
     intent = make_intent(side=Side.BUY, qty=Decimal("5"))
     bar = make_bar(open=Decimal("50"), close=Decimal("200"))
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": bar},
     )
 
-    assert len(fills) == 1
-    assert fills[0].price == Decimal("50")
+    assert len(batch.fills) == 1
+    assert batch.fills[0].price == Decimal("50")
 
 
 def test_next_open_fill_sell_price_equals_open():
@@ -205,13 +205,13 @@ def test_next_open_fill_sell_price_equals_open():
     intent = make_intent(side=Side.SELL, qty=Decimal("5"))
     bar = make_bar(open=Decimal("75"), close=Decimal("50"))
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": bar},
     )
 
-    assert len(fills) == 1
-    assert fills[0].price == Decimal("75")
+    assert len(batch.fills) == 1
+    assert batch.fills[0].price == Decimal("75")
 
 
 def test_next_open_fill_timestamp_is_bar_timestamp():
@@ -220,13 +220,13 @@ def test_next_open_fill_timestamp_is_bar_timestamp():
     intent = make_intent(side=Side.BUY)
     bar = make_bar(open=Decimal("60"), close=Decimal("100"))
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": bar},
     )
 
-    assert len(fills) == 1
-    assert fills[0].timestamp == bar.timestamp
+    assert len(batch.fills) == 1
+    assert batch.fills[0].timestamp == bar.timestamp
 
 
 # ---------------------------------------------------------------------------
@@ -254,8 +254,8 @@ def test_latency_zero_uses_close():
     )
     bar = make_bar(open=Decimal("50"), close=Decimal("100"))
     intent = make_intent(side=Side.BUY)
-    fills = service.fill(order_intents=[intent], bars_at_timestamp={"AAPL": bar})
-    assert fills[0].price == Decimal("100")  # close, not open
+    batch = service.fill(order_intents=[intent], bars_at_timestamp={"AAPL": bar})
+    assert batch.fills[0].price == Decimal("100")  # close, not open
 
 
 def test_latency_nonzero_uses_open():
@@ -271,5 +271,5 @@ def test_latency_nonzero_uses_open():
     )
     bar = make_bar(open=Decimal("50"), close=Decimal("100"))
     intent = make_intent(side=Side.BUY)
-    fills = service.fill(order_intents=[intent], bars_at_timestamp={"AAPL": bar})
-    assert fills[0].price == Decimal("50")  # open, not close
+    batch = service.fill(order_intents=[intent], bars_at_timestamp={"AAPL": bar})
+    assert batch.fills[0].price == Decimal("50")  # open, not close

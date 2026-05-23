@@ -97,7 +97,10 @@
       "Bash(mkdir -p \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\tests\\\\research\\\\cache\")",
       "Bash(mypy tests/research/cache/ --ignore-missing-imports)",
       "Bash(\"/c/Users/Tristan/.cache/pre-commit/repo710_y3j3/py_env-python3/Scripts/mypy.exe\" tests/research/cache/ src/autonomous_trading_platform/research/cache/ --ignore-missing-imports)",
-      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\" -Recurse -Directory | Where-Object { $_.Name -match \"\\(execution|research\\)\" } | Select-Object -ExpandProperty FullName)"
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\" -Recurse -Directory | Where-Object { $_.Name -match \"\\(execution|research\\)\" } | Select-Object -ExpandProperty FullName)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\execution\" -Recurse -ErrorAction SilentlyContinue)",
+      "Bash(Select-String \"passed|failed|error\")",
+      "Bash(Select-Object -Last 3)"
     ]
   }
 }

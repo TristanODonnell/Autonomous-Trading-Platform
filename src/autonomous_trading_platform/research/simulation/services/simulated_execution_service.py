@@ -1,6 +1,9 @@
+from __future__ import annotations
+
+import copy
 import dataclasses
 import uuid
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from typing import Any
 
 from autonomous_trading_platform.contracts.trading.fill import Fill
@@ -10,6 +13,16 @@ from autonomous_trading_platform.research.simulation.models.fill_model import (
 from autonomous_trading_platform.research.simulation.services.simulation_cost_model_service import (
     SimulationCostModelService,
 )
+
+
+@dataclasses.dataclass(slots=True)
+class FillBatch:
+    """Result of a fill pass: completed fills plus orders that could not be fully executed."""
+
+    fills: list[Fill]
+    # OrderIntents (or duck-typed equivalents) carrying the remaining unfilled quantity.
+    # The engine reschedules these for the next eligible bar.
+    carry_forward: list[Any]
 
 
 class SimulatedExecutionService:
@@ -42,8 +55,9 @@ class SimulatedExecutionService:
         *,
         order_intents: list[Any],
         bars_at_timestamp: dict[str, Any],
-    ) -> list[Fill]:
+    ) -> FillBatch:
         fills: list[Fill] = []
+        carry_forward: list[Any] = []
 
         for intent in order_intents:
             bar = bars_at_timestamp.get(intent.symbol)
@@ -53,32 +67,81 @@ class SimulatedExecutionService:
             if intent.qty is None or intent.qty <= 0:
                 continue
 
-            fill = self._build_fill_for_intent(intent=intent, bar=bar)
+            original_qty = Decimal(str(intent.qty))
 
-            if fill is not None:
-                fills.append(fill)
+            # Apply volume participation cap when configured.
+            fill_qty = self._cap_by_participation(original_qty, bar)
+            remaining_qty = original_qty - fill_qty
 
-        return fills
+            if fill_qty <= Decimal("0"):
+                # Bar volume too thin to fill anything; carry the entire order forward.
+                carry_forward.append(self._make_carry_forward(intent, original_qty))
+                continue
 
-    def _build_fill_for_intent(self, *, intent: Any, bar: Any) -> Fill | None:
+            fill_result = self._build_fill_for_intent(
+                intent=intent, bar=bar, effective_qty=fill_qty
+            )
+
+            if fill_result is not None:
+                fills.append(fill_result)
+                if remaining_qty > Decimal("0"):
+                    carry_forward.append(self._make_carry_forward(intent, remaining_qty))
+            # Limit orders that don't cross are silently dropped (existing semantics).
+
+        return FillBatch(fills=fills, carry_forward=carry_forward)
+
+    # ------------------------------------------------------------------
+    # Volume participation helpers
+    # ------------------------------------------------------------------
+
+    def _cap_by_participation(self, qty: Decimal, bar: Any) -> Decimal:
+        rate = self.fill_model_config.max_volume_participation_rate
+        if rate is None:
+            return qty
+
+        bar_volume = getattr(bar, "volume", None)
+        if bar_volume is None or bar_volume <= 0:
+            # No usable volume data; nothing can fill this bar.
+            return Decimal("0")
+
+        max_fill = (Decimal(str(bar_volume)) * Decimal(str(rate))).to_integral_value(
+            rounding=ROUND_DOWN
+        )
+        return min(qty, max_fill)
+
+    def _make_carry_forward(self, intent: Any, qty: Decimal) -> Any:
+        try:
+            return intent.model_copy(update={"qty": qty})
+        except AttributeError:
+            cf = copy.copy(intent)
+            cf.qty = qty
+            return cf
+
+    # ------------------------------------------------------------------
+    # Fill construction
+    # ------------------------------------------------------------------
+
+    def _build_fill_for_intent(
+        self, *, intent: Any, bar: Any, effective_qty: Decimal
+    ) -> Fill | None:
         order_type = self._normalize_enum_value(intent.order_type)
 
         if order_type == "market":
-            return self._fill_market_order(intent=intent, bar=bar)
+            return self._fill_market_order(intent=intent, bar=bar, qty=effective_qty)
 
         if order_type == "limit":
-            return self._fill_limit_order(intent=intent, bar=bar)
+            return self._fill_limit_order(intent=intent, bar=bar, qty=effective_qty)
 
         return None
 
-    def _fill_market_order(self, *, intent: Any, bar: Any) -> Fill:
+    def _fill_market_order(self, *, intent: Any, bar: Any, qty: Decimal) -> Fill:
         # latency_bars=0 → order executes this bar, priced at close.
         # latency_bars>=1 → order was deferred; the engine passes the execution bar's
         #   data, so price at open reflects entry after bar N closes.
         reference_price = bar.close if self.fill_model_config.latency_bars == 0 else bar.open
-        return self._create_fill(intent=intent, bar=bar, reference_price=reference_price)
+        return self._create_fill(intent=intent, bar=bar, reference_price=reference_price, qty=qty)
 
-    def _fill_limit_order(self, *, intent: Any, bar: Any) -> Fill | None:
+    def _fill_limit_order(self, *, intent: Any, bar: Any, qty: Decimal) -> Fill | None:
         limit_price = getattr(intent, "limit_price", None)
 
         if limit_price is None:
@@ -101,6 +164,7 @@ class SimulatedExecutionService:
             intent=intent,
             bar=bar,
             reference_price=limit_price_decimal,
+            qty=qty,
         )
 
     def _create_fill(
@@ -109,11 +173,12 @@ class SimulatedExecutionService:
         intent: Any,
         bar: Any,
         reference_price: Any,
+        qty: Decimal,
     ) -> Fill:
         costs = self.simulation_cost_model_service.apply_costs(
             side=intent.side,
             reference_price=reference_price,
-            quantity=intent.qty,
+            quantity=qty,
         )
 
         return Fill(
@@ -124,7 +189,7 @@ class SimulatedExecutionService:
             symbol=intent.symbol,
             timestamp=bar.timestamp,
             side=intent.side,
-            quantity=intent.qty,
+            quantity=qty,
             price=costs.fill_price,
             fees=costs.commission,
             liquidity=None,
