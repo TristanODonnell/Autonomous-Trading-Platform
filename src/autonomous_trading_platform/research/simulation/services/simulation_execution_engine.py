@@ -16,6 +16,9 @@ from autonomous_trading_platform.contracts.common.enums import (
     Side,
     TimeInForce,
 )
+from autonomous_trading_platform.contracts.execution.execution_policy_config import (
+    ExecutionPolicyConfig,
+)
 from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
 from autonomous_trading_platform.contracts.trading.signal import Signal
 from autonomous_trading_platform.execution.services.cash_ledger_service import CashLedgerService
@@ -27,6 +30,9 @@ from autonomous_trading_platform.research.simulation.services.lookahead_guard_se
 )
 from autonomous_trading_platform.research.simulation.services.simple_position_sizer import (
     SimplePositionSizer,
+)
+from autonomous_trading_platform.research.simulation.services.simulation_execution_model import (
+    SimulatedExecutionModel,
 )
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
     StrategyContextBuilder,
@@ -53,11 +59,13 @@ class SimulationExecutionEngine:
         position_ledger_service: PositionLedgerService,
         lookahead_guard_service: LookaheadGuardService,
         position_sizer: SimplePositionSizer,
+        simulated_execution_model: SimulatedExecutionModel | None = None,
     ):
         self.cash_ledger_service = cash_ledger_service
         self.position_ledger_service = position_ledger_service
         self.lookahead_guard_service = lookahead_guard_service
         self.position_sizer = position_sizer
+        self.simulated_execution_model = simulated_execution_model or SimulatedExecutionModel()
 
     def execute(
         self,
@@ -68,6 +76,7 @@ class SimulationExecutionEngine:
         context_builder: StrategyContextBuilder,
         simulated_execution_service: Any,
         initial_cash: float,
+        execution_policy_config: ExecutionPolicyConfig | None = None,
     ) -> SimulationExecutionResult:
         cash = Decimal(str(initial_cash))
         positions: dict[str, Position] = {}
@@ -153,32 +162,48 @@ class SimulationExecutionEngine:
                 timestamp=timestamp,
             )
 
-            # Phase 2: schedule orders for execution.
-            # latency_bars=0 → execute immediately this bar (close price).
-            # latency_bars>=1 → defer to bar bar_index+latency_bars (open price).
+            # Apply execution policy: convert parent intents to (bar_offset, child_intent)
+            # pairs.  PASSTHROUGH returns [(0, intent)] per order — identical to the pre-policy
+            # path.  TWAP/VWAP-lite spread slices over consecutive bars; LIMIT computes a
+            # limit price from the current bar close.
+            child_pairs = self._plan_child_orders(
+                order_intents=order_intents,
+                execution_policy_config=execution_policy_config,
+                prices=prices,
+            )
+
+            # Phase 2: schedule child orders for execution.
+            # latency_bars=0 → bar_offset=0 children execute immediately this bar (close price);
+            #                   bar_offset>0 children schedule at bar_index+bar_offset.
+            # latency_bars>=1 → all children defer to bar_index+latency_bars+bar_offset (open price).
             immediate_fills: list[Any] = []
             if latency_bars == 0:
-                immediate_fills, immediate_carry_forward = self._simulate_fills(
-                    order_intents=order_intents,
-                    bars_at_timestamp=bars_at_timestamp,
-                    simulated_execution_service=simulated_execution_service,
-                )
-                cash = self._apply_fills(
-                    run_id=run_id,
-                    timestamp=timestamp,
-                    fills=immediate_fills,
-                    positions=positions,
-                    cash=cash,
-                    prices=prices,
-                    realized_pnl_by_symbol=realized_pnl_by_symbol,
-                )
-                # Partially filled orders carry their remaining quantity to the next bar.
-                if immediate_carry_forward:
-                    scheduled.setdefault(bar_index + 1, []).extend(immediate_carry_forward)
+                immediate_intents = [ci for off, ci in child_pairs if off == 0]
+                if immediate_intents:
+                    immediate_fills, immediate_carry_forward = self._simulate_fills(
+                        order_intents=immediate_intents,
+                        bars_at_timestamp=bars_at_timestamp,
+                        simulated_execution_service=simulated_execution_service,
+                    )
+                    cash = self._apply_fills(
+                        run_id=run_id,
+                        timestamp=timestamp,
+                        fills=immediate_fills,
+                        positions=positions,
+                        cash=cash,
+                        prices=prices,
+                        realized_pnl_by_symbol=realized_pnl_by_symbol,
+                    )
+                    # Partially filled orders carry their remaining quantity to the next bar.
+                    if immediate_carry_forward:
+                        scheduled.setdefault(bar_index + 1, []).extend(immediate_carry_forward)
+                for off, ci in child_pairs:
+                    if off > 0:
+                        scheduled.setdefault(bar_index + off, []).append(ci)
             else:
-                target = bar_index + latency_bars
-                if order_intents:
-                    scheduled.setdefault(target, []).extend(order_intents)
+                for off, ci in child_pairs:
+                    target = bar_index + latency_bars + off
+                    scheduled.setdefault(target, []).append(ci)
 
             fills = deferred_fills + immediate_fills
 
@@ -275,6 +300,34 @@ class SimulationExecutionEngine:
                 ]
             ),
         )
+
+    def _plan_child_orders(
+        self,
+        *,
+        order_intents: list[OrderIntent],
+        execution_policy_config: ExecutionPolicyConfig | None,
+        prices: dict[str, float],
+    ) -> list[tuple[int, OrderIntent]]:
+        """Apply execution policy to convert parent intents to (bar_offset, child_intent) pairs.
+
+        When execution_policy_config is None the method returns [(0, intent)] per parent,
+        preserving identical behaviour to the pre-policy simulation path.
+        """
+        pairs: list[tuple[int, OrderIntent]] = []
+        for intent in order_intents:
+            if execution_policy_config is None:
+                pairs.append((0, intent))
+            else:
+                ref = prices.get(intent.symbol)
+                ref_price = Decimal(str(ref)) if ref is not None else None
+                pairs.extend(
+                    self.simulated_execution_model.plan(
+                        intent=intent,
+                        config=execution_policy_config,
+                        reference_price=ref_price,
+                    )
+                )
+        return pairs
 
     def _evaluate_signals(
         self,
