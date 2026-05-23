@@ -101,7 +101,10 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\execution\" -Recurse -ErrorAction SilentlyContinue)",
       "Bash(Select-String \"passed|failed|error\")",
       "Bash(Select-Object -Last 3)",
-      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\" -Recurse -Filter \"*.py\")"
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\" -Recurse -Filter \"*.py\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\execution\" -Recurse)",
+      "Bash(Select-Object FullName, Length)",
+      "Bash(Format-Table -AutoSize)"
     ]
   }
 }

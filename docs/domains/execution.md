@@ -72,6 +72,58 @@ Reconciliation is intended to verify alignment between internal state and broker
 
 ---
 
+## Retry Idempotency
+
+`OrderExecutionService.submit()` uses `client_order_id` as an application-level idempotency
+key to prevent duplicate broker orders during transient network failures.
+
+### client_order_id
+
+Generated deterministically from `(run_id, strategy_id, bar_timestamp, symbol, side, qty)`
+using UUID5. The same intent always produces the same `client_order_id`, and it is never
+regenerated between retry attempts.
+
+### Ambiguous failure handling
+
+When submission raises a transport error (timeout, connection reset — any
+`httpx.TransportError`), the outcome is ambiguous: the broker may or may not have accepted
+the order before the connection failed.
+
+Before retrying, the service performs an idempotency lookup:
+
+```
+GET /v2/orders/{client_order_id}?by=client_order_id
+```
+
+- **Order found**: treat original submission as successful. Return the existing broker order
+  without calling `submit_order` again. Logs `retry_skipped_existing_broker_order`.
+- **Order not found**: proceed with retry according to the existing backoff policy.
+  Logs `broker_order_not_found_retrying`.
+- **Lookup itself fails**: raise the lookup exception immediately. Logs
+  `idempotency_lookup_failed`. This prevents any blind retry when broker state is unknown.
+
+### Safe-to-retry failures
+
+HTTP errors (`httpx.HTTPStatusError` — 4xx/5xx) indicate the broker responded definitively.
+These are retried according to the existing policy without performing an idempotency lookup,
+since a broker response means the submission was not ambiguous.
+
+### Structured log events
+
+| Event | When emitted |
+|-------|-------------|
+| `ambiguous_submit_failure` | Transport error after `submit_order` |
+| `idempotency_lookup_started` | Before calling `get_order_by_client_order_id` |
+| `retry_skipped_existing_broker_order` | Lookup found existing order |
+| `broker_order_not_found_retrying` | Lookup confirmed order absent |
+| `idempotency_lookup_failed` | Lookup raised an exception |
+| `order_submission_retry_exhausted` | Max attempts reached |
+
+Fields on each event: `client_order_id`, `symbol`, `side`, `attempt`, `broker`,
+`exception_type`, `broker_order_id` (where available).
+
+---
+
 ## Current Behavior
 
 The execution system is partially implemented and operational:
@@ -79,7 +131,7 @@ The execution system is partially implemented and operational:
 - Order submission to broker adapter works
 - Order state machine enforces valid transitions
 - Fill events update portfolio state
-- Retry logic exists for network errors
+- Retry logic is transport-error-aware with idempotency lookup before retry
 - Basic audit logging is present
 
 However:
@@ -99,7 +151,6 @@ Key limitations in the execution system:
 - No human acknowledgment workflow
 - No cancellation of remaining quantity after partial fill
 - Strategy state not consistently updated based on fills/rejections
-- Retry logic does not distinguish error types (may retry incorrectly)
 - Event logging does not match full contract (missing fields and structure)
 - Idempotency enforcement depends on stubbed components
 
