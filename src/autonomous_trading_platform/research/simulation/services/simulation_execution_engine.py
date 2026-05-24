@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
@@ -19,6 +20,7 @@ from autonomous_trading_platform.contracts.common.enums import (
 from autonomous_trading_platform.contracts.execution.execution_policy_config import (
     ExecutionPolicyConfig,
 )
+from autonomous_trading_platform.contracts.simulation.dividend_event import DividendEvent
 from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
 from autonomous_trading_platform.contracts.trading.signal import Signal
 from autonomous_trading_platform.execution.services.cash_ledger_service import CashLedgerService
@@ -71,6 +73,7 @@ class SimulationExecutionResult:
     per_bar_metrics: pd.DataFrame
     positions: pd.DataFrame
     signal_log: pd.DataFrame
+    dividend_log: pd.DataFrame
 
 
 class SimulationExecutionEngine:
@@ -100,6 +103,7 @@ class SimulationExecutionEngine:
         initial_cash: float,
         execution_policy_config: ExecutionPolicyConfig | None = None,
         settlement_days: int = 0,
+        dividend_events: list[DividendEvent] | None = None,
     ) -> SimulationExecutionResult:
         settled_cash = Decimal(str(initial_cash))
         unsettled_cash = ZERO
@@ -114,6 +118,13 @@ class SimulationExecutionEngine:
         equity_rows: list[dict[str, Any]] = []
         metric_rows: list[dict[str, Any]] = []
         position_rows: list[dict[str, Any]] = []
+        dividend_rows: list[dict[str, Any]] = []
+
+        # Index dividend events by ex_date for O(1) per-bar lookup.
+        # pop() ensures each ex_date fires exactly once (first bar of that date).
+        dividend_by_date: dict[date, list[DividendEvent]] = defaultdict(list)
+        for _evt in dividend_events or []:
+            dividend_by_date[_evt.ex_date].append(_evt)
 
         strategy_state: dict[str, Any] = {}
         timeline = list(window.timeline)
@@ -193,6 +204,25 @@ class SimulationExecutionEngine:
                     bar_index=bar_index,
                     pending_settlements=pending_settlements,
                 )
+
+            # Apply cash dividends for positions held on the ex_date bar.
+            # Dividend cash is added to settled_cash immediately (no T+N delay).
+            # pop() ensures each ex_date fires once even with intraday bars.
+            bar_date = timestamp.date()
+            bar_dividend_events = dividend_by_date.pop(bar_date, [])
+            dividend_cash_this_bar: Decimal = ZERO
+            if bar_dividend_events:
+                settled_cash, new_dividend_rows, dividend_cash_this_bar = (
+                    self._apply_dividends_for_bar(
+                        run_id=run_id,
+                        strategy_id=strategy.strategy_id,
+                        timestamp=timestamp,
+                        dividend_events=bar_dividend_events,
+                        positions=positions,
+                        settled_cash=settled_cash,
+                    )
+                )
+                dividend_rows.extend(new_dividend_rows)
 
             order_intents = self._construct_orders(
                 signals=signals,
@@ -287,6 +317,7 @@ class SimulationExecutionEngine:
                     positions=positions,
                     prices=prices,
                     pending_settlement_count=len(pending_settlements),
+                    dividend_cash_bar=dividend_cash_this_bar,
                 )
             )
 
@@ -377,6 +408,21 @@ class SimulationExecutionEngine:
                     "signal_type",
                 ]
             ),
+            dividend_log=pd.DataFrame(dividend_rows)
+            if dividend_rows
+            else pd.DataFrame(
+                columns=[
+                    "run_id",
+                    "strategy_id",
+                    "symbol",
+                    "timestamp",
+                    "ex_date",
+                    "shares_held",
+                    "dividend_per_share",
+                    "cash_applied",
+                    "currency",
+                ]
+            ),
         )
 
     # ------------------------------------------------------------------
@@ -426,6 +472,89 @@ class SimulationExecutionEngine:
             return new_settled, new_unsettled, remaining
 
         return settled_cash, unsettled_cash, remaining
+
+    # ------------------------------------------------------------------
+    # Dividend processing
+    # ------------------------------------------------------------------
+
+    def _apply_dividends_for_bar(
+        self,
+        *,
+        run_id: UUID,
+        strategy_id: str,
+        timestamp: datetime,
+        dividend_events: list[DividendEvent],
+        positions: dict[str, Position],
+        settled_cash: Decimal,
+    ) -> tuple[Decimal, list[dict[str, Any]], Decimal]:
+        """Apply cash dividends to settled_cash for all eligible positions.
+
+        Returns (updated_settled_cash, dividend_rows, total_cash_applied_this_bar).
+
+        Only positions with quantity > 0 receive the dividend.  Dividend cash
+        is added to settled_cash immediately without settlement delay.
+        Multiple events for the same symbol on the same ex_date are each
+        processed independently (e.g. regular + special dividend).
+        """
+        updated_settled = settled_cash
+        total_cash_applied = ZERO
+        rows: list[dict[str, Any]] = []
+
+        for event in dividend_events:
+            position = positions.get(event.symbol)
+            if position is None:
+                logger.debug(
+                    "dividend.no_position",
+                    extra={
+                        "symbol": event.symbol,
+                        "ex_date": str(event.ex_date),
+                        "cash_per_share": str(event.cash_amount_per_share),
+                    },
+                )
+                continue
+
+            shares = Decimal(str(position.quantity))
+            if shares <= ZERO:
+                logger.debug(
+                    "dividend.zero_shares",
+                    extra={
+                        "symbol": event.symbol,
+                        "ex_date": str(event.ex_date),
+                    },
+                )
+                continue
+
+            cash_applied = shares * event.cash_amount_per_share
+            updated_settled += cash_applied
+            total_cash_applied += cash_applied
+
+            logger.debug(
+                "dividend.applied",
+                extra={
+                    "symbol": event.symbol,
+                    "ex_date": str(event.ex_date),
+                    "shares_held": str(shares),
+                    "dividend_per_share": str(event.cash_amount_per_share),
+                    "cash_applied": str(cash_applied),
+                    "settled_cash_after": str(updated_settled),
+                    "currency": event.currency,
+                },
+            )
+            rows.append(
+                {
+                    "run_id": str(run_id),
+                    "strategy_id": strategy_id,
+                    "symbol": event.symbol,
+                    "timestamp": timestamp,
+                    "ex_date": event.ex_date,
+                    "shares_held": float(shares),
+                    "dividend_per_share": float(event.cash_amount_per_share),
+                    "cash_applied": float(cash_applied),
+                    "currency": event.currency,
+                }
+            )
+
+        return updated_settled, rows, total_cash_applied
 
     # ------------------------------------------------------------------
     # Order planning and filling
@@ -829,6 +958,7 @@ class SimulationExecutionEngine:
         positions: dict[str, Position],
         prices: dict[str, float],
         pending_settlement_count: int = 0,
+        dividend_cash_bar: Decimal = ZERO,
     ) -> dict[str, Any]:
         positions_value = self._calculate_positions_value(positions=positions, prices=prices)
         cash = settled_cash + unsettled_cash
@@ -847,6 +977,7 @@ class SimulationExecutionEngine:
             "buying_power": float(buying_power),
             "positions_value": float(positions_value),
             "pending_settlement_count": pending_settlement_count,
+            "dividend_cash_bar": float(dividend_cash_bar),
             "drawdown": 0.0,
         }
 

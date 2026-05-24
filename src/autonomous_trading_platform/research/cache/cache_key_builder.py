@@ -11,6 +11,7 @@ import hashlib
 import json
 from typing import Any
 
+from autonomous_trading_platform.contracts.simulation.dividend_event import DividendEvent
 from autonomous_trading_platform.research.cache.cache_identity import (
     SimulationCacheKey,
     StrategyGenerationCacheKey,
@@ -53,6 +54,7 @@ def build_simulation_cache_key(
     calibration_snapshot_id: str = "",
     adverse_threshold_bps: str = "10",
     settlement_days: int | None = None,
+    dividend_events: list[DividendEvent] | None = None,
 ) -> SimulationCacheKey:
     """Build a fully-specified simulation cache key.
 
@@ -89,12 +91,19 @@ def build_simulation_cache_key(
         Settlement delay in simulation trading bars.  When ``None``, the value is
         read from ``run_config.settlement_days`` (recommended).  Pass explicitly to
         override the run config value.
+    dividend_events:
+        Cash dividend events applied during simulation.  When ``None``, events are
+        read from ``run_config.dividend_events``.  Changing this list produces a
+        distinct cache entry to preserve lineage reproducibility.
     """
     fill = fill_model if fill_model is not None else _DEFAULT_FILL
     slippage = slippage_model if slippage_model is not None else _DEFAULT_SLIPPAGE_MODEL
     cost = cost_model if cost_model is not None else _DEFAULT_COST
     effective_settlement_days = (
         settlement_days if settlement_days is not None else run_config.settlement_days
+    )
+    effective_dividend_events = (
+        dividend_events if dividend_events is not None else run_config.dividend_events
     )
 
     return SimulationCacheKey(
@@ -118,6 +127,7 @@ def build_simulation_cache_key(
         calibration_snapshot_id=calibration_snapshot_id,
         adverse_threshold_bps=adverse_threshold_bps,
         settlement_days=effective_settlement_days,
+        dividend_events_hash=_hash_dividend_events(effective_dividend_events),
     )
 
 
@@ -145,4 +155,23 @@ def _hash_feature_versions(versions: dict[str, str] | None) -> str:
         {k: versions[k] for k in sorted(versions)},
         separators=(",", ":"),
     ).encode()
+    return hashlib.sha256(payload).hexdigest()[:16]
+
+
+def _hash_dividend_events(events: list[DividendEvent]) -> str:
+    """Deterministic 16-char hash of a dividend event list (order-independent)."""
+    if not events:
+        return ""
+    items = sorted(
+        [
+            {
+                "cash_amount_per_share": str(e.cash_amount_per_share),
+                "ex_date": str(e.ex_date),
+                "symbol": e.symbol,
+            }
+            for e in events
+        ],
+        key=lambda x: (x["symbol"], x["ex_date"]),
+    )
+    payload = json.dumps(items, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()[:16]

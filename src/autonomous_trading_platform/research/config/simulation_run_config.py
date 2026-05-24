@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.contracts.simulation.dividend_event import DividendEvent
 
 
 class SimulationRunConfig(BaseModel):
@@ -41,6 +42,11 @@ class SimulationRunConfig(BaseModel):
     # Settlement delay in simulation trading bars.  0 = immediate (legacy);
     # 1 = T+1 (modern US equities); 2 = T+2 (legacy US equities).
     settlement_days: int = 0
+    # Cash dividend events applied during simulation for total-return accuracy.
+    # Each event adds (shares_held × cash_amount_per_share) to settled cash on
+    # the first bar whose calendar date matches the event's ex_date.
+    # Prices are assumed to be split-adjusted when price_basis=ADJUSTED.
+    dividend_events: list[DividendEvent] = []
 
     @field_validator("strategy_id")
     @classmethod
@@ -95,6 +101,11 @@ class SimulationRunConfig(BaseModel):
     def _settlement_days_non_negative(cls, v: int) -> int:
         if v < 0:
             raise ValueError("settlement_days must be >= 0")
+        return v
+
+    @field_validator("dividend_events")
+    @classmethod
+    def _dividend_events_valid(cls, v: list[DividendEvent]) -> list[DividendEvent]:
         return v
 
     @model_validator(mode="after")

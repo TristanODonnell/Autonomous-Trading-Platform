@@ -33,6 +33,7 @@ class CacheInvalidationReason(StrEnum):
     WINDOW_SEMANTICS_CHANGED = "window_semantics_changed"
     CALIBRATION_CHANGED = "calibration_changed"
     THRESHOLD_CHANGED = "threshold_changed"
+    DIVIDEND_EVENTS_CHANGED = "dividend_events_changed"
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,9 @@ class SimulationCacheKey:
     adverse_threshold_bps: str = "10"
     # Settlement delay in simulation trading bars (F-06).  0 = immediate (legacy).
     settlement_days: int = 0
+    # 16-char SHA-256 of sorted dividend events (A-02).  Empty = no dividends applied.
+    # Changing dividend inputs produces a distinct cache entry.
+    dividend_events_hash: str = ""
 
     def __post_init__(self) -> None:
         if not self.config_hash:
@@ -116,6 +120,7 @@ class SimulationCacheKey:
             "config_hash": self.config_hash,
             "cost_model_type": self.cost_model_type,
             "dataset_version": self.dataset_version,
+            "dividend_events_hash": self.dividend_events_hash,
             "end_date": self.end_date,
             "feature_versions_hash": self.feature_versions_hash,
             "fill_policy": self.fill_policy,

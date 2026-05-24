@@ -168,6 +168,7 @@ class TestSimulationCacheKey:
             "calibration_snapshot_id",
             "config_hash",
             "dataset_version",
+            "dividend_events_hash",
             "universe_version",
             "price_basis",
             "symbols_hash",
