@@ -74,3 +74,7 @@ class RunManifestRow(Base):
         SAEnum(GovernanceState, name="governance_state_enum"),
         nullable=False,
     )
+    settlement_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    dividend_events_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    dividend_events_hash: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    price_adjustment_basis: Mapped[str | None] = mapped_column(String(64), nullable=True)

@@ -128,7 +128,8 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\execution\" -Recurse -File)",
       "Bash(mypy *)",
       "Bash(/c/Users/Tristan/AppData/Local/Programs/Python/Python311/Scripts/ruff check *)",
-      "Bash(pip show *)"
+      "Bash(pip show *)",
+      "Bash(alembic *)"
     ]
   }
 }
