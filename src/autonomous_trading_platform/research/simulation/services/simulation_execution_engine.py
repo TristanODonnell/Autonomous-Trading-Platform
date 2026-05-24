@@ -25,6 +25,7 @@ from autonomous_trading_platform.execution.services.cash_ledger_service import C
 from autonomous_trading_platform.execution.services.position_ledger_service import (
     PositionLedgerService,
 )
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
     LookaheadGuardService,
 )
@@ -37,6 +38,8 @@ from autonomous_trading_platform.research.simulation.services.simulation_executi
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
     StrategyContextBuilder,
 )
+
+logger = get_logger(__name__)
 
 # Stable namespace for deterministic intent IDs (P-01).
 _INTENT_NS = uuid5(NAMESPACE_URL, "autonomous-trading-platform:intent")
@@ -79,6 +82,9 @@ class SimulationExecutionEngine:
         execution_policy_config: ExecutionPolicyConfig | None = None,
     ) -> SimulationExecutionResult:
         cash = Decimal(str(initial_cash))
+        # Aggregate cash reserved for all pending buy orders. Reduces buying power
+        # immediately so the same cash cannot be committed to multiple orders.
+        reserved_cash: Decimal = Decimal("0")
         positions: dict[str, Position] = {}
         realized_pnl_by_symbol: dict[str, Decimal] = {}
 
@@ -107,12 +113,20 @@ class SimulationExecutionEngine:
             # These were generated N bars ago and execute at this bar's open price.
             deferred_fills: list[Any] = []
             if not is_warmup and bar_index in scheduled:
+                deferred_intents = scheduled.pop(bar_index)
                 deferred_fills, deferred_carry_forward = self._simulate_fills(
-                    order_intents=scheduled.pop(bar_index),
+                    order_intents=deferred_intents,
                     bars_at_timestamp=bars_at_timestamp,
                     simulated_execution_service=simulated_execution_service,
                 )
+                # Release reservation for intents that were neither filled nor carried
+                # forward (stochastic rejection or missing bar data).
+                reserved_cash = self._release_lost_intents(
+                    deferred_intents, deferred_fills, deferred_carry_forward, reserved_cash
+                )
                 # Partially filled orders carry their remaining quantity to the next bar.
+                # Carry-forward intents keep their existing reservation in the pool —
+                # they must NOT be re-reserved when added back to the schedule.
                 if deferred_carry_forward:
                     scheduled.setdefault(bar_index + 1, []).extend(deferred_carry_forward)
 
@@ -143,12 +157,13 @@ class SimulationExecutionEngine:
 
             # Apply deferred fills so positions are current before mark-to-market.
             if deferred_fills:
-                cash = self._apply_fills(
+                cash, reserved_cash = self._apply_fills(
                     run_id=run_id,
                     timestamp=timestamp,
                     fills=deferred_fills,
                     positions=positions,
                     cash=cash,
+                    reserved_cash=reserved_cash,
                     prices=prices,
                     realized_pnl_by_symbol=realized_pnl_by_symbol,
                 )
@@ -178,32 +193,51 @@ class SimulationExecutionEngine:
             # latency_bars>=1 → all children defer to bar_index+latency_bars+bar_offset (open price).
             immediate_fills: list[Any] = []
             if latency_bars == 0:
-                immediate_intents = [ci for off, ci in child_pairs if off == 0]
+                # Reserve and filter immediate child intents before attempting fills.
+                immediate_intents: list[Any] = []
+                for off, ci in child_pairs:
+                    if off == 0:
+                        cash, reserved_cash, accepted = self._try_reserve(ci, cash, reserved_cash)
+                        if accepted:
+                            immediate_intents.append(ci)
+
                 if immediate_intents:
                     immediate_fills, immediate_carry_forward = self._simulate_fills(
                         order_intents=immediate_intents,
                         bars_at_timestamp=bars_at_timestamp,
                         simulated_execution_service=simulated_execution_service,
                     )
-                    cash = self._apply_fills(
+                    # Release reservation for rejected/no-bar intents.
+                    reserved_cash = self._release_lost_intents(
+                        immediate_intents, immediate_fills, immediate_carry_forward, reserved_cash
+                    )
+                    cash, reserved_cash = self._apply_fills(
                         run_id=run_id,
                         timestamp=timestamp,
                         fills=immediate_fills,
                         positions=positions,
                         cash=cash,
+                        reserved_cash=reserved_cash,
                         prices=prices,
                         realized_pnl_by_symbol=realized_pnl_by_symbol,
                     )
-                    # Partially filled orders carry their remaining quantity to the next bar.
+                    # Carry-forward intents retain their reservation — no re-reserve.
                     if immediate_carry_forward:
                         scheduled.setdefault(bar_index + 1, []).extend(immediate_carry_forward)
+
+                # Reserve and schedule future child slices (offset > 0).
                 for off, ci in child_pairs:
                     if off > 0:
-                        scheduled.setdefault(bar_index + off, []).append(ci)
+                        cash, reserved_cash, accepted = self._try_reserve(ci, cash, reserved_cash)
+                        if accepted:
+                            scheduled.setdefault(bar_index + off, []).append(ci)
             else:
+                # All children deferred: reserve when scheduling.
                 for off, ci in child_pairs:
                     target = bar_index + latency_bars + off
-                    scheduled.setdefault(target, []).append(ci)
+                    cash, reserved_cash, accepted = self._try_reserve(ci, cash, reserved_cash)
+                    if accepted:
+                        scheduled.setdefault(target, []).append(ci)
 
             fills = deferred_fills + immediate_fills
 
@@ -231,6 +265,7 @@ class SimulationExecutionEngine:
                     strategy_id=strategy.strategy_id,
                     timestamp=timestamp,
                     cash=cash,
+                    reserved_cash=reserved_cash,
                     positions=positions,
                     prices=prices,
                 )
@@ -250,6 +285,22 @@ class SimulationExecutionEngine:
                     realized_pnl_by_symbol=realized_pnl_by_symbol,
                 )
             )
+
+        # Release reservations for all orders that remained pending at simulation end.
+        # These would never fill (no more bars), so their reserved cash must be freed.
+        for pending_intents in scheduled.values():
+            for intent in pending_intents:
+                released = self._estimate_reservation(intent)
+                if released > Decimal("0"):
+                    reserved_cash = max(Decimal("0"), reserved_cash - released)
+                    logger.debug(
+                        "reserved_cash.released_on_simulation_end",
+                        extra={
+                            "intent_id": str(getattr(intent, "intent_id", "?")),
+                            "symbol": str(getattr(intent, "symbol", "?")),
+                            "released": str(released),
+                        },
+                    )
 
         return SimulationExecutionResult(
             trade_logs=pd.DataFrame(trade_rows)
@@ -444,6 +495,99 @@ class SimulationExecutionEngine:
         )
         return batch.fills, batch.carry_forward
 
+    @staticmethod
+    def _estimate_reservation(intent: Any) -> Decimal:
+        """Estimate the cash notional to reserve for a pending buy order.
+
+        Uses intent.limit_price as the reference price (market orders set limit_price
+        to the current bar close when constructed; child intents inherit or override it).
+        Sell orders return zero — no reservation is needed for the sell side.
+        """
+        side = getattr(intent, "side", None)
+        side_val = getattr(side, "value", str(side)).lower() if side is not None else ""
+        if side_val != "buy":
+            return Decimal("0")
+        qty = intent.qty if intent.qty is not None else Decimal("0")
+        limit_price = getattr(intent, "limit_price", None)
+        price = limit_price if limit_price is not None else Decimal("0")
+        return Decimal(str(qty)) * Decimal(str(price))
+
+    def _try_reserve(
+        self,
+        intent: Any,
+        cash: Decimal,
+        reserved_cash: Decimal,
+    ) -> tuple[Decimal, Decimal, bool]:
+        """Attempt to reserve cash for a buy order.
+
+        Returns (cash, reserved_cash, accepted).  cash is unchanged; reserved_cash
+        increases by the estimated notional on success.  On insufficient buying power
+        the intent is rejected (accepted=False) and reserved_cash is unchanged.
+        Sell orders are always accepted with no reservation.
+        """
+        estimated = self._estimate_reservation(intent)
+        if estimated == Decimal("0"):
+            return cash, reserved_cash, True
+
+        buying_power = cash - reserved_cash
+        if estimated > buying_power:
+            logger.warning(
+                "reserved_cash.insufficient_buying_power",
+                extra={
+                    "intent_id": str(getattr(intent, "intent_id", "?")),
+                    "symbol": str(getattr(intent, "symbol", "?")),
+                    "estimated_notional": str(estimated),
+                    "available_buying_power": str(buying_power),
+                    "reserved_cash": str(reserved_cash),
+                },
+            )
+            return cash, reserved_cash, False
+
+        new_reserved = reserved_cash + estimated
+        logger.debug(
+            "reserved_cash.reserved_for_order",
+            extra={
+                "intent_id": str(getattr(intent, "intent_id", "?")),
+                "symbol": str(getattr(intent, "symbol", "?")),
+                "reserved_amount": str(estimated),
+                "total_reserved_cash": str(new_reserved),
+                "buying_power_after": str(cash - new_reserved),
+            },
+        )
+        return cash, new_reserved, True
+
+    def _release_lost_intents(
+        self,
+        intents: list[Any],
+        fills: list[Any],
+        carry_forward: list[Any],
+        reserved_cash: Decimal,
+    ) -> Decimal:
+        """Release reservation for intents that produced neither a fill nor a carry-forward.
+
+        These are orders that were stochastically rejected or had no bar data.
+        Their upfront reservation must be freed so buying power is restored.
+        """
+        covered = {getattr(f, "intent_id", None) for f in fills} | {
+            getattr(cf, "intent_id", None) for cf in carry_forward
+        }
+        updated = reserved_cash
+        for intent in intents:
+            if getattr(intent, "intent_id", None) not in covered:
+                released = self._estimate_reservation(intent)
+                if released > Decimal("0"):
+                    updated = max(Decimal("0"), updated - released)
+                    logger.debug(
+                        "reserved_cash.released_on_lost_intent",
+                        extra={
+                            "intent_id": str(getattr(intent, "intent_id", "?")),
+                            "symbol": str(getattr(intent, "symbol", "?")),
+                            "released": str(released),
+                            "remaining_reserved": str(updated),
+                        },
+                    )
+        return updated
+
     def _apply_fills(
         self,
         *,
@@ -452,10 +596,12 @@ class SimulationExecutionEngine:
         fills: list[Any],
         positions: dict[str, Position],
         cash: Decimal,
+        reserved_cash: Decimal,
         prices: dict[str, float],
         realized_pnl_by_symbol: dict[str, Decimal],
-    ) -> Decimal:
+    ) -> tuple[Decimal, Decimal]:
         updated_cash = cash
+        updated_reserved = reserved_cash
 
         for fill in fills:
             cash_snapshot = CashSnapshot(
@@ -464,8 +610,8 @@ class SimulationExecutionEngine:
                 timestamp=timestamp,
                 currency="USD",
                 cash=updated_cash,
-                buying_power=updated_cash,
-                reserved_cash=Decimal("0"),
+                buying_power=updated_cash - updated_reserved,
+                reserved_cash=updated_reserved,
                 equity=self._calculate_equity(
                     cash=updated_cash,
                     positions=positions,
@@ -480,6 +626,7 @@ class SimulationExecutionEngine:
                 fill=fill,
             )
             updated_cash = cash_result.cash
+            updated_reserved = cash_result.reserved_cash
 
             market_price = Decimal(str(prices.get(fill.symbol, fill.price)))
             position_result = self.position_ledger_service.apply_fill(
@@ -497,7 +644,7 @@ class SimulationExecutionEngine:
                 realized_pnl_by_symbol.get(fill.symbol, Decimal("0")) + position_result.realized_pnl
             )
 
-        return updated_cash
+        return updated_cash, updated_reserved
 
     def _record_metrics(
         self,
@@ -557,11 +704,13 @@ class SimulationExecutionEngine:
         strategy_id: str,
         timestamp: datetime,
         cash: Decimal,
+        reserved_cash: Decimal,
         positions: dict[str, Position],
         prices: dict[str, float],
     ) -> dict[str, Any]:
         positions_value = self._calculate_positions_value(positions=positions, prices=prices)
         equity = cash + positions_value
+        buying_power = cash - reserved_cash
 
         return {
             "run_id": str(run_id),
@@ -569,6 +718,8 @@ class SimulationExecutionEngine:
             "timestamp": timestamp,
             "equity": float(equity),
             "cash": float(cash),
+            "reserved_cash": float(reserved_cash),
+            "buying_power": float(buying_power),
             "positions_value": float(positions_value),
             "drawdown": 0.0,
         }

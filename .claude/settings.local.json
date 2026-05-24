@@ -124,7 +124,9 @@
       "Bash(Select-String -Path \"C:\\\\Users\\\\Tristan\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Tristan-PycharmProjects-Autonomous-Trading-Platform\\\\7c90e206-4a4b-4088-9eda-2823b4d34a7c\\\\tasks\\\\blwrl6moh.output\" -Pattern \"passed|failed|error\")",
       "PowerShell(python -m pytest tests/execution/ tests/research/cache/ tests/contracts/ -q 2>&1 | Select-Object -Last 3)",
       "PowerShell(python -m pytest tests/execution/ tests/research/cache/ tests/contracts/ -q 2>&1 | Select-Object -Last 1)",
-      "PowerShell(python -m pytest tests/execution/ tests/research/cache/ tests/contracts/ 2>&1 | Select-Object -Last 1)"
+      "PowerShell(python -m pytest tests/execution/ tests/research/cache/ tests/contracts/ 2>&1 | Select-Object -Last 1)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\execution\" -Recurse -File)",
+      "Bash(mypy *)"
     ]
   }
 }
