@@ -32,6 +32,7 @@ class CacheInvalidationReason(StrEnum):
     PRICE_BASIS_CHANGED = "price_basis_changed"
     WINDOW_SEMANTICS_CHANGED = "window_semantics_changed"
     CALIBRATION_CHANGED = "calibration_changed"
+    THRESHOLD_CHANGED = "threshold_changed"
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,9 @@ class SimulationCacheKey:
     regime_dataset_version: str
     feature_versions_hash: str
     calibration_snapshot_id: str = ""  # empty string = no calibration applied
+    # Adverse fill threshold used for fill quality annotations in this simulation.
+    # Stored for lineage reproducibility; changing this produces a distinct cache entry.
+    adverse_threshold_bps: str = "10"
 
     def __post_init__(self) -> None:
         if not self.config_hash:
@@ -104,6 +108,7 @@ class SimulationCacheKey:
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "adverse_threshold_bps": self.adverse_threshold_bps,
             "calibration_snapshot_id": self.calibration_snapshot_id,
             "commission_per_share": self.commission_per_share,
             "config_hash": self.config_hash,

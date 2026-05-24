@@ -10,8 +10,14 @@ from autonomous_trading_platform.contracts.common.enums import (
     Side,
 )
 from autonomous_trading_platform.contracts.common.types import Money, Quantity
+from autonomous_trading_platform.contracts.execution.execution_policy_config import (
+    ExecutionPolicyConfig,
+    PolicyMode,
+)
 from autonomous_trading_platform.contracts.trading.fill import Fill
 from autonomous_trading_platform.execution.services.realised_slippage_service import (
+    _FALLBACK_ADVERSE_THRESHOLD_BPS,
+    _POLICY_METADATA_THRESHOLD_KEY,
     RealisedSlippageService,
 )
 from autonomous_trading_platform.storage.sor.models.fill_quality_metrics import FillQualityMetrics
@@ -526,3 +532,296 @@ class TestMergedRecordCompleteness:
         # Fill actuals still intact.
         assert row.fill_price == Decimal("101")
         assert row.fill_timestamp == _FILL_TS
+
+
+# ---------------------------------------------------------------------------
+# C-02 — Policy-aware adverse fill threshold tests
+# ---------------------------------------------------------------------------
+
+
+def _make_policy_result_mock(
+    *,
+    mode: str = "passthrough",
+    threshold_bps: Decimal | None = None,
+) -> MagicMock:
+    meta: dict = {}
+    if threshold_bps is not None:
+        meta[_POLICY_METADATA_THRESHOLD_KEY] = str(threshold_bps)
+    pr = MagicMock()
+    pr.reference_price = Decimal("100")
+    pr.policy_mode_applied.value = mode
+    pr.expected_slippage = None
+    pr.expected_cost = None
+    pr.policy_metadata = meta if meta else None
+    return pr
+
+
+def _make_intent_mock() -> MagicMock:
+    intent = MagicMock()
+    intent.intent_id = _INTENT_ID
+    intent.run_id = _RUN_ID
+    intent.strategy_id = "strat-alpha"
+    intent.symbol = "AAPL"
+    intent.timestamp = _NOW
+    intent.qty = Decimal("10")
+    return intent
+
+
+def _make_broker_order_mock() -> MagicMock:
+    bo = MagicMock()
+    bo.broker_order_id = "bo-001"
+    return bo
+
+
+def _run_full_lifecycle(
+    *,
+    adverse_threshold_bps: Decimal,
+    fill_slippage_bps: Decimal,
+    policy_mode: str = "passthrough",
+) -> FillQualityMetrics:
+    """Run Phase 1 + Phase 2 with an explicit threshold; return the final row."""
+    repo = TrackingFillQualityMetricsRepository(seed=None)
+    svc = _make_svc(repo)
+
+    # Phase 1
+    policy_result = _make_policy_result_mock(mode=policy_mode)
+    svc.record_submission_context(
+        intent=_make_intent_mock(),
+        broker_order=_make_broker_order_mock(),
+        policy_result=policy_result,
+        submit_duration_seconds=0.01,
+        now_utc=_NOW,
+        adverse_threshold_bps=adverse_threshold_bps,
+    )
+
+    # Phase 2: construct fill_price so that slippage equals fill_slippage_bps
+    # reference = 100, slippage_bps = (fill - ref) / ref * 10000 (BUY)
+    fill_price = Decimal("100") * (1 + fill_slippage_bps / Decimal("10000"))
+    fill = _make_fill(price=str(fill_price))
+    svc.record_fill_actuals(fill=fill, now_utc=_NOW)
+
+    assert repo._row is not None
+    return repo._row
+
+
+class TestPolicyAwareAdverseThreshold:
+    """Adverse fill classification must honour the per-policy threshold."""
+
+    def test_twap_threshold_5bps_classifies_6bps_as_adverse(self) -> None:
+        row = _run_full_lifecycle(
+            adverse_threshold_bps=Decimal("5"),
+            fill_slippage_bps=Decimal("6"),
+            policy_mode="twap",
+        )
+        assert row.is_adverse_fill is True
+
+    def test_market_order_threshold_25bps_does_not_classify_6bps_as_adverse(self) -> None:
+        row = _run_full_lifecycle(
+            adverse_threshold_bps=Decimal("25"),
+            fill_slippage_bps=Decimal("6"),
+            policy_mode="market",
+        )
+        assert row.is_adverse_fill is False
+
+    def test_boundary_exactly_at_threshold_is_not_adverse(self) -> None:
+        # is_adverse uses strict >, so exactly at threshold → not adverse
+        row = _run_full_lifecycle(
+            adverse_threshold_bps=Decimal("10"),
+            fill_slippage_bps=Decimal("10"),
+        )
+        assert row.is_adverse_fill is False
+
+    def test_one_bps_above_threshold_is_adverse(self) -> None:
+        row = _run_full_lifecycle(
+            adverse_threshold_bps=Decimal("10"),
+            fill_slippage_bps=Decimal("11"),
+        )
+        assert row.is_adverse_fill is True
+
+    def test_different_policies_different_classifications_same_fill(self) -> None:
+        # 8 bps slippage: adverse for TWAP (5 bps), not adverse for VWAP-lite (10 bps)
+        twap_row = _run_full_lifecycle(
+            adverse_threshold_bps=Decimal("5"),
+            fill_slippage_bps=Decimal("8"),
+            policy_mode="twap",
+        )
+        vwap_row = _run_full_lifecycle(
+            adverse_threshold_bps=Decimal("10"),
+            fill_slippage_bps=Decimal("8"),
+            policy_mode="vwap_lite",
+        )
+        assert twap_row.is_adverse_fill is True
+        assert vwap_row.is_adverse_fill is False
+
+
+class TestThresholdStoredInPolicyMetadata:
+    """Phase 1 must persist adverse_threshold_bps in policy_metadata."""
+
+    def test_threshold_written_to_policy_metadata_at_phase1(self) -> None:
+        repo = TrackingFillQualityMetricsRepository(seed=None)
+        svc = _make_svc(repo)
+
+        svc.record_submission_context(
+            intent=_make_intent_mock(),
+            broker_order=_make_broker_order_mock(),
+            policy_result=_make_policy_result_mock(),
+            submit_duration_seconds=0.01,
+            now_utc=_NOW,
+            adverse_threshold_bps=Decimal("7"),
+        )
+
+        row = repo.insert_calls[0]
+        assert row.policy_metadata is not None
+        assert row.policy_metadata[_POLICY_METADATA_THRESHOLD_KEY] == "7"
+
+    def test_threshold_survives_phase2_update(self) -> None:
+        row = _run_full_lifecycle(
+            adverse_threshold_bps=Decimal("5"),
+            fill_slippage_bps=Decimal("3"),
+        )
+        assert row.policy_metadata is not None
+        assert row.policy_metadata[_POLICY_METADATA_THRESHOLD_KEY] == "5"
+
+    def test_no_threshold_in_phase1_stores_no_key(self) -> None:
+        repo = TrackingFillQualityMetricsRepository(seed=None)
+        svc = _make_svc(repo)
+
+        svc.record_submission_context(
+            intent=_make_intent_mock(),
+            broker_order=_make_broker_order_mock(),
+            policy_result=_make_policy_result_mock(),
+            submit_duration_seconds=0.01,
+            now_utc=_NOW,
+            # adverse_threshold_bps omitted
+        )
+
+        row = repo.insert_calls[0]
+        has_key = (
+            row.policy_metadata is not None
+            and _POLICY_METADATA_THRESHOLD_KEY in row.policy_metadata
+        )
+        assert not has_key
+
+
+class TestFallbackThresholdBehavior:
+    """Fallback must be explicit, deterministic, and logged."""
+
+    def test_fallback_threshold_equals_10_bps(self) -> None:
+        assert Decimal("10") == _FALLBACK_ADVERSE_THRESHOLD_BPS
+
+    def test_fallback_applied_when_no_threshold_in_metadata(self, caplog) -> None:
+        import logging
+
+        repo = TrackingFillQualityMetricsRepository(seed=None)
+        svc = _make_svc(repo)
+
+        # Phase 1 without threshold — no key stored
+        svc.record_submission_context(
+            intent=_make_intent_mock(),
+            broker_order=_make_broker_order_mock(),
+            policy_result=_make_policy_result_mock(),
+            submit_duration_seconds=0.01,
+            now_utc=_NOW,
+        )
+
+        with caplog.at_level(logging.WARNING):
+            svc.record_fill_actuals(fill=_make_fill(price="110.1"), now_utc=_NOW)
+
+        assert any("adverse_threshold_fallback" in r.message for r in caplog.records)
+
+    def test_fallback_classifies_11bps_as_adverse(self) -> None:
+        repo = TrackingFillQualityMetricsRepository(seed=None)
+        svc = _make_svc(repo)
+
+        # No threshold stored — fallback is 10 bps
+        svc.record_submission_context(
+            intent=_make_intent_mock(),
+            broker_order=_make_broker_order_mock(),
+            policy_result=_make_policy_result_mock(),
+            submit_duration_seconds=0.01,
+            now_utc=_NOW,
+        )
+        # 11 bps slippage on reference=100 → fill_price ≈ 100.11
+        svc.record_fill_actuals(fill=_make_fill(price="100.11"), now_utc=_NOW)
+
+        assert repo._row is not None
+        assert repo._row.is_adverse_fill is True
+
+    def test_fallback_does_not_classify_9bps_as_adverse(self) -> None:
+        repo = TrackingFillQualityMetricsRepository(seed=None)
+        svc = _make_svc(repo)
+
+        svc.record_submission_context(
+            intent=_make_intent_mock(),
+            broker_order=_make_broker_order_mock(),
+            policy_result=_make_policy_result_mock(),
+            submit_duration_seconds=0.01,
+            now_utc=_NOW,
+        )
+        # 9 bps slippage on reference=100 → fill_price = 100.09
+        svc.record_fill_actuals(fill=_make_fill(price="100.09"), now_utc=_NOW)
+
+        assert repo._row is not None
+        assert repo._row.is_adverse_fill is False
+
+
+class TestDeterminism:
+    """Same config + same fill must always produce identical classification."""
+
+    def test_same_threshold_same_fill_identical_result(self) -> None:
+        row_a = _run_full_lifecycle(
+            adverse_threshold_bps=Decimal("5"),
+            fill_slippage_bps=Decimal("8"),
+        )
+        row_b = _run_full_lifecycle(
+            adverse_threshold_bps=Decimal("5"),
+            fill_slippage_bps=Decimal("8"),
+        )
+        assert row_a.is_adverse_fill == row_b.is_adverse_fill
+
+    def test_changing_threshold_changes_classification(self) -> None:
+        # 6 bps slippage: adverse at 5 bps threshold, not adverse at 7 bps threshold
+        row_tight = _run_full_lifecycle(
+            adverse_threshold_bps=Decimal("5"),
+            fill_slippage_bps=Decimal("6"),
+        )
+        row_loose = _run_full_lifecycle(
+            adverse_threshold_bps=Decimal("7"),
+            fill_slippage_bps=Decimal("6"),
+        )
+        assert row_tight.is_adverse_fill is True
+        assert row_loose.is_adverse_fill is False
+
+
+class TestExecutionPolicyConfigThresholdField:
+    """ExecutionPolicyConfig.adverse_slippage_threshold_bps field behaviour."""
+
+    def test_default_threshold_is_10_bps(self) -> None:
+        config = ExecutionPolicyConfig()
+        assert config.adverse_slippage_threshold_bps == Decimal("10")
+
+    def test_passthrough_factory_uses_default_threshold(self) -> None:
+        config = ExecutionPolicyConfig.passthrough()
+        assert config.adverse_slippage_threshold_bps == Decimal("10")
+
+    def test_explicit_threshold_overrides_default(self) -> None:
+        config = ExecutionPolicyConfig(
+            policy_mode=PolicyMode.TWAP,
+            adverse_slippage_threshold_bps=Decimal("5"),
+        )
+        assert config.adverse_slippage_threshold_bps == Decimal("5")
+
+    def test_threshold_must_be_non_negative(self) -> None:
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            ExecutionPolicyConfig(adverse_slippage_threshold_bps=Decimal("-1"))
+
+    def test_zero_threshold_means_any_slippage_is_adverse(self) -> None:
+        config = ExecutionPolicyConfig(adverse_slippage_threshold_bps=Decimal("0"))
+        assert config.adverse_slippage_threshold_bps == Decimal("0")
+
+    def test_threshold_round_trips_through_dict(self) -> None:
+        config = ExecutionPolicyConfig(adverse_slippage_threshold_bps=Decimal("7"))
+        round_tripped = ExecutionPolicyConfig.from_dict(config.to_dict())
+        assert round_tripped.adverse_slippage_threshold_bps == Decimal("7")

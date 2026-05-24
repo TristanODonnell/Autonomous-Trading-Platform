@@ -11,6 +11,7 @@ from uuid import UUID
 import pytest
 
 from autonomous_trading_platform.contracts.common.enums import (
+    OrderEvent,
     OrderStatus,
     OrderType,
     Side,
@@ -203,3 +204,28 @@ class TestStatusRegressionDetection:
         assert row.current_status == OrderStatus.FILLED
         assert row.is_open is False
         assert row.previous_filled_qty == Decimal("100")
+
+
+class TestBrokerOrderNotFoundRuntimeUpdate:
+    def test_missing_broker_order_updates_status_without_rewinding_state(self) -> None:
+        svc = OrderRuntimeStateService()
+        tracked = _make_tracked_order(previous_filled_qty="50")
+        tracked.previous_avg_fill_price = Decimal("100.00")
+        uow = FakeUnitOfWork(tracked)
+        result = ReconciliationResult(
+            order_id=_ORDER_ID,
+            broker_order=None,
+            next_status=OrderStatus.EXPIRED,
+            event_applied=OrderEvent.EXPIRE,
+            fill=None,
+            broker_not_found=True,
+        )
+
+        svc.apply_reconciliation_result(uow=cast(SorUnitOfWork, uow), result=result, now_utc=_NOW)
+
+        row = uow.tracked_orders._row
+        assert row.current_status == OrderStatus.EXPIRED
+        assert row.is_open is False
+        assert row.broker_order_id == "bo-001"
+        assert row.previous_filled_qty == Decimal("50")
+        assert row.previous_avg_fill_price == Decimal("100.00")

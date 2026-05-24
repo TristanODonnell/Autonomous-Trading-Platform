@@ -60,6 +60,7 @@ class TestCalibrationSnapshotIdInCacheKey:
         key = _make_key()
         d = key.to_dict()
         expected = {
+            "adverse_threshold_bps",
             "calibration_snapshot_id",
             "config_hash",
             "dataset_version",

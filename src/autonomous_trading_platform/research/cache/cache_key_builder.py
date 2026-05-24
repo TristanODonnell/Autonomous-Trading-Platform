@@ -51,6 +51,7 @@ def build_simulation_cache_key(
     regime_dataset_version: str | None = None,
     feature_versions: dict[str, str] | None = None,
     calibration_snapshot_id: str = "",
+    adverse_threshold_bps: str = "10",
 ) -> SimulationCacheKey:
     """Build a fully-specified simulation cache key.
 
@@ -79,6 +80,10 @@ def build_simulation_cache_key(
         Calibration snapshot UUID used to derive slippage model parameters, or ``""``
         when no calibration is applied.  Changing this value changes the cache key so
         simulations with different calibrations never collide.
+    adverse_threshold_bps:
+        Adverse fill threshold (in bps, as string) that governs fill quality
+        annotations for this simulation run.  Simulations with different thresholds
+        produce distinct cache entries.  Defaults to ``"10"`` (platform default).
     """
     fill = fill_model if fill_model is not None else _DEFAULT_FILL
     slippage = slippage_model if slippage_model is not None else _DEFAULT_SLIPPAGE_MODEL
@@ -103,6 +108,7 @@ def build_simulation_cache_key(
         regime_dataset_version=regime_dataset_version or "",
         feature_versions_hash=_hash_feature_versions(feature_versions),
         calibration_snapshot_id=calibration_snapshot_id,
+        adverse_threshold_bps=adverse_threshold_bps,
     )
 
 

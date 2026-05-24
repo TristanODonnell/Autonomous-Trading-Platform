@@ -164,6 +164,7 @@ class TestSimulationCacheKey:
         key = _make_sim_key()
         d = key.to_dict()
         expected_fields = {
+            "adverse_threshold_bps",
             "calibration_snapshot_id",
             "config_hash",
             "dataset_version",

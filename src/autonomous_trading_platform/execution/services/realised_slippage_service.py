@@ -24,7 +24,14 @@ from autonomous_trading_platform.storage.sor.repositories.core.fill_quality_metr
 logger = get_logger(__name__)
 
 BPS_DENOMINATOR = Decimal("10000")
-_ADVERSE_SLIPPAGE_THRESHOLD_BPS = Decimal("10")  # flag fills worse than 10 bps
+
+# Compatibility fallback used ONLY when no threshold is present in the stored
+# policy_metadata.  This mirrors the original 10 bps constant but is now explicit
+# and logged, not silently applied.  Configure adverse_slippage_threshold_bps on
+# ExecutionPolicyConfig to avoid hitting this path in production.
+_FALLBACK_ADVERSE_THRESHOLD_BPS = Decimal("10")
+
+_POLICY_METADATA_THRESHOLD_KEY = "adverse_threshold_bps"
 
 
 class RealisedSlippageService:
@@ -89,6 +96,7 @@ class RealisedSlippageService:
         policy_result: ExecutionPolicyResult,
         submit_duration_seconds: float,
         now_utc: datetime,
+        adverse_threshold_bps: Decimal | None = None,
     ) -> None:
         """
         Persist a fill_quality_metrics row immediately after order submission.
@@ -100,6 +108,12 @@ class RealisedSlippageService:
         Idempotent: if Phase 2 (record_fill_actuals) already inserted a minimal
         row for this intent_id, submission context fields are merged in without
         overwriting any fill actuals already present.
+
+        Args:
+            adverse_threshold_bps: The policy-configured adverse fill threshold.
+                Stored in policy_metadata so Phase 2 can resolve it without
+                needing to re-read the policy config.  When omitted the Phase 2
+                fallback applies (10 bps, with a logged warning).
         """
         intent_id_str = str(intent.intent_id)
         expected_slippage = policy_result.expected_slippage
@@ -120,6 +134,10 @@ class RealisedSlippageService:
         spread = Decimal(str(expected_cost.spread_cost)) if expected_cost is not None else None
         slip_cost = Decimal(str(expected_cost.slippage_cost)) if expected_cost is not None else None
         total = Decimal(str(expected_cost.total_cost)) if expected_cost is not None else None
+
+        metadata = dict(policy_result.policy_metadata or {})
+        if adverse_threshold_bps is not None:
+            metadata[_POLICY_METADATA_THRESHOLD_KEY] = str(adverse_threshold_bps)
 
         existing = self._repo.get_by_intent_id(intent_id_str)
         if existing is not None:
@@ -145,7 +163,7 @@ class RealisedSlippageService:
             existing.slippage_cost = slip_cost
             existing.total_cost = total
             existing.policy_mode = policy_result.policy_mode_applied.value
-            existing.policy_metadata = policy_result.policy_metadata or None
+            existing.policy_metadata = metadata or None
             existing.strategy_id = intent.strategy_id
             if qty is not None and existing.quantity is None:
                 existing.quantity = qty
@@ -178,7 +196,7 @@ class RealisedSlippageService:
             policy_mode=policy_result.policy_mode_applied.value,
             quantity=qty,
             is_adverse_fill=None,  # populated in phase 2
-            policy_metadata=policy_result.policy_metadata or None,
+            policy_metadata=metadata or None,
         )
         self._repo.insert(row)
 
@@ -249,7 +267,8 @@ class RealisedSlippageService:
                 sub_ts = sub_ts.replace(tzinfo=UTC)
             fill_latency = (fill_ts - sub_ts).total_seconds()
 
-        is_adverse = abs(realised.slippage_bps) > _ADVERSE_SLIPPAGE_THRESHOLD_BPS
+        effective_threshold = self._resolve_adverse_threshold(existing)
+        is_adverse = abs(realised.slippage_bps) > effective_threshold
 
         if existing is not None:
             if existing.fill_id is not None and existing.fill_id != fill.fill_id:
@@ -324,6 +343,35 @@ class RealisedSlippageService:
                 policy_metadata=None,
             )
             self._repo.insert(row)
+
+    def _resolve_adverse_threshold(self, existing: FillQualityMetrics | None) -> Decimal:
+        """Return the effective adverse fill threshold for a record.
+
+        Resolution order:
+          1. Value stored in policy_metadata["adverse_threshold_bps"] (set at Phase 1)
+          2. _FALLBACK_ADVERSE_THRESHOLD_BPS (10 bps, with a warning logged)
+
+        The fallback path exists only for records written before C-02 or when
+        Phase 2 arrives without a preceding Phase 1.  New records always carry
+        the threshold in policy_metadata.
+        """
+        if existing is not None and existing.policy_metadata:
+            raw = existing.policy_metadata.get(_POLICY_METADATA_THRESHOLD_KEY)
+            if raw is not None:
+                try:
+                    return Decimal(str(raw))
+                except Exception:
+                    pass
+
+        logger.warning(
+            "fill_quality.adverse_threshold_fallback",
+            extra={
+                "intent_id": existing.intent_id if existing is not None else "unknown",
+                "fallback_bps": str(_FALLBACK_ADVERSE_THRESHOLD_BPS),
+                "reason": "adverse_threshold_bps absent from policy_metadata",
+            },
+        )
+        return _FALLBACK_ADVERSE_THRESHOLD_BPS
 
     @staticmethod
     def _resolve_quantity(intent: OrderIntent) -> Decimal | None:
