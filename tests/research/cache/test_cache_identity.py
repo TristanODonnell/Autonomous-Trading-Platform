@@ -71,7 +71,8 @@ def _make_sim_key(**overrides: Any) -> SimulationCacheKey:
         window_role="default",
         fill_policy="current_close",
         latency_bars=0,
-        slippage_rate="0.0001",
+        cost_model_type="volume_share",
+        slippage_config_hash="abc1234567890123",
         commission_per_share="0.0000",
         regime_dataset_version="",
         feature_versions_hash="",
@@ -101,9 +102,14 @@ class TestSimulationCacheKey:
         k2 = _make_sim_key(dataset_version="v2")
         assert k1.key_id != k2.key_id
 
-    def test_key_id_changes_with_slippage(self):
-        k1 = _make_sim_key(slippage_rate="0.0001")
-        k2 = _make_sim_key(slippage_rate="0.0005")
+    def test_key_id_changes_with_slippage_config(self):
+        k1 = _make_sim_key(slippage_config_hash="aaaa111111111111")
+        k2 = _make_sim_key(slippage_config_hash="bbbb222222222222")
+        assert k1.key_id != k2.key_id
+
+    def test_key_id_changes_with_cost_model_type(self):
+        k1 = _make_sim_key(cost_model_type="fixed_bps")
+        k2 = _make_sim_key(cost_model_type="volume_share")
         assert k1.key_id != k2.key_id
 
     def test_key_id_changes_with_fill_policy(self):
@@ -170,7 +176,8 @@ class TestSimulationCacheKey:
             "window_role",
             "fill_policy",
             "latency_bars",
-            "slippage_rate",
+            "cost_model_type",
+            "slippage_config_hash",
             "commission_per_share",
             "regime_dataset_version",
             "feature_versions_hash",

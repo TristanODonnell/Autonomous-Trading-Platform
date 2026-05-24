@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import Any
 
 from autonomous_trading_platform.research.cache.cache_identity import (
     SimulationCacheKey,
@@ -18,8 +19,8 @@ from autonomous_trading_platform.research.config.simulation_run_config import Si
 from autonomous_trading_platform.research.simulation.models.fill_model import (
     SimulatedFillModelConfig,
 )
-from autonomous_trading_platform.research.simulation.models.slippage_model import (
-    SlippageModelConfig,
+from autonomous_trading_platform.research.simulation.models.volume_share_slippage_model import (
+    VolumeShareSlippageModel,
 )
 from autonomous_trading_platform.research.simulation.services.simulation_cost_model_service import (
     SimulationCostModelConfig,
@@ -27,7 +28,7 @@ from autonomous_trading_platform.research.simulation.services.simulation_cost_mo
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
 _DEFAULT_FILL = SimulatedFillModelConfig()
-_DEFAULT_SLIPPAGE = SlippageModelConfig()
+_DEFAULT_SLIPPAGE_MODEL: Any = VolumeShareSlippageModel()
 _DEFAULT_COST = SimulationCostModelConfig()
 
 
@@ -44,7 +45,7 @@ def build_simulation_cache_key(
     strategy_config: StrategyConfig,
     run_config: SimulationRunConfig,
     fill_model: SimulatedFillModelConfig | None = None,
-    slippage_model: SlippageModelConfig | None = None,
+    slippage_model: Any | None = None,
     cost_model: SimulationCostModelConfig | None = None,
     universe_version: str = "v1",
     regime_dataset_version: str | None = None,
@@ -61,9 +62,11 @@ def build_simulation_cache_key(
     fill_model:
         Fill policy; defaults to ``SimulatedFillModelConfig()`` when omitted.
     slippage_model:
-        Slippage model; defaults to ``SlippageModelConfig()`` when omitted.
+        Slippage model instance (SlippageModel, VolumeShareSlippageModel,
+        SpreadAwareSlippageModel, or any object with model_type and config_summary()).
+        Defaults to ``VolumeShareSlippageModel()`` when omitted.
     cost_model:
-        Cost model; defaults to ``SimulationCostModelConfig()`` when omitted.
+        Cost model config; defaults to ``SimulationCostModelConfig()`` when omitted.
     universe_version:
         Universe snapshot version; defaults to ``"v1"``.
     regime_dataset_version:
@@ -73,7 +76,7 @@ def build_simulation_cache_key(
         consumed by this simulation.
     """
     fill = fill_model if fill_model is not None else _DEFAULT_FILL
-    slippage = slippage_model if slippage_model is not None else _DEFAULT_SLIPPAGE
+    slippage = slippage_model if slippage_model is not None else _DEFAULT_SLIPPAGE_MODEL
     cost = cost_model if cost_model is not None else _DEFAULT_COST
 
     return SimulationCacheKey(
@@ -89,11 +92,22 @@ def build_simulation_cache_key(
         window_role=run_config.window_role or "default",
         fill_policy=fill.market_fill_policy.value,
         latency_bars=fill.latency_bars,
-        slippage_rate=str(slippage.slippage_rate),
+        cost_model_type=slippage.model_type.value,
+        slippage_config_hash=_hash_slippage_config(slippage),
         commission_per_share=str(cost.commission_per_share),
         regime_dataset_version=regime_dataset_version or "",
         feature_versions_hash=_hash_feature_versions(feature_versions),
     )
+
+
+def _hash_slippage_config(slippage_model: Any) -> str:
+    """Deterministic 16-char hash of a slippage model's config summary."""
+    summary = slippage_model.config_summary()
+    payload = json.dumps(
+        {k: summary[k] for k in sorted(summary)},
+        separators=(",", ":"),
+    ).encode()
+    return hashlib.sha256(payload).hexdigest()[:16]
 
 
 def _hash_symbols(symbols: list[str]) -> str:

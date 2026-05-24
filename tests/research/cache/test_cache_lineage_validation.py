@@ -28,7 +28,8 @@ def _base_key(**overrides: Any) -> SimulationCacheKey:
         window_role="default",
         fill_policy="current_close",
         latency_bars=0,
-        slippage_rate="0.0001",
+        cost_model_type="volume_share",
+        slippage_config_hash="abc1234567890123",
         commission_per_share="0.0000",
         regime_dataset_version="",
         feature_versions_hash="",
@@ -146,12 +147,19 @@ class TestValidateSimulationLineage:
         assert not result.compatible
         assert result.reason == CacheInvalidationReason.FILL_POLICY_CHANGED
 
-    def test_slippage_change_invalidates(self):
-        cached = _base_key(slippage_rate="0.0001")
-        current = _base_key(slippage_rate="0.0005")
+    def test_slippage_config_change_invalidates(self):
+        cached = _base_key(slippage_config_hash="aaaa111111111111")
+        current = _base_key(slippage_config_hash="bbbb222222222222")
         result = validate_simulation_lineage(cached, current)
         assert not result.compatible
         assert result.reason == CacheInvalidationReason.SLIPPAGE_CHANGED
+
+    def test_cost_model_type_change_invalidates(self):
+        cached = _base_key(cost_model_type="fixed_bps")
+        current = _base_key(cost_model_type="volume_share")
+        result = validate_simulation_lineage(cached, current)
+        assert not result.compatible
+        assert result.reason == CacheInvalidationReason.COST_MODEL_TYPE_CHANGED
 
     def test_commission_change_invalidates(self):
         cached = _base_key(commission_per_share="0.0000")
@@ -187,7 +195,8 @@ class TestValidateSimulationLineage:
             ("stage_name", "test", CacheInvalidationReason.WINDOW_SEMANTICS_CHANGED),
             ("window_role", "fold_2", CacheInvalidationReason.WINDOW_SEMANTICS_CHANGED),
             ("fill_policy", "next_open", CacheInvalidationReason.FILL_POLICY_CHANGED),
-            ("slippage_rate", "0.01", CacheInvalidationReason.SLIPPAGE_CHANGED),
+            ("cost_model_type", "fixed_bps", CacheInvalidationReason.COST_MODEL_TYPE_CHANGED),
+            ("slippage_config_hash", "zzzz999999999999", CacheInvalidationReason.SLIPPAGE_CHANGED),
             ("commission_per_share", "0.01", CacheInvalidationReason.COMMISSION_CHANGED),
             ("regime_dataset_version", "rr_v1", CacheInvalidationReason.REGIME_VERSION_CHANGED),
             ("feature_versions_hash", "aabbcc", CacheInvalidationReason.FEATURE_VERSION_CHANGED),

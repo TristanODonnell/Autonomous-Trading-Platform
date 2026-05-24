@@ -4,13 +4,14 @@ import copy
 import dataclasses
 import random
 from decimal import ROUND_DOWN, Decimal
-from typing import Any
+from typing import Any, cast
 from uuid import NAMESPACE_URL, uuid5
 
 from autonomous_trading_platform.contracts.trading.fill import Fill
 from autonomous_trading_platform.research.simulation.models.fill_model import (
     SimulatedFillModelConfig,
 )
+from autonomous_trading_platform.research.simulation.models.slippage_context import SlippageContext
 from autonomous_trading_platform.research.simulation.services.simulation_cost_model_service import (
     SimulationCostModelService,
 )
@@ -67,13 +68,11 @@ class SimulatedExecutionService:
         }
 
     @property
-    def slippage_model_summary(self) -> dict:
-        return {
-            k: str(v) if isinstance(v, Decimal) else v
-            for k, v in dataclasses.asdict(
-                self.simulation_cost_model_service.slippage_model.config
-            ).items()
-        }
+    def slippage_model_summary(self) -> dict[str, object]:
+        return cast(
+            dict[str, object],
+            self.simulation_cost_model_service.slippage_model.config_summary(),
+        )
 
     def fill(
         self,
@@ -356,10 +355,22 @@ class SimulatedExecutionService:
         reference_price: Any,
         qty: Decimal,
     ) -> Fill:
+        context = SlippageContext(
+            quantity=qty,
+            bar_volume=(
+                Decimal(str(bar.volume)) if getattr(bar, "volume", None) is not None else None
+            ),
+            bar_high=(Decimal(str(bar.high)) if getattr(bar, "high", None) is not None else None),
+            bar_low=(Decimal(str(bar.low)) if getattr(bar, "low", None) is not None else None),
+            bar_close=(
+                Decimal(str(bar.close)) if getattr(bar, "close", None) is not None else None
+            ),
+        )
         costs = self.simulation_cost_model_service.apply_costs(
             side=intent.side,
             reference_price=reference_price,
             quantity=qty,
+            context=context,
         )
 
         self._fill_counter += 1

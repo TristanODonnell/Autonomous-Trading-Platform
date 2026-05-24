@@ -74,7 +74,7 @@ class _CostModel(SimulationCostModelService):
     def __init__(self):
         pass
 
-    def apply_costs(self, *, side, reference_price, quantity):
+    def apply_costs(self, *, side, reference_price, quantity, context=None):
         return _Costs(fill_price=Decimal(str(reference_price)), commission=Decimal("0"))
 
 

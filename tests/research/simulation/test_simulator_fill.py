@@ -39,7 +39,7 @@ class MockCosts:
 
 
 class MockCostModel:
-    def apply_costs(self, *, side, reference_price, quantity):
+    def apply_costs(self, *, side, reference_price, quantity, context=None):
         return MockCosts(
             fill_price=Decimal(str(reference_price)),
             commission=Decimal("0"),

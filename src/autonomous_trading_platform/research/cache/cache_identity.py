@@ -24,6 +24,7 @@ class CacheInvalidationReason(StrEnum):
     UNIVERSE_VERSION_CHANGED = "universe_version_changed"
     FILL_POLICY_CHANGED = "fill_policy_changed"
     SLIPPAGE_CHANGED = "slippage_changed"
+    COST_MODEL_TYPE_CHANGED = "cost_model_type_changed"
     COMMISSION_CHANGED = "commission_changed"
     SEED_CHANGED = "seed_changed"
     SYMBOLS_CHANGED = "symbols_changed"
@@ -82,7 +83,8 @@ class SimulationCacheKey:
     window_role: str
     fill_policy: str
     latency_bars: int
-    slippage_rate: str
+    cost_model_type: str  # e.g. "fixed_bps", "volume_share", "spread_aware"
+    slippage_config_hash: str  # hash of all slippage model config params
     commission_per_share: str
     regime_dataset_version: str
     feature_versions_hash: str
@@ -100,8 +102,9 @@ class SimulationCacheKey:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "config_hash": self.config_hash,
             "commission_per_share": self.commission_per_share,
+            "config_hash": self.config_hash,
+            "cost_model_type": self.cost_model_type,
             "dataset_version": self.dataset_version,
             "end_date": self.end_date,
             "feature_versions_hash": self.feature_versions_hash,
@@ -110,7 +113,7 @@ class SimulationCacheKey:
             "price_basis": self.price_basis,
             "random_seed": self.random_seed,
             "regime_dataset_version": self.regime_dataset_version,
-            "slippage_rate": self.slippage_rate,
+            "slippage_config_hash": self.slippage_config_hash,
             "stage_name": self.stage_name,
             "start_date": self.start_date,
             "symbols_hash": self.symbols_hash,

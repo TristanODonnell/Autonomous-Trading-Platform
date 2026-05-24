@@ -25,9 +25,8 @@ from autonomous_trading_platform.research.simulation.contexts.simulation_context
 from autonomous_trading_platform.research.simulation.models.fill_model import (
     SimulatedFillModelConfig,
 )
-from autonomous_trading_platform.research.simulation.models.slippage_model import (
-    SlippageModel,
-    SlippageModelConfig,
+from autonomous_trading_platform.research.simulation.models.volume_share_slippage_model import (
+    VolumeShareSlippageModel,
 )
 from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
     LookaheadGuardService,
@@ -117,15 +116,12 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         universe_size=_DEFAULT_UNIVERSE_SIZE,
     )
 
-    # TODO: move cost/slippage config into Settings
     simulation_cost_model_service = SimulationCostModelService(
         config=SimulationCostModelConfig(
             commission_per_share=Decimal("0.0000"),
             min_commission=Decimal("0.00"),
         ),
-        slippage_model=SlippageModel(
-            config=SlippageModelConfig(slippage_rate=Decimal("0.0001")),
-        ),
+        slippage_model=VolumeShareSlippageModel(),
     )
     simulated_execution_service = SimulatedExecutionService(
         simulation_cost_model_service=simulation_cost_model_service,

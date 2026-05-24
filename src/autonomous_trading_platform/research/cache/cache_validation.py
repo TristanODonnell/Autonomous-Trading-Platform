@@ -76,7 +76,16 @@ def validate_simulation_lineage(
         (cached.stage_name, current.stage_name, CacheInvalidationReason.WINDOW_SEMANTICS_CHANGED),
         (cached.window_role, current.window_role, CacheInvalidationReason.WINDOW_SEMANTICS_CHANGED),
         (cached.fill_policy, current.fill_policy, CacheInvalidationReason.FILL_POLICY_CHANGED),
-        (cached.slippage_rate, current.slippage_rate, CacheInvalidationReason.SLIPPAGE_CHANGED),
+        (
+            cached.cost_model_type,
+            current.cost_model_type,
+            CacheInvalidationReason.COST_MODEL_TYPE_CHANGED,
+        ),
+        (
+            cached.slippage_config_hash,
+            current.slippage_config_hash,
+            CacheInvalidationReason.SLIPPAGE_CHANGED,
+        ),
         (
             cached.commission_per_share,
             current.commission_per_share,

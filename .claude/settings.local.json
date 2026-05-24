@@ -116,7 +116,11 @@
       "Bash(Get-ChildItem \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\tests\\\\application\\\\services\\\\\" | Select-Object -First 10 -ExpandProperty Name *)",
       "PowerShell(& \"C:\\\\Users\\\\Tristan\\\\AppData\\\\Local\\\\pypoetry\\\\Cache\\\\virtualenvs\\\\autonomous-trading-platform-IlAFR7j4-py3.11\\\\Scripts\\\\mypy.exe\" src/autonomous_trading_platform/application/services/simulation_vs_paper_comparison_service.py src/autonomous_trading_platform/contracts/execution/simulation_vs_paper_comparison.py 2>&1 | Select-Object -First 40)",
       "PowerShell(ruff check *)",
-      "PowerShell(D:\\\\PythonVenvs\\\\autonomous-trading-platform\\\\.venv\\\\Scripts\\\\pre-commit.exe run ruff --files src/autonomous_trading_platform/application/services/simulation_vs_paper_comparison_service.py src/autonomous_trading_platform/contracts/execution/simulation_vs_paper_comparison.py tests/application/services/test_simulation_vs_paper_comparison_service.py 2>&1)"
+      "PowerShell(D:\\\\PythonVenvs\\\\autonomous-trading-platform\\\\.venv\\\\Scripts\\\\pre-commit.exe run ruff --files src/autonomous_trading_platform/application/services/simulation_vs_paper_comparison_service.py src/autonomous_trading_platform/contracts/execution/simulation_vs_paper_comparison.py tests/application/services/test_simulation_vs_paper_comparison_service.py 2>&1)",
+      "Bash(xargs grep -l \"LinearCostModelService\\\\|VolumeShareSlippageModelService\\\\|CostModelConfig\\\\|SlippageModelConfig\")",
+      "Bash(D:/PythonVenvs/autonomous-trading-platform/.venv/Scripts/ruff.exe check *)",
+      "PowerShell(D:\\\\PythonVenvs\\\\autonomous-trading-platform\\\\.venv\\\\Scripts\\\\ruff.exe check src\\\\autonomous_trading_platform\\\\research\\\\simulation\\\\models\\\\ src\\\\autonomous_trading_platform\\\\research\\\\cache\\\\ src\\\\autonomous_trading_platform\\\\research\\\\simulation\\\\services\\\\simulation_cost_model_service.py src\\\\autonomous_trading_platform\\\\research\\\\simulation\\\\services\\\\simulated_execution_service.py src\\\\autonomous_trading_platform\\\\research\\\\simulation\\\\contexts\\\\build_simulation_context.py 2>&1 | Select-Object -First 30)",
+      "Bash(/c/Users/Tristan/.cache/pre-commit/repopss762x1/py_env-python3/Scripts/ruff.exe check *)"
     ]
   }
 }
