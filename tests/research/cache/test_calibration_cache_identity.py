@@ -79,6 +79,7 @@ class TestCalibrationSnapshotIdInCacheKey:
             "commission_per_share",
             "regime_dataset_version",
             "feature_versions_hash",
+            "settlement_days",
         }
         assert set(d.keys()) == expected
 
@@ -130,6 +131,7 @@ class TestCacheKeyBuilderCalibration:
         mock_run_config.random_seed = 42
         mock_run_config.stage_name = "train"
         mock_run_config.window_role = "default"
+        mock_run_config.settlement_days = 0
 
         key_no_cal = build_simulation_cache_key(
             strategy_config=mock_config,

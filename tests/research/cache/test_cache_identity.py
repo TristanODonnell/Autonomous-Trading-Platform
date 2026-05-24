@@ -183,6 +183,7 @@ class TestSimulationCacheKey:
             "commission_per_share",
             "regime_dataset_version",
             "feature_versions_hash",
+            "settlement_days",
         }
         assert set(d.keys()) == expected_fields
 

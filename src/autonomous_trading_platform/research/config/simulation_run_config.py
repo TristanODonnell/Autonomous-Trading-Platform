@@ -38,6 +38,9 @@ class SimulationRunConfig(BaseModel):
     shuffle_timestamp: bool = False
     window_role: str | None = None
     stage_name: str | None = None
+    # Settlement delay in simulation trading bars.  0 = immediate (legacy);
+    # 1 = T+1 (modern US equities); 2 = T+2 (legacy US equities).
+    settlement_days: int = 0
 
     @field_validator("strategy_id")
     @classmethod
@@ -85,6 +88,13 @@ class SimulationRunConfig(BaseModel):
     def _cash_positive(cls, v: float) -> float:
         if v <= 0:
             raise ValueError("initial_cash must be > 0")
+        return v
+
+    @field_validator("settlement_days")
+    @classmethod
+    def _settlement_days_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("settlement_days must be >= 0")
         return v
 
     @model_validator(mode="after")

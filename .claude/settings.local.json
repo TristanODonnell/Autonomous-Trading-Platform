@@ -126,7 +126,9 @@
       "PowerShell(python -m pytest tests/execution/ tests/research/cache/ tests/contracts/ -q 2>&1 | Select-Object -Last 1)",
       "PowerShell(python -m pytest tests/execution/ tests/research/cache/ tests/contracts/ 2>&1 | Select-Object -Last 1)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\execution\" -Recurse -File)",
-      "Bash(mypy *)"
+      "Bash(mypy *)",
+      "Bash(/c/Users/Tristan/AppData/Local/Programs/Python/Python311/Scripts/ruff check *)",
+      "Bash(pip show *)"
     ]
   }
 }

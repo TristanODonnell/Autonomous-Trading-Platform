@@ -52,6 +52,7 @@ def build_simulation_cache_key(
     feature_versions: dict[str, str] | None = None,
     calibration_snapshot_id: str = "",
     adverse_threshold_bps: str = "10",
+    settlement_days: int | None = None,
 ) -> SimulationCacheKey:
     """Build a fully-specified simulation cache key.
 
@@ -84,10 +85,17 @@ def build_simulation_cache_key(
         Adverse fill threshold (in bps, as string) that governs fill quality
         annotations for this simulation run.  Simulations with different thresholds
         produce distinct cache entries.  Defaults to ``"10"`` (platform default).
+    settlement_days:
+        Settlement delay in simulation trading bars.  When ``None``, the value is
+        read from ``run_config.settlement_days`` (recommended).  Pass explicitly to
+        override the run config value.
     """
     fill = fill_model if fill_model is not None else _DEFAULT_FILL
     slippage = slippage_model if slippage_model is not None else _DEFAULT_SLIPPAGE_MODEL
     cost = cost_model if cost_model is not None else _DEFAULT_COST
+    effective_settlement_days = (
+        settlement_days if settlement_days is not None else run_config.settlement_days
+    )
 
     return SimulationCacheKey(
         config_hash=strategy_config.config_hash(),
@@ -109,6 +117,7 @@ def build_simulation_cache_key(
         feature_versions_hash=_hash_feature_versions(feature_versions),
         calibration_snapshot_id=calibration_snapshot_id,
         adverse_threshold_bps=adverse_threshold_bps,
+        settlement_days=effective_settlement_days,
     )
 
 

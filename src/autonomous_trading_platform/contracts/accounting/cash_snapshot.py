@@ -21,3 +21,6 @@ class CashSnapshot(BaseModel):
     equity: Money | None = None
     source: OrderSource
     capital_bucket: Money | None = None
+    # Settlement-aware fields (F-06). None → legacy: treat all cash as settled.
+    settled_cash: Money | None = None
+    unsettled_cash: Money | None = None

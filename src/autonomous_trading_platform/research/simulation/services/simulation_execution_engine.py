@@ -44,6 +44,25 @@ logger = get_logger(__name__)
 # Stable namespace for deterministic intent IDs (P-01).
 _INTENT_NS = uuid5(NAMESPACE_URL, "autonomous-trading-platform:intent")
 
+ZERO = Decimal("0")
+
+
+@dataclass(frozen=True, slots=True)
+class PendingSettlement:
+    """A sell-fill's net proceeds awaiting settlement maturation.
+
+    settlement_bar_index is the bar at which the proceeds become settled cash
+    (trade_bar_index + settlement_days).  All arithmetic uses bar indices so
+    settlement is deterministic and independent of wall-clock time.
+    """
+
+    fill_id: str
+    symbol: str
+    amount: Decimal
+    trade_bar_index: int
+    settlement_bar_index: int
+    order_id: str = ""
+
 
 @dataclass(slots=True)
 class SimulationExecutionResult:
@@ -80,11 +99,13 @@ class SimulationExecutionEngine:
         simulated_execution_service: Any,
         initial_cash: float,
         execution_policy_config: ExecutionPolicyConfig | None = None,
+        settlement_days: int = 0,
     ) -> SimulationExecutionResult:
-        cash = Decimal(str(initial_cash))
-        # Aggregate cash reserved for all pending buy orders. Reduces buying power
-        # immediately so the same cash cannot be committed to multiple orders.
-        reserved_cash: Decimal = Decimal("0")
+        settled_cash = Decimal(str(initial_cash))
+        unsettled_cash = ZERO
+        # Aggregate cash reserved for all pending buy orders.
+        reserved_cash: Decimal = ZERO
+        pending_settlements: list[PendingSettlement] = []
         positions: dict[str, Position] = {}
         realized_pnl_by_symbol: dict[str, Decimal] = {}
 
@@ -101,16 +122,24 @@ class SimulationExecutionEngine:
 
         latency_bars = simulated_execution_service.fill_model_config.latency_bars
         # Execution scheduler: maps target_bar_index → orders to execute on that bar.
-        # latency_bars=0 → orders execute immediately (same bar, at close).
-        # latency_bars=N → orders execute N bars later (at that bar's open).
         scheduled: dict[int, list[OrderIntent]] = {}
 
         for bar_index, timestamp in enumerate(timeline):
             bars_at_timestamp = window.bars_by_timestamp[timestamp]
             is_warmup = window.is_warmup(timestamp)
 
+            # Mature pending settlements before processing this bar's fills.
+            # Settlement matures when bar_index >= settlement_bar_index so proceeds
+            # become available at the open of the settlement bar.
+            if pending_settlements and not is_warmup:
+                settled_cash, unsettled_cash, pending_settlements = self._mature_settlements(
+                    bar_index=bar_index,
+                    settled_cash=settled_cash,
+                    unsettled_cash=unsettled_cash,
+                    pending_settlements=pending_settlements,
+                )
+
             # Phase 1: Execute any orders scheduled for this bar index (latency>=1 only).
-            # These were generated N bars ago and execute at this bar's open price.
             deferred_fills: list[Any] = []
             if not is_warmup and bar_index in scheduled:
                 deferred_intents = scheduled.pop(bar_index)
@@ -119,14 +148,9 @@ class SimulationExecutionEngine:
                     bars_at_timestamp=bars_at_timestamp,
                     simulated_execution_service=simulated_execution_service,
                 )
-                # Release reservation for intents that were neither filled nor carried
-                # forward (stochastic rejection or missing bar data).
                 reserved_cash = self._release_lost_intents(
                     deferred_intents, deferred_fills, deferred_carry_forward, reserved_cash
                 )
-                # Partially filled orders carry their remaining quantity to the next bar.
-                # Carry-forward intents keep their existing reservation in the pool —
-                # they must NOT be re-reserved when added back to the schedule.
                 if deferred_carry_forward:
                     scheduled.setdefault(bar_index + 1, []).extend(deferred_carry_forward)
 
@@ -148,8 +172,6 @@ class SimulationExecutionEngine:
                 )
             )
 
-            # During warmup we only evaluate signals so indicators accumulate
-            # state. No orders, fills, trades or equity rows are recorded.
             if is_warmup:
                 continue
 
@@ -157,15 +179,19 @@ class SimulationExecutionEngine:
 
             # Apply deferred fills so positions are current before mark-to-market.
             if deferred_fills:
-                cash, reserved_cash = self._apply_fills(
+                settled_cash, unsettled_cash, reserved_cash = self._apply_fills(
                     run_id=run_id,
                     timestamp=timestamp,
                     fills=deferred_fills,
                     positions=positions,
-                    cash=cash,
+                    settled_cash=settled_cash,
+                    unsettled_cash=unsettled_cash,
                     reserved_cash=reserved_cash,
                     prices=prices,
                     realized_pnl_by_symbol=realized_pnl_by_symbol,
+                    settlement_days=settlement_days,
+                    bar_index=bar_index,
+                    pending_settlements=pending_settlements,
                 )
 
             order_intents = self._construct_orders(
@@ -177,27 +203,18 @@ class SimulationExecutionEngine:
                 timestamp=timestamp,
             )
 
-            # Apply execution policy: convert parent intents to (bar_offset, child_intent)
-            # pairs.  PASSTHROUGH returns [(0, intent)] per order — identical to the pre-policy
-            # path.  TWAP/VWAP-lite spread slices over consecutive bars; LIMIT computes a
-            # limit price from the current bar close.
             child_pairs = self._plan_child_orders(
                 order_intents=order_intents,
                 execution_policy_config=execution_policy_config,
                 prices=prices,
             )
 
-            # Phase 2: schedule child orders for execution.
-            # latency_bars=0 → bar_offset=0 children execute immediately this bar (close price);
-            #                   bar_offset>0 children schedule at bar_index+bar_offset.
-            # latency_bars>=1 → all children defer to bar_index+latency_bars+bar_offset (open price).
             immediate_fills: list[Any] = []
             if latency_bars == 0:
-                # Reserve and filter immediate child intents before attempting fills.
                 immediate_intents: list[Any] = []
                 for off, ci in child_pairs:
                     if off == 0:
-                        cash, reserved_cash, accepted = self._try_reserve(ci, cash, reserved_cash)
+                        reserved_cash, accepted = self._try_reserve(ci, settled_cash, reserved_cash)
                         if accepted:
                             immediate_intents.append(ci)
 
@@ -207,35 +224,35 @@ class SimulationExecutionEngine:
                         bars_at_timestamp=bars_at_timestamp,
                         simulated_execution_service=simulated_execution_service,
                     )
-                    # Release reservation for rejected/no-bar intents.
                     reserved_cash = self._release_lost_intents(
                         immediate_intents, immediate_fills, immediate_carry_forward, reserved_cash
                     )
-                    cash, reserved_cash = self._apply_fills(
+                    settled_cash, unsettled_cash, reserved_cash = self._apply_fills(
                         run_id=run_id,
                         timestamp=timestamp,
                         fills=immediate_fills,
                         positions=positions,
-                        cash=cash,
+                        settled_cash=settled_cash,
+                        unsettled_cash=unsettled_cash,
                         reserved_cash=reserved_cash,
                         prices=prices,
                         realized_pnl_by_symbol=realized_pnl_by_symbol,
+                        settlement_days=settlement_days,
+                        bar_index=bar_index,
+                        pending_settlements=pending_settlements,
                     )
-                    # Carry-forward intents retain their reservation — no re-reserve.
                     if immediate_carry_forward:
                         scheduled.setdefault(bar_index + 1, []).extend(immediate_carry_forward)
 
-                # Reserve and schedule future child slices (offset > 0).
                 for off, ci in child_pairs:
                     if off > 0:
-                        cash, reserved_cash, accepted = self._try_reserve(ci, cash, reserved_cash)
+                        reserved_cash, accepted = self._try_reserve(ci, settled_cash, reserved_cash)
                         if accepted:
                             scheduled.setdefault(bar_index + off, []).append(ci)
             else:
-                # All children deferred: reserve when scheduling.
                 for off, ci in child_pairs:
                     target = bar_index + latency_bars + off
-                    cash, reserved_cash, accepted = self._try_reserve(ci, cash, reserved_cash)
+                    reserved_cash, accepted = self._try_reserve(ci, settled_cash, reserved_cash)
                     if accepted:
                         scheduled.setdefault(target, []).append(ci)
 
@@ -264,10 +281,12 @@ class SimulationExecutionEngine:
                     run_id=run_id,
                     strategy_id=strategy.strategy_id,
                     timestamp=timestamp,
-                    cash=cash,
+                    settled_cash=settled_cash,
+                    unsettled_cash=unsettled_cash,
                     reserved_cash=reserved_cash,
                     positions=positions,
                     prices=prices,
+                    pending_settlement_count=len(pending_settlements),
                 )
             )
 
@@ -276,7 +295,7 @@ class SimulationExecutionEngine:
                     run_id=run_id,
                     strategy_id=strategy.strategy_id,
                     timestamp=timestamp,
-                    cash=cash,
+                    cash=settled_cash + unsettled_cash,
                     positions=positions,
                     prices=prices,
                     bars_at_timestamp=bars_at_timestamp,
@@ -287,12 +306,11 @@ class SimulationExecutionEngine:
             )
 
         # Release reservations for all orders that remained pending at simulation end.
-        # These would never fill (no more bars), so their reserved cash must be freed.
         for pending_intents in scheduled.values():
             for intent in pending_intents:
                 released = self._estimate_reservation(intent)
-                if released > Decimal("0"):
-                    reserved_cash = max(Decimal("0"), reserved_cash - released)
+                if released > ZERO:
+                    reserved_cash = max(ZERO, reserved_cash - released)
                     logger.debug(
                         "reserved_cash.released_on_simulation_end",
                         extra={
@@ -301,6 +319,15 @@ class SimulationExecutionEngine:
                             "released": str(released),
                         },
                     )
+
+        if pending_settlements:
+            logger.debug(
+                "settlement.pending_at_simulation_end",
+                extra={
+                    "count": len(pending_settlements),
+                    "total_unsettled": str(unsettled_cash),
+                },
+            )
 
         return SimulationExecutionResult(
             trade_logs=pd.DataFrame(trade_rows)
@@ -352,6 +379,58 @@ class SimulationExecutionEngine:
             ),
         )
 
+    # ------------------------------------------------------------------
+    # Settlement
+    # ------------------------------------------------------------------
+
+    def _mature_settlements(
+        self,
+        *,
+        bar_index: int,
+        settled_cash: Decimal,
+        unsettled_cash: Decimal,
+        pending_settlements: list[PendingSettlement],
+    ) -> tuple[Decimal, Decimal, list[PendingSettlement]]:
+        """Move pending settlements whose settlement_bar_index has arrived into settled cash."""
+        matured = ZERO
+        remaining: list[PendingSettlement] = []
+        for ps in pending_settlements:
+            if bar_index >= ps.settlement_bar_index:
+                matured += ps.amount
+                logger.debug(
+                    "settlement.matured",
+                    extra={
+                        "fill_id": ps.fill_id,
+                        "symbol": ps.symbol,
+                        "amount": str(ps.amount),
+                        "trade_bar_index": ps.trade_bar_index,
+                        "settlement_bar_index": ps.settlement_bar_index,
+                        "bar_index": bar_index,
+                    },
+                )
+            else:
+                remaining.append(ps)
+
+        if matured > ZERO:
+            new_settled = settled_cash + matured
+            new_unsettled = unsettled_cash - matured
+            logger.debug(
+                "settlement.maturation_batch",
+                extra={
+                    "matured_total": str(matured),
+                    "settled_cash_after": str(new_settled),
+                    "unsettled_cash_after": str(new_unsettled),
+                    "remaining_pending": len(remaining),
+                },
+            )
+            return new_settled, new_unsettled, remaining
+
+        return settled_cash, unsettled_cash, remaining
+
+    # ------------------------------------------------------------------
+    # Order planning and filling
+    # ------------------------------------------------------------------
+
     def _plan_child_orders(
         self,
         *,
@@ -359,11 +438,6 @@ class SimulationExecutionEngine:
         execution_policy_config: ExecutionPolicyConfig | None,
         prices: dict[str, float],
     ) -> list[tuple[int, OrderIntent]]:
-        """Apply execution policy to convert parent intents to (bar_offset, child_intent) pairs.
-
-        When execution_policy_config is None the method returns [(0, intent)] per parent,
-        preserving identical behaviour to the pre-policy simulation path.
-        """
         pairs: list[tuple[int, OrderIntent]] = []
         for intent in order_intents:
             if execution_policy_config is None:
@@ -452,9 +526,6 @@ class SimulationExecutionEngine:
             if price is None:
                 continue
 
-            # Deterministic intent_id (P-01): stable given identical run_id, symbol,
-            # timestamp, side, and delta. Carry-forward copies keep this intent_id so
-            # fill lineage is traceable across bars.
             _intent_key = (
                 f"{run_id}:{strategy_id}:{symbol}:{timestamp.isoformat()}:{side.value}:{delta}"
             )
@@ -499,37 +570,34 @@ class SimulationExecutionEngine:
     def _estimate_reservation(intent: Any) -> Decimal:
         """Estimate the cash notional to reserve for a pending buy order.
 
-        Uses intent.limit_price as the reference price (market orders set limit_price
-        to the current bar close when constructed; child intents inherit or override it).
-        Sell orders return zero — no reservation is needed for the sell side.
+        Uses intent.limit_price as the reference price.  Sell orders return zero.
         """
         side = getattr(intent, "side", None)
         side_val = getattr(side, "value", str(side)).lower() if side is not None else ""
         if side_val != "buy":
-            return Decimal("0")
-        qty = intent.qty if intent.qty is not None else Decimal("0")
+            return ZERO
+        qty = intent.qty if intent.qty is not None else ZERO
         limit_price = getattr(intent, "limit_price", None)
-        price = limit_price if limit_price is not None else Decimal("0")
+        price = limit_price if limit_price is not None else ZERO
         return Decimal(str(qty)) * Decimal(str(price))
 
     def _try_reserve(
         self,
         intent: Any,
-        cash: Decimal,
+        settled_cash: Decimal,
         reserved_cash: Decimal,
-    ) -> tuple[Decimal, Decimal, bool]:
+    ) -> tuple[Decimal, bool]:
         """Attempt to reserve cash for a buy order.
 
-        Returns (cash, reserved_cash, accepted).  cash is unchanged; reserved_cash
-        increases by the estimated notional on success.  On insufficient buying power
-        the intent is rejected (accepted=False) and reserved_cash is unchanged.
-        Sell orders are always accepted with no reservation.
+        Returns (reserved_cash, accepted).  reserved_cash increases by the estimated
+        notional on success.  Buying power is settled_cash - reserved_cash; unsettled
+        proceeds cannot be reserved.  Sell orders are always accepted with no reservation.
         """
         estimated = self._estimate_reservation(intent)
-        if estimated == Decimal("0"):
-            return cash, reserved_cash, True
+        if estimated == ZERO:
+            return reserved_cash, True
 
-        buying_power = cash - reserved_cash
+        buying_power = settled_cash - reserved_cash
         if estimated > buying_power:
             logger.warning(
                 "reserved_cash.insufficient_buying_power",
@@ -538,10 +606,11 @@ class SimulationExecutionEngine:
                     "symbol": str(getattr(intent, "symbol", "?")),
                     "estimated_notional": str(estimated),
                     "available_buying_power": str(buying_power),
+                    "settled_cash": str(settled_cash),
                     "reserved_cash": str(reserved_cash),
                 },
             )
-            return cash, reserved_cash, False
+            return reserved_cash, False
 
         new_reserved = reserved_cash + estimated
         logger.debug(
@@ -551,10 +620,10 @@ class SimulationExecutionEngine:
                 "symbol": str(getattr(intent, "symbol", "?")),
                 "reserved_amount": str(estimated),
                 "total_reserved_cash": str(new_reserved),
-                "buying_power_after": str(cash - new_reserved),
+                "buying_power_after": str(settled_cash - new_reserved),
             },
         )
-        return cash, new_reserved, True
+        return new_reserved, True
 
     def _release_lost_intents(
         self,
@@ -563,11 +632,7 @@ class SimulationExecutionEngine:
         carry_forward: list[Any],
         reserved_cash: Decimal,
     ) -> Decimal:
-        """Release reservation for intents that produced neither a fill nor a carry-forward.
-
-        These are orders that were stochastically rejected or had no bar data.
-        Their upfront reservation must be freed so buying power is restored.
-        """
+        """Release reservation for intents that produced neither a fill nor a carry-forward."""
         covered = {getattr(f, "intent_id", None) for f in fills} | {
             getattr(cf, "intent_id", None) for cf in carry_forward
         }
@@ -575,8 +640,8 @@ class SimulationExecutionEngine:
         for intent in intents:
             if getattr(intent, "intent_id", None) not in covered:
                 released = self._estimate_reservation(intent)
-                if released > Decimal("0"):
-                    updated = max(Decimal("0"), updated - released)
+                if released > ZERO:
+                    updated = max(ZERO, updated - released)
                     logger.debug(
                         "reserved_cash.released_on_lost_intent",
                         extra={
@@ -595,12 +660,23 @@ class SimulationExecutionEngine:
         timestamp: datetime,
         fills: list[Any],
         positions: dict[str, Position],
-        cash: Decimal,
+        settled_cash: Decimal,
+        unsettled_cash: Decimal,
         reserved_cash: Decimal,
         prices: dict[str, float],
         realized_pnl_by_symbol: dict[str, Decimal],
-    ) -> tuple[Decimal, Decimal]:
-        updated_cash = cash
+        settlement_days: int = 0,
+        bar_index: int = 0,
+        pending_settlements: list[PendingSettlement],
+    ) -> tuple[Decimal, Decimal, Decimal]:
+        """Apply fills to cash and position ledgers.
+
+        Returns (settled_cash, unsettled_cash, reserved_cash) after all fills.
+        For SELL fills with settlement_days > 0, proceeds are added to unsettled_cash
+        and a PendingSettlement record is appended to pending_settlements.
+        """
+        updated_settled = settled_cash
+        updated_unsettled = unsettled_cash
         updated_reserved = reserved_cash
 
         for fill in fills:
@@ -609,11 +685,14 @@ class SimulationExecutionEngine:
                 run_id=run_id,
                 timestamp=timestamp,
                 currency="USD",
-                cash=updated_cash,
-                buying_power=updated_cash - updated_reserved,
+                cash=updated_settled + updated_unsettled,
+                buying_power=updated_settled - updated_reserved,
                 reserved_cash=updated_reserved,
+                settled_cash=updated_settled,
+                unsettled_cash=updated_unsettled,
                 equity=self._calculate_equity(
-                    cash=updated_cash,
+                    settled_cash=updated_settled,
+                    unsettled_cash=updated_unsettled,
                     positions=positions,
                     prices=prices,
                 ),
@@ -624,9 +703,40 @@ class SimulationExecutionEngine:
             cash_result = self.cash_ledger_service.apply_fill(
                 existing_snapshot=cash_snapshot,
                 fill=fill,
+                settlement_days=settlement_days,
             )
-            updated_cash = cash_result.cash
+
+            prev_unsettled = updated_unsettled
+            updated_settled = cash_result.settled_cash
+            updated_unsettled = cash_result.unsettled_cash
             updated_reserved = cash_result.reserved_cash
+
+            # For SELL fills with settlement_days > 0, record a pending settlement.
+            if fill.side == Side.SELL and settlement_days > 0:
+                new_pending_amount = updated_unsettled - prev_unsettled
+                if new_pending_amount > ZERO:
+                    ps = PendingSettlement(
+                        fill_id=str(getattr(fill, "fill_id", uuid4())),
+                        symbol=fill.symbol,
+                        amount=new_pending_amount,
+                        trade_bar_index=bar_index,
+                        settlement_bar_index=bar_index + settlement_days,
+                        order_id=str(getattr(fill, "intent_id", "")),
+                    )
+                    pending_settlements.append(ps)
+                    logger.debug(
+                        "settlement.pending_created",
+                        extra={
+                            "fill_id": ps.fill_id,
+                            "symbol": ps.symbol,
+                            "amount": str(ps.amount),
+                            "settlement_bar_index": ps.settlement_bar_index,
+                            "settled_cash": str(updated_settled),
+                            "unsettled_cash": str(updated_unsettled),
+                            "reserved_cash": str(updated_reserved),
+                            "buying_power": str(updated_settled - updated_reserved),
+                        },
+                    )
 
             market_price = Decimal(str(prices.get(fill.symbol, fill.price)))
             position_result = self.position_ledger_service.apply_fill(
@@ -641,10 +751,14 @@ class SimulationExecutionEngine:
                 positions[fill.symbol] = position_result.updated_position
 
             realized_pnl_by_symbol[fill.symbol] = (
-                realized_pnl_by_symbol.get(fill.symbol, Decimal("0")) + position_result.realized_pnl
+                realized_pnl_by_symbol.get(fill.symbol, ZERO) + position_result.realized_pnl
             )
 
-        return updated_cash, updated_reserved
+        return updated_settled, updated_unsettled, updated_reserved
+
+    # ------------------------------------------------------------------
+    # Row builders and helpers
+    # ------------------------------------------------------------------
 
     def _record_metrics(
         self,
@@ -663,13 +777,13 @@ class SimulationExecutionEngine:
         rows: list[dict[str, Any]] = []
         for symbol in bars_at_timestamp:
             position = positions.get(symbol)
-            position_qty = Decimal(position.quantity) if position else Decimal("0")
+            position_qty = Decimal(position.quantity) if position else ZERO
             unrealized_pnl = (
                 Decimal(position.unrealized_pnl)
                 if position is not None and position.unrealized_pnl is not None
-                else Decimal("0")
+                else ZERO
             )
-            realized_pnl = realized_pnl_by_symbol.get(symbol, Decimal("0"))
+            realized_pnl = realized_pnl_by_symbol.get(symbol, ZERO)
 
             rows.append(
                 {
@@ -691,11 +805,17 @@ class SimulationExecutionEngine:
     def _calculate_equity(
         self,
         *,
-        cash: Decimal,
+        settled_cash: Decimal,
+        unsettled_cash: Decimal,
         positions: dict[str, Position],
         prices: dict[str, float],
     ) -> Decimal:
-        return cash + self._calculate_positions_value(positions=positions, prices=prices)
+        # Total economic value includes both settled and unsettled cash.
+        return (
+            settled_cash
+            + unsettled_cash
+            + self._calculate_positions_value(positions=positions, prices=prices)
+        )
 
     def _build_equity_row(
         self,
@@ -703,14 +823,17 @@ class SimulationExecutionEngine:
         run_id: UUID,
         strategy_id: str,
         timestamp: datetime,
-        cash: Decimal,
+        settled_cash: Decimal,
+        unsettled_cash: Decimal,
         reserved_cash: Decimal,
         positions: dict[str, Position],
         prices: dict[str, float],
+        pending_settlement_count: int = 0,
     ) -> dict[str, Any]:
         positions_value = self._calculate_positions_value(positions=positions, prices=prices)
+        cash = settled_cash + unsettled_cash
         equity = cash + positions_value
-        buying_power = cash - reserved_cash
+        buying_power = settled_cash - reserved_cash
 
         return {
             "run_id": str(run_id),
@@ -718,9 +841,12 @@ class SimulationExecutionEngine:
             "timestamp": timestamp,
             "equity": float(equity),
             "cash": float(cash),
+            "settled_cash": float(settled_cash),
+            "unsettled_cash": float(unsettled_cash),
             "reserved_cash": float(reserved_cash),
             "buying_power": float(buying_power),
             "positions_value": float(positions_value),
+            "pending_settlement_count": pending_settlement_count,
             "drawdown": 0.0,
         }
 
@@ -730,7 +856,7 @@ class SimulationExecutionEngine:
         positions: dict[str, Position],
         prices: dict[str, float],
     ) -> Decimal:
-        positions_value = Decimal("0")
+        positions_value = ZERO
         for position in positions.values():
             price = Decimal(str(prices.get(position.symbol, position.market_price)))
             positions_value += Decimal(position.quantity) * price
@@ -787,7 +913,7 @@ class SimulationExecutionEngine:
                     "market_price": float(market_price),
                     "market_value": float(market_value),
                     "unrealized_pnl": float(position.unrealized_pnl or 0),
-                    "realized_pnl": float(realized_pnl_by_symbol.get(symbol, Decimal("0"))),
+                    "realized_pnl": float(realized_pnl_by_symbol.get(symbol, ZERO)),
                 }
             )
         return rows

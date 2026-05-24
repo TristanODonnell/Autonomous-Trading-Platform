@@ -29,3 +29,6 @@ class CashSnapshot(Base):
         SAEnum(OrderSource, name="order_source_enum"), nullable=False
     )
     capital_bucket: Mapped[Money | None] = mapped_column(MoneyType(), nullable=True)
+    # Settlement-aware fields (F-06). Null → legacy: all cash is settled.
+    settled_cash: Mapped[Money | None] = mapped_column(MoneyType(), nullable=True)
+    unsettled_cash: Mapped[Money | None] = mapped_column(MoneyType(), nullable=True)

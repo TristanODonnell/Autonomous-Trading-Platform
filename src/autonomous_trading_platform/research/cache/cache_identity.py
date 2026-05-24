@@ -94,6 +94,8 @@ class SimulationCacheKey:
     # Adverse fill threshold used for fill quality annotations in this simulation.
     # Stored for lineage reproducibility; changing this produces a distinct cache entry.
     adverse_threshold_bps: str = "10"
+    # Settlement delay in simulation trading bars (F-06).  0 = immediate (legacy).
+    settlement_days: int = 0
 
     def __post_init__(self) -> None:
         if not self.config_hash:
@@ -121,6 +123,7 @@ class SimulationCacheKey:
             "price_basis": self.price_basis,
             "random_seed": self.random_seed,
             "regime_dataset_version": self.regime_dataset_version,
+            "settlement_days": self.settlement_days,
             "slippage_config_hash": self.slippage_config_hash,
             "stage_name": self.stage_name,
             "start_date": self.start_date,
