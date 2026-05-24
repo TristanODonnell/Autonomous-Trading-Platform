@@ -2,10 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from autonomous_trading_platform.contracts.common.enums import Side
 from autonomous_trading_platform.research.simulation.models.cost_model_type import CostModelType
 from autonomous_trading_platform.research.simulation.models.slippage_context import SlippageContext
+
+if TYPE_CHECKING:
+    from autonomous_trading_platform.research.calibration.models.calibration_snapshot import (
+        SlippageCalibrationSnapshot,
+    )
 
 _BPS = Decimal("10000")
 _HALF = Decimal("2")
@@ -77,3 +83,21 @@ class VolumeShareSlippageModel:
             "max_volume_share": str(self.config.max_volume_share),
             "fallback_min_bps": str(self.config.fallback_min_bps),
         }
+
+    @classmethod
+    def from_calibration_snapshot(
+        cls, snapshot: SlippageCalibrationSnapshot
+    ) -> VolumeShareSlippageModel:
+        """Construct a model with parameters derived from a calibration snapshot.
+
+        Uses calibrated_impact_coefficient_bps and calibrated_fallback_min_bps from
+        the snapshot.  Falls back gracefully if the snapshot is not globally calibrated
+        (is_globally_calibrated=False) — in that case the snapshot already contains safe
+        default values.
+        """
+        config = VolumeShareSlippageConfig(
+            impact_coefficient_bps=snapshot.calibrated_impact_coefficient_bps,
+            fallback_min_bps=snapshot.calibrated_fallback_min_bps,
+            max_volume_share=snapshot.calibrated_max_volume_share,
+        )
+        return cls(config=config)

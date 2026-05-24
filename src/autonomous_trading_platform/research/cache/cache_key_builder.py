@@ -50,6 +50,7 @@ def build_simulation_cache_key(
     universe_version: str = "v1",
     regime_dataset_version: str | None = None,
     feature_versions: dict[str, str] | None = None,
+    calibration_snapshot_id: str = "",
 ) -> SimulationCacheKey:
     """Build a fully-specified simulation cache key.
 
@@ -74,6 +75,10 @@ def build_simulation_cache_key(
     feature_versions:
         Dict mapping feature name → dataset version for any feature datasets
         consumed by this simulation.
+    calibration_snapshot_id:
+        Calibration snapshot UUID used to derive slippage model parameters, or ``""``
+        when no calibration is applied.  Changing this value changes the cache key so
+        simulations with different calibrations never collide.
     """
     fill = fill_model if fill_model is not None else _DEFAULT_FILL
     slippage = slippage_model if slippage_model is not None else _DEFAULT_SLIPPAGE_MODEL
@@ -97,6 +102,7 @@ def build_simulation_cache_key(
         commission_per_share=str(cost.commission_per_share),
         regime_dataset_version=regime_dataset_version or "",
         feature_versions_hash=_hash_feature_versions(feature_versions),
+        calibration_snapshot_id=calibration_snapshot_id,
     )
 
 

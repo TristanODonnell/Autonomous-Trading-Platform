@@ -1,6 +1,7 @@
 # autonomous_trading_platform/storage/sor/repositories/fill_quality_metrics_repository.py
 from __future__ import annotations
 
+from datetime import datetime
 from typing import cast
 
 from sqlalchemy import select
@@ -39,3 +40,27 @@ class FillQualityMetricsRepository(BaseRepository):
         for column in FillQualityMetrics.__table__.columns:
             setattr(existing, column.name, getattr(row, column.name))
         return existing
+
+    def get_for_calibration(
+        self,
+        *,
+        window_start: datetime,
+        window_end: datetime,
+    ) -> list[FillQualityMetrics]:
+        """Return completed fills (slippage_bps NOT NULL) in the given time window.
+
+        Rows are ordered by fill_timestamp ascending for deterministic aggregation.
+        Only rows with both fill_timestamp and slippage_bps populated are returned —
+        partial or pending fills are excluded.
+        """
+        stmt = (
+            select(FillQualityMetrics)
+            .where(
+                FillQualityMetrics.fill_timestamp.is_not(None),
+                FillQualityMetrics.fill_timestamp >= window_start,
+                FillQualityMetrics.fill_timestamp <= window_end,
+                FillQualityMetrics.slippage_bps.is_not(None),
+            )
+            .order_by(FillQualityMetrics.fill_timestamp)
+        )
+        return list(self.session.scalars(stmt).all())

@@ -31,6 +31,7 @@ class CacheInvalidationReason(StrEnum):
     DATE_RANGE_CHANGED = "date_range_changed"
     PRICE_BASIS_CHANGED = "price_basis_changed"
     WINDOW_SEMANTICS_CHANGED = "window_semantics_changed"
+    CALIBRATION_CHANGED = "calibration_changed"
 
 
 @dataclass(frozen=True)
@@ -88,6 +89,7 @@ class SimulationCacheKey:
     commission_per_share: str
     regime_dataset_version: str
     feature_versions_hash: str
+    calibration_snapshot_id: str = ""  # empty string = no calibration applied
 
     def __post_init__(self) -> None:
         if not self.config_hash:
@@ -102,6 +104,7 @@ class SimulationCacheKey:
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "calibration_snapshot_id": self.calibration_snapshot_id,
             "commission_per_share": self.commission_per_share,
             "config_hash": self.config_hash,
             "cost_model_type": self.cost_model_type,
