@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from time import perf_counter
 from typing import Any, cast
@@ -17,6 +18,8 @@ from autonomous_trading_platform.observability.metrics import ratp_broker_api_re
 from autonomous_trading_platform.observability.tracing import start_span
 
 COMPONENT = "execution.order_execution"
+
+logger = logging.getLogger(__name__)
 
 
 class OrderExecutionService:
@@ -74,7 +77,39 @@ class OrderExecutionService:
                     if attempt >= self.max_attempts:
                         span.set_attribute("ratp.retry_exhausted", True)
                         span.set_attribute("ratp.broker.status", "error")
+                        logger.warning(
+                            "order_submission_retry_exhausted",
+                            extra={
+                                "client_order_id": intent.client_order_id,
+                                "symbol": intent.symbol,
+                                "side": intent.side.value,
+                                "attempt": attempt,
+                                "broker": "alpaca",
+                                "exception_type": type(exc).__name__,
+                            },
+                        )
                         raise
+
+                    # Ambiguous failures (transport errors) may have reached the broker.
+                    # Check whether the broker already accepted the order before retrying
+                    # to prevent duplicate submission.
+                    if isinstance(exc, httpx.TransportError):
+                        logger.warning(
+                            "ambiguous_submit_failure",
+                            extra={
+                                "client_order_id": intent.client_order_id,
+                                "symbol": intent.symbol,
+                                "side": intent.side.value,
+                                "attempt": attempt,
+                                "broker": "alpaca",
+                                "exception_type": type(exc).__name__,
+                            },
+                        )
+                        span.set_attribute("ratp.submit_ambiguous_failure", True)
+                        existing = self._lookup_existing_broker_order(intent, attempt, span)
+                        if existing is not None:
+                            return existing
+
                     ratp_broker_api_retries_total.add(
                         1,
                         broker_labels(
@@ -89,6 +124,81 @@ class OrderExecutionService:
                     span.set_attribute("ratp.retry_backoff_seconds", backoff)
                     time.sleep(backoff)
                     backoff *= 2
+
+    def _lookup_existing_broker_order(
+        self,
+        intent: OrderIntent,
+        attempt: int,
+        span: Any,
+    ) -> dict[str, Any] | None:
+        """
+        Check whether the broker already accepted this order using client_order_id.
+        Returns the existing broker order dict if found, or None to proceed with retry.
+        Raises if the lookup itself fails (cannot safely determine broker state).
+        """
+        logger.info(
+            "idempotency_lookup_started",
+            extra={
+                "client_order_id": intent.client_order_id,
+                "symbol": intent.symbol,
+                "side": intent.side.value,
+                "attempt": attempt,
+                "broker": "alpaca",
+            },
+        )
+        span.set_attribute("ratp.idempotency_lookup_started", True)
+
+        try:
+            existing = cast(
+                dict[str, Any] | None,
+                self.client.get_order_by_client_order_id(intent.client_order_id),
+            )
+        except Exception as lookup_exc:
+            span.record_exception(lookup_exc)
+            span.set_attribute("ratp.idempotency_lookup_failed", True)
+            logger.error(
+                "idempotency_lookup_failed",
+                extra={
+                    "client_order_id": intent.client_order_id,
+                    "symbol": intent.symbol,
+                    "side": intent.side.value,
+                    "attempt": attempt,
+                    "broker": "alpaca",
+                    "exception_type": type(lookup_exc).__name__,
+                },
+            )
+            raise
+
+        if existing is not None:
+            broker_order_id = existing.get("id", "unknown")
+            span.set_attribute("ratp.idempotency_order_reused", True)
+            span.set_attribute("ratp.broker.status", "submitted")
+            span.set_attribute("ratp.broker_order_id", broker_order_id)
+            logger.info(
+                "retry_skipped_existing_broker_order",
+                extra={
+                    "client_order_id": intent.client_order_id,
+                    "broker_order_id": broker_order_id,
+                    "symbol": intent.symbol,
+                    "side": intent.side.value,
+                    "attempt": attempt,
+                    "broker": "alpaca",
+                },
+            )
+            return existing
+
+        span.set_attribute("ratp.idempotency_order_not_found", True)
+        logger.info(
+            "broker_order_not_found_retrying",
+            extra={
+                "client_order_id": intent.client_order_id,
+                "symbol": intent.symbol,
+                "side": intent.side.value,
+                "attempt": attempt,
+                "broker": "alpaca",
+            },
+        )
+        return None
 
     def get_order(self, broker_order_id: str) -> dict[str, Any]:
         return cast(dict[str, Any], self.client.get_order_by_id(broker_order_id))

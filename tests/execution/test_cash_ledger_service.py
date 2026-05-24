@@ -55,13 +55,16 @@ class TestCashLedgerService:
         )
 
         assert result.cash == Decimal("9000")
-        assert result.buying_power == Decimal("9000")
+        # buying_power = cash - remaining_reserved = 9000 - 500
+        assert result.buying_power == Decimal("8500")
         assert result.reserved_cash == Decimal("500")
 
-    def test_sell_increases_cash_buying_power_and_reduces_reserved_cash(
+    def test_sell_increases_cash_but_does_not_release_reserved_cash(
         self,
         service: CashLedgerService,
     ) -> None:
+        # SELL fills do not consume reservation — reserved_cash represents pending BUY
+        # obligations and is unaffected by proceeds from selling existing positions.
         snapshot = make_snapshot(cash="5000", reserved_cash="300")
         fill = make_fill(side=Side.SELL, quantity="10", price="100")
 
@@ -71,8 +74,9 @@ class TestCashLedgerService:
         )
 
         assert result.cash == Decimal("6000")
-        assert result.buying_power == Decimal("6000")
-        assert result.reserved_cash == Decimal("0")
+        assert result.reserved_cash == Decimal("300")
+        # buying_power = cash - reserved = 6000 - 300
+        assert result.buying_power == Decimal("5700")
 
     def test_buy_fees_and_commissions_reduce_cash_appropriately(
         self,
@@ -193,7 +197,7 @@ class TestCashLedgerService:
         assert result.cash == Decimal("9500")
         assert result.reserved_cash == Decimal("500")
 
-    def test_sell_reduces_reserved_cash(
+    def test_sell_does_not_alter_reserved_cash(
         self,
         service: CashLedgerService,
     ) -> None:
@@ -206,7 +210,8 @@ class TestCashLedgerService:
         )
 
         assert result.cash == Decimal("5200")
-        assert result.reserved_cash == Decimal("200")
+        # reserved_cash is unchanged by a SELL fill
+        assert result.reserved_cash == Decimal("400")
 
     def test_reserved_cash_does_not_go_negative(
         self,

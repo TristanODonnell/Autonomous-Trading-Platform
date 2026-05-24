@@ -11,23 +11,40 @@ from ..errors import InvalidOrderTransitionError
 
 VALID_TRANSITIONS = {
     OrderStatus.NEW: {
+        OrderEvent.PENDING_SUBMIT: OrderStatus.PENDING_NEW,
         OrderEvent.SUBMIT: OrderStatus.SUBMITTED,
         OrderEvent.REJECT: OrderStatus.REJECTED,
+    },
+    OrderStatus.PENDING_NEW: {
+        OrderEvent.SUBMIT: OrderStatus.SUBMITTED,
+        OrderEvent.REJECT: OrderStatus.REJECTED,
+        OrderEvent.EXPIRE: OrderStatus.EXPIRED,
     },
     OrderStatus.SUBMITTED: {
         OrderEvent.PARTIAL_FILL: OrderStatus.PARTIALLY_FILLED,
         OrderEvent.FULL_FILL: OrderStatus.FILLED,
         OrderEvent.CANCEL: OrderStatus.CANCELED,
         OrderEvent.REJECT: OrderStatus.REJECTED,
+        OrderEvent.REQUEST_CANCEL: OrderStatus.PENDING_CANCEL,
+        OrderEvent.EXPIRE: OrderStatus.EXPIRED,
     },
     OrderStatus.PARTIALLY_FILLED: {
         OrderEvent.PARTIAL_FILL: OrderStatus.PARTIALLY_FILLED,
         OrderEvent.FULL_FILL: OrderStatus.FILLED,
         OrderEvent.CANCEL: OrderStatus.CANCELED,
+        OrderEvent.REQUEST_CANCEL: OrderStatus.PENDING_CANCEL,
+        OrderEvent.EXPIRE: OrderStatus.EXPIRED,
+    },
+    OrderStatus.PENDING_CANCEL: {
+        OrderEvent.CANCEL: OrderStatus.CANCELED,
+        OrderEvent.FULL_FILL: OrderStatus.FILLED,
+        OrderEvent.PARTIAL_FILL: OrderStatus.PARTIALLY_FILLED,
+        OrderEvent.EXPIRE: OrderStatus.EXPIRED,
     },
     OrderStatus.FILLED: {},
     OrderStatus.CANCELED: {},
     OrderStatus.REJECTED: {},
+    OrderStatus.EXPIRED: {},
 }
 
 

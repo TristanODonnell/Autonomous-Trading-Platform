@@ -94,8 +94,15 @@ class ExecutionPolicyConfig(BaseModel):
         {
             "policy_mode": "twap",
             "twap": {"window_minutes": 20, "num_slices": 4},
-            "slippage": {"fixed_slippage_rate": "0.0003"}
+            "slippage": {"fixed_slippage_rate": "0.0003"},
+            "adverse_slippage_threshold_bps": "5"
         }
+
+    Adverse fill threshold guidance by policy type:
+        PASSTHROUGH / MARKET : 10–25 bps (default 10)
+        LIMIT                : 3–8 bps
+        TWAP                 : 3–5 bps
+        VWAP_LITE            : 5–10 bps
     """
 
     policy_mode: PolicyMode = PolicyMode.PASSTHROUGH
@@ -105,6 +112,12 @@ class ExecutionPolicyConfig(BaseModel):
     twap: TWAPConfig = Field(default_factory=TWAPConfig)
     vwap_lite: VWAPLiteConfig = Field(default_factory=VWAPLiteConfig)
     slippage: SlippageConfig = Field(default_factory=SlippageConfig)
+
+    # Threshold above which a fill is classified as adverse in fill quality analytics.
+    # Set explicitly per policy to avoid one-size-fits-all misclassification.
+    # When absent from stored records, RealisedSlippageService falls back to 10 bps
+    # and logs a warning — but that fallback is not the intended operating mode.
+    adverse_slippage_threshold_bps: Decimal = Field(default=Decimal("10"), ge=Decimal("0"))
 
     # Whether to emit fill quality analytics to Postgres .
     record_fill_quality: bool = True

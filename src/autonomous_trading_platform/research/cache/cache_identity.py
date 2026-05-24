@@ -24,12 +24,16 @@ class CacheInvalidationReason(StrEnum):
     UNIVERSE_VERSION_CHANGED = "universe_version_changed"
     FILL_POLICY_CHANGED = "fill_policy_changed"
     SLIPPAGE_CHANGED = "slippage_changed"
+    COST_MODEL_TYPE_CHANGED = "cost_model_type_changed"
     COMMISSION_CHANGED = "commission_changed"
     SEED_CHANGED = "seed_changed"
     SYMBOLS_CHANGED = "symbols_changed"
     DATE_RANGE_CHANGED = "date_range_changed"
     PRICE_BASIS_CHANGED = "price_basis_changed"
     WINDOW_SEMANTICS_CHANGED = "window_semantics_changed"
+    CALIBRATION_CHANGED = "calibration_changed"
+    THRESHOLD_CHANGED = "threshold_changed"
+    DIVIDEND_EVENTS_CHANGED = "dividend_events_changed"
 
 
 @dataclass(frozen=True)
@@ -81,10 +85,21 @@ class SimulationCacheKey:
     stage_name: str
     window_role: str
     fill_policy: str
-    slippage_rate: str
+    latency_bars: int
+    cost_model_type: str  # e.g. "fixed_bps", "volume_share", "spread_aware"
+    slippage_config_hash: str  # hash of all slippage model config params
     commission_per_share: str
     regime_dataset_version: str
     feature_versions_hash: str
+    calibration_snapshot_id: str = ""  # empty string = no calibration applied
+    # Adverse fill threshold used for fill quality annotations in this simulation.
+    # Stored for lineage reproducibility; changing this produces a distinct cache entry.
+    adverse_threshold_bps: str = "10"
+    # Settlement delay in simulation trading bars (F-06).  0 = immediate (legacy).
+    settlement_days: int = 0
+    # 16-char SHA-256 of sorted dividend events (A-02).  Empty = no dividends applied.
+    # Changing dividend inputs produces a distinct cache entry.
+    dividend_events_hash: str = ""
 
     def __post_init__(self) -> None:
         if not self.config_hash:
@@ -99,16 +114,22 @@ class SimulationCacheKey:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "config_hash": self.config_hash,
+            "adverse_threshold_bps": self.adverse_threshold_bps,
+            "calibration_snapshot_id": self.calibration_snapshot_id,
             "commission_per_share": self.commission_per_share,
+            "config_hash": self.config_hash,
+            "cost_model_type": self.cost_model_type,
             "dataset_version": self.dataset_version,
+            "dividend_events_hash": self.dividend_events_hash,
             "end_date": self.end_date,
             "feature_versions_hash": self.feature_versions_hash,
             "fill_policy": self.fill_policy,
+            "latency_bars": self.latency_bars,
             "price_basis": self.price_basis,
             "random_seed": self.random_seed,
             "regime_dataset_version": self.regime_dataset_version,
-            "slippage_rate": self.slippage_rate,
+            "settlement_days": self.settlement_days,
+            "slippage_config_hash": self.slippage_config_hash,
             "stage_name": self.stage_name,
             "start_date": self.start_date,
             "symbols_hash": self.symbols_hash,

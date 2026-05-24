@@ -215,7 +215,12 @@ def _entry_to_key(key_dict: dict[str, Any]) -> SimulationCacheKey:
         stage_name=key_dict["stage_name"],
         window_role=key_dict["window_role"],
         fill_policy=key_dict["fill_policy"],
-        slippage_rate=key_dict["slippage_rate"],
+        latency_bars=int(key_dict.get("latency_bars", 0)),
+        cost_model_type=key_dict.get("cost_model_type", "fixed_bps"),
+        slippage_config_hash=key_dict.get(
+            "slippage_config_hash",
+            key_dict.get("slippage_rate", ""),
+        ),
         commission_per_share=key_dict["commission_per_share"],
         regime_dataset_version=key_dict["regime_dataset_version"],
         feature_versions_hash=key_dict["feature_versions_hash"],

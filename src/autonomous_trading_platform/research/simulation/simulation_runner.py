@@ -7,9 +7,8 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-import numpy as np
 import pandas as pd
 
 from autonomous_trading_platform.common.system_info import get_dependency_lock_hash, get_git_commit
@@ -82,6 +81,9 @@ from autonomous_trading_platform.strategy.contexts.strategy_context_builder impo
 )
 from autonomous_trading_platform.strategy.factories.strategy_factory import StrategyFactory
 from autonomous_trading_platform.strategy.registry.strategy_registry import get_registry
+
+# Stable namespace for deterministic run_id generation (P-01).
+_RUN_NS = uuid5(NAMESPACE_URL, "autonomous-trading-platform:run")
 
 
 @dataclass(slots=True)
@@ -173,10 +175,17 @@ class SimulationRunner:
         if not isinstance(request.random_seed, int):
             raise ValueError("random_seed must be an int for deterministic execution")
 
-        self._set_seed(request.random_seed)
-
-        run_id = uuid4()
+        # P-01: derive a stable run_id from the simulation inputs so that identical
+        # reruns produce the same run_id (and therefore the same fill / intent IDs).
+        run_id = self._derive_run_id(request)
         experiment_id = request.experiment_id or f"adhoc_{run_id}"
+
+        # P-02: create an isolated, seeded RNG instance rather than mutating global
+        # random / numpy state. Inject it into the execution service so all stochastic
+        # decisions within this run are reproducible and isolated from other runs.
+        py_rng = self._init_rng(request.random_seed)
+        if hasattr(self.simulated_execution_service, "reset_for_run"):
+            self.simulated_execution_service.reset_for_run(rng=py_rng)
 
         artifact_identity = SimulationArtifactIdentity(
             run_id=str(run_id),
@@ -484,8 +493,10 @@ class SimulationRunner:
                 schema_definition={
                     "determinism": {
                         "random_seed": request.random_seed,
-                        "python_random_seeded": True,
-                        "numpy_random_seeded": True,
+                        "isolated_python_rng": True,
+                        "isolated_numpy_rng": False,
+                        "deterministic_run_id": True,
+                        "deterministic_fill_ids": True,
                         "seed_scope": "simulation_run",
                     },
                     "simulation_request": {
@@ -615,6 +626,32 @@ class SimulationRunner:
             if repo is not None:
                 repo.session.commit()
 
-    def _set_seed(self, seed: int) -> None:
-        random.seed(seed)
-        np.random.seed(seed)
+    def _derive_run_id(self, request: SimulationRunRequest) -> UUID:
+        """Derive a stable UUID from the simulation inputs (P-01).
+
+        Identical inputs always produce the same run_id, making fill IDs and intent IDs
+        reproducible across reruns without relying on wall-clock time or random generation.
+        """
+        key = ":".join(
+            [
+                request.strategy_id,
+                str(request.random_seed),
+                request.dataset_version,
+                request.price_basis.value,
+                ":".join(sorted(request.symbols)),
+                str(request.start_date),
+                str(request.end_date),
+                request.experiment_id or "",
+                request.stage_name or "",
+                request.window_role or "",
+            ]
+        )
+        return uuid5(_RUN_NS, key)
+
+    def _init_rng(self, seed: int) -> random.Random:
+        """Create an isolated, seeded Python RNG instance (P-02).
+
+        Uses random.Random(seed) rather than random.seed() so the simulation's
+        randomness is isolated from global module state and from other concurrent runs.
+        """
+        return random.Random(seed)

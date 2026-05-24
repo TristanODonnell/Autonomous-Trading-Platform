@@ -20,10 +20,16 @@ from autonomous_trading_platform.research.simulation.services.simulation_cost_mo
 )
 
 
-def make_bar(*, symbol: str = "AAPL", close: Decimal = Decimal("100")):
+def make_bar(
+    *,
+    symbol: str = "AAPL",
+    open: Decimal = Decimal("100"),
+    close: Decimal = Decimal("100"),
+):
     return SimpleNamespace(
         symbol=symbol,
         timestamp=datetime(2025, 1, 1, 10, 0, tzinfo=UTC),
+        open=open,
         close=close,
     )
 
@@ -67,14 +73,14 @@ def test_fill_applies_buy_slippage_and_fees():
     intent = make_intent(side=Side.BUY)
     bar = make_bar(close=Decimal("100"))
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": bar},
     )
 
-    assert len(fills) == 1
+    assert len(batch.fills) == 1
 
-    fill = fills[0]
+    fill = batch.fills[0]
 
     assert fill.symbol == "AAPL"
     assert fill.side == Side.BUY
@@ -94,14 +100,14 @@ def test_fill_applies_sell_slippage_and_fees():
     intent = make_intent(side=Side.SELL)
     bar = make_bar(close=Decimal("100"))
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": bar},
     )
 
-    assert len(fills) == 1
+    assert len(batch.fills) == 1
 
-    fill = fills[0]
+    fill = batch.fills[0]
 
     assert fill.symbol == "AAPL"
     assert fill.side == Side.SELL
@@ -119,12 +125,12 @@ def test_fill_skips_intent_when_bar_missing():
 
     intent = make_intent(side=Side.BUY, symbol="MSFT")
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": make_bar(symbol="AAPL")},
     )
 
-    assert fills == []
+    assert batch.fills == []
 
 
 def test_fill_skips_intent_when_quantity_missing():
@@ -132,9 +138,138 @@ def test_fill_skips_intent_when_quantity_missing():
 
     intent = make_intent(side=Side.BUY, qty=None)
 
-    fills = service.fill(
+    batch = service.fill(
         order_intents=[intent],
         bars_at_timestamp={"AAPL": make_bar()},
     )
 
-    assert fills == []
+    assert batch.fills == []
+
+
+# ---------------------------------------------------------------------------
+# NEXT_OPEN fill policy
+# ---------------------------------------------------------------------------
+
+
+def make_next_open_service() -> SimulatedExecutionService:
+    cost_model = SimulationCostModelService(
+        config=SimulationCostModelConfig(
+            commission_per_share=Decimal("0"),
+            min_commission=Decimal("0"),
+        ),
+        slippage_model=SlippageModel(
+            config=SlippageModelConfig(slippage_rate=Decimal("0")),
+        ),
+    )
+    return SimulatedExecutionService(
+        simulation_cost_model_service=cost_model,
+        fill_model_config=SimulatedFillModelConfig(latency_bars=1),
+    )
+
+
+def test_next_open_fill_uses_bar_open_not_close():
+    service = make_next_open_service()
+
+    intent = make_intent(side=Side.BUY)
+    bar = make_bar(open=Decimal("88"), close=Decimal("100"))
+
+    batch = service.fill(
+        order_intents=[intent],
+        bars_at_timestamp={"AAPL": bar},
+    )
+
+    assert len(batch.fills) == 1
+    fill = batch.fills[0]
+    assert fill.price == Decimal("88"), f"NEXT_OPEN must fill at bar.open=88, got {fill.price}"
+    assert fill.price != bar.close, "fill must not use bar.close under NEXT_OPEN policy"
+
+
+def test_next_open_fill_buy_price_equals_open():
+    service = make_next_open_service()
+
+    intent = make_intent(side=Side.BUY, qty=Decimal("5"))
+    bar = make_bar(open=Decimal("50"), close=Decimal("200"))
+
+    batch = service.fill(
+        order_intents=[intent],
+        bars_at_timestamp={"AAPL": bar},
+    )
+
+    assert len(batch.fills) == 1
+    assert batch.fills[0].price == Decimal("50")
+
+
+def test_next_open_fill_sell_price_equals_open():
+    service = make_next_open_service()
+
+    intent = make_intent(side=Side.SELL, qty=Decimal("5"))
+    bar = make_bar(open=Decimal("75"), close=Decimal("50"))
+
+    batch = service.fill(
+        order_intents=[intent],
+        bars_at_timestamp={"AAPL": bar},
+    )
+
+    assert len(batch.fills) == 1
+    assert batch.fills[0].price == Decimal("75")
+
+
+def test_next_open_fill_timestamp_is_bar_timestamp():
+    service = make_next_open_service()
+
+    intent = make_intent(side=Side.BUY)
+    bar = make_bar(open=Decimal("60"), close=Decimal("100"))
+
+    batch = service.fill(
+        order_intents=[intent],
+        bars_at_timestamp={"AAPL": bar},
+    )
+
+    assert len(batch.fills) == 1
+    assert batch.fills[0].timestamp == bar.timestamp
+
+
+# ---------------------------------------------------------------------------
+# latency_bars config validation in SimulatedFillModelConfig
+# ---------------------------------------------------------------------------
+
+
+def test_negative_latency_bars_raises():
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="latency_bars must be >= 0"):
+        SimulatedFillModelConfig(latency_bars=-1)
+
+
+def test_latency_zero_uses_close():
+    service = SimulatedExecutionService(
+        simulation_cost_model_service=SimulationCostModelService(
+            config=SimulationCostModelConfig(
+                commission_per_share=Decimal("0"),
+                min_commission=Decimal("0"),
+            ),
+            slippage_model=SlippageModel(config=SlippageModelConfig(slippage_rate=Decimal("0"))),
+        ),
+        fill_model_config=SimulatedFillModelConfig(latency_bars=0),
+    )
+    bar = make_bar(open=Decimal("50"), close=Decimal("100"))
+    intent = make_intent(side=Side.BUY)
+    batch = service.fill(order_intents=[intent], bars_at_timestamp={"AAPL": bar})
+    assert batch.fills[0].price == Decimal("100")  # close, not open
+
+
+def test_latency_nonzero_uses_open():
+    service = SimulatedExecutionService(
+        simulation_cost_model_service=SimulationCostModelService(
+            config=SimulationCostModelConfig(
+                commission_per_share=Decimal("0"),
+                min_commission=Decimal("0"),
+            ),
+            slippage_model=SlippageModel(config=SlippageModelConfig(slippage_rate=Decimal("0"))),
+        ),
+        fill_model_config=SimulatedFillModelConfig(latency_bars=2),
+    )
+    bar = make_bar(open=Decimal("50"), close=Decimal("100"))
+    intent = make_intent(side=Side.BUY)
+    batch = service.fill(order_intents=[intent], bars_at_timestamp={"AAPL": bar})
+    assert batch.fills[0].price == Decimal("50")  # open, not close

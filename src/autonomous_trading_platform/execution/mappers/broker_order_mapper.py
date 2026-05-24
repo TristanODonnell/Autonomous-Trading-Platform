@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -20,6 +21,8 @@ from autonomous_trading_platform.storage.sor.models.broker_orders import (
     BrokerOrder as BrokerOrderRow,
 )
 from autonomous_trading_platform.storage.sor.models.fills import Fill as FillRow
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -127,14 +130,18 @@ class BrokerOrderMapper:
         )
 
     def to_order_event(self, broker_order: BrokerOrder) -> OrderEvent | None:
-        if broker_order.status == OrderStatus.SUBMITTED:
+        if broker_order.status in {OrderStatus.SUBMITTED, OrderStatus.PENDING_NEW}:
             return None
+        if broker_order.status == OrderStatus.PENDING_CANCEL:
+            return OrderEvent.REQUEST_CANCEL
         if broker_order.status == OrderStatus.PARTIALLY_FILLED:
             return OrderEvent.PARTIAL_FILL
         if broker_order.status == OrderStatus.FILLED:
             return OrderEvent.FULL_FILL
         if broker_order.status == OrderStatus.CANCELED:
             return OrderEvent.CANCEL
+        if broker_order.status == OrderStatus.EXPIRED:
+            return OrderEvent.EXPIRE
         if broker_order.status == OrderStatus.REJECTED:
             return OrderEvent.REJECT
         return None
@@ -145,11 +152,43 @@ class BrokerOrderMapper:
         broker_order: BrokerOrder,
         previous_filled_qty: Decimal,
         previous_avg_fill_price: Decimal | None,
+        received_at: datetime | None = None,
     ) -> FillExtractionResult:
         current_filled_qty = Decimal(str(broker_order.filled_qty))
         delta_qty = current_filled_qty - previous_filled_qty
 
-        if delta_qty <= 0:
+        if delta_qty < Decimal("0"):
+            # Stale or out-of-order broker update. Preserve monotonic state by
+            # returning previous_filled_qty so callers do not rewind tracked qty.
+            logger.critical(
+                "fill.quantity_regression_detected",
+                extra={
+                    "broker_order_id": broker_order.broker_order_id,
+                    "intent_id": str(broker_order.intent_id),
+                    "symbol": broker_order.symbol,
+                    "previous_filled_qty": str(previous_filled_qty),
+                    "current_filled_qty": str(current_filled_qty),
+                    "delta_qty": str(delta_qty),
+                    "broker_status": broker_order.status.value,
+                    "received_at": received_at.isoformat() if received_at is not None else None,
+                    "broker_update_timestamp": broker_order.updated_at.isoformat(),
+                },
+            )
+            return FillExtractionResult(
+                fill=None,
+                new_filled_qty=previous_filled_qty,
+            )
+
+        if delta_qty == Decimal("0"):
+            logger.debug(
+                "fill.duplicate_broker_update",
+                extra={
+                    "broker_order_id": broker_order.broker_order_id,
+                    "intent_id": str(broker_order.intent_id),
+                    "filled_qty": str(current_filled_qty),
+                    "received_at": received_at.isoformat() if received_at is not None else None,
+                },
+            )
             return FillExtractionResult(
                 fill=None,
                 new_filled_qty=current_filled_qty,
@@ -160,6 +199,17 @@ class BrokerOrderMapper:
                 fill=None,
                 new_filled_qty=current_filled_qty,
             )
+
+        snapshot_meta: dict[str, Any] = {
+            "client_order_id": broker_order.client_order_id,
+            "previous_filled_qty": str(previous_filled_qty),
+            "previous_avg_fill_price": (
+                str(previous_avg_fill_price) if previous_avg_fill_price is not None else None
+            ),
+            "broker_update_timestamp": broker_order.updated_at.isoformat(),
+        }
+        if received_at is not None:
+            snapshot_meta["received_at"] = received_at.isoformat()
 
         fill = Fill(
             fill_id=str(uuid4()),
@@ -174,13 +224,7 @@ class BrokerOrderMapper:
             fees=None,
             liquidity=self._infer_liquidity(broker_order),
             venue="alpaca",
-            metadata={
-                "client_order_id": broker_order.client_order_id,
-                "previous_filled_qty": str(previous_filled_qty),
-                "previous_avg_fill_price": (
-                    str(previous_avg_fill_price) if previous_avg_fill_price is not None else None
-                ),
-            },
+            metadata=snapshot_meta,
         )
 
         return FillExtractionResult(
@@ -191,13 +235,21 @@ class BrokerOrderMapper:
     def _map_order_status(self, status: str) -> OrderStatus:
         normalized = status.lower()
 
-        if normalized in {"new", "accepted", "pending_new", "accepted_for_bidding"}:
+        if normalized in {"new", "accepted", "accepted_for_bidding"}:
             return OrderStatus.SUBMITTED
+        # Broker pending_new = order in broker's queue; treat as submitted for tracking.
+        if normalized == "pending_new":
+            return OrderStatus.SUBMITTED
+        if normalized == "pending_cancel":
+            return OrderStatus.PENDING_CANCEL
         if normalized == "partially_filled":
             return OrderStatus.PARTIALLY_FILLED
         if normalized == "filled":
             return OrderStatus.FILLED
-        if normalized in {"canceled", "expired", "done_for_day"}:
+        # expired and done_for_day are distinct from voluntary cancellation.
+        if normalized in {"expired", "done_for_day"}:
+            return OrderStatus.EXPIRED
+        if normalized == "canceled":
             return OrderStatus.CANCELED
         if normalized in {"rejected", "suspended"}:
             return OrderStatus.REJECTED

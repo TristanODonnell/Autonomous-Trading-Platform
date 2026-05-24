@@ -296,7 +296,8 @@ def test_runner_defaults_window_role_to_default_when_none(patched_metrics) -> No
     assert identity.window_role == "default"
 
 
-def test_two_runs_same_config_get_different_run_ids(patched_metrics) -> None:
+def test_two_runs_same_config_produce_same_run_id(patched_metrics) -> None:
+    """Deterministic run_id: identical inputs must produce the same run_id for idempotent replay."""
     recorder = CapturingRecorder()
     runner = _build_runner(recorder)
 
@@ -306,4 +307,16 @@ def test_two_runs_same_config_get_different_run_ids(patched_metrics) -> None:
 
     assert len(recorder.recorded) == 2
     run_ids = {i.run_id for i in recorder.recorded}
-    assert len(run_ids) == 2, "Each run must produce a unique run_id"
+    assert len(run_ids) == 1, "Identical inputs must produce the same deterministic run_id"
+
+
+def test_two_runs_different_seeds_get_different_run_ids(patched_metrics) -> None:
+    """Different seeds must produce different run_ids."""
+    recorder = CapturingRecorder()
+    runner = _build_runner(recorder)
+
+    runner.run(_make_request(seed=1))
+    runner.run(_make_request(seed=2))
+
+    run_ids = {i.run_id for i in recorder.recorded}
+    assert len(run_ids) == 2, "Different seeds must produce different run_ids"

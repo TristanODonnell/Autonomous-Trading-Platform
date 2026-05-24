@@ -9,8 +9,10 @@ from autonomous_trading_platform.storage.sor.repositories.base import BaseReposi
 
 OPEN_STATUSES = {
     OrderStatus.NEW,
+    OrderStatus.PENDING_NEW,
     OrderStatus.SUBMITTED,
     OrderStatus.PARTIALLY_FILLED,
+    OrderStatus.PENDING_CANCEL,
 }
 
 

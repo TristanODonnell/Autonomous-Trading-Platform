@@ -429,6 +429,7 @@ def run_order_submission_job(
                                 policy_result=policy_result,
                                 submit_duration_seconds=submit_duration,
                                 now_utc=now_utc,
+                                adverse_threshold_bps=policy_config.adverse_slippage_threshold_bps,
                             )
                         except Exception as analytics_exc:
                             # Analytics failure is non-fatal. Log and continue.

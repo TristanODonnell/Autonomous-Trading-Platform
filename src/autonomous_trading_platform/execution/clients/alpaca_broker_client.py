@@ -61,6 +61,22 @@ class AlpacaBrokerClient:
             self._request("GET", f"/v2/orders/{order_id}", endpoint_tag="orders.get"),
         )
 
+    def get_order_by_client_order_id(self, client_order_id: str) -> dict[str, Any] | None:
+        """
+        Fetch an order by client_order_id. Returns None if not found (404).
+        Used for idempotency verification before retrying ambiguous submissions.
+        """
+        response = self._raw_request(
+            "GET",
+            f"/v2/orders/{client_order_id}",
+            endpoint_tag="orders.get_by_client_order_id",
+            params={"by": "client_order_id"},
+        )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return cast(dict[str, Any], response.json())
+
     def list_open_orders(self) -> list[dict[str, Any]]:
         return cast(
             list[dict[str, Any]],

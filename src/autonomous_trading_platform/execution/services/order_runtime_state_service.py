@@ -9,8 +9,11 @@ from autonomous_trading_platform.execution.services.order_reconciliation_service
     ReconciliationInput,
     ReconciliationResult,
 )
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.models.tracked_orders import TrackedOrder
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
+
+logger = get_logger(__name__)
 
 
 class OrderRuntimeStateService:
@@ -103,10 +106,38 @@ class OrderRuntimeStateService:
         if existing is None:
             return
 
-        existing.broker_order_id = result.broker_order.broker_order_id
+        if result.broker_order is None:
+            existing.current_status = result.next_status
+            existing.is_open = result.next_status in {
+                OrderStatus.SUBMITTED,
+                OrderStatus.PARTIALLY_FILLED,
+            }
+            existing.updated_at = now_utc
+            uow.tracked_orders.upsert(existing)
+            return
+
+        broker_order = result.broker_order
+
+        existing.broker_order_id = broker_order.broker_order_id
         existing.current_status = result.next_status
-        existing.previous_filled_qty = result.broker_order.filled_qty
-        existing.previous_avg_fill_price = result.broker_order.avg_fill_price
+
+        # Monotonic guard: never rewind filled_qty to a stale lower value from
+        # an out-of-order broker snapshot. Quantity can only progress forward.
+        broker_filled_qty = broker_order.filled_qty
+        if broker_filled_qty < existing.previous_filled_qty:
+            logger.warning(
+                "runtime_state.monotonic_qty_guard_triggered",
+                extra={
+                    "broker_order_id": broker_order.broker_order_id,
+                    "intent_id": str(result.order_id),
+                    "previous_filled_qty": str(existing.previous_filled_qty),
+                    "broker_filled_qty": str(broker_filled_qty),
+                },
+            )
+            broker_filled_qty = existing.previous_filled_qty
+
+        existing.previous_filled_qty = broker_filled_qty
+        existing.previous_avg_fill_price = broker_order.avg_fill_price
         existing.is_open = result.next_status in {
             OrderStatus.SUBMITTED,
             OrderStatus.PARTIALLY_FILLED,

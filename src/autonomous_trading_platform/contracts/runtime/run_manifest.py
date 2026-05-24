@@ -51,6 +51,15 @@ class RunManifest(BaseModel):
     artifact_manifest: dict[str, Any] | None = None
     schema_definition: dict[str, Any] | None = None
     governance_state: GovernanceState
+    # Settlement delay applied during simulation (A-03 / F-06).
+    settlement_days: int | None = None
+    # Corporate-action lineage recorded for reproducibility (A-02).
+    # dividend_events_count: number of dividend events applied.
+    # dividend_events_hash: 16-char SHA-256 of sorted events; empty = none applied.
+    # price_adjustment_basis: "split_adjusted" | "raw" reflecting the dataset assumption.
+    dividend_events_count: int | None = None
+    dividend_events_hash: str | None = None
+    price_adjustment_basis: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return manifest as a Python dictionary."""
