@@ -282,7 +282,9 @@ class QualityBasedReallocationService:
         wall_start = perf_counter()
 
         try:
-            inputs = self._load_strategy_inputs(settings=settings, now=now)
+            inputs = self._load_strategy_inputs(
+                settings=settings, now=now, rebalance_id=rebalance_id
+            )
             before = {item.strategy_id: item.current_allocation_pct for item in inputs}
             proposals = self._compute_proposals(inputs)
 
@@ -587,6 +589,7 @@ class QualityBasedReallocationService:
         *,
         settings: OperatorSettingsRow,
         now: datetime,
+        rebalance_id: str | None = None,
     ) -> list[StrategyQualityInput]:
         rows = list(
             self._session.scalars(
@@ -598,6 +601,20 @@ class QualityBasedReallocationService:
         policies = self._policies_by_status_and_tier()
         controls = self._controls_by_strategy()
         overrides = self._active_overrides_by_strategy(now=now)
+        expired_overrides = self._expired_active_overrides_by_strategy(now=now)
+        for strategy_id, expired_list in expired_overrides.items():
+            for exp in expired_list:
+                if exp.overridden_by != AUTO_REBALANCE_ACTOR:
+                    logger.info(
+                        "ALLOCATION_OVERRIDE_EXPIRED_IGNORED",
+                        extra={
+                            "strategy_id": strategy_id,
+                            "override_id": exp.override_id,
+                            "overridden_by": exp.overridden_by,
+                            "expires_at": exp.expires_at.isoformat() if exp.expires_at else None,
+                            "rebalance_run_id": rebalance_id,
+                        },
+                    )
 
         inputs: list[StrategyQualityInput] = []
         for governance in rows:
@@ -1003,16 +1020,20 @@ class QualityBasedReallocationService:
         }
 
     def _active_overrides_by_strategy(self, *, now: datetime) -> dict[str, AllocationOverrides]:
-        rows = self._session.scalars(
-            select(AllocationOverrides)
-            .where(AllocationOverrides.is_active.is_(True))
-            .order_by(AllocationOverrides.created_at.desc(), AllocationOverrides.override_id.asc())
-        ).all()
+        """Return the most-recent non-expired active override keyed by strategy_id."""
+        rows = self._allocation_overrides_repo.get_all_active_non_expired(now=now)
         result: dict[str, AllocationOverrides] = {}
         for row in rows:
-            if row.expires_at is not None and row.expires_at <= now:
-                continue
             result.setdefault(row.strategy_id, row)
+        return result
+
+    def _expired_active_overrides_by_strategy(
+        self, *, now: datetime
+    ) -> dict[str, list[AllocationOverrides]]:
+        """Return all expired-but-still-active overrides grouped by strategy_id."""
+        result: dict[str, list[AllocationOverrides]] = {}
+        for row in self._allocation_overrides_repo.get_all_expired_active(now=now):
+            result.setdefault(row.strategy_id, []).append(row)
         return result
 
     def _resolve_policy(
