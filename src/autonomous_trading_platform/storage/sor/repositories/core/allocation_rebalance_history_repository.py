@@ -22,6 +22,12 @@ class AllocationRebalanceHistoryRepository:
         self._session.flush()
         return row
 
+    def get_by_rebalance_id(self, rebalance_id: str) -> AllocationRebalanceHistory | None:
+        return cast(
+            AllocationRebalanceHistory | None,
+            self._session.get(AllocationRebalanceHistory, rebalance_id),
+        )
+
     def get_last_completed(self) -> AllocationRebalanceHistory | None:
         return cast(
             AllocationRebalanceHistory | None,

@@ -916,6 +916,30 @@ rebalance_duration_seconds = meter.create_histogram(
     unit="s",
 )
 
+rebalance_lock_acquired = meter.create_counter(
+    name="ratp_rebalance_lock_acquired_total",
+    description="Total number of times the rebalance advisory/row lock was successfully acquired",
+    unit="1",
+)
+
+rebalance_lock_contention = meter.create_counter(
+    name="ratp_rebalance_lock_contention_total",
+    description="Total number of times the rebalance lock could not be acquired due to contention",
+    unit="1",
+)
+
+rebalance_skipped_concurrent = meter.create_counter(
+    name="ratp_rebalance_skipped_concurrent_total",
+    description="Total number of rebalance cycles skipped because a concurrent run held the lock",
+    unit="1",
+)
+
+rebalance_failed = meter.create_counter(
+    name="ratp_rebalance_failed_total",
+    description="Total number of rebalance cycles that failed with an unhandled exception",
+    unit="1",
+)
+
 # =========================
 # UNIVERSE METRICS
 # =========================

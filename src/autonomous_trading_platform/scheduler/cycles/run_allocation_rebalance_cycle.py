@@ -24,9 +24,13 @@ from autonomous_trading_platform.observability.metrics import (
     allocation_cycle_runs,
     rebalance_allocation_changes,
     rebalance_duration_seconds,
+    rebalance_failed,
+    rebalance_lock_acquired,
+    rebalance_lock_contention,
     rebalance_noop,
     rebalance_runs,
     rebalance_skipped,
+    rebalance_skipped_concurrent,
     rebalance_turnover_pct,
 )
 from autonomous_trading_platform.observability.runtime_context import runtime_context
@@ -105,6 +109,7 @@ def run_strategy_allocation_rebalance_cycle(
             result = QualityBasedReallocationService(session=session).rebalance(
                 run_id=str(run_id),
                 actor=trigger_source,
+                trigger_source=trigger_source,
             )
             _emit_rebalance_stability_metrics(result)
             payload = QualityBasedReallocationService.result_to_jsonable(result)
@@ -163,6 +168,8 @@ def run_strategy_allocation_rebalance_cycle(
                 session.commit()
                 return result or {}
             except Exception as exc:
+                environment = os.getenv("APP_ENV") or os.getenv("TRADING_ENVIRONMENT") or "unknown"
+                rebalance_failed.add(1, {"environment": environment, "component": COMPONENT})
                 record_cycle_failed(
                     logger=logger,
                     metrics=ALLOCATION_CYCLE_METRICS,
@@ -183,8 +190,15 @@ def _emit_rebalance_stability_metrics(result: QualityReallocationResult) -> None
     attrs = {"environment": environment, "component": COMPONENT}
 
     if result.skipped_reason is not None and not result.noop:
-        rebalance_skipped.add(1, {**attrs, "skip_reason": result.skipped_reason})
+        skip_reason = result.skipped_reason
+        rebalance_skipped.add(1, {**attrs, "skip_reason": skip_reason})
+        if skip_reason == "concurrent_lock":
+            rebalance_skipped_concurrent.add(1, attrs)
+            rebalance_lock_contention.add(1, attrs)
         return
+
+    if result.lock_acquired:
+        rebalance_lock_acquired.add(1, attrs)
 
     rebalance_runs.add(1, attrs)
 
