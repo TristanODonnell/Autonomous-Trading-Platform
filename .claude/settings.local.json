@@ -129,7 +129,9 @@
       "Bash(mypy *)",
       "Bash(/c/Users/Tristan/AppData/Local/Programs/Python/Python311/Scripts/ruff check *)",
       "Bash(pip show *)",
-      "Bash(alembic *)"
+      "Bash(alembic *)",
+      "PowerShell(Get-Command *)",
+      "PowerShell(head *)"
     ]
   }
 }

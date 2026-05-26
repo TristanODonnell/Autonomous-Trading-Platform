@@ -45,24 +45,8 @@ class RiskSnapshotRepository(BaseRepository):
 
         drawdown_pct = getattr(row, "drawdown_pct", None)
 
-        limits = _json_safe(
-            {
-                "max_gross_exposure": getattr(row, "max_gross_exposure", None),
-                "max_net_exposure": getattr(row, "max_net_exposure", None),
-                "max_leverage": getattr(row, "max_leverage", None),
-            }
-        )
-
-        utilization = _json_safe(
-            {
-                "gross_exposure": row.gross_exposure,
-                "net_exposure": row.net_exposure,
-                "leverage": row.leverage,
-                "breach_gross_exposure": breach_gross,
-                "breach_net_exposure": breach_net,
-                "breach_leverage": breach_leverage,
-            }
-        )
+        limits = _json_safe(getattr(row, "limits", {}))
+        utilization = _json_safe(getattr(row, "utilization", {}))
 
         return RiskSnapshotRow(
             snapshot_id=row.snapshot_id,
@@ -119,20 +103,8 @@ class RiskSnapshotRepository(BaseRepository):
         existing.leverage = row.leverage
         existing.drawdown_pct = getattr(row, "drawdown_pct", None)
 
-        existing.limits = {
-            "max_gross_exposure": getattr(row, "max_gross_exposure", None),
-            "max_net_exposure": getattr(row, "max_net_exposure", None),
-            "max_leverage": getattr(row, "max_leverage", None),
-        }
-
-        existing.utilization = {
-            "gross_exposure": row.gross_exposure,
-            "net_exposure": row.net_exposure,
-            "leverage": row.leverage,
-            "breach_gross_exposure": breach_gross,
-            "breach_net_exposure": breach_net,
-            "breach_leverage": breach_leverage,
-        }
+        existing.limits = _json_safe(getattr(row, "limits", {}))
+        existing.utilization = _json_safe(getattr(row, "utilization", {}))
 
         existing.is_blocked = getattr(
             row,

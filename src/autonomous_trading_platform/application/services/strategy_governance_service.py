@@ -7,6 +7,11 @@ from typing import cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.governance_exceptions import (
+    PromotionCriteriaConfigurationError,
+    PromotionRulesMissingError,
+)
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
 from autonomous_trading_platform.storage.sor.models.operator_settings import (
     OperatorSettingsRow,
@@ -24,6 +29,8 @@ from autonomous_trading_platform.storage.sor.repositories.core.operator_settings
 from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_repository import (
     PromotionRulesRepository,
 )
+
+logger = get_logger(__name__)
 
 _STATE_ALIASES = {
     "research": "approved_research",
@@ -47,18 +54,29 @@ _RULE_STATE_ALIASES = {
 
 _ALLOWED_TRANSITIONS = {
     "approved_research": {"approved_for_paper_trading"},
-    "approved_for_paper_trading": {"approved_for_live_trading"},
-    "approved_for_live_trading": {"retired"},
+    "approved_for_paper_trading": {"approved_for_live_trading", "approved_research"},
+    "approved_for_live_trading": {"approved_for_paper_trading", "retired"},
 }
 
 _TARGET_STATE_ROLES = {
-    "approved_research": {"researcher", "admin"},
-    "approved_for_paper_trading": {"risk_manager", "admin"},
+    "approved_research": {"researcher", "system_risk", "admin"},
+    "approved_for_paper_trading": {"risk_manager", "system_risk", "admin"},
     "approved_for_live_trading": {"admin"},
     "retired": {"operator", "risk_manager", "admin"},
 }
 
 _PROMOTION_TARGET_STATES = {"approved_for_paper_trading", "approved_for_live_trading"}
+
+# Criteria that MUST be non-null on the PromotionRules row for a promotion to proceed.
+# Keyed by (rule_from_status, rule_to_status) using _RULE_STATE_ALIASES values.
+# An empty frozenset means no hard-required fields for that transition.
+# Future extension: add per-tier overrides, operator-approval requirements, etc.
+_REQUIRED_CRITERIA_BY_TRANSITION: dict[tuple[str, str], frozenset[str]] = {
+    ("approved_paper", "approved_live"): frozenset(
+        {"min_sharpe", "min_days_tested", "min_trade_count"}
+    ),
+    ("approved_research", "approved_paper"): frozenset(),
+}
 
 
 @dataclass(frozen=True)
@@ -101,12 +119,14 @@ class StrategyGovernanceService:
 
         self._assert_role_allowed(target_state=target_state, actor_role=actor_role)
         self._assert_transition_allowed(from_state=from_state, target_state=target_state)
-        self._assert_promotion_criteria_met(
-            strategy_id=strategy_id,
-            source_run_id=str(governance.source_run_id) if governance.source_run_id else None,
-            from_state=from_state,
-            target_state=target_state,
-        )
+        criteria_summary: dict[str, object] = {}
+        if self._is_promotion_transition(from_state=from_state, target_state=target_state):
+            criteria_summary = self._assert_promotion_criteria_met(
+                strategy_id=strategy_id,
+                source_run_id=str(governance.source_run_id) if governance.source_run_id else None,
+                from_state=from_state,
+                target_state=target_state,
+            )
 
         now = datetime.now(UTC)
         previous_state = governance.current_state
@@ -123,6 +143,7 @@ class StrategyGovernanceService:
                 "strategy_id": strategy_id,
                 "from_state": previous_state,
                 "to_state": target_state,
+                **criteria_summary,
             },
         )
         if self._should_notify_strategy_promotion(target_state):
@@ -176,6 +197,14 @@ class StrategyGovernanceService:
 
         return bool(settings.notify_strategy_promotion_events)
 
+    def _is_promotion_transition(self, *, from_state: str, target_state: str) -> bool:
+        return (
+            from_state == "approved_research" and target_state == "approved_for_paper_trading"
+        ) or (
+            from_state == "approved_for_paper_trading"
+            and target_state == "approved_for_live_trading"
+        )
+
     def _assert_role_allowed(self, *, target_state: str, actor_role: str) -> None:
         allowed_roles = _TARGET_STATE_ROLES[target_state]
         if actor_role not in allowed_roles:
@@ -196,49 +225,136 @@ class StrategyGovernanceService:
         source_run_id: str | None,
         from_state: str,
         target_state: str,
-    ) -> None:
+    ) -> dict[str, object]:
+        """Validate that strategy metrics meet all active promotion criteria.
+
+        Returns a criteria audit summary dict to be embedded in the governance transition
+        audit log so that successful promotions record which checks passed.
+
+        Raises:
+            PromotionRulesMissingError: no active rule row for this transition.
+            PromotionCriteriaConfigurationError: rule exists but required fields are null.
+            ValueError: strategy metrics fail one or more configured thresholds.
+        """
+        rule_from = _RULE_STATE_ALIASES[from_state]
+        rule_to = _RULE_STATE_ALIASES[target_state]
         rule = self._promotion_rules_repo.get_rules_for_transition(
-            from_status=_RULE_STATE_ALIASES[from_state],
-            to_status=_RULE_STATE_ALIASES[target_state],
+            from_status=rule_from,
+            to_status=rule_to,
         )
+        now = datetime.now(UTC)
+
         if rule is None:
-            return
+            self._audit_log_repo.record_operator_action(
+                action="PROMOTION_RULES_CONFIGURATION_ERROR",
+                actor="system",
+                reason=f"No active PromotionRules row for {rule_from} -> {rule_to}",
+                occurred_at=now,
+                component="governance",
+                metadata={
+                    "strategy_id": strategy_id,
+                    "from_state": from_state,
+                    "to_state": target_state,
+                    "error": "missing_rule",
+                    "rule_from_status": rule_from,
+                    "rule_to_status": rule_to,
+                },
+            )
+            raise PromotionRulesMissingError(from_state=rule_from, to_state=rule_to)
+
+        required_criteria = _REQUIRED_CRITERIA_BY_TRANSITION.get((rule_from, rule_to), frozenset())
+        null_required = [f for f in sorted(required_criteria) if getattr(rule, f) is None]
+        if null_required:
+            self._audit_log_repo.record_operator_action(
+                action="PROMOTION_RULES_CONFIGURATION_ERROR",
+                actor="system",
+                reason=(
+                    f"Required criteria null on rule {rule.rule_id!r} "
+                    f"for {rule_from} -> {rule_to}: {null_required}"
+                ),
+                occurred_at=now,
+                component="governance",
+                metadata={
+                    "strategy_id": strategy_id,
+                    "from_state": from_state,
+                    "to_state": target_state,
+                    "rule_id": rule.rule_id,
+                    "error": "null_required_criteria",
+                    "missing_required_criteria": null_required,
+                },
+            )
+            raise PromotionCriteriaConfigurationError(
+                from_state=rule_from,
+                to_state=rule_to,
+                missing_fields=null_required,
+                rule_id=rule.rule_id,
+            )
 
         metrics = self._metrics_for_strategy(strategy_id=strategy_id, source_run_id=source_run_id)
         failures: list[str] = []
+        evaluated: list[dict[str, object]] = []
+        skipped_optional: list[str] = []
 
-        if rule.min_sharpe is not None:
-            actual = metrics.get("sharpe")
-            if actual is None or actual < rule.min_sharpe:
-                failures.append(f"sharpe {actual} < required {rule.min_sharpe}")
+        _min_criteria = [
+            ("min_sharpe", "sharpe"),
+            ("min_days_tested", "days_tested"),
+            ("min_trade_count", "trade_count"),
+            ("min_cagr", "cagr"),
+            ("min_win_rate", "win_rate"),
+        ]
+        for field_name, metric_key in _min_criteria:
+            threshold = getattr(rule, field_name)
+            if threshold is None:
+                skipped_optional.append(field_name)
+                continue
+            actual = metrics.get(metric_key)
+            passed = actual is not None and actual >= threshold
+            evaluated.append(
+                {"criterion": field_name, "required": threshold, "actual": actual, "passed": passed}
+            )
+            if not passed:
+                failures.append(f"{metric_key} {actual} < required {threshold}")
 
         if rule.max_drawdown is not None:
-            actual = metrics.get("max_drawdown")
-            if actual is None or self._max_drawdown_exceeds(actual, rule.max_drawdown):
-                failures.append(f"max_drawdown {actual} exceeds limit {rule.max_drawdown}")
+            actual_dd = metrics.get("max_drawdown")
+            passed_dd = actual_dd is not None and not self._max_drawdown_exceeds(
+                actual_dd, rule.max_drawdown
+            )
+            evaluated.append(
+                {
+                    "criterion": "max_drawdown",
+                    "required": rule.max_drawdown,
+                    "actual": actual_dd,
+                    "passed": passed_dd,
+                }
+            )
+            if not passed_dd:
+                failures.append(f"max_drawdown {actual_dd} exceeds limit {rule.max_drawdown}")
+        else:
+            skipped_optional.append("max_drawdown")
 
-        if rule.min_days_tested is not None:
-            actual = metrics.get("days_tested")
-            if actual is None or actual < rule.min_days_tested:
-                failures.append(f"days_tested {actual} < required {rule.min_days_tested}")
-
-        if rule.min_trade_count is not None:
-            actual = metrics.get("trade_count")
-            if actual is None or actual < rule.min_trade_count:
-                failures.append(f"trade_count {actual} < required {rule.min_trade_count}")
-
-        if rule.min_cagr is not None:
-            actual = metrics.get("cagr")
-            if actual is None or actual < rule.min_cagr:
-                failures.append(f"cagr {actual} < required {rule.min_cagr}")
-
-        if rule.min_win_rate is not None:
-            actual = metrics.get("win_rate")
-            if actual is None or actual < rule.min_win_rate:
-                failures.append(f"win_rate {actual} < required {rule.min_win_rate}")
+        if skipped_optional:
+            logger.info(
+                "governance.optional_criteria_skipped",
+                extra={
+                    "strategy_id": strategy_id,
+                    "skipped": skipped_optional,
+                    "rule_id": rule.rule_id,
+                    "from": rule_from,
+                    "to": rule_to,
+                },
+            )
 
         if failures:
             raise ValueError("Strategy does not meet promotion criteria: " + "; ".join(failures))
+
+        return {
+            "promotion_criteria_evaluated": evaluated,
+            "promotion_criteria_skipped_optional": skipped_optional,
+            "rule_id": rule.rule_id,
+            "rule_from_status": rule_from,
+            "rule_to_status": rule_to,
+        }
 
     def _metrics_for_strategy(
         self,

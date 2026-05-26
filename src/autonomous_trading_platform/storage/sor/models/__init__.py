@@ -11,6 +11,7 @@ from . import experiments as experiments
 from . import fills as fills
 from . import ingestion_checkpoint as ingestion_checkpoint
 from . import ingestion_runs as ingestion_runs
+from . import kill_switch_state as kill_switch_state
 from . import market_bars as market_bars
 from . import metrics_summary as metrics_summary
 from . import missing_bar_incidents as missing_bar_incidents
@@ -84,6 +85,7 @@ __all__ = [
     "runtime_job_runs",
     "runtime_job_run_steps",
     "runtime_control_state",
+    "kill_switch_state",
     "reconciliation_snapshots",
     "runtime_soak_reports",
     "rebalance_runs",

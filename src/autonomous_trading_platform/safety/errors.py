@@ -48,3 +48,39 @@ class RepeatedOrderInBarError(SafetyError):
 
 class DuplicateIdempotencyKeyError(SafetyError):
     """Raised when an order is submitted with an idempotency key that already exists."""
+
+
+class PortfolioSymbolExposureLimitExceededError(SafetyError):
+    """Raised when a proposed order would push aggregate portfolio symbol exposure past configured limits."""
+
+    def __init__(
+        self,
+        *,
+        symbol: str,
+        strategy_id: str,
+        current_exposure_usd: float,
+        projected_exposure_usd: float,
+        limit_usd: float | None,
+        current_exposure_pct: float,
+        projected_exposure_pct: float,
+        limit_pct: float | None,
+    ) -> None:
+        self.symbol = symbol
+        self.strategy_id = strategy_id
+        self.current_exposure_usd = current_exposure_usd
+        self.projected_exposure_usd = projected_exposure_usd
+        self.limit_usd = limit_usd
+        self.current_exposure_pct = current_exposure_pct
+        self.projected_exposure_pct = projected_exposure_pct
+        self.limit_pct = limit_pct
+
+        parts: list[str] = []
+        if limit_usd is not None:
+            parts.append(f"USD ${projected_exposure_usd:,.2f} > limit ${limit_usd:,.2f}")
+        if limit_pct is not None:
+            parts.append(f"pct {projected_exposure_pct:.2%} > limit {limit_pct:.2%}")
+        detail = "; ".join(parts) or "limit exceeded"
+        super().__init__(
+            f"Portfolio symbol exposure limit exceeded for {symbol} "
+            f"(strategy={strategy_id}): {detail}."
+        )

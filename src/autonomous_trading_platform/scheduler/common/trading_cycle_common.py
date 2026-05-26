@@ -132,6 +132,7 @@ def build_trading_cycle_dependencies() -> TradingCycleDependencies:
         risk_state_reader=risk_state_reader,
         order_activity_reader=order_activity_reader,
         audit_log_repository=audit_log_repository,
+        session=session,
     )
 
     portfolio_engine = _build_portfolio_engine(session=session, settings=settings)

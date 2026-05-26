@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.safety.environment_policy import EnvironmentSafetyPolicy
@@ -17,6 +18,9 @@ from autonomous_trading_platform.safety.services.live_trading_gate_service impor
 )
 from autonomous_trading_platform.safety.services.runtime_gate_service import (
     RuntimeGateService,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.kill_switch_state_repository import (
+    KillSwitchStateRepository,
 )
 
 
@@ -41,6 +45,7 @@ def _live_ready_env(monkeypatch) -> None:
 
 def _build_service(
     monkeypatch,
+    db_session: Session,
 ) -> tuple[
     LiveTradingGateService,
     RuntimeGateService,
@@ -49,7 +54,9 @@ def _build_service(
     settings = Settings()
     environment_policy = EnvironmentSafetyPolicy(settings)
     runtime_gate_service = RuntimeGateService()
-    kill_switch_service = KillSwitchService()
+    kill_switch_service = KillSwitchService(
+        repository=KillSwitchStateRepository(session=db_session),
+    )
 
     live_gate_service = LiveTradingGateService(
         environment_policy=environment_policy,
@@ -59,27 +66,29 @@ def _build_service(
     return live_gate_service, runtime_gate_service, kill_switch_service
 
 
-def test_live_gate_blocks_when_environment_is_not_live(monkeypatch) -> None:
+def test_live_gate_blocks_when_environment_is_not_live(monkeypatch, db_session: Session) -> None:
     _base_env(monkeypatch)
     monkeypatch.setenv("TRADING_ENVIRONMENT", "paper")
 
-    live_gate_service, _, _ = _build_service(monkeypatch)
+    live_gate_service, _, _ = _build_service(monkeypatch, db_session)
 
     with pytest.raises(LiveTradingBlockedError, match="not LIVE"):
         live_gate_service.assert_live_trading_allowed(account_id="paper-1")
 
 
-def test_live_gate_blocks_when_runtime_gate_not_armed(monkeypatch) -> None:
+def test_live_gate_blocks_when_runtime_gate_not_armed(monkeypatch, db_session: Session) -> None:
     _live_ready_env(monkeypatch)
-    live_gate_service, _, _ = _build_service(monkeypatch)
+    live_gate_service, _, _ = _build_service(monkeypatch, db_session)
 
     with pytest.raises(RuntimeGateNotArmedError):
         live_gate_service.assert_live_trading_allowed(account_id="live-1")
 
 
-def test_live_gate_blocks_when_kill_switch_enabled(monkeypatch) -> None:
+def test_live_gate_blocks_when_kill_switch_enabled(monkeypatch, db_session: Session) -> None:
     _live_ready_env(monkeypatch)
-    live_gate_service, runtime_gate_service, kill_switch_service = _build_service(monkeypatch)
+    live_gate_service, runtime_gate_service, kill_switch_service = _build_service(
+        monkeypatch, db_session
+    )
 
     runtime_gate_service.arm(
         reason="supervised session",
@@ -94,9 +103,9 @@ def test_live_gate_blocks_when_kill_switch_enabled(monkeypatch) -> None:
         live_gate_service.assert_live_trading_allowed(account_id="live-1")
 
 
-def test_live_gate_allows_trading_when_all_gates_pass(monkeypatch) -> None:
+def test_live_gate_allows_trading_when_all_gates_pass(monkeypatch, db_session: Session) -> None:
     _live_ready_env(monkeypatch)
-    live_gate_service, runtime_gate_service, _ = _build_service(monkeypatch)
+    live_gate_service, runtime_gate_service, _ = _build_service(monkeypatch, db_session)
 
     runtime_gate_service.arm(
         reason="supervised session",
@@ -107,9 +116,9 @@ def test_live_gate_allows_trading_when_all_gates_pass(monkeypatch) -> None:
     assert live_gate_service.can_trade_live(account_id="live-1") is True
 
 
-def test_live_gate_blocks_when_account_not_allowlisted(monkeypatch) -> None:
+def test_live_gate_blocks_when_account_not_allowlisted(monkeypatch, db_session: Session) -> None:
     _live_ready_env(monkeypatch)
-    live_gate_service, runtime_gate_service, _ = _build_service(monkeypatch)
+    live_gate_service, runtime_gate_service, _ = _build_service(monkeypatch, db_session)
 
     runtime_gate_service.arm(
         reason="supervised session",
@@ -120,7 +129,9 @@ def test_live_gate_blocks_when_account_not_allowlisted(monkeypatch) -> None:
         live_gate_service.assert_live_trading_allowed(account_id="live-2")
 
 
-def test_live_gate_maps_missing_live_modules_to_build_gate_error(monkeypatch) -> None:
+def test_live_gate_maps_missing_live_modules_to_build_gate_error(
+    monkeypatch, db_session: Session
+) -> None:
     _base_env(monkeypatch)
     monkeypatch.setenv("TRADING_ENVIRONMENT", "live")
     monkeypatch.setenv("NO_LIVE_TRADING", "false")
@@ -130,14 +141,16 @@ def test_live_gate_maps_missing_live_modules_to_build_gate_error(monkeypatch) ->
     monkeypatch.setenv("LIVE_BROKER_API_SECRET", "live-secret")
     monkeypatch.setenv("LIVE_ALLOWED_ACCOUNT_IDS", "live-1")
 
-    live_gate_service, runtime_gate_service, _ = _build_service(monkeypatch)
+    live_gate_service, runtime_gate_service, _ = _build_service(monkeypatch, db_session)
     runtime_gate_service.arm(reason="supervised session", armed_by="tester")
 
     with pytest.raises(BuildGateDisabledError):
         live_gate_service.assert_live_trading_allowed(account_id="live-1")
 
 
-def test_live_gate_maps_config_disable_to_config_gate_error(monkeypatch) -> None:
+def test_live_gate_maps_config_disable_to_config_gate_error(
+    monkeypatch, db_session: Session
+) -> None:
     _base_env(monkeypatch)
     monkeypatch.setenv("TRADING_ENVIRONMENT", "live")
     monkeypatch.setenv("NO_LIVE_TRADING", "false")
@@ -147,16 +160,16 @@ def test_live_gate_maps_config_disable_to_config_gate_error(monkeypatch) -> None
     monkeypatch.setenv("LIVE_BROKER_API_SECRET", "live-secret")
     monkeypatch.setenv("LIVE_ALLOWED_ACCOUNT_IDS", "live-1")
 
-    live_gate_service, runtime_gate_service, _ = _build_service(monkeypatch)
+    live_gate_service, runtime_gate_service, _ = _build_service(monkeypatch, db_session)
     runtime_gate_service.arm(reason="supervised session", armed_by="tester")
 
     with pytest.raises(ConfigGateDisabledError):
         live_gate_service.assert_live_trading_allowed(account_id="live-1")
 
 
-def test_live_gate_status_reports_failures(monkeypatch) -> None:
+def test_live_gate_status_reports_failures(monkeypatch, db_session: Session) -> None:
     _live_ready_env(monkeypatch)
-    live_gate_service, _, _ = _build_service(monkeypatch)
+    live_gate_service, _, _ = _build_service(monkeypatch, db_session)
 
     status = live_gate_service.get_gate_status(account_id="live-1")
 

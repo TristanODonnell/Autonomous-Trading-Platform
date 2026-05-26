@@ -14,8 +14,13 @@ from autonomous_trading_platform.api.envelope import (
     SuccessEnvelope,
     success_response,
 )
+from autonomous_trading_platform.api.errors import APIError, ErrorCode
 from autonomous_trading_platform.application.services.active_strategies_service import (
     ActiveStrategiesService,
+)
+from autonomous_trading_platform.application.services.governance_exceptions import (
+    PromotionCriteriaConfigurationError,
+    PromotionRulesMissingError,
 )
 from autonomous_trading_platform.application.services.strategy_allocation_service import (
     StrategyAllocationService,
@@ -53,6 +58,7 @@ from autonomous_trading_platform.interfaces.rest.schemas.active_strategies_schem
     StrategyListResponse,
     StrategyStatus,
 )
+from autonomous_trading_platform.portfolio.exceptions import AllocationBudgetExceededError
 
 router = APIRouter(prefix="/strategies", tags=["strategies"])
 experiments_router = APIRouter(prefix="/experiments", tags=["experiments"])
@@ -221,6 +227,18 @@ def update_strategy_allocation(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
+    except AllocationBudgetExceededError as exc:
+        raise APIError(
+            code=ErrorCode.VALIDATION_ERROR,
+            message=str(exc),
+            http_status=status.HTTP_409_CONFLICT,
+            details={
+                "requested_strategy_id": exc.strategy_id,
+                "requested_allocation_pct": exc.requested_pct,
+                "resulting_total_pct": exc.resulting_total_pct,
+                "configured_max_pct": exc.configured_max_pct,
+            },
+        ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -333,6 +351,24 @@ def transition_strategy_governance(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
+        ) from exc
+    except PromotionRulesMissingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Promotion blocked: no active PromotionRules configured for "
+                f"{exc.from_state!r} -> {exc.to_state!r}. "
+                "Create a rule row with all required criteria to enable this transition."
+            ),
+        ) from exc
+    except PromotionCriteriaConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Promotion blocked: PromotionRules (rule_id={exc.rule_id!r}) for "
+                f"{exc.from_state!r} -> {exc.to_state!r} has null required criteria: "
+                f"{exc.missing_fields}. Set these thresholds to unblock the transition."
+            ),
         ) from exc
     except ValueError as exc:
         raise HTTPException(

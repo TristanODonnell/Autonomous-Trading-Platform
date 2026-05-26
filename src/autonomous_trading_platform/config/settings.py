@@ -46,6 +46,10 @@ class Settings:
 
         self.max_gross_exposure = self._get_float("MAX_GROSS_EXPOSURE", 100000.0)
         self.max_symbol_exposure = self._get_float("MAX_SYMBOL_EXPOSURE", 10000.0)
+        self.max_portfolio_symbol_exposure_usd = self._get_optional_float(
+            "MAX_PORTFOLIO_SYMBOL_EXPOSURE_USD",
+        )
+        self.max_portfolio_symbol_pct = self._get_optional_float("MAX_PORTFOLIO_SYMBOL_PCT")
         self.max_daily_notional_traded = self._get_float("MAX_DAILY_NOTIONAL_TRADED", 25000.0)
         self.max_reserved_cash = self._get_float("MAX_RESERVED_CASH", 25000.0)
 
@@ -203,6 +207,12 @@ class Settings:
         value = os.getenv(key)
         if value is None:
             return default
+        return float(value.strip())
+
+    def _get_optional_float(self, key: str) -> float | None:
+        value = os.getenv(key)
+        if value is None or value.strip() == "":
+            return None
         return float(value.strip())
 
     def _get_decimal(self, key: str, default: Decimal) -> Decimal:

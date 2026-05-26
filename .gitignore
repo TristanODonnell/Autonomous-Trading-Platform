@@ -227,3 +227,6 @@ infra/db/alembic/versions/__pycache__/
 # Python
 **/__pycache__/
 *.pyc
+
+.claude/settings.local.json
+.task_progress.json

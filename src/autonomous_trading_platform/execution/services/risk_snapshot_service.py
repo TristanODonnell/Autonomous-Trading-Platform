@@ -8,6 +8,9 @@ from uuid import UUID, uuid4
 from autonomous_trading_platform.contracts.accounting.cash_snapshot import CashSnapshot
 from autonomous_trading_platform.contracts.accounting.position_snapshot import PositionSnapshot
 from autonomous_trading_platform.contracts.accounting.risk_snapshot import RiskSnapshot
+from autonomous_trading_platform.safety.readers.portfolio_risk_state_reader import (
+    PortfolioRiskStateReader,
+)
 
 ZERO = Decimal("0")
 
@@ -17,6 +20,8 @@ class RiskLimitConfig:
     max_gross_exposure: Decimal | None = None
     max_net_exposure: Decimal | None = None
     max_leverage: Decimal | None = None
+    max_portfolio_symbol_exposure_usd: Decimal | None = None
+    max_portfolio_symbol_pct: Decimal | None = None
 
 
 class RiskSnapshotService:
@@ -41,12 +46,17 @@ class RiskSnapshotService:
             gross_exposure=gross_exposure,
             equity=equity,
         )
+        portfolio_reader = PortfolioRiskStateReader.from_position_snapshot(
+            position_snapshot,
+            total_equity=equity,
+        )
 
         limits = self._build_limits_dict(limits_config)
         utilization = self._build_utilization_dict(
             gross_exposure=gross_exposure,
             net_exposure=net_exposure,
             leverage=leverage,
+            portfolio_reader=portfolio_reader,
             limits_config=limits_config,
         )
 
@@ -126,6 +136,8 @@ class RiskSnapshotService:
             "max_gross_exposure": limits_config.max_gross_exposure,
             "max_net_exposure": limits_config.max_net_exposure,
             "max_leverage": limits_config.max_leverage,
+            "max_portfolio_symbol_exposure_usd": (limits_config.max_portfolio_symbol_exposure_usd),
+            "max_portfolio_symbol_pct": limits_config.max_portfolio_symbol_pct,
         }
 
     def _build_utilization_dict(
@@ -134,8 +146,12 @@ class RiskSnapshotService:
         gross_exposure: Decimal,
         net_exposure: Decimal,
         leverage: Decimal,
+        portfolio_reader: PortfolioRiskStateReader,
         limits_config: RiskLimitConfig,
     ) -> dict[str, Any]:
+        concentration_metrics = portfolio_reader.get_concentration_metrics(
+            max_portfolio_symbol_pct=limits_config.max_portfolio_symbol_pct,
+        )
         return {
             "gross_exposure_pct": self._safe_ratio(
                 numerator=gross_exposure,
@@ -149,6 +165,7 @@ class RiskSnapshotService:
                 numerator=leverage,
                 denominator=limits_config.max_leverage,
             ),
+            "portfolio_symbol_concentration": concentration_metrics,
         }
 
     def _build_block_reasons(

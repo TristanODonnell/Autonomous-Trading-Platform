@@ -39,6 +39,15 @@ class OperatorSettingsRow(Base):
     transaction_cost_model: Mapped[str | None] = mapped_column(
         String(32), nullable=True, default="per_share"
     )
+    max_total_strategy_allocation_pct: Mapped[float | None] = mapped_column(
+        Numeric(6, 4), nullable=True, default=1.0
+    )
+    max_portfolio_symbol_exposure_usd: Mapped[float | None] = mapped_column(
+        Numeric(16, 2), nullable=True, default=None
+    )
+    max_portfolio_symbol_pct: Mapped[float | None] = mapped_column(
+        Numeric(6, 4), nullable=True, default=None
+    )
 
     updated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 

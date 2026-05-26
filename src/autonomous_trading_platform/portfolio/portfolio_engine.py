@@ -297,6 +297,47 @@ class PortfolioEngine:
             criteria_results=criteria,
         )
 
+    def get_aggregate_allocation_pct(
+        self,
+        strategy_entries: list[tuple[str, GovernanceState, str | None]],
+        *,
+        proposed_overrides: dict[str, float] | None = None,
+    ) -> float:
+        """
+        Canonical aggregate allocation calculation.
+
+        Returns the sum of resolved max_pct_of_capital across all provided
+        strategy entries (e.g. 1.2 means 120% total allocation).
+        Entries that fail policy/state lookup are excluded rather than erroring.
+        Proposed overrides can replace resolved allocations for validation before
+        persistence.
+        """
+        proposed_overrides = proposed_overrides or {}
+        total = 0.0
+        now = datetime.now(tz=UTC)
+        for strategy_id, approval_status, performance_tier in strategy_entries:
+            try:
+                self._assert_allocatable(strategy_id, approval_status)
+            except AllocationDeniedError:
+                continue
+
+            if strategy_id in proposed_overrides:
+                total += proposed_overrides[strategy_id]
+                continue
+
+            override = self._overrides.get_active_override(strategy_id=strategy_id, now=now)
+            if override is not None and override.max_pct_of_capital is not None:
+                total += override.max_pct_of_capital
+                continue
+
+            policy = self._policies.get_active_policy(
+                approval_status=approval_status.value,
+                performance_tier=performance_tier,
+            )
+            if policy is not None:
+                total += policy.max_pct_of_capital
+        return total
+
     @property
     def total_capital(self) -> float:
         return self._total_capital

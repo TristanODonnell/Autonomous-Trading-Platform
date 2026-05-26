@@ -34,6 +34,7 @@ from autonomous_trading_platform.storage.sor.models.capital_allocation_policies 
     CapitalAllocationPolicies,
 )
 from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
+from autonomous_trading_platform.storage.sor.models.promotion_rules import PromotionRules
 from autonomous_trading_platform.storage.sor.models.strategy_configs import StrategyConfigs
 from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
 from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
@@ -310,9 +311,31 @@ def test_rebalance_notification_not_emitted_when_skipped(db_session: Session) ->
 # ---------------------------------------------------------------------------
 
 
+def _seed_research_to_paper_rule(session: Session) -> None:
+    """Minimal rule required by the fail-closed promotion check. No criteria for research->paper."""
+    session.add(
+        PromotionRules(
+            rule_id="research_to_paper_notif",
+            from_status="approved_research",
+            to_status="approved_paper",
+            min_sharpe=None,
+            max_drawdown=None,
+            min_days_tested=None,
+            min_trade_count=None,
+            min_cagr=None,
+            min_win_rate=None,
+            is_active=True,
+            created_at=datetime.now(UTC),
+            notes=None,
+        )
+    )
+    session.flush()
+
+
 def test_promotion_notification_suppressed_when_flag_disabled(db_session: Session) -> None:
     now = datetime.now(UTC)
     session = db_session
+    _seed_research_to_paper_rule(session)
     session.add(
         StrategyGovernance(
             strategy_id="promo1",
@@ -346,6 +369,7 @@ def test_promotion_notification_suppressed_when_flag_disabled(db_session: Sessio
 def test_promotion_notification_emitted_when_flag_enabled(db_session: Session) -> None:
     now = datetime.now(UTC)
     session = db_session
+    _seed_research_to_paper_rule(session)
     session.add(
         StrategyGovernance(
             strategy_id="promo2",

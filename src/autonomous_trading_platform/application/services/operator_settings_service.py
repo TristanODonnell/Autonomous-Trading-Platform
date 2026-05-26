@@ -26,6 +26,7 @@ class OperatorSettingsDTO:
     target_portfolio_volatility: float
     slippage_model: str
     transaction_cost_model: str
+    max_total_strategy_allocation_pct: float
 
 
 class OperatorSettingsService:
@@ -123,4 +124,7 @@ class OperatorSettingsService:
             target_portfolio_volatility=float(row.target_portfolio_volatility),
             slippage_model=row.slippage_model or "fixed",
             transaction_cost_model=row.transaction_cost_model or "per_share",
+            max_total_strategy_allocation_pct=float(
+                getattr(row, "max_total_strategy_allocation_pct", 1.0) or 1.0
+            ),
         )

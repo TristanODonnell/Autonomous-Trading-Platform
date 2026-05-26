@@ -1,5 +1,8 @@
 # CLI Runtime Harness Reference
 
+Status: Historical operator handbook. The current parser inventory is maintained
+in `docs/backend/cli/cli.md`; command counts in this file may lag the code.
+
 **Project:** Autonomous Trading Platform
 **Scope:** Full audit of all 56 CLI commands across 12 domains
 **Audience:** Platform operators and developers

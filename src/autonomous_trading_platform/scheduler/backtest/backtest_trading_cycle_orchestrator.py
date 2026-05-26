@@ -142,6 +142,7 @@ def _build_backtest_dependencies(
         risk_state_reader=StubRiskStateReader(),
         order_activity_reader=StubOrderActivityReader(),
         audit_log_repository=audit_log_repository,
+        session=session,
     )
 
     portfolio_engine = PortfolioEngine(

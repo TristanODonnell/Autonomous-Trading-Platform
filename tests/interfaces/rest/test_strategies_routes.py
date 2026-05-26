@@ -13,6 +13,9 @@ from autonomous_trading_platform.storage.sor.models.allocation_overrides import 
     AllocationOverrides,
 )
 from autonomous_trading_platform.storage.sor.models.audit_logs import AuditLogRow
+from autonomous_trading_platform.storage.sor.models.capital_allocation_policies import (
+    CapitalAllocationPolicies,
+)
 from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
 from autonomous_trading_platform.storage.sor.models.experiments import Experiments
 from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
@@ -357,6 +360,67 @@ def test_strategy_allocation_rejects_override_above_total_portfolio_capital(
     assert db_session.query(AuditLogRow).all() == []
 
 
+def test_strategy_allocation_budget_violation_returns_structured_error(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    now = datetime.now(UTC)
+    for strategy_id in ["momentum_v1", "mean_reversion_v1"]:
+        seed_strategy_governance(
+            db_session,
+            strategy_id=strategy_id,
+            state="approved_for_live_trading",
+        )
+    db_session.add_all(
+        [
+            CapitalAllocationPolicies(
+                policy_id="approved-live-policy",
+                approval_status="approved_live",
+                performance_tier=None,
+                max_pct_of_capital=0.50,
+                max_position_size_usd=None,
+                max_drawdown_allowed=0.15,
+                is_active=True,
+                created_at=now,
+            ),
+            AllocationOverrides(
+                override_id="existing-allocation",
+                strategy_id="momentum_v1",
+                overridden_by="risk-manager-1",
+                override_reason="existing allocation",
+                max_pct_of_capital=0.60,
+                max_position_size_usd=None,
+                max_drawdown_allowed=None,
+                is_active=True,
+                created_at=now,
+                expires_at=None,
+            ),
+        ]
+    )
+    db_session.flush()
+
+    response = client.put(
+        "/api/v1/strategies/mean_reversion_v1/allocation",
+        json={"allocation_pct": "60", "reason": "risk rebalance"},
+        headers=auth_headers(role="risk_manager"),
+    )
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["details"]["requested_strategy_id"] == "mean_reversion_v1"
+    assert body["error"]["details"]["requested_allocation_pct"] == 0.6
+    assert body["error"]["details"]["resulting_total_pct"] == 1.2
+    assert body["error"]["details"]["configured_max_pct"] == 1.0
+
+    active_new_overrides = (
+        db_session.query(AllocationOverrides)
+        .filter_by(strategy_id="mean_reversion_v1", is_active=True)
+        .count()
+    )
+    assert active_new_overrides == 0
+
+
 def test_strategy_enabled_requires_operator_or_admin(client: TestClient) -> None:
     response = client.put(
         "/api/v1/strategies/momentum_v1/enabled",
@@ -599,6 +663,24 @@ def test_strategy_promotion_notification_flag_false_suppresses_notification_even
         strategy_id="paper_candidate_v1",
         state="approved_research",
     )
+    # A rule row is required for promotion (fail-closed). research->paper has no required criteria.
+    db_session.add(
+        PromotionRules(
+            rule_id="research_to_paper_notif_false",
+            from_status="approved_research",
+            to_status="approved_paper",
+            min_sharpe=None,
+            max_drawdown=None,
+            min_days_tested=None,
+            min_trade_count=None,
+            min_cagr=None,
+            min_win_rate=None,
+            is_active=True,
+            created_at=datetime.now(UTC),
+            notes=None,
+        )
+    )
+    db_session.flush()
 
     response = client.post(
         "/api/v1/strategies/paper_candidate_v1/governance/transition",
@@ -622,6 +704,7 @@ def test_strategy_promotion_notification_flag_true_emits_live_promotion_event(
     client: TestClient,
     db_session: Session,
 ) -> None:
+    now = datetime.now(UTC)
     OperatorSettingsRepository(db_session).update_current(
         {"notify_strategy_promotion_events": True},
         updated_by="test",
@@ -631,6 +714,43 @@ def test_strategy_promotion_notification_flag_true_emits_live_promotion_event(
         strategy_id="live_candidate_v1",
         state="approved_for_paper_trading",
     )
+    # paper->live requires min_sharpe, min_days_tested, min_trade_count — all must be set.
+    # Also seed a MetricsSummary so the strategy can pass the criteria check.
+    db_session.add_all(
+        [
+            PromotionRules(
+                rule_id="paper_to_live_notif_true",
+                from_status="approved_paper",
+                to_status="approved_live",
+                min_sharpe=1.0,
+                max_drawdown=None,
+                min_days_tested=30,
+                min_trade_count=10,
+                min_cagr=None,
+                min_win_rate=None,
+                is_active=True,
+                created_at=now,
+                notes=None,
+            ),
+            MetricsSummary(
+                metrics_snapshot_id="metrics-notif",
+                run_id="run-notif",
+                created_at=now,
+                total_return=0.15,
+                sharpe_ratio=2.5,
+                max_drawdown=-0.08,
+                trade_count=40,
+                winning_trade_count=28,
+                losing_trade_count=12,
+                volatility=0.18,
+                metrics_json={
+                    "strategy_id": "live_candidate_v1",
+                    "days_tested": 90,
+                },
+            ),
+        ]
+    )
+    db_session.flush()
 
     response = client.post(
         "/api/v1/strategies/live_candidate_v1/governance/transition",
@@ -696,7 +816,7 @@ def test_strategy_governance_transition_rejects_when_promotion_criteria_fail(
                 to_status="approved_live",
                 min_sharpe=2.0,
                 max_drawdown=None,
-                min_days_tested=None,
+                min_days_tested=30,  # required — must be non-null for paper->live
                 min_trade_count=10,
                 min_cagr=None,
                 min_win_rate=None,
@@ -709,13 +829,13 @@ def test_strategy_governance_transition_rejects_when_promotion_criteria_fail(
                 run_id=str(source_run_id),
                 created_at=now,
                 total_return=0.08,
-                sharpe_ratio=1.1,
+                sharpe_ratio=1.1,  # below min_sharpe=2.0 → promotion criteria fail
                 max_drawdown=-0.12,
                 trade_count=30,
                 winning_trade_count=18,
                 losing_trade_count=12,
                 volatility=0.25,
-                metrics_json={},
+                metrics_json={"days_tested": 60},  # satisfies min_days_tested=30
             ),
         ]
     )

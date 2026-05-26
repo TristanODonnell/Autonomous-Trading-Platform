@@ -155,6 +155,158 @@ def _seed_rule(session: Session) -> None:
     session.flush()
 
 
+def _seed_live_rule(
+    session: Session,
+    *,
+    min_sharpe: float | None = 1.0,
+    min_days_tested: int | None = 30,
+    min_trade_count: int | None = 10,
+) -> None:
+    session.add(
+        PromotionRules(
+            rule_id="paper_to_live",
+            from_status="approved_paper",
+            to_status="approved_live",
+            min_sharpe=min_sharpe,
+            max_drawdown=0.20,
+            min_days_tested=min_days_tested,
+            min_trade_count=min_trade_count,
+            min_cagr=None,
+            min_win_rate=None,
+            is_active=True,
+            created_at=datetime.now(UTC),
+            notes="test",
+        )
+    )
+    session.flush()
+
+
+# ---------------------------------------------------------------------------
+# FINDING-07: null required criteria hardening
+# ---------------------------------------------------------------------------
+
+
+def test_auto_promotion_scan_returns_invalid_rule_config_when_required_criteria_null(
+    db_session: Session,
+) -> None:
+    """AutoPromotionService must not treat a null required criterion as 'no constraint'."""
+    _seed_live_rule(db_session, min_sharpe=None)
+    _seed_candidate(
+        db_session,
+        "paper_eligible",
+        state="approved_for_paper_trading",
+        sharpe=3.0,
+        days=90,
+        trades=50,
+    )
+
+    [candidate] = AutoPromotionService(session=db_session).scan()
+
+    assert candidate.eligible is False
+    assert candidate.status == "invalid_rule_config"
+    assert "min_sharpe" in candidate.missing_required_criteria
+
+
+def test_auto_promotion_does_not_promote_when_required_criteria_null(
+    db_session: Session,
+) -> None:
+    _seed_live_rule(db_session, min_days_tested=None)
+    _seed_candidate(
+        db_session,
+        "paper_eligible",
+        state="approved_for_paper_trading",
+        sharpe=3.0,
+        days=90,
+        trades=50,
+    )
+    OperatorSettingsRepository(db_session).update_current(
+        {"auto_promote_enabled": True},
+        updated_by="test",
+    )
+
+    result = AutoPromotionService(session=db_session).run(actor="test")
+
+    assert result.promotions_executed == []
+    assert result.candidates[0].status == "invalid_rule_config"
+
+
+def test_auto_promotion_emits_audit_for_invalid_rule_config(db_session: Session) -> None:
+    _seed_live_rule(db_session, min_trade_count=None)
+    _seed_candidate(
+        db_session,
+        "paper_eligible",
+        state="approved_for_paper_trading",
+        sharpe=3.0,
+        days=90,
+        trades=50,
+    )
+
+    AutoPromotionService(session=db_session).scan()
+
+    event = (
+        db_session.query(AuditLogRow)
+        .filter_by(event_type="PROMOTION_RULES_CONFIGURATION_ERROR")
+        .one()
+    )
+    assert "min_trade_count" in event.event_metadata["missing_required_criteria"]
+    assert event.event_metadata["source"] == "auto_promotion_scan"
+
+
+def test_auto_promotion_skipped_optional_criteria_appear_in_result(
+    db_session: Session,
+) -> None:
+    """Optional null criteria (min_cagr, min_win_rate) should be reflected as skipped."""
+    _seed_rule(db_session)
+    _seed_candidate(db_session, "eligible", sharpe=2.0, days=45, trades=20)
+
+    [candidate] = AutoPromotionService(session=db_session).scan()
+
+    assert candidate.eligible is True
+    # min_cagr and min_win_rate are null in _seed_rule → appear as skipped
+    assert "min_cagr" in candidate.skipped_criteria or "min_win_rate" in candidate.skipped_criteria
+
+
+def test_active_rule_payloads_expose_validity_and_missing_criteria(
+    db_session: Session,
+) -> None:
+    _seed_live_rule(db_session, min_sharpe=None)
+    OperatorSettingsRepository(db_session).update_current(
+        {"auto_promote_enabled": False},
+        updated_by="test",
+    )
+
+    result = AutoPromotionService(session=db_session).run(actor="test")
+
+    live_rule_payload = next(
+        (r for r in result.promotion_rules_used if r["to_status"] == "approved_live"), None
+    )
+    assert live_rule_payload is not None
+    assert live_rule_payload["is_valid"] is False
+    assert "min_sharpe" in live_rule_payload["missing_required_criteria"]
+    assert "min_sharpe" in live_rule_payload["required_criteria"]
+
+
+def test_fully_configured_live_rule_allows_auto_promotion(db_session: Session) -> None:
+    _seed_live_rule(db_session, min_sharpe=1.0, min_days_tested=30, min_trade_count=10)
+    _seed_candidate(
+        db_session,
+        "paper_pass",
+        state="approved_for_paper_trading",
+        sharpe=2.5,
+        days=90,
+        trades=50,
+    )
+    OperatorSettingsRepository(db_session).update_current(
+        {"auto_promote_enabled": True},
+        updated_by="test",
+    )
+
+    result = AutoPromotionService(session=db_session).run(actor="test")
+
+    assert result.promotions_executed[0]["status"] == "promoted"
+    assert result.promotions_executed[0]["strategy_id"] == "paper_pass"
+
+
 def _seed_candidate(
     session: Session,
     strategy_id: str,

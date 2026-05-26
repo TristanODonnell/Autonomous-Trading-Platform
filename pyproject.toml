@@ -71,6 +71,9 @@ cli = [
   "rich>=13.7",
 ]
 
+[project.scripts]
+atp = "autonomous_trading_platform.cli.main:main"
+
 [project.urls]
 Homepage = "https://github.com/TristanODonnell/Autonomous-Trading-Platform"
 

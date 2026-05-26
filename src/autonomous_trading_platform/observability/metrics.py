@@ -836,6 +836,30 @@ governance_cycle_duration = meter.create_histogram(
     unit="s",
 )
 
+auto_demotion_scan_total = meter.create_counter(
+    name="ratp_auto_demotion_scan_total",
+    description="Total number of auto-demotion scans",
+    unit="1",
+)
+
+auto_demotion_breach_total = meter.create_counter(
+    name="ratp_auto_demotion_breach_total",
+    description="Total number of auto-demotion breaches detected",
+    unit="1",
+)
+
+strategy_demotion_total = meter.create_counter(
+    name="ratp_strategy_demotion_total",
+    description="Total number of strategy demotions executed",
+    unit="1",
+)
+
+auto_demotion_scan_duration_seconds = meter.create_histogram(
+    name="ratp_auto_demotion_scan_duration_seconds",
+    description="Auto-demotion scan duration",
+    unit="s",
+)
+
 allocation_cycle_runs = meter.create_counter(
     name="ratp_allocation_cycle_runs_total",
     description="Total number of allocation cycle executions",

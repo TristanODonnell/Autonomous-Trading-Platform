@@ -352,6 +352,24 @@ def test_rebalance_direct_call_records_automation_actor(db_session: Session) -> 
 
 def test_manual_transition_records_operator_user_id(db_session: Session) -> None:
     now = datetime.now(UTC)
+    # A rule row is required for promotion to proceed (fail-closed). No criteria
+    # are required for research->paper, so all thresholds can be null.
+    db_session.add(
+        PromotionRules(
+            rule_id="research_to_paper_audit",
+            from_status="approved_research",
+            to_status="approved_paper",
+            min_sharpe=None,
+            max_drawdown=None,
+            min_days_tested=None,
+            min_trade_count=None,
+            min_cagr=None,
+            min_win_rate=None,
+            is_active=True,
+            created_at=now,
+            notes=None,
+        )
+    )
     db_session.add(
         StrategyGovernance(
             strategy_id="op1",

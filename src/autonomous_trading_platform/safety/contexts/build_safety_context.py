@@ -1,4 +1,11 @@
+from __future__ import annotations
+
+from sqlalchemy.orm import Session
+
 from autonomous_trading_platform.safety.contexts.safety_context import SafetyContext
+from autonomous_trading_platform.safety.readers.portfolio_risk_state_reader import (
+    PortfolioRiskStateReader,
+)
 from autonomous_trading_platform.safety.services.kill_switch_service import KillSwitchService
 from autonomous_trading_platform.safety.services.live_trading_gate_service import (
     LiveTradingGateService,
@@ -13,6 +20,12 @@ from autonomous_trading_platform.safety.services.runtime_trading_guard_service i
     RuntimeTradingGuardService,
 )
 from autonomous_trading_platform.safety.services.shadow_mode_service import ShadowModeService
+from autonomous_trading_platform.storage.sor.repositories.core.kill_switch_state_repository import (
+    KillSwitchStateRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.runtime_control_state_repository import (
+    RuntimeControlStateRepository,
+)
 
 
 def build_safety_context(
@@ -22,8 +35,17 @@ def build_safety_context(
     risk_state_reader,
     order_activity_reader,
     audit_log_repository,
-):
-    kill_switch_service = KillSwitchService()
+    session: Session,
+) -> SafetyContext:
+    ks_repo = KillSwitchStateRepository(session=session)
+    runtime_control_repo = RuntimeControlStateRepository(session=session)
+
+    kill_switch_service = KillSwitchService(
+        repository=ks_repo,
+        runtime_control_repo=runtime_control_repo,
+    )
+    kill_switch_service.emit_startup_audit_event(audit_repo=audit_log_repository)
+
     runtime_gate_service = RuntimeGateService()
 
     live_trading_gate_service = LiveTradingGateService(
@@ -46,8 +68,12 @@ def build_safety_context(
         settings=settings,
         order_activity_reader=order_activity_reader,
     )
+    portfolio_risk_state_reader = PortfolioRiskStateReader.from_session(session)
     pre_trade_risk_service = PreTradeRiskService(
-        settings=settings, risk_state_reader=risk_state_reader
+        settings=settings,
+        risk_state_reader=risk_state_reader,
+        portfolio_risk_state_reader=portfolio_risk_state_reader,
+        audit_log_repo=audit_log_repository,
     )
     shadow_mode_service = ShadowModeService(settings=settings)
 

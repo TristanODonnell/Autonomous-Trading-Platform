@@ -57,3 +57,27 @@ class InsufficientCapitalError(PortfolioError):
             f"Strategy '{strategy_id}' requested ${requested:,.2f} "
             f"but only ${available:,.2f} is available."
         )
+
+
+class AllocationBudgetExceededError(PortfolioError):
+    """
+    Raised when a proposed manual override would push aggregate portfolio
+    allocation above the configured maximum (default 100%).
+    """
+
+    def __init__(
+        self,
+        strategy_id: str,
+        requested_pct: float,
+        resulting_total_pct: float,
+        configured_max_pct: float,
+    ) -> None:
+        self.strategy_id = strategy_id
+        self.requested_pct = requested_pct
+        self.resulting_total_pct = resulting_total_pct
+        self.configured_max_pct = configured_max_pct
+        super().__init__(
+            f"Allocation override for '{strategy_id}' ({requested_pct:.1%}) would bring "
+            f"aggregate portfolio allocation to {resulting_total_pct:.1%}, "
+            f"exceeding the configured maximum of {configured_max_pct:.1%}."
+        )

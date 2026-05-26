@@ -2,14 +2,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from time import perf_counter
 from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.strategy_governance_service import (
+    StrategyGovernanceService,
+)
 from autonomous_trading_platform.execution.services.trading_freeze_service import (
     TradingFreezeService,
+)
+from autonomous_trading_platform.observability.logging import get_logger
+from autonomous_trading_platform.observability.metrics import (
+    auto_demotion_breach_total,
+    auto_demotion_scan_duration_seconds,
+    auto_demotion_scan_total,
+    strategy_demotion_total,
 )
 from autonomous_trading_platform.storage.sor.models.allocation_overrides import (
     AllocationOverrides,
@@ -17,6 +28,7 @@ from autonomous_trading_platform.storage.sor.models.allocation_overrides import 
 from autonomous_trading_platform.storage.sor.models.audit_logs import AuditLogRow
 from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
 from autonomous_trading_platform.storage.sor.models.operator_settings import OperatorSettingsRow
+from autonomous_trading_platform.storage.sor.models.promotion_rules import PromotionRules
 from autonomous_trading_platform.storage.sor.models.risk_snapshots import RiskSnapshot
 from autonomous_trading_platform.storage.sor.models.strategy_governance import (
     StrategyGovernance,
@@ -30,12 +42,18 @@ from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_reposi
 from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
     OperatorSettingsRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_repository import (
+    PromotionRulesRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.strategy_control_state_repository import (
     StrategyControlStateRepository,
 )
 
-AUTO_DEMOTION_ACTOR = "auto_demotion"
-AUTO_DEMOTION_EVENT = "STRATEGY_AUTO_DEMOTED"
+AUTO_DEMOTION_ACTOR = "system_risk"
+AUTO_DEMOTION_EVENT = "STRATEGY_DEMOTION_EVENT"
+AUTO_DEMOTION_AUDIT_EVENT = "STRATEGY_AUTO_DEMOTED"
+AUTO_DEMOTION_COMPLETED_EVENT = "STRATEGY_AUTO_DEMOTION_COMPLETED"
+AUTO_DEMOTION_SKIPPED_EVENT = "STRATEGY_AUTO_DEMOTION_SKIPPED"
 
 _DEMOTABLE_STATES = {
     "approved_for_live_trading",
@@ -50,6 +68,37 @@ _NEXT_STATE = {
     "approved_for_paper_trading": "approved_research",
     "approved_paper": "approved_research",
 }
+
+_MAINTENANCE_RULE_STATUS = {
+    "approved_for_live_trading": ("approved_paper", "approved_live"),
+    "approved_live": ("approved_paper", "approved_live"),
+    "approved_for_paper_trading": ("approved_research", "approved_paper"),
+    "approved_paper": ("approved_research", "approved_paper"),
+}
+
+logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class PerformanceObservation:
+    drawdown: float | None
+    sharpe: float | None
+    win_rate: float | None
+    trade_count: int | None
+    bars: int | None
+    source_id: str | None
+    source_type: str
+    timestamp: datetime
+
+
+@dataclass(frozen=True)
+class MaintenanceRuleSet:
+    rule_id: str | None
+    lookback_window_bars: int | None
+    lookback_window_trades: int | None
+    maintenance_min_sharpe: float | None
+    maintenance_min_win_rate: float | None
+    maintenance_max_drawdown: float
 
 
 @dataclass(frozen=True)
@@ -68,6 +117,14 @@ class DemotionCandidate:
     breach_key: str | None
     status: str
     reasons: list[str]
+    breached_metric: str | None = None
+    breached_value: float | None = None
+    threshold: float | None = None
+    observed_sharpe: float | None = None
+    observed_win_rate: float | None = None
+    trade_count: int | None = None
+    lookback_window: dict[str, int | None] | None = None
+    rule_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -79,6 +136,7 @@ class AutoDemotionRunResult:
     demotions_executed: list[dict[str, Any]]
     skipped_reason: str | None
     audit_event_type: str
+    dry_run: bool = False
 
 
 class AutoDemotionService:
@@ -87,25 +145,58 @@ class AutoDemotionService:
         *,
         session: Session,
         operator_settings_repo: OperatorSettingsRepository | None = None,
+        promotion_rules_repo: PromotionRulesRepository | None = None,
         audit_log_repo: AuditLogRepository | None = None,
         control_state_repo: StrategyControlStateRepository | None = None,
         allocation_overrides_repo: AllocationOverridesRepository | None = None,
+        governance_service: StrategyGovernanceService | None = None,
         freeze_service: TradingFreezeService | None = None,
     ) -> None:
         self._session = session
         self._operator_settings_repo = operator_settings_repo or OperatorSettingsRepository(session)
+        self._promotion_rules_repo = promotion_rules_repo or PromotionRulesRepository(session)
         self._audit_log_repo = audit_log_repo or AuditLogRepository(session)
         self._control_state_repo = control_state_repo or StrategyControlStateRepository(session)
         self._allocation_overrides_repo = (
             allocation_overrides_repo or AllocationOverridesRepository(session)
         )
+        self._governance_service = governance_service or StrategyGovernanceService(
+            session=session,
+            promotion_rules_repo=self._promotion_rules_repo,
+            audit_log_repo=self._audit_log_repo,
+        )
         self._freeze_service = freeze_service or TradingFreezeService()
 
     def scan(self) -> list[DemotionCandidate]:
+        start = perf_counter()
         settings = self._operator_settings_repo.get_or_create_default()
         threshold = float(settings.max_strategy_drawdown)
         rows = self._candidate_governance_rows()
-        return [self._evaluate_strategy(row, max_strategy_drawdown=threshold) for row in rows]
+        rules = self._active_rules_by_transition()
+
+        logger.info(
+            "auto_demotion.scan_started",
+            extra={"strategies_evaluated": len(rows), "max_strategy_drawdown": threshold},
+        )
+        auto_demotion_scan_total.add(1)
+
+        candidates = [
+            self._evaluate_strategy(row, max_strategy_drawdown=threshold, rules=rules)
+            for row in rows
+        ]
+        breach_count = sum(1 for candidate in candidates if candidate.status == "breach")
+        if breach_count:
+            auto_demotion_breach_total.add(breach_count)
+        auto_demotion_scan_duration_seconds.record(max(0.0, perf_counter() - start))
+        logger.info(
+            "auto_demotion.scan_completed",
+            extra={
+                "strategies_evaluated": len(candidates),
+                "breach_count": breach_count,
+                "skipped_count": sum(1 for row in candidates if row.status.startswith("skipped")),
+            },
+        )
+        return candidates
 
     def run(
         self,
@@ -113,10 +204,12 @@ class AutoDemotionService:
         run_id: str | None = None,
         actor: str = AUTO_DEMOTION_ACTOR,
         enforce_enabled: bool = True,
+        dry_run: bool = False,
     ) -> AutoDemotionRunResult:
         now = datetime.now(UTC)
         settings = self._operator_settings_repo.get_or_create_default()
         candidates = self.scan()
+
         if enforce_enabled and not bool(settings.auto_demote_on_breach):
             result = AutoDemotionRunResult(
                 run_id=run_id,
@@ -125,13 +218,27 @@ class AutoDemotionService:
                 candidates=candidates,
                 demotions_executed=[],
                 skipped_reason="auto_demote_disabled",
-                audit_event_type="STRATEGY_AUTO_DEMOTION_SKIPPED",
+                audit_event_type=AUTO_DEMOTION_SKIPPED_EVENT,
+                dry_run=dry_run,
             )
             self._audit_run(result=result, actor=actor, occurred_at=now)
-            if self._should_notify_drawdown_alert(settings):
-                for candidate in candidates:
-                    if candidate.breach:
-                        self._emit_drawdown_alert(candidate=candidate, actor=actor, occurred_at=now)
+            self._emit_drawdown_alerts_if_enabled(settings=settings, candidates=candidates, now=now)
+            self._session.flush()
+            self._session.commit()
+            return result
+
+        if dry_run:
+            result = AutoDemotionRunResult(
+                run_id=run_id,
+                auto_demote_on_breach=bool(settings.auto_demote_on_breach),
+                max_strategy_drawdown=float(settings.max_strategy_drawdown),
+                candidates=candidates,
+                demotions_executed=[],
+                skipped_reason="dry_run",
+                audit_event_type=AUTO_DEMOTION_COMPLETED_EVENT,
+                dry_run=True,
+            )
+            self._audit_run(result=result, actor=actor, occurred_at=now)
             self._session.flush()
             self._session.commit()
             return result
@@ -140,77 +247,82 @@ class AutoDemotionService:
         for candidate in candidates:
             if candidate.status != "breach" or candidate.recommended_state is None:
                 continue
-            row = self._latest_governance(candidate.strategy_id)
-            if row is None or row.current_state != candidate.old_state:
+            if candidate.breach_key is not None and self._breach_already_demoted(
+                candidate.breach_key
+            ):
                 continue
 
-            old_state = row.current_state
-            row.current_state = candidate.recommended_state
-            row.updated_at = now
-            reason = "; ".join(candidate.reasons)
+            try:
+                transition = self._governance_service.transition(
+                    strategy_id=candidate.strategy_id,
+                    to_state=candidate.recommended_state,
+                    reason="; ".join(candidate.reasons),
+                    updated_by=actor,
+                    actor_role="system_risk",
+                )
+            except Exception as exc:
+                self._session.rollback()
+                logger.warning(
+                    "auto_demotion.transition_failed",
+                    extra={
+                        "strategy_id": candidate.strategy_id,
+                        "from_state": candidate.old_state,
+                        "to_state": candidate.recommended_state,
+                        "error": str(exc),
+                    },
+                    exc_info=True,
+                )
+                executed.append(
+                    {
+                        "strategy_id": candidate.strategy_id,
+                        "old_governance_state": candidate.old_state,
+                        "new_governance_state": candidate.recommended_state,
+                        "breached_metric": candidate.breached_metric,
+                        "status": "failed",
+                        "error": str(exc),
+                    }
+                )
+                continue
 
             if candidate.should_disable:
                 self._control_state_repo.set_enabled(
                     strategy_id=candidate.strategy_id,
                     enabled=False,
-                    reason=reason,
+                    reason="; ".join(candidate.reasons),
                     updated_by=actor,
                     updated_at=now,
                 )
-
             if candidate.should_zero_allocation:
                 self._zero_allocation(candidate=candidate, actor=actor, now=now)
-
             if candidate.should_freeze:
                 self._freeze_service.freeze_trading(
-                    reason=reason,
+                    reason="; ".join(candidate.reasons),
                     source="auto_demotion",
                 )
 
-            self._audit_log_repo.record_operator_action(
-                action=AUTO_DEMOTION_EVENT,
+            self._audit_demotion(
+                candidate=candidate,
+                transition=transition,
                 actor=actor,
-                reason=reason,
-                occurred_at=now,
-                component="governance",
-                metadata={
-                    "strategy_id": candidate.strategy_id,
-                    "from_state": old_state,
-                    "to_state": candidate.recommended_state,
-                    "observed_drawdown": candidate.observed_drawdown,
-                    "max_strategy_drawdown": candidate.max_strategy_drawdown,
-                    "source_id": candidate.source_id,
-                    "source_type": candidate.source_type,
-                    "breach_key": candidate.breach_key,
-                    "allocation_after": 0.0 if candidate.should_zero_allocation else None,
-                    "strategy_disabled": candidate.should_disable,
-                },
+                now=now,
+                notify=bool(settings.notify_strategy_demotion_events),
             )
-            if self._should_notify_demotion(settings):
-                self._audit_log_repo.record_operator_action(
-                    action="STRATEGY_DEMOTION_EVENT",
-                    actor=actor,
-                    reason=reason,
-                    occurred_at=now,
-                    component="notifications",
-                    metadata={
-                        "channel": "notify_strategy_demotion_events",
-                        "strategy_id": candidate.strategy_id,
-                        "from_state": old_state,
-                        "to_state": candidate.recommended_state,
-                        "observed_drawdown": candidate.observed_drawdown,
-                        "breach_key": candidate.breach_key,
-                    },
-                )
-            if self._should_notify_drawdown_alert(settings):
-                self._emit_drawdown_alert(candidate=candidate, actor=actor, occurred_at=now)
+            self._emit_drawdown_alerts_if_enabled(
+                settings=settings,
+                candidates=[candidate],
+                now=now,
+            )
+            strategy_demotion_total.add(1)
             executed.append(
                 {
                     "strategy_id": candidate.strategy_id,
-                    "old_governance_state": old_state,
-                    "new_governance_state": candidate.recommended_state,
+                    "old_governance_state": transition.from_state,
+                    "new_governance_state": transition.to_state,
                     "observed_drawdown": candidate.observed_drawdown,
                     "max_strategy_drawdown": candidate.max_strategy_drawdown,
+                    "breached_metric": candidate.breached_metric,
+                    "breached_value": candidate.breached_value,
+                    "threshold": candidate.threshold,
                     "breach_key": candidate.breach_key,
                     "strategy_disabled": candidate.should_disable,
                     "allocation_after": 0.0 if candidate.should_zero_allocation else None,
@@ -225,11 +337,23 @@ class AutoDemotionService:
             candidates=candidates,
             demotions_executed=executed,
             skipped_reason=None,
-            audit_event_type="STRATEGY_AUTO_DEMOTION_COMPLETED",
+            audit_event_type=AUTO_DEMOTION_COMPLETED_EVENT,
+            dry_run=False,
         )
         self._audit_run(result=result, actor=actor, occurred_at=now)
         self._session.flush()
         self._session.commit()
+        logger.info(
+            "auto_demotion.run_completed",
+            extra={
+                "strategies_evaluated": len(candidates),
+                "breach_count": sum(1 for row in candidates if row.status == "breach"),
+                "demotion_count": sum(1 for row in executed if row.get("status") == "demoted"),
+                "failed_transition_count": sum(
+                    1 for row in executed if row.get("status") == "failed"
+                ),
+            },
+        )
         return result
 
     def _evaluate_strategy(
@@ -237,102 +361,258 @@ class AutoDemotionService:
         governance: StrategyGovernance,
         *,
         max_strategy_drawdown: float,
+        rules: dict[tuple[str, str], PromotionRules],
     ) -> DemotionCandidate:
-        observed = self._latest_strategy_drawdown(governance.strategy_id)
+        observation = self._latest_strategy_observation(governance.strategy_id)
         old_state = governance.current_state
         new_state = _NEXT_STATE.get(old_state)
-        observed_drawdown = observed["drawdown"]
-        source_id = observed["source_id"]
-        source_type = observed["source_type"]
-        breach = (
-            observed_drawdown is not None and abs(float(observed_drawdown)) > max_strategy_drawdown
-        )
-        breach_key = (
-            f"{governance.strategy_id}:{source_type}:{source_id}:{max_strategy_drawdown}"
-            if breach and source_id is not None
-            else None
-        )
-
-        if not breach:
-            return DemotionCandidate(
-                strategy_id=governance.strategy_id,
-                source_id=source_id,
-                source_type=source_type,
-                observed_drawdown=observed_drawdown,
-                max_strategy_drawdown=max_strategy_drawdown,
-                breach=False,
-                old_state=old_state,
-                recommended_state=None,
-                should_disable=False,
-                should_zero_allocation=False,
-                should_freeze=False,
-                breach_key=breach_key,
-                status="no_breach",
-                reasons=[
-                    (
-                        f"observed drawdown {observed_drawdown} does not exceed "
-                        f"max_strategy_drawdown {max_strategy_drawdown}"
-                    )
-                ],
-            )
-
-        if breach_key is not None and self._breach_already_demoted(breach_key):
-            return DemotionCandidate(
-                strategy_id=governance.strategy_id,
-                source_id=source_id,
-                source_type=source_type,
-                observed_drawdown=observed_drawdown,
-                max_strategy_drawdown=max_strategy_drawdown,
-                breach=True,
-                old_state=old_state,
-                recommended_state=None,
-                should_disable=False,
-                should_zero_allocation=False,
-                should_freeze=False,
-                breach_key=breach_key,
-                status="already_demoted",
-                reasons=[f"breach key {breach_key} has already produced a demotion"],
-            )
-
-        severe = abs(float(observed_drawdown or 0)) >= max_strategy_drawdown * 2
-        return DemotionCandidate(
-            strategy_id=governance.strategy_id,
-            source_id=source_id,
-            source_type=source_type,
-            observed_drawdown=observed_drawdown,
+        maintenance = self._maintenance_rules_for(
+            current_state=old_state,
             max_strategy_drawdown=max_strategy_drawdown,
+            rules=rules,
+        )
+        lookback_window = {
+            "bars": maintenance.lookback_window_bars,
+            "trades": maintenance.lookback_window_trades,
+        }
+
+        sample_skip = self._sample_skip_reason(observation, maintenance)
+        if sample_skip is not None:
+            return self._candidate(
+                governance=governance,
+                observation=observation,
+                maintenance=maintenance,
+                breach=False,
+                status="skipped_insufficient_sample",
+                recommended_state=None,
+                reasons=[sample_skip],
+                lookback_window=lookback_window,
+            )
+
+        breach = self._first_breach(observation=observation, maintenance=maintenance)
+        if breach is None:
+            return self._candidate(
+                governance=governance,
+                observation=observation,
+                maintenance=maintenance,
+                breach=False,
+                status="no_breach",
+                recommended_state=None,
+                reasons=["maintenance metrics are within configured thresholds"],
+                lookback_window=lookback_window,
+            )
+
+        breach_metric, breach_value, threshold, reason = breach
+        breach_key = self._breach_key(
+            strategy_id=governance.strategy_id,
+            source_type=observation.source_type,
+            source_id=observation.source_id,
+            breached_metric=breach_metric,
+            threshold=threshold,
+        )
+        if breach_key is not None and self._breach_already_demoted(breach_key):
+            return self._candidate(
+                governance=governance,
+                observation=observation,
+                maintenance=maintenance,
+                breach=True,
+                status="already_demoted",
+                recommended_state=None,
+                reasons=[f"breach key {breach_key} has already produced a demotion"],
+                lookback_window=lookback_window,
+                breach_key=breach_key,
+                breached_metric=breach_metric,
+                breached_value=breach_value,
+                threshold=threshold,
+            )
+
+        severe = (
+            breach_metric == "drawdown"
+            and breach_value is not None
+            and abs(float(breach_value)) >= maintenance.maintenance_max_drawdown * 2
+        )
+        return self._candidate(
+            governance=governance,
+            observation=observation,
+            maintenance=maintenance,
             breach=True,
-            old_state=old_state,
+            status="breach",
             recommended_state=new_state,
+            reasons=[reason, f"recommended governance state: {new_state}"],
+            lookback_window=lookback_window,
+            breach_key=breach_key,
+            breached_metric=breach_metric,
+            breached_value=breach_value,
+            threshold=threshold,
             should_disable=True,
             should_zero_allocation=True,
             should_freeze=severe,
-            breach_key=breach_key,
-            status="breach",
-            reasons=[
-                (
-                    f"observed drawdown {observed_drawdown} exceeds "
-                    f"max_strategy_drawdown {max_strategy_drawdown}"
-                ),
-                f"recommended governance state: {new_state}",
-            ],
         )
 
-    def _latest_strategy_drawdown(self, strategy_id: str) -> dict[str, Any]:
+    def _candidate(
+        self,
+        *,
+        governance: StrategyGovernance,
+        observation: PerformanceObservation,
+        maintenance: MaintenanceRuleSet,
+        breach: bool,
+        status: str,
+        recommended_state: str | None,
+        reasons: list[str],
+        lookback_window: dict[str, int | None],
+        breach_key: str | None = None,
+        breached_metric: str | None = None,
+        breached_value: float | None = None,
+        threshold: float | None = None,
+        should_disable: bool = False,
+        should_zero_allocation: bool = False,
+        should_freeze: bool = False,
+    ) -> DemotionCandidate:
+        return DemotionCandidate(
+            strategy_id=governance.strategy_id,
+            source_id=observation.source_id,
+            source_type=observation.source_type,
+            observed_drawdown=observation.drawdown,
+            max_strategy_drawdown=maintenance.maintenance_max_drawdown,
+            breach=breach,
+            old_state=governance.current_state,
+            recommended_state=recommended_state,
+            should_disable=should_disable,
+            should_zero_allocation=should_zero_allocation,
+            should_freeze=should_freeze,
+            breach_key=breach_key,
+            status=status,
+            reasons=reasons,
+            breached_metric=breached_metric,
+            breached_value=breached_value,
+            threshold=threshold,
+            observed_sharpe=observation.sharpe,
+            observed_win_rate=observation.win_rate,
+            trade_count=observation.trade_count,
+            lookback_window=lookback_window,
+            rule_id=maintenance.rule_id,
+        )
+
+    def _maintenance_rules_for(
+        self,
+        *,
+        current_state: str,
+        max_strategy_drawdown: float,
+        rules: dict[tuple[str, str], PromotionRules],
+    ) -> MaintenanceRuleSet:
+        rule = rules.get(_MAINTENANCE_RULE_STATUS[current_state])
+        return MaintenanceRuleSet(
+            rule_id=rule.rule_id if rule is not None else None,
+            lookback_window_bars=rule.lookback_window_bars if rule is not None else None,
+            lookback_window_trades=rule.lookback_window_trades if rule is not None else None,
+            maintenance_min_sharpe=(
+                rule.maintenance_min_sharpe
+                if rule is not None and rule.maintenance_min_sharpe is not None
+                else -1.0
+            ),
+            maintenance_min_win_rate=(rule.maintenance_min_win_rate if rule is not None else None),
+            maintenance_max_drawdown=(
+                rule.maintenance_max_drawdown
+                if rule is not None and rule.maintenance_max_drawdown is not None
+                else max_strategy_drawdown
+            ),
+        )
+
+    def _sample_skip_reason(
+        self,
+        observation: PerformanceObservation,
+        maintenance: MaintenanceRuleSet,
+    ) -> str | None:
+        if observation.source_id is None:
+            return "no recent performance observation available"
+        if (
+            maintenance.lookback_window_trades is not None
+            and observation.trade_count is not None
+            and observation.trade_count < maintenance.lookback_window_trades
+        ):
+            return (
+                f"trade_count {observation.trade_count} below lookback_window_trades "
+                f"{maintenance.lookback_window_trades}"
+            )
+        if (
+            maintenance.lookback_window_bars is not None
+            and observation.bars is not None
+            and observation.bars < maintenance.lookback_window_bars
+        ):
+            return (
+                f"bars {observation.bars} below lookback_window_bars "
+                f"{maintenance.lookback_window_bars}"
+            )
+        return None
+
+    def _first_breach(
+        self,
+        *,
+        observation: PerformanceObservation,
+        maintenance: MaintenanceRuleSet,
+    ) -> tuple[str, float | None, float, str] | None:
+        if observation.drawdown is not None and self._drawdown_exceeds(
+            observation.drawdown,
+            maintenance.maintenance_max_drawdown,
+        ):
+            return (
+                "drawdown",
+                observation.drawdown,
+                maintenance.maintenance_max_drawdown,
+                (
+                    f"observed drawdown {observation.drawdown} exceeds "
+                    f"max_strategy_drawdown {maintenance.maintenance_max_drawdown}"
+                ),
+            )
+        if (
+            maintenance.maintenance_min_sharpe is not None
+            and observation.sharpe is not None
+            and observation.sharpe < maintenance.maintenance_min_sharpe
+        ):
+            return (
+                "sharpe",
+                observation.sharpe,
+                maintenance.maintenance_min_sharpe,
+                (
+                    f"trailing sharpe {observation.sharpe} below maintenance_min_sharpe "
+                    f"{maintenance.maintenance_min_sharpe}"
+                ),
+            )
+        if (
+            maintenance.maintenance_min_win_rate is not None
+            and observation.win_rate is not None
+            and observation.win_rate < maintenance.maintenance_min_win_rate
+        ):
+            return (
+                "win_rate",
+                observation.win_rate,
+                maintenance.maintenance_min_win_rate,
+                (
+                    f"trailing win_rate {observation.win_rate} below maintenance_min_win_rate "
+                    f"{maintenance.maintenance_min_win_rate}"
+                ),
+            )
+        return None
+
+    def _latest_strategy_observation(self, strategy_id: str) -> PerformanceObservation:
         metrics = self._latest_metrics_for_strategy(strategy_id)
         risk = self._latest_risk_for_strategy(strategy_id)
-        if risk is not None and (metrics is None or risk["timestamp"] >= metrics["timestamp"]):
+        if risk is not None and (metrics is None or risk.timestamp >= metrics.timestamp):
             return risk
         if metrics is not None:
             return metrics
-        return {
-            "drawdown": None,
-            "source_id": None,
-            "source_type": "none",
-            "timestamp": datetime.min.replace(tzinfo=UTC),
-        }
+        return PerformanceObservation(
+            drawdown=None,
+            sharpe=None,
+            win_rate=None,
+            trade_count=None,
+            bars=None,
+            source_id=None,
+            source_type="none",
+            timestamp=datetime.min.replace(tzinfo=UTC),
+        )
 
-    def _latest_metrics_for_strategy(self, strategy_id: str) -> dict[str, Any] | None:
+    def _latest_metrics_for_strategy(self, strategy_id: str) -> PerformanceObservation | None:
         rows = self._session.scalars(
             select(MetricsSummary).order_by(
                 MetricsSummary.created_at.desc(),
@@ -342,15 +622,23 @@ class AutoDemotionService:
         for row in rows:
             if (row.metrics_json or {}).get("strategy_id") != strategy_id:
                 continue
-            return {
-                "drawdown": row.max_drawdown,
-                "source_id": row.metrics_snapshot_id,
-                "source_type": "metrics_summary",
-                "timestamp": row.created_at,
-            }
+            metrics_json = row.metrics_json or {}
+            win_rate = metrics_json.get("win_rate")
+            if win_rate is None and row.trade_count and row.winning_trade_count is not None:
+                win_rate = row.winning_trade_count / row.trade_count
+            return PerformanceObservation(
+                drawdown=row.max_drawdown,
+                sharpe=row.sharpe_ratio,
+                win_rate=float(win_rate) if win_rate is not None else None,
+                trade_count=row.trade_count,
+                bars=metrics_json.get("bars", metrics_json.get("days_tested")),
+                source_id=row.metrics_snapshot_id,
+                source_type="metrics_summary",
+                timestamp=row.created_at,
+            )
         return None
 
-    def _latest_risk_for_strategy(self, strategy_id: str) -> dict[str, Any] | None:
+    def _latest_risk_for_strategy(self, strategy_id: str) -> PerformanceObservation | None:
         rows = self._session.scalars(
             select(RiskSnapshot).order_by(RiskSnapshot.timestamp.desc())
         ).all()
@@ -358,20 +646,37 @@ class AutoDemotionService:
             utilization = row.utilization or {}
             strategy_drawdowns = utilization.get("strategy_drawdowns")
             if isinstance(strategy_drawdowns, dict) and strategy_id in strategy_drawdowns:
-                return {
-                    "drawdown": float(strategy_drawdowns[strategy_id]),
-                    "source_id": str(row.snapshot_id),
-                    "source_type": "risk_snapshot",
-                    "timestamp": row.timestamp,
-                }
-            strategy_id_value = utilization.get("strategy_id")
-            if strategy_id_value == strategy_id:
-                return {
-                    "drawdown": row.drawdown_pct,
-                    "source_id": str(row.snapshot_id),
-                    "source_type": "risk_snapshot",
-                    "timestamp": row.timestamp,
-                }
+                return PerformanceObservation(
+                    drawdown=float(strategy_drawdowns[strategy_id]),
+                    sharpe=self._nested_strategy_metric(
+                        utilization, "strategy_sharpes", strategy_id
+                    ),
+                    win_rate=self._nested_strategy_metric(
+                        utilization,
+                        "strategy_win_rates",
+                        strategy_id,
+                    ),
+                    trade_count=self._nested_strategy_int(
+                        utilization,
+                        "strategy_trade_counts",
+                        strategy_id,
+                    ),
+                    bars=self._nested_strategy_int(utilization, "strategy_bars", strategy_id),
+                    source_id=str(row.snapshot_id),
+                    source_type="risk_snapshot",
+                    timestamp=row.timestamp,
+                )
+            if utilization.get("strategy_id") == strategy_id:
+                return PerformanceObservation(
+                    drawdown=row.drawdown_pct,
+                    sharpe=utilization.get("sharpe"),
+                    win_rate=utilization.get("win_rate"),
+                    trade_count=utilization.get("trade_count"),
+                    bars=utilization.get("bars"),
+                    source_id=str(row.snapshot_id),
+                    source_type="risk_snapshot",
+                    timestamp=row.timestamp,
+                )
         return None
 
     def _zero_allocation(
@@ -409,44 +714,91 @@ class AutoDemotionService:
             latest_by_strategy.setdefault(row.strategy_id, row)
         return list(latest_by_strategy.values())
 
-    def _latest_governance(self, strategy_id: str) -> StrategyGovernance | None:
-        return cast(
-            StrategyGovernance | None,
-            self._session.scalars(
-                select(StrategyGovernance)
-                .where(StrategyGovernance.strategy_id == strategy_id)
-                .order_by(StrategyGovernance.updated_at.desc())
-                .limit(1)
-            ).one_or_none(),
-        )
+    def _active_rules_by_transition(self) -> dict[tuple[str, str], PromotionRules]:
+        return {
+            (row.from_status, row.to_status): row
+            for row in self._promotion_rules_repo.get_all_active()
+        }
 
     def _breach_already_demoted(self, breach_key: str) -> bool:
         return (
             self._session.query(AuditLogRow)
-            .filter(AuditLogRow.event_type == AUTO_DEMOTION_EVENT)
+            .filter(AuditLogRow.event_type == AUTO_DEMOTION_AUDIT_EVENT)
             .filter(AuditLogRow.metadata_["breach_key"].as_string() == breach_key)
             .first()
             is not None
         )
 
-    def _should_notify_demotion(self, settings: OperatorSettingsRow) -> bool:
-        return bool(settings.notify_strategy_demotion_events)
+    def _audit_demotion(
+        self,
+        *,
+        candidate: DemotionCandidate,
+        transition,
+        actor: str,
+        now: datetime,
+        notify: bool,
+    ) -> None:
+        metadata = {
+            "strategy_id": candidate.strategy_id,
+            "previous_state": transition.from_state,
+            "new_state": transition.to_state,
+            "from_state": transition.from_state,
+            "to_state": transition.to_state,
+            "breached_metric": candidate.breached_metric,
+            "breached_value": candidate.breached_value,
+            "threshold": candidate.threshold,
+            "lookback_window": candidate.lookback_window,
+            "evaluated_at": now.isoformat(),
+            "actor_role": "system_risk",
+            "source_id": candidate.source_id,
+            "source_type": candidate.source_type,
+            "breach_key": candidate.breach_key,
+            "allocation_after": 0.0 if candidate.should_zero_allocation else None,
+            "strategy_disabled": candidate.should_disable,
+        }
+        self._audit_log_repo.record_operator_action(
+            action=AUTO_DEMOTION_AUDIT_EVENT,
+            actor=actor,
+            reason="; ".join(candidate.reasons),
+            occurred_at=now,
+            component="governance",
+            metadata=metadata,
+        )
+        if notify:
+            self._audit_log_repo.record_operator_action(
+                action=AUTO_DEMOTION_EVENT,
+                actor=actor,
+                reason="; ".join(candidate.reasons),
+                occurred_at=now,
+                component="notifications",
+                metadata={"channel": "notify_strategy_demotion_events", **metadata},
+            )
 
-    def _should_notify_drawdown_alert(self, settings: OperatorSettingsRow) -> bool:
-        return bool(settings.notify_drawdown_alerts)
+    def _emit_drawdown_alerts_if_enabled(
+        self,
+        *,
+        settings: OperatorSettingsRow,
+        candidates: list[DemotionCandidate],
+        now: datetime,
+    ) -> None:
+        if not bool(settings.notify_drawdown_alerts):
+            return
+        for candidate in candidates:
+            if candidate.breach and candidate.breached_metric == "drawdown":
+                self._emit_drawdown_alert(candidate=candidate, actor=AUTO_DEMOTION_ACTOR, now=now)
 
     def _emit_drawdown_alert(
         self,
         *,
         candidate: DemotionCandidate,
         actor: str,
-        occurred_at: datetime,
+        now: datetime,
     ) -> None:
         self._audit_log_repo.record_operator_action(
             action="DRAWDOWN_ALERT_EVENT",
             actor=actor,
             reason="; ".join(candidate.reasons),
-            occurred_at=occurred_at,
+            occurred_at=now,
             component="notifications",
             metadata={
                 "channel": "notify_drawdown_alerts",
@@ -480,14 +832,23 @@ class AutoDemotionService:
             "run_id": result.run_id,
             "auto_demote_on_breach": result.auto_demote_on_breach,
             "max_strategy_drawdown": result.max_strategy_drawdown,
+            "dry_run": result.dry_run,
             "candidate_strategies": [
                 {
                     "strategy_id": row.strategy_id,
                     "source_id": row.source_id,
                     "source_type": row.source_type,
                     "observed_drawdown": row.observed_drawdown,
+                    "observed_sharpe": row.observed_sharpe,
+                    "observed_win_rate": row.observed_win_rate,
+                    "trade_count": row.trade_count,
                     "max_strategy_drawdown": row.max_strategy_drawdown,
                     "breach_status": row.breach,
+                    "breached_metric": row.breached_metric,
+                    "breached_value": row.breached_value,
+                    "threshold": row.threshold,
+                    "lookback_window": row.lookback_window,
+                    "rule_id": row.rule_id,
                     "old_governance_state": row.old_state,
                     "new_governance_state": row.recommended_state,
                     "should_disable": row.should_disable,
@@ -503,3 +864,53 @@ class AutoDemotionService:
             "skipped_reason": result.skipped_reason,
             "audit_event_emitted": result.audit_event_type,
         }
+
+    @staticmethod
+    def _drawdown_exceeds(actual: float, limit: float) -> bool:
+        if limit < 0:
+            return actual < limit
+        return abs(actual) > limit
+
+    @staticmethod
+    def _breach_key(
+        *,
+        strategy_id: str,
+        source_type: str,
+        source_id: str | None,
+        breached_metric: str,
+        threshold: float,
+    ) -> str | None:
+        if source_id is None:
+            return None
+        return f"{strategy_id}:{source_type}:{source_id}:{breached_metric}:{threshold}"
+
+    @staticmethod
+    def _nested_strategy_metric(
+        utilization: dict[str, Any],
+        key: str,
+        strategy_id: str,
+    ) -> float | None:
+        values = utilization.get(key)
+        if not isinstance(values, dict) or strategy_id not in values:
+            return None
+        return float(values[strategy_id])
+
+    @staticmethod
+    def _nested_strategy_int(
+        utilization: dict[str, Any],
+        key: str,
+        strategy_id: str,
+    ) -> int | None:
+        value = AutoDemotionService._nested_strategy_metric(utilization, key, strategy_id)
+        return int(value) if value is not None else None
+
+    def _latest_governance(self, strategy_id: str) -> StrategyGovernance | None:
+        return cast(
+            StrategyGovernance | None,
+            self._session.scalars(
+                select(StrategyGovernance)
+                .where(StrategyGovernance.strategy_id == strategy_id)
+                .order_by(StrategyGovernance.updated_at.desc())
+                .limit(1)
+            ).one_or_none(),
+        )

@@ -30,6 +30,7 @@ from autonomous_trading_platform.application.services.strategy_catalog_service i
 )
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.contracts.runtime.runtime_snapshot import (
+    AggregateAllocationSnapshot,
     DatasetVersionEntry,
     ExperimentEntry,
     OperatorControlsSnapshot,
@@ -74,6 +75,7 @@ class RuntimeSnapshotService:
             operator_settings=self._capture_settings(),
             strategy_controls=strategy_controls,
             strategy_allocations=self._capture_allocations(),
+            aggregate_allocation=self._capture_aggregate_allocation(),
             datasets=self._capture_datasets(),
             recent_activity=self._capture_recent_activity(),
             experiments=self._capture_experiments(),
@@ -147,6 +149,25 @@ class RuntimeSnapshotService:
             ]
         except Exception:
             return []
+
+    def _capture_aggregate_allocation(self) -> AggregateAllocationSnapshot | None:
+        try:
+            status = StrategyAllocationService(
+                session=self._session
+            ).get_aggregate_allocation_status()
+            return AggregateAllocationSnapshot(
+                aggregate_allocation_pct=Decimal(str(status["aggregate_allocation_pct"])),
+                max_total_strategy_allocation_pct=Decimal(
+                    str(status["max_total_strategy_allocation_pct"])
+                ),
+                remaining_allocation_capacity_pct=Decimal(
+                    str(status["remaining_allocation_capacity_pct"])
+                ),
+                allocation_utilization=Decimal(str(status["allocation_utilization"])),
+                allocation_budget_exceeded=bool(status["allocation_budget_exceeded"]),
+            )
+        except Exception:
+            return None
 
     def _capture_datasets(self) -> list[DatasetVersionEntry]:
         try:

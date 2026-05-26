@@ -339,6 +339,9 @@ class QualityBasedReallocationService:
         self._session.flush()
 
         for proposal in proposals:
+            existing = active.get(proposal.strategy_id)
+            if existing is not None and existing.overridden_by != AUTO_REBALANCE_ACTOR:
+                continue
             if proposal.manual_override_respected:
                 continue
             self._allocation_overrides_repo.create_override(
