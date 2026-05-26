@@ -61,6 +61,16 @@ _SERVICE_TO_STATE = {
     "live": "approved_for_live_trading",
 }
 
+# Auto-promotion transitions that require an explicit source_run_id on the governance record.
+# The (from_status, to_status) pairs use the rule-alias conventions.
+# If a strategy is in one of these transitions and has no source_run_id, it is skipped.
+_CAPITAL_BEARING_AUTO_PROMOTION_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("approved_research", "approved_paper"),
+        ("approved_paper", "approved_live"),
+    }
+)
+
 
 @dataclass(frozen=True)
 class PromotionCriterionResult:
@@ -85,6 +95,9 @@ class PromotionEligibilityResult:
     reasons: list[str]
     skipped_criteria: list[str] = field(default_factory=list)
     missing_required_criteria: list[str] = field(default_factory=list)
+    source_run_id: str | None = None
+    fallback_allowed: bool = True
+    metrics_source_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -206,7 +219,61 @@ class AutoPromotionService:
         to_status = "approved_paper" if from_status == "approved_research" else "approved_live"
         to_state = _TARGET_STATE[governance.current_state]
         rule = rules.get((from_status, to_status))
-        metrics = self._metrics_for_strategy(governance)
+        is_capital_bearing = (from_status, to_status) in _CAPITAL_BEARING_AUTO_PROMOTION_TRANSITIONS
+
+        # Capital-bearing transitions fail closed when source_run_id is absent; no fallback.
+        if is_capital_bearing and governance.source_run_id is None:
+            self._audit_log_repo.record_operator_action(
+                action="PROMOTION_MISSING_SOURCE_RUN",
+                actor=AUTO_PROMOTION_ACTOR,
+                reason=(
+                    f"Strategy {governance.strategy_id!r} skipped: no source_run_id for "
+                    f"capital-bearing auto-promotion to {to_status!r}"
+                ),
+                occurred_at=datetime.now(UTC),
+                component="governance",
+                metadata={
+                    "strategy_id": governance.strategy_id,
+                    "from_state": governance.current_state,
+                    "to_state": to_state,
+                    "from_status": from_status,
+                    "to_status": to_status,
+                    "error": "missing_source_run_id",
+                    "fallback_allowed": False,
+                    "source": "auto_promotion_scan",
+                },
+            )
+            null_metrics: dict[str, float | int | None] = {
+                k: None
+                for k in (
+                    "sharpe",
+                    "max_drawdown",
+                    "days_tested",
+                    "trade_count",
+                    "cagr",
+                    "win_rate",
+                )
+            }
+            return PromotionEligibilityResult(
+                strategy_id=governance.strategy_id,
+                from_state=governance.current_state,
+                to_state=to_state,
+                rule_id=rule.rule_id if rule else None,
+                eligible=False,
+                status="missing_source_run",
+                metrics=null_metrics,
+                criteria=[],
+                reasons=[
+                    f"Capital-bearing promotion to {to_status!r} requires explicit source_run_id. "
+                    "Set source_run_id on the governance record to enable auto-promotion."
+                ],
+                source_run_id=None,
+                fallback_allowed=False,
+                metrics_source_type=None,
+            )
+
+        resolved_source_run_id = str(governance.source_run_id) if governance.source_run_id else None
+        metrics = self._metrics_for_strategy(governance, is_capital_bearing=is_capital_bearing)
 
         if rule is None:
             return PromotionEligibilityResult(
@@ -219,6 +286,8 @@ class AutoPromotionService:
                 metrics=metrics,
                 criteria=[],
                 reasons=[f"No active PromotionRules row for {from_status} -> {to_status}."],
+                source_run_id=resolved_source_run_id,
+                fallback_allowed=not is_capital_bearing,
             )
 
         # Check required criteria for null thresholds before evaluating strategy metrics.
@@ -270,6 +339,8 @@ class AutoPromotionService:
                     f"{null_required} are null for {from_status} -> {to_status}."
                 ],
                 missing_required_criteria=null_required,
+                source_run_id=resolved_source_run_id,
+                fallback_allowed=not is_capital_bearing,
             )
 
         criteria = self._evaluate_rule(
@@ -282,6 +353,7 @@ class AutoPromotionService:
         ]
         skipped = [criterion.name for criterion in criteria if criterion.skipped]
         eligible = not failures
+        metrics_source_type = "explicit_source_run" if resolved_source_run_id else "fallback"
         return PromotionEligibilityResult(
             strategy_id=governance.strategy_id,
             from_state=governance.current_state,
@@ -293,6 +365,9 @@ class AutoPromotionService:
             criteria=criteria,
             reasons=["eligible"] if eligible else failures,
             skipped_criteria=skipped,
+            source_run_id=resolved_source_run_id,
+            fallback_allowed=not is_capital_bearing,
+            metrics_source_type=metrics_source_type,
         )
 
     def _evaluate_rule(
@@ -428,6 +503,8 @@ class AutoPromotionService:
     def _metrics_for_strategy(
         self,
         governance: StrategyGovernance,
+        *,
+        is_capital_bearing: bool = False,
     ) -> dict[str, float | int | None]:
         metrics_row: MetricsSummary | None = None
         run_row: SimulationRuns | None = None
@@ -439,7 +516,7 @@ class AutoPromotionService:
                 select(MetricsSummary).where(MetricsSummary.run_id == run_id)
             ).one_or_none()
 
-        if metrics_row is None:
+        if not is_capital_bearing and metrics_row is None:
             row = self._session.execute(
                 select(MetricsSummary, SimulationRuns)
                 .join(SimulationRuns, MetricsSummary.run_id == SimulationRuns.run_id)
@@ -452,7 +529,7 @@ class AutoPromotionService:
             if row is not None:
                 metrics_row, run_row = row
 
-        if metrics_row is None:
+        if not is_capital_bearing and metrics_row is None:
             metrics_row = self._latest_metrics_from_json(governance.strategy_id)
 
         if metrics_row is None:
@@ -552,6 +629,9 @@ class AutoPromotionService:
                     "rule_id": candidate.rule_id,
                     "eligible": candidate.eligible,
                     "status": candidate.status,
+                    "source_run_id": candidate.source_run_id,
+                    "metrics_source_type": candidate.metrics_source_type,
+                    "fallback_allowed": candidate.fallback_allowed,
                     "metrics": candidate.metrics,
                     "criteria": [
                         {

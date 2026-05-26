@@ -19,6 +19,7 @@ from autonomous_trading_platform.application.services.active_strategies_service 
     ActiveStrategiesService,
 )
 from autonomous_trading_platform.application.services.governance_exceptions import (
+    MissingSourceRunError,
     PromotionCriteriaConfigurationError,
     PromotionRulesMissingError,
 )
@@ -341,6 +342,7 @@ def transition_strategy_governance(
             reason=reason,
             updated_by=actor,
             actor_role=actor_role,
+            source_run_id=str(payload.source_run_id) if payload.source_run_id else None,
         )
     except PermissionError as exc:
         raise HTTPException(
@@ -351,6 +353,16 @@ def transition_strategy_governance(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
+        ) from exc
+    except MissingSourceRunError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Promotion of strategy {exc.strategy_id!r} to {exc.target_state!r} requires "
+                "an explicit source_run_id. Capital-bearing transitions must reference the "
+                "specific evaluation run that justifies the promotion. "
+                "Missing field: source_run_id."
+            ),
         ) from exc
     except PromotionRulesMissingError as exc:
         raise HTTPException(

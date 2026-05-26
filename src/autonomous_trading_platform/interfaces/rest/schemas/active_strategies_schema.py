@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -68,6 +69,13 @@ class StrategyEnabledUpdateResponse(BaseModel):
 class StrategyGovernanceTransitionRequest(BaseModel):
     to_state: str = Field(min_length=1, max_length=100)
     reason: str = Field(min_length=1, max_length=500)
+    source_run_id: UUID | None = Field(
+        default=None,
+        description=(
+            "ID of the simulation run whose metrics justify this promotion. "
+            "Required for capital-bearing transitions (approved_paper, approved_live)."
+        ),
+    )
 
 
 class StrategyGovernanceTransitionResponse(BaseModel):

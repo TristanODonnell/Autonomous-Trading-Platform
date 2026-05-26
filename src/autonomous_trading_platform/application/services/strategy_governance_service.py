@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.application.services.governance_exceptions import (
+    MissingSourceRunError,
     PromotionCriteriaConfigurationError,
     PromotionRulesMissingError,
 )
@@ -67,6 +68,15 @@ _TARGET_STATE_ROLES = {
 
 _PROMOTION_TARGET_STATES = {"approved_for_paper_trading", "approved_for_live_trading"}
 
+# Transitions that require an explicit source_run_id; no fallback to latest run is allowed.
+# Encode the policy here rather than scattering conditionals across the service.
+_SOURCE_RUN_REQUIRED_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("approved_research", "approved_for_paper_trading"),
+        ("approved_for_paper_trading", "approved_for_live_trading"),
+    }
+)
+
 # Criteria that MUST be non-null on the PromotionRules row for a promotion to proceed.
 # Keyed by (rule_from_status, rule_to_status) using _RULE_STATE_ALIASES values.
 # An empty frozenset means no hard-required fields for that transition.
@@ -109,6 +119,7 @@ class StrategyGovernanceService:
         reason: str,
         updated_by: str,
         actor_role: str,
+        source_run_id: str | None = None,
     ) -> StrategyGovernanceTransitionResult:
         governance = self._latest_governance(strategy_id)
         if governance is None:
@@ -117,13 +128,18 @@ class StrategyGovernanceService:
         from_state = self._normalize_state(governance.current_state)
         target_state = self._normalize_state(to_state)
 
+        # Resolve source_run_id: explicit caller argument wins over governance record.
+        resolved_source_run_id = source_run_id or (
+            str(governance.source_run_id) if governance.source_run_id else None
+        )
+
         self._assert_role_allowed(target_state=target_state, actor_role=actor_role)
         self._assert_transition_allowed(from_state=from_state, target_state=target_state)
         criteria_summary: dict[str, object] = {}
         if self._is_promotion_transition(from_state=from_state, target_state=target_state):
             criteria_summary = self._assert_promotion_criteria_met(
                 strategy_id=strategy_id,
-                source_run_id=str(governance.source_run_id) if governance.source_run_id else None,
+                source_run_id=resolved_source_run_id,
                 from_state=from_state,
                 target_state=target_state,
             )
@@ -234,6 +250,7 @@ class StrategyGovernanceService:
         Raises:
             PromotionRulesMissingError: no active rule row for this transition.
             PromotionCriteriaConfigurationError: rule exists but required fields are null.
+            MissingSourceRunError: capital-bearing transition attempted without source_run_id.
             ValueError: strategy metrics fail one or more configured thresholds.
         """
         rule_from = _RULE_STATE_ALIASES[from_state]
@@ -243,6 +260,7 @@ class StrategyGovernanceService:
             to_status=rule_to,
         )
         now = datetime.now(UTC)
+        is_capital_bearing = (from_state, target_state) in _SOURCE_RUN_REQUIRED_TRANSITIONS
 
         if rule is None:
             self._audit_log_repo.record_operator_action(
@@ -290,7 +308,31 @@ class StrategyGovernanceService:
                 rule_id=rule.rule_id,
             )
 
-        metrics = self._metrics_for_strategy(strategy_id=strategy_id, source_run_id=source_run_id)
+        if is_capital_bearing and source_run_id is None:
+            self._audit_log_repo.record_operator_action(
+                action="PROMOTION_MISSING_SOURCE_RUN",
+                actor="system",
+                reason=(
+                    f"Capital-bearing promotion to {target_state!r} requires explicit source_run_id"
+                ),
+                occurred_at=now,
+                component="governance",
+                metadata={
+                    "strategy_id": strategy_id,
+                    "from_state": from_state,
+                    "to_state": target_state,
+                    "error": "missing_source_run_id",
+                    "fallback_allowed": False,
+                    "rule_id": rule.rule_id,
+                },
+            )
+            raise MissingSourceRunError(strategy_id=strategy_id, target_state=target_state)
+
+        metrics = self._metrics_for_strategy(
+            strategy_id=strategy_id,
+            source_run_id=source_run_id,
+            is_capital_bearing=is_capital_bearing,
+        )
         failures: list[str] = []
         evaluated: list[dict[str, object]] = []
         skipped_optional: list[str] = []
@@ -348,7 +390,11 @@ class StrategyGovernanceService:
         if failures:
             raise ValueError("Strategy does not meet promotion criteria: " + "; ".join(failures))
 
+        metrics_source_type = "explicit_source_run" if source_run_id else "fallback"
         return {
+            "source_run_id": source_run_id,
+            "metrics_source_type": metrics_source_type,
+            "fallback_allowed": not is_capital_bearing,
             "promotion_criteria_evaluated": evaluated,
             "promotion_criteria_skipped_optional": skipped_optional,
             "rule_id": rule.rule_id,
@@ -361,6 +407,7 @@ class StrategyGovernanceService:
         *,
         strategy_id: str,
         source_run_id: str | None,
+        is_capital_bearing: bool = False,
     ) -> dict[str, float]:
         metrics_row: MetricsSummary | None = None
         run_row: SimulationRuns | None = None
@@ -371,7 +418,7 @@ class StrategyGovernanceService:
                 select(MetricsSummary).where(MetricsSummary.run_id == source_run_id)
             ).one_or_none()
 
-        if metrics_row is None:
+        if not is_capital_bearing and metrics_row is None:
             stmt = (
                 select(MetricsSummary, SimulationRuns)
                 .join(SimulationRuns, MetricsSummary.run_id == SimulationRuns.run_id)
@@ -383,7 +430,7 @@ class StrategyGovernanceService:
             if row is not None:
                 metrics_row, run_row = row
 
-        if metrics_row is None:
+        if not is_capital_bearing and metrics_row is None:
             metrics_row = self._latest_metrics_from_json(strategy_id)
 
         if metrics_row is None:

@@ -684,7 +684,11 @@ def test_strategy_promotion_notification_flag_false_suppresses_notification_even
 
     response = client.post(
         "/api/v1/strategies/paper_candidate_v1/governance/transition",
-        json={"to_state": "paper", "reason": "manual approval"},
+        json={
+            "to_state": "paper",
+            "reason": "manual approval",
+            "source_run_id": "00000000-0000-0000-0000-000000000001",
+        },
         headers=auth_headers(role="risk_manager"),
     )
 
@@ -716,6 +720,7 @@ def test_strategy_promotion_notification_flag_true_emits_live_promotion_event(
     )
     # paper->live requires min_sharpe, min_days_tested, min_trade_count — all must be set.
     # Also seed a MetricsSummary so the strategy can pass the criteria check.
+    _live_source_run_id = "a1a1a1a1-0000-0000-0000-a1a1a1a1a1a1"
     db_session.add_all(
         [
             PromotionRules(
@@ -734,7 +739,7 @@ def test_strategy_promotion_notification_flag_true_emits_live_promotion_event(
             ),
             MetricsSummary(
                 metrics_snapshot_id="metrics-notif",
-                run_id="run-notif",
+                run_id=_live_source_run_id,
                 created_at=now,
                 total_return=0.15,
                 sharpe_ratio=2.5,
@@ -754,7 +759,11 @@ def test_strategy_promotion_notification_flag_true_emits_live_promotion_event(
 
     response = client.post(
         "/api/v1/strategies/live_candidate_v1/governance/transition",
-        json={"to_state": "live", "reason": "live criteria approved"},
+        json={
+            "to_state": "live",
+            "reason": "live criteria approved",
+            "source_run_id": _live_source_run_id,
+        },
         headers=auth_headers(role="admin"),
     )
 

@@ -1,6 +1,25 @@
 from __future__ import annotations
 
 
+class MissingSourceRunError(Exception):
+    """Raised when a capital-bearing promotion is attempted without an explicit source_run_id.
+
+    Promotions into approved_paper or approved_live must reference the specific simulation run
+    whose metrics justified the transition.  Without this reference the audit trail cannot
+    answer "which run justified this promotion?" and the metrics source is ambiguous.
+    """
+
+    def __init__(self, strategy_id: str, target_state: str) -> None:
+        self.strategy_id = strategy_id
+        self.target_state = target_state
+        super().__init__(
+            f"Promotion of strategy {strategy_id!r} to {target_state!r} requires an explicit "
+            "source_run_id. Capital-bearing promotions must reference the specific evaluation "
+            "run that justifies the transition. "
+            "Missing field: source_run_id."
+        )
+
+
 class PromotionRulesMissingError(Exception):
     """Raised when no active PromotionRules row exists for a requested promotion transition.
 

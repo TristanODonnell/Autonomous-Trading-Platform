@@ -390,6 +390,7 @@ def test_manual_transition_records_operator_user_id(db_session: Session) -> None
         reason="manual promotion",
         updated_by="user_alice",
         actor_role="risk_manager",
+        source_run_id="audit_test_run",
     )
 
     assert _last_audit_actor(db_session, "STRATEGY_GOVERNANCE_TRANSITIONED") == "user_alice"

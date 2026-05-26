@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.application.services.governance_exceptions import (
+    MissingSourceRunError,
     PromotionCriteriaConfigurationError,
     PromotionRulesMissingError,
 )
@@ -109,6 +110,33 @@ def _seed_live_rule(
     session.flush()
 
 
+def _seed_paper_rule(
+    session: Session,
+    *,
+    min_sharpe: float | None = 1.0,
+    min_days_tested: int | None = 30,
+    min_trade_count: int | None = 10,
+    max_drawdown: float | None = 0.20,
+) -> None:
+    session.add(
+        PromotionRules(
+            rule_id="research_to_paper",
+            from_status="approved_research",
+            to_status="approved_paper",
+            min_sharpe=min_sharpe,
+            max_drawdown=max_drawdown,
+            min_days_tested=min_days_tested,
+            min_trade_count=min_trade_count,
+            min_cagr=None,
+            min_win_rate=None,
+            is_active=True,
+            created_at=datetime.now(UTC),
+            notes="test",
+        )
+    )
+    session.flush()
+
+
 def _service(session: Session) -> StrategyGovernanceService:
     return StrategyGovernanceService(session=session)
 
@@ -128,6 +156,7 @@ def test_promotion_to_live_raises_when_no_rule_exists(db_session: Session) -> No
             reason="test",
             updated_by="admin",
             actor_role="admin",
+            source_run_id="run_s1",
         )
 
     assert exc_info.value.from_state == "approved_paper"
@@ -144,6 +173,7 @@ def test_promotion_to_live_missing_rule_emits_config_error_audit(db_session: Ses
             reason="test",
             updated_by="admin",
             actor_role="admin",
+            source_run_id="run_s1",
         )
 
     event = (
@@ -171,6 +201,7 @@ def test_promotion_to_live_raises_when_min_sharpe_is_null(db_session: Session) -
             reason="test",
             updated_by="admin",
             actor_role="admin",
+            source_run_id="run_s1",
         )
 
     assert "min_sharpe" in exc_info.value.missing_fields
@@ -187,6 +218,7 @@ def test_promotion_to_live_raises_when_min_days_tested_is_null(db_session: Sessi
             reason="test",
             updated_by="admin",
             actor_role="admin",
+            source_run_id="run_s1",
         )
 
     assert "min_days_tested" in exc_info.value.missing_fields
@@ -203,6 +235,7 @@ def test_promotion_to_live_raises_when_min_trade_count_is_null(db_session: Sessi
             reason="test",
             updated_by="admin",
             actor_role="admin",
+            source_run_id="run_s1",
         )
 
     assert "min_trade_count" in exc_info.value.missing_fields
@@ -219,6 +252,7 @@ def test_null_required_criteria_emits_config_error_audit(db_session: Session) ->
             reason="test",
             updated_by="admin",
             actor_role="admin",
+            source_run_id="run_s1",
         )
 
     event = (
@@ -254,6 +288,7 @@ def test_optional_null_criteria_do_not_block_promotion(db_session: Session) -> N
         reason="test",
         updated_by="admin",
         actor_role="admin",
+        source_run_id="run_s1",
     )
 
     assert result.to_state == "approved_for_live_trading"
@@ -276,6 +311,7 @@ def test_optional_null_criteria_are_logged_in_audit(db_session: Session) -> None
         reason="test",
         updated_by="admin",
         actor_role="admin",
+        source_run_id="run_s1",
     )
 
     transition_audit = (
@@ -308,6 +344,7 @@ def test_valid_fully_configured_rule_allows_promotion_when_metrics_pass(
         reason="test",
         updated_by="admin",
         actor_role="admin",
+        source_run_id="run_s1",
     )
 
     assert result.to_state == "approved_for_live_trading"
@@ -339,6 +376,7 @@ def test_valid_fully_configured_rule_rejects_promotion_when_metrics_fail(
             reason="test",
             updated_by="admin",
             actor_role="admin",
+            source_run_id="run_s1",
         )
 
 
@@ -357,4 +395,126 @@ def test_promotion_to_paper_raises_when_no_rule_exists(db_session: Session) -> N
             reason="test",
             updated_by="risk_manager",
             actor_role="risk_manager",
+            source_run_id="run_s1",
+        )
+
+
+# ---------------------------------------------------------------------------
+# FINDING-15: source_run_id required for capital-bearing promotions
+# ---------------------------------------------------------------------------
+
+
+def test_promotion_to_paper_without_source_run_id_raises(db_session: Session) -> None:
+    _seed_strategy(db_session, "s1", state="approved_research")
+    _seed_paper_rule(db_session)
+
+    with pytest.raises(MissingSourceRunError) as exc_info:
+        _service(db_session).transition(
+            strategy_id="s1",
+            to_state="approved_for_paper_trading",
+            reason="test",
+            updated_by="risk_manager",
+            actor_role="risk_manager",
+            # source_run_id intentionally omitted
+        )
+
+    assert exc_info.value.strategy_id == "s1"
+    assert "approved_for_paper_trading" in exc_info.value.target_state
+
+
+def test_promotion_to_live_without_source_run_id_raises(db_session: Session) -> None:
+    _seed_strategy(db_session, "s1")
+    _seed_live_rule(db_session)
+
+    with pytest.raises(MissingSourceRunError) as exc_info:
+        _service(db_session).transition(
+            strategy_id="s1",
+            to_state="approved_for_live_trading",
+            reason="test",
+            updated_by="admin",
+            actor_role="admin",
+            # source_run_id intentionally omitted
+        )
+
+    assert exc_info.value.strategy_id == "s1"
+    assert "approved_for_live_trading" in exc_info.value.target_state
+
+
+def test_missing_source_run_emits_audit_event(db_session: Session) -> None:
+    _seed_strategy(db_session, "s1")
+    _seed_live_rule(db_session)
+
+    with pytest.raises(MissingSourceRunError):
+        _service(db_session).transition(
+            strategy_id="s1",
+            to_state="approved_for_live_trading",
+            reason="test",
+            updated_by="admin",
+            actor_role="admin",
+        )
+
+    event = db_session.query(AuditLogRow).filter_by(event_type="PROMOTION_MISSING_SOURCE_RUN").one()
+    assert event.event_metadata["strategy_id"] == "s1"
+    assert event.event_metadata["error"] == "missing_source_run_id"
+    assert event.event_metadata["fallback_allowed"] is False
+
+
+def test_promotion_to_paper_with_source_run_id_uses_specified_run(db_session: Session) -> None:
+    _seed_strategy(db_session, "s1", state="approved_research", sharpe=2.0, days=45, trades=20)
+    _seed_paper_rule(db_session)
+
+    result = _service(db_session).transition(
+        strategy_id="s1",
+        to_state="approved_for_paper_trading",
+        reason="test",
+        updated_by="risk_manager",
+        actor_role="risk_manager",
+        source_run_id="run_s1",
+    )
+
+    assert result.to_state == "approved_for_paper_trading"
+    audit = (
+        db_session.query(AuditLogRow).filter_by(event_type="STRATEGY_GOVERNANCE_TRANSITIONED").one()
+    )
+    assert audit.event_metadata["source_run_id"] == "run_s1"
+    assert audit.event_metadata["metrics_source_type"] == "explicit_source_run"
+    assert audit.event_metadata["fallback_allowed"] is False
+
+
+def test_promotion_audit_records_source_run_and_fallback_policy(db_session: Session) -> None:
+    _seed_strategy(db_session, "s1", sharpe=2.5, days=90, trades=50, drawdown=0.08)
+    _seed_live_rule(db_session)
+
+    _service(db_session).transition(
+        strategy_id="s1",
+        to_state="approved_for_live_trading",
+        reason="test",
+        updated_by="admin",
+        actor_role="admin",
+        source_run_id="run_s1",
+    )
+
+    audit = (
+        db_session.query(AuditLogRow).filter_by(event_type="STRATEGY_GOVERNANCE_TRANSITIONED").one()
+    )
+    meta = audit.event_metadata
+    assert meta["source_run_id"] == "run_s1"
+    assert meta["metrics_source_type"] == "explicit_source_run"
+    assert meta["fallback_allowed"] is False
+
+
+def test_latest_run_fallback_not_used_for_capital_bearing_promotion(db_session: Session) -> None:
+    """With source_run_id pointing to a non-existent run, capital-bearing promotion gets
+    empty metrics and fails criteria rather than silently falling back to latest run."""
+    _seed_strategy(db_session, "s1", sharpe=2.5, days=90, trades=50, drawdown=0.08)
+    _seed_live_rule(db_session, min_sharpe=1.0, min_days_tested=30, min_trade_count=10)
+
+    with pytest.raises(ValueError, match="promotion criteria"):
+        _service(db_session).transition(
+            strategy_id="s1",
+            to_state="approved_for_live_trading",
+            reason="test",
+            updated_by="admin",
+            actor_role="admin",
+            source_run_id="nonexistent_run_id",  # valid source_run_id but no matching metrics
         )

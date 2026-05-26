@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
@@ -17,6 +18,11 @@ from autonomous_trading_platform.storage.sor.models.strategy_governance import (
 from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
     OperatorSettingsRepository,
 )
+
+
+def _make_source_run_id(strategy_id: str) -> uuid.UUID:
+    """Deterministic UUID from strategy_id for test governance records."""
+    return uuid.uuid5(uuid.NAMESPACE_OID, strategy_id)
 
 
 def test_auto_promotion_scanner_uses_promotion_rules_not_deprecated_settings(
@@ -307,6 +313,163 @@ def test_fully_configured_live_rule_allows_auto_promotion(db_session: Session) -
     assert result.promotions_executed[0]["strategy_id"] == "paper_pass"
 
 
+# ---------------------------------------------------------------------------
+# FINDING-15: source_run_id required for capital-bearing auto-promotions
+# ---------------------------------------------------------------------------
+
+
+def test_auto_promotion_scan_skips_research_candidate_without_source_run_id(
+    db_session: Session,
+) -> None:
+    """Capital-bearing research→paper auto-promotion skips strategies without source_run_id."""
+    _seed_rule(db_session)
+    _seed_candidate(
+        db_session,
+        "no_source",
+        sharpe=2.0,
+        days=45,
+        trades=20,
+        include_source_run=False,
+    )
+
+    [candidate] = AutoPromotionService(session=db_session).scan()
+
+    assert candidate.eligible is False
+    assert candidate.status == "missing_source_run"
+    assert candidate.source_run_id is None
+    assert candidate.fallback_allowed is False
+    assert any("source_run_id" in r for r in candidate.reasons)
+
+
+def test_auto_promotion_scan_skips_paper_candidate_without_source_run_id(
+    db_session: Session,
+) -> None:
+    """Capital-bearing paper→live auto-promotion skips strategies without source_run_id."""
+    _seed_live_rule(db_session, min_sharpe=1.0, min_days_tested=30, min_trade_count=10)
+    _seed_candidate(
+        db_session,
+        "no_source_paper",
+        state="approved_for_paper_trading",
+        sharpe=3.0,
+        days=90,
+        trades=50,
+        include_source_run=False,
+    )
+
+    [candidate] = AutoPromotionService(session=db_session).scan()
+
+    assert candidate.eligible is False
+    assert candidate.status == "missing_source_run"
+    assert candidate.fallback_allowed is False
+
+
+def test_auto_promotion_does_not_execute_for_missing_source_run(db_session: Session) -> None:
+    _seed_rule(db_session)
+    _seed_candidate(
+        db_session,
+        "no_source",
+        sharpe=2.0,
+        days=45,
+        trades=20,
+        include_source_run=False,
+    )
+    OperatorSettingsRepository(db_session).update_current(
+        {"auto_promote_enabled": True},
+        updated_by="test",
+    )
+
+    result = AutoPromotionService(session=db_session).run(actor="test")
+
+    assert result.promotions_executed == []
+    assert result.candidates[0].status == "missing_source_run"
+
+
+def test_auto_promotion_emits_audit_for_missing_source_run(db_session: Session) -> None:
+    _seed_rule(db_session)
+    _seed_candidate(
+        db_session,
+        "no_source",
+        sharpe=2.0,
+        days=45,
+        trades=20,
+        include_source_run=False,
+    )
+
+    AutoPromotionService(session=db_session).scan()
+
+    event = db_session.query(AuditLogRow).filter_by(event_type="PROMOTION_MISSING_SOURCE_RUN").one()
+    assert event.event_metadata["strategy_id"] == "no_source"
+    assert event.event_metadata["error"] == "missing_source_run_id"
+    assert event.event_metadata["fallback_allowed"] is False
+    assert event.event_metadata["source"] == "auto_promotion_scan"
+
+
+def test_auto_promotion_with_source_run_id_includes_it_in_audit_event(
+    db_session: Session,
+) -> None:
+    _seed_rule(db_session)
+    _seed_candidate(db_session, "has_source", sharpe=2.0, days=45, trades=20)
+    OperatorSettingsRepository(db_session).update_current(
+        {"auto_promote_enabled": True},
+        updated_by="test",
+    )
+
+    result = AutoPromotionService(session=db_session).run(actor="test")
+
+    audit = (
+        db_session.query(AuditLogRow)
+        .filter_by(event_type="STRATEGY_AUTO_PROMOTION_COMPLETED")
+        .one()
+    )
+    candidates = audit.event_metadata.get("candidate_strategies", [])
+    promoted_candidate = next(c for c in candidates if c["strategy_id"] == "has_source")
+    assert promoted_candidate["source_run_id"] == str(_make_source_run_id("has_source"))
+    assert promoted_candidate["metrics_source_type"] == "explicit_source_run"
+    assert promoted_candidate["fallback_allowed"] is False
+    assert result.promotions_executed[0]["status"] == "promoted"
+
+
+def test_auto_promotion_with_source_run_uses_explicit_run_metrics(db_session: Session) -> None:
+    """The eligible candidate has source_run_id set; its own run's metrics are used."""
+    _seed_rule(db_session)
+    _seed_candidate(db_session, "eligible", sharpe=2.0, days=45, trades=20)
+
+    [candidate] = AutoPromotionService(session=db_session).scan()
+
+    assert candidate.eligible is True
+    assert candidate.source_run_id == str(_make_source_run_id("eligible"))
+    assert candidate.metrics_source_type == "explicit_source_run"
+
+
+def test_auto_promotion_missing_source_run_status_does_not_attempt_promotion(
+    db_session: Session,
+) -> None:
+    """Strategies with missing_source_run status must not be promoted even if enabled."""
+    _seed_live_rule(db_session, min_sharpe=0.1, min_days_tested=1, min_trade_count=1)
+    _seed_candidate(
+        db_session,
+        "no_src_paper",
+        state="approved_for_paper_trading",
+        sharpe=9.9,
+        days=365,
+        trades=1000,
+        include_source_run=False,
+    )
+    OperatorSettingsRepository(db_session).update_current(
+        {"auto_promote_enabled": True},
+        updated_by="test",
+    )
+
+    result = AutoPromotionService(session=db_session).run(actor="test")
+
+    assert result.promotions_executed == []
+    governance_row = db_session.get(
+        StrategyGovernance,
+        {"strategy_id": "no_src_paper", "config_hash": "no_src_paper_hash"},
+    )
+    assert governance_row.current_state == "approved_for_paper_trading"
+
+
 def _seed_candidate(
     session: Session,
     strategy_id: str,
@@ -316,8 +479,12 @@ def _seed_candidate(
     drawdown: float = 0.05,
     days: int,
     trades: int,
+    include_source_run: bool = True,
 ) -> None:
     now = datetime.now(UTC)
+    # Use a deterministic UUID so governance.source_run_id matches MetricsSummary.run_id
+    source_run_id = _make_source_run_id(strategy_id) if include_source_run else None
+    run_id = str(source_run_id) if source_run_id else f"run_{strategy_id}"
     session.add(
         StrategyConfigs(
             strategy_id=strategy_id,
@@ -334,7 +501,7 @@ def _seed_candidate(
             config_hash=f"{strategy_id}_hash",
             current_state=state,
             experiment_id="test",
-            source_run_id=None,
+            source_run_id=source_run_id,
             submitted_at=now,
             updated_at=now,
             submitted_by="test",
@@ -343,7 +510,7 @@ def _seed_candidate(
     session.add(
         MetricsSummary(
             metrics_snapshot_id=f"metrics_{strategy_id}",
-            run_id=f"run_{strategy_id}",
+            run_id=run_id,
             created_at=now,
             total_return=0.10,
             sharpe_ratio=sharpe,

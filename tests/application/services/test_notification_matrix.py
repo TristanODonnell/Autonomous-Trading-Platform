@@ -360,6 +360,7 @@ def test_promotion_notification_suppressed_when_flag_disabled(db_session: Sessio
         reason="test",
         updated_by="operator1",
         actor_role="risk_manager",
+        source_run_id="promo1_run",
     )
 
     assert _notification_count(db_session, "STRATEGY_PROMOTION_EVENT") == 0
@@ -394,6 +395,7 @@ def test_promotion_notification_emitted_when_flag_enabled(db_session: Session) -
         reason="test",
         updated_by="operator1",
         actor_role="risk_manager",
+        source_run_id="promo2_run",
     )
 
     assert _notification_count(db_session, "STRATEGY_PROMOTION_EVENT") == 1
