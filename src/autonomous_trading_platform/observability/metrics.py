@@ -878,6 +878,44 @@ allocation_cycle_duration = meter.create_histogram(
     unit="s",
 )
 
+# --- Rebalance stability metrics ---
+
+rebalance_runs = meter.create_counter(
+    name="ratp_rebalance_runs_total",
+    description="Total number of allocation rebalance executions (applied + noop)",
+    unit="1",
+)
+
+rebalance_skipped = meter.create_counter(
+    name="ratp_rebalance_skipped_total",
+    description="Total number of allocation rebalances skipped by stability guards",
+    unit="1",
+)
+
+rebalance_noop = meter.create_counter(
+    name="ratp_rebalance_noop_total",
+    description="Total number of no-op allocation rebalances (all changes below threshold)",
+    unit="1",
+)
+
+rebalance_turnover_pct = meter.create_histogram(
+    name="ratp_rebalance_turnover_pct",
+    description="Sum of absolute allocation deltas per rebalance (churn fraction)",
+    unit="1",
+)
+
+rebalance_allocation_changes = meter.create_counter(
+    name="ratp_rebalance_allocation_changes_total",
+    description="Total number of strategy allocation overrides written per rebalance",
+    unit="1",
+)
+
+rebalance_duration_seconds = meter.create_histogram(
+    name="ratp_rebalance_duration_seconds",
+    description="Allocation rebalance service execution duration",
+    unit="s",
+)
+
 # =========================
 # UNIVERSE METRICS
 # =========================

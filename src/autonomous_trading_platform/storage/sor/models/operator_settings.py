@@ -48,6 +48,15 @@ class OperatorSettingsRow(Base):
     max_portfolio_symbol_pct: Mapped[float | None] = mapped_column(
         Numeric(6, 4), nullable=True, default=None
     )
+    min_rebalance_interval_hours: Mapped[float] = mapped_column(
+        Numeric(8, 2), nullable=False, default=24.0
+    )
+    min_allocation_change_pct: Mapped[float] = mapped_column(
+        Numeric(6, 4), nullable=False, default=0.01
+    )
+    turnover_penalty_weight: Mapped[float | None] = mapped_column(
+        Numeric(8, 4), nullable=True, default=None
+    )
 
     updated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 

@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.models.allocation_overrides import (
     AllocationOverrides,
+)
+from autonomous_trading_platform.storage.sor.models.allocation_rebalance_history import (
+    AllocationRebalanceHistory,
 )
 from autonomous_trading_platform.storage.sor.models.capital_allocation_policies import (
     CapitalAllocationPolicies,
@@ -27,6 +31,9 @@ from autonomous_trading_platform.storage.sor.models.strategy_governance import (
 from autonomous_trading_platform.storage.sor.repositories.core.allocation_overrides_repository import (
     AllocationOverridesRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.allocation_rebalance_history_repository import (
+    AllocationRebalanceHistoryRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
     AuditLogRepository,
 )
@@ -38,6 +45,10 @@ ACTIVE_STATES = {"approved_for_paper_trading", "approved_for_live_trading"}
 AUTO_REBALANCE_ACTOR = "auto_rebalance"
 DEFAULT_TOTAL_ALLOCATION = Decimal("1")
 PCT_QUANT = Decimal("0.000001")
+_DEFAULT_INTERVAL_HOURS = 24.0
+_DEFAULT_MIN_CHANGE_PCT = Decimal("0.01")
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -71,6 +82,7 @@ class StrategyAllocationProposal:
 @dataclass(frozen=True)
 class QualityReallocationResult:
     run_id: str | None
+    rebalance_id: str | None
     auto_rebalance_enabled: bool
     before_allocation: dict[str, Decimal]
     after_allocation: dict[str, Decimal]
@@ -80,6 +92,9 @@ class QualityReallocationResult:
     allocation_overrides: list[dict[str, str | float | bool | None]]
     skipped_reason: str | None
     audit_event_type: str
+    turnover_metrics: dict[str, float | int]
+    allocation_changes_count: int
+    noop: bool
 
     @property
     def changed(self) -> bool:
@@ -94,12 +109,16 @@ class QualityBasedReallocationService:
         audit_log_repo: AuditLogRepository | None = None,
         operator_settings_repo: OperatorSettingsRepository | None = None,
         allocation_overrides_repo: AllocationOverridesRepository | None = None,
+        rebalance_history_repo: AllocationRebalanceHistoryRepository | None = None,
     ) -> None:
         self._session = session
         self._audit_log_repo = audit_log_repo or AuditLogRepository(session)
         self._operator_settings_repo = operator_settings_repo or OperatorSettingsRepository(session)
         self._allocation_overrides_repo = (
             allocation_overrides_repo or AllocationOverridesRepository(session)
+        )
+        self._rebalance_history_repo = (
+            rebalance_history_repo or AllocationRebalanceHistoryRepository(session)
         )
 
     def rebalance(
@@ -110,27 +129,115 @@ class QualityBasedReallocationService:
         enforce_enabled: bool = True,
     ) -> QualityReallocationResult:
         now = datetime.now(UTC)
+        rebalance_id = str(uuid4())
         settings = self._operator_settings_repo.get_or_create_default()
+
         if enforce_enabled and not bool(settings.auto_rebalance_enabled):
-            result = self._build_skipped_result(
+            return self._record_skipped(
                 run_id=run_id,
+                rebalance_id=rebalance_id,
+                actor=actor,
                 settings=settings,
                 skipped_reason="auto_rebalance_disabled",
+                status="skipped_disabled",
+                now=now,
             )
-            self._audit(result=result, actor=actor, occurred_at=now)
-            self._session.flush()
-            self._session.commit()
-            return result
+
+        # --- Interval guard ---
+        _raw_interval = getattr(settings, "min_rebalance_interval_hours", None)
+        interval_hours = (
+            float(_raw_interval) if _raw_interval is not None else _DEFAULT_INTERVAL_HOURS
+        )
+        if interval_hours > 0:
+            last = self._rebalance_history_repo.get_last_completed()
+            if last is not None and last.completed_at is not None:
+                # Normalize to UTC: SQLite returns naive datetimes; treat as UTC.
+                last_completed_at = last.completed_at
+                if last_completed_at.tzinfo is None:
+                    last_completed_at = last_completed_at.replace(tzinfo=UTC)
+                next_allowed = last_completed_at + timedelta(hours=interval_hours)
+                if now < next_allowed:
+                    logger.info(
+                        "REBALANCE_SKIPPED_INTERVAL_GUARD",
+                        extra={
+                            "rebalance_id": rebalance_id,
+                            "last_completed_at": last.completed_at.isoformat(),
+                            "next_allowed_at": next_allowed.isoformat(),
+                            "interval_hours": interval_hours,
+                        },
+                    )
+                    return self._record_skipped(
+                        run_id=run_id,
+                        rebalance_id=rebalance_id,
+                        actor=actor,
+                        settings=settings,
+                        skipped_reason="interval_guard",
+                        status="skipped_interval",
+                        now=now,
+                    )
+
+        # --- Concurrent lock guard ---
+        active_lock = self._rebalance_history_repo.get_active_lock(now=now)
+        if active_lock is not None:
+            logger.warning(
+                "REBALANCE_SKIPPED_CONCURRENT_LOCK",
+                extra={
+                    "rebalance_id": rebalance_id,
+                    "lock_held_by": active_lock.rebalance_id,
+                    "lock_started_at": active_lock.started_at.isoformat(),
+                },
+            )
+            return self._record_skipped(
+                run_id=run_id,
+                rebalance_id=rebalance_id,
+                actor=actor,
+                settings=settings,
+                skipped_reason="concurrent_lock",
+                status="skipped_concurrent",
+                now=now,
+            )
+
+        # --- Acquire lock: flush "running" row (visible within session; other-process
+        # protection relies on prior committed rows from previous cycles) ---
+        running_row = AllocationRebalanceHistory(
+            rebalance_id=rebalance_id,
+            run_id=run_id,
+            actor=actor,
+            trigger_source=None,
+            status="running",
+            skipped_reason=None,
+            started_at=now,
+            completed_at=None,
+        )
+        self._rebalance_history_repo.insert(running_row)
 
         inputs = self._load_strategy_inputs(settings=settings, now=now)
         before = {item.strategy_id: item.current_allocation_pct for item in inputs}
         proposals = self._compute_proposals(inputs)
-        after = {proposal.strategy_id: proposal.after_pct for proposal in proposals}
 
-        self._write_auto_overrides(proposals=proposals, actor=actor, now=now)
+        min_change = Decimal(
+            str(
+                getattr(settings, "min_allocation_change_pct", None)
+                or float(_DEFAULT_MIN_CHANGE_PCT)
+            )
+        )
+        changes_count, total_delta = self._write_auto_overrides(
+            proposals=proposals,
+            actor=actor,
+            now=now,
+            min_allocation_change_pct=min_change,
+        )
+        noop = changes_count == 0
+        after = before if noop else {p.strategy_id: p.after_pct for p in proposals}
+        audit_event = (
+            "STRATEGY_ALLOCATION_REBALANCE_NOOP" if noop else "STRATEGY_ALLOCATION_REBALANCED"
+        )
+
+        turnover_metrics = self._compute_turnover_metrics(proposals, min_change, settings)
 
         result = QualityReallocationResult(
             run_id=run_id,
+            rebalance_id=rebalance_id,
             auto_rebalance_enabled=bool(settings.auto_rebalance_enabled),
             before_allocation=before,
             after_allocation=after,
@@ -138,12 +245,90 @@ class QualityBasedReallocationService:
             quality_metrics={item.strategy_id: item.metrics for item in inputs},
             active_policies=self._active_policy_payloads(),
             allocation_overrides=self._active_override_payloads(now=now),
-            skipped_reason=None,
-            audit_event_type="STRATEGY_ALLOCATION_REBALANCED",
+            skipped_reason="all_changes_below_threshold" if noop else None,
+            audit_event_type=audit_event,
+            turnover_metrics=turnover_metrics,
+            allocation_changes_count=changes_count,
+            noop=noop,
         )
+
+        final_status = "noop" if noop else "completed"
+        self._rebalance_history_repo.update_status(
+            rebalance_id=rebalance_id,
+            status=final_status,
+            completed_at=datetime.now(UTC),
+            strategies_evaluated=len(inputs),
+            allocation_changes_count=changes_count,
+            total_allocation_delta_pct=float(total_delta),
+            churn_pct=float(total_delta),
+            skipped_reason="all_changes_below_threshold" if noop else None,
+            result_summary_json={
+                "proposals_count": len(proposals),
+                "noop": noop,
+                "changes_count": changes_count,
+            },
+        )
+
+        if noop:
+            logger.info(
+                "REBALANCE_NOOP",
+                extra={
+                    "rebalance_id": rebalance_id,
+                    "strategies_evaluated": len(inputs),
+                    "min_change_pct": float(min_change),
+                },
+            )
+        else:
+            logger.info(
+                "REBALANCE_APPLIED",
+                extra={
+                    "rebalance_id": rebalance_id,
+                    "changes_count": changes_count,
+                    "churn_pct": float(total_delta),
+                    "strategies_evaluated": len(inputs),
+                },
+            )
+
         self._audit(result=result, actor=actor, occurred_at=now)
-        if bool(settings.notify_allocation_rebalance_events):
+        if not noop and bool(settings.notify_allocation_rebalance_events):
             self._emit_rebalance_notification(result=result, actor=actor, occurred_at=now)
+        self._session.flush()
+        self._session.commit()
+        return result
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _record_skipped(
+        self,
+        *,
+        run_id: str | None,
+        rebalance_id: str,
+        actor: str,
+        settings: OperatorSettingsRow,
+        skipped_reason: str,
+        status: str,
+        now: datetime,
+    ) -> QualityReallocationResult:
+        result = self._build_skipped_result(
+            run_id=run_id,
+            rebalance_id=rebalance_id,
+            settings=settings,
+            skipped_reason=skipped_reason,
+        )
+        history_row = AllocationRebalanceHistory(
+            rebalance_id=rebalance_id,
+            run_id=run_id,
+            actor=actor,
+            trigger_source=None,
+            status=status,
+            skipped_reason=skipped_reason,
+            started_at=now,
+            completed_at=now,
+        )
+        self._rebalance_history_repo.insert(history_row)
+        self._audit(result=result, actor=actor, occurred_at=now)
         self._session.flush()
         self._session.commit()
         return result
@@ -152,6 +337,7 @@ class QualityBasedReallocationService:
         self,
         *,
         run_id: str | None,
+        rebalance_id: str,
         settings: OperatorSettingsRow,
         skipped_reason: str,
     ) -> QualityReallocationResult:
@@ -160,6 +346,7 @@ class QualityBasedReallocationService:
         before = {item.strategy_id: item.current_allocation_pct for item in inputs}
         return QualityReallocationResult(
             run_id=run_id,
+            rebalance_id=rebalance_id,
             auto_rebalance_enabled=bool(settings.auto_rebalance_enabled),
             before_allocation=before,
             after_allocation=before,
@@ -169,6 +356,9 @@ class QualityBasedReallocationService:
             allocation_overrides=self._active_override_payloads(now=now),
             skipped_reason=skipped_reason,
             audit_event_type="STRATEGY_ALLOCATION_REBALANCE_SKIPPED",
+            turnover_metrics={},
+            allocation_changes_count=0,
+            noop=False,
         )
 
     def _load_strategy_inputs(
@@ -204,11 +394,20 @@ class QualityBasedReallocationService:
             control = controls.get(governance.strategy_id)
             override = overrides.get(governance.strategy_id)
             manual_override_pct = self._manual_override_pct(override)
-            current_pct = (
-                manual_override_pct
-                if manual_override_pct is not None
-                else self._decimal_pct(policy.max_pct_of_capital)
-            )
+            if manual_override_pct is not None:
+                current_pct = manual_override_pct
+            elif (
+                override is not None
+                and override.overridden_by == AUTO_REBALANCE_ACTOR
+                and override.max_pct_of_capital is not None
+            ):
+                # Use the previous auto-rebalance value as the baseline so hysteresis
+                # detects real drift from the last committed allocation.
+                current_pct = self._decimal_pct(override.max_pct_of_capital)
+            else:
+                # No prior committed allocation: baseline is zero so any quality-
+                # weighted assignment above the threshold is written on first run.
+                current_pct = Decimal("0")
             metrics = self._latest_metrics(governance.strategy_id)
             quality_score = self._quality_score(metrics)
             policy_cap = self._decimal_pct(policy.max_pct_of_capital)
@@ -328,22 +527,37 @@ class QualityBasedReallocationService:
         proposals: list[StrategyAllocationProposal],
         actor: str,
         now: datetime,
-    ) -> None:
+        min_allocation_change_pct: Decimal,
+    ) -> tuple[int, Decimal]:
+        """Write auto-rebalance overrides, skipping changes below the hysteresis threshold.
+
+        Returns (changes_written, total_absolute_delta).
+        """
         active = self._active_overrides_by_strategy(now=now)
-        for proposal in proposals:
+
+        def _should_write(proposal: StrategyAllocationProposal) -> bool:
             existing = active.get(proposal.strategy_id)
             if existing is not None and existing.overridden_by != AUTO_REBALANCE_ACTOR:
+                return False
+            if proposal.manual_override_respected:
+                return False
+            delta = abs(proposal.after_pct - proposal.before_pct)
+            return delta >= min_allocation_change_pct
+
+        for proposal in proposals:
+            if not _should_write(proposal):
                 continue
+            existing = active.get(proposal.strategy_id)
             if existing is not None:
                 existing.is_active = False
         self._session.flush()
 
+        changes_written = 0
+        total_delta = Decimal("0")
         for proposal in proposals:
-            existing = active.get(proposal.strategy_id)
-            if existing is not None and existing.overridden_by != AUTO_REBALANCE_ACTOR:
+            if not _should_write(proposal):
                 continue
-            if proposal.manual_override_respected:
-                continue
+            delta = abs(proposal.after_pct - proposal.before_pct)
             self._allocation_overrides_repo.create_override(
                 AllocationOverrides(
                     override_id=str(uuid4()),
@@ -358,6 +572,38 @@ class QualityBasedReallocationService:
                     expires_at=None,
                 )
             )
+            changes_written += 1
+            total_delta += delta
+
+        return changes_written, total_delta
+
+    def _compute_turnover_metrics(
+        self,
+        proposals: list[StrategyAllocationProposal],
+        min_allocation_change_pct: Decimal,
+        settings: OperatorSettingsRow,
+    ) -> dict[str, float | int]:
+        variable_proposals = [p for p in proposals if not p.manual_override_respected]
+        total_delta = sum(abs(p.after_pct - p.before_pct) for p in variable_proposals)
+        strategies_changed = sum(
+            1
+            for p in variable_proposals
+            if abs(p.after_pct - p.before_pct) >= min_allocation_change_pct
+        )
+        churn_pct = float(total_delta)
+
+        metrics: dict[str, float | int] = {
+            "total_allocation_delta_pct": churn_pct,
+            "strategies_changed": strategies_changed,
+            "strategies_evaluated": len(proposals),
+            "churn_pct": churn_pct,
+        }
+
+        turnover_penalty_weight = getattr(settings, "turnover_penalty_weight", None)
+        if turnover_penalty_weight is not None:
+            metrics["turnover_penalty"] = float(turnover_penalty_weight) * churn_pct
+
+        return metrics
 
     def _audit(
         self,
@@ -401,6 +647,7 @@ class QualityBasedReallocationService:
     def result_to_jsonable(result: QualityReallocationResult) -> dict:
         return {
             "run_id": result.run_id,
+            "rebalance_id": result.rebalance_id,
             "auto_rebalance_enabled": result.auto_rebalance_enabled,
             "before_allocation": {
                 key: float(value) for key, value in result.before_allocation.items()
@@ -427,6 +674,9 @@ class QualityBasedReallocationService:
             "allocation_overrides": result.allocation_overrides,
             "skipped_reason": result.skipped_reason,
             "audit_event_emitted": result.audit_event_type,
+            "turnover_metrics": result.turnover_metrics,
+            "allocation_changes_count": result.allocation_changes_count,
+            "noop": result.noop,
         }
 
     def _latest_metrics(self, strategy_id: str) -> dict[str, float | int | None]:

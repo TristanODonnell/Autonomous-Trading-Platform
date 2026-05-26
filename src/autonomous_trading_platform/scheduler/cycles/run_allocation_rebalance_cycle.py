@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
 
 from autonomous_trading_platform.application.services.quality_based_reallocation_service import (
     QualityBasedReallocationService,
+    QualityReallocationResult,
 )
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.observability.enums import SpanTimespan
@@ -20,6 +22,12 @@ from autonomous_trading_platform.observability.metrics import (
     allocation_cycle_duration,
     allocation_cycle_failures,
     allocation_cycle_runs,
+    rebalance_allocation_changes,
+    rebalance_duration_seconds,
+    rebalance_noop,
+    rebalance_runs,
+    rebalance_skipped,
+    rebalance_turnover_pct,
 )
 from autonomous_trading_platform.observability.runtime_context import runtime_context
 from autonomous_trading_platform.observability.tracing import start_span
@@ -75,6 +83,12 @@ def run_strategy_allocation_rebalance_cycle(
         input_settings={
             "auto_rebalance_enabled": bool(settings.auto_rebalance_enabled),
             "rebalance_frequency": settings.rebalance_frequency,
+            "min_rebalance_interval_hours": float(
+                getattr(settings, "min_rebalance_interval_hours", 24.0) or 24.0
+            ),
+            "min_allocation_change_pct": float(
+                getattr(settings, "min_allocation_change_pct", 0.01) or 0.01
+            ),
             "allocation_targets_source": "capital_allocation_policies + allocation_overrides",
             "now_utc": now_utc.isoformat(),
         },
@@ -92,6 +106,7 @@ def run_strategy_allocation_rebalance_cycle(
                 run_id=str(run_id),
                 actor=trigger_source,
             )
+            _emit_rebalance_stability_metrics(result)
             payload = QualityBasedReallocationService.result_to_jsonable(result)
             complete_governance_manifest(
                 session=session,
@@ -161,6 +176,32 @@ def run_strategy_allocation_rebalance_cycle(
                 raise
     finally:
         session.close()
+
+
+def _emit_rebalance_stability_metrics(result: QualityReallocationResult) -> None:
+    environment = os.getenv("APP_ENV") or os.getenv("TRADING_ENVIRONMENT") or "unknown"
+    attrs = {"environment": environment, "component": COMPONENT}
+
+    if result.skipped_reason is not None and not result.noop:
+        rebalance_skipped.add(1, {**attrs, "skip_reason": result.skipped_reason})
+        return
+
+    rebalance_runs.add(1, attrs)
+
+    if result.noop:
+        rebalance_noop.add(1, attrs)
+        return
+
+    if result.allocation_changes_count > 0:
+        rebalance_allocation_changes.add(result.allocation_changes_count, attrs)
+
+    churn = result.turnover_metrics.get("churn_pct")
+    if churn is not None:
+        rebalance_turnover_pct.record(float(churn), attrs)
+
+    duration = result.turnover_metrics.get("duration_seconds")
+    if duration is not None:
+        rebalance_duration_seconds.record(float(duration), attrs)
 
 
 if __name__ == "__main__":

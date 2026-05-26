@@ -131,7 +131,8 @@
       "Bash(pip show *)",
       "Bash(alembic *)",
       "PowerShell(Get-Command *)",
-      "PowerShell(head *)"
+      "PowerShell(head *)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }

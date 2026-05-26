@@ -1,4 +1,5 @@
 from . import allocation_overrides as allocation_overrides
+from . import allocation_rebalance_history as allocation_rebalance_history
 from . import audit_logs as audit_logs
 from . import broker_account_snapshots as broker_account_snapshots
 from . import broker_orders as broker_orders
@@ -80,6 +81,7 @@ __all__ = [
     "metrics_summary",
     "strategy_governance",
     "allocation_overrides",
+    "allocation_rebalance_history",
     "capital_allocation_policies",
     "promotion_rules",
     "runtime_job_runs",
