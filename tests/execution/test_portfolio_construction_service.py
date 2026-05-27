@@ -14,16 +14,21 @@ from autonomous_trading_platform.contracts.trading.signal import Signal
 from autonomous_trading_platform.execution.services.portfolio_construction_service import (
     PortfolioConstructionService,
 )
-from autonomous_trading_platform.execution.services.position_sizer import PositionSizer
+from autonomous_trading_platform.execution.services.position_sizer import (
+    PositionSizer,
+    SizingResult,
+)
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.safety.services.pre_trade_risk_service import (
     PreTradeRiskService,
 )
 
+_BASE_NOTIONAL = Decimal("10000.00")
+
 
 class FakePositionSizer:
     def __init__(self, qty_by_symbol: dict[str, int] | None = None) -> None:
-        self.last_vol_scalar: Decimal | None = None
+        self.last_combined_scalar: Decimal | None = None
         self.last_realized_drawdown: float | None = None
         self._qty_by_symbol = qty_by_symbol or {"TSLA": 0}
 
@@ -35,12 +40,20 @@ class FakePositionSizer:
         symbol: str,
         current_price: object,
         performance_tier: str | None = None,
-        vol_scalar: Decimal | None = None,
+        combined_scalar: Decimal | None = None,
         realized_drawdown: float | None = None,
-    ) -> int:
-        self.last_vol_scalar = vol_scalar
+    ) -> SizingResult:
+        self.last_combined_scalar = combined_scalar
         self.last_realized_drawdown = realized_drawdown
-        return self._qty_by_symbol.get(symbol, 10)
+        qty = self._qty_by_symbol.get(symbol, 10)
+        final = _BASE_NOTIONAL * combined_scalar if combined_scalar is not None else _BASE_NOTIONAL
+        return SizingResult(
+            quantity=qty,
+            base_notional=_BASE_NOTIONAL,
+            final_notional=final,
+            combined_scalar=combined_scalar,
+            scaling_applied=combined_scalar is not None and combined_scalar < Decimal("1"),
+        )
 
 
 @dataclass

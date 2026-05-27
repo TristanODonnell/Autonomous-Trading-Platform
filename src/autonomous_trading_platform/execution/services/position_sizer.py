@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from decimal import ROUND_DOWN, Decimal
 
 from autonomous_trading_platform.execution.services.drawdown_scaling_service import (
@@ -20,6 +21,29 @@ ZERO = Decimal("0")
 ONE = Decimal("1")
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class SizingResult:
+    """
+    Complete output from a single PositionSizer.compute_quantity() call.
+
+    quantity:         Whole-share quantity to trade; 0 means skip this order.
+    base_notional:    allocated * capital_fraction before any scaling layers.
+    final_notional:   Notional after vol/Sharpe combined scalar, drawdown scalar,
+                      and position-size caps.
+    combined_scalar:  The pre-multiplied vol/Sharpe scalar forwarded by
+                      PortfolioConstructionService; None when no scaling was
+                      applied at that layer.
+    scaling_applied:  True when final_notional < base_notional due to any
+                      scaling factor (vol, drawdown, or caps).
+    """
+
+    quantity: int
+    base_notional: Decimal
+    final_notional: Decimal
+    combined_scalar: Decimal | None
+    scaling_applied: bool
 
 
 class PositionSizer:
@@ -55,9 +79,22 @@ class PositionSizer:
         current_price: Decimal,
         approval_status: GovernanceState | None = None,
         performance_tier: str | None = None,
-        vol_scalar: Decimal | None = None,
+        combined_scalar: Decimal | None = None,
         realized_drawdown: float | None = None,
-    ) -> int:
+    ) -> SizingResult:
+        """
+        Compute the whole-share quantity for a position.
+
+        combined_scalar is the pre-multiplied vol/Sharpe scalar forwarded from
+        PortfolioConstructionService.  It must be in (0, 1] when provided —
+        we only scale positions down, never up.  The clamp is enforced by
+        PortfolioConstructionService before this call; raising here is a
+        final safety net.
+
+        Scaling composition (outermost first):
+            final = base * combined_scalar * drawdown_scalar
+            (then capped by max_position_size_usd and max_symbol_exposure_usd)
+        """
 
         if current_price <= ZERO:
             raise ValueError(f"current_price must be positive for '{symbol}', got {current_price}")
@@ -70,19 +107,20 @@ class PositionSizer:
 
         allocated = Decimal(str(allocation.allocated_capital_usd))
 
-        # Apply capital_fraction
-        target_notional = allocated * self._capital_fraction
+        # base_notional: capital committed before any risk scaling
+        base_notional = allocated * self._capital_fraction
+        target_notional = base_notional
 
-        # Apply vol_scalar if provided (TASK-193)
-        if vol_scalar is not None:
-            if not (ZERO < vol_scalar <= ONE):
-                raise ValueError(f"vol_scalar must be in (0, 1], got {vol_scalar}")
-            target_notional = target_notional * vol_scalar
+        # Apply combined vol/Sharpe scalar (FINDING-18 — replaces old TASK-193 vol_scalar)
+        if combined_scalar is not None:
+            if not (ZERO < combined_scalar <= ONE):
+                raise ValueError(f"combined_scalar must be in (0, 1], got {combined_scalar}")
+            target_notional = target_notional * combined_scalar
 
         # Apply drawdown scalar (FINDING-12) — strategy-level taper based on
         # how close realized drawdown is to the policy-configured maximum.
-        # Must run after vol_scalar so the scaling composition is deterministic:
-        # final_notional = base * capital_fraction * vol_scalar * drawdown_scalar
+        # Must run after combined_scalar so the scaling composition is deterministic:
+        #   final_notional = base * capital_fraction * combined_scalar * drawdown_scalar
         # The max_drawdown_allowed comes from the already-resolved allocation so
         # override and policy merging is respected without a second lookup.
         if self._drawdown_scaling is not None and realized_drawdown is not None:
@@ -168,7 +206,13 @@ class PositionSizer:
                     "min_notional_usd": float(self._min_notional_usd),
                 },
             )
-            return 0
+            return SizingResult(
+                quantity=0,
+                base_notional=base_notional,
+                final_notional=target_notional,
+                combined_scalar=combined_scalar,
+                scaling_applied=target_notional < base_notional,
+            )
 
         # Convert notional to whole shares
         quantity = (target_notional / current_price).to_integral_value(rounding=ROUND_DOWN)
@@ -183,6 +227,18 @@ class PositionSizer:
                     "current_price": float(current_price),
                 },
             )
-            return 0
+            return SizingResult(
+                quantity=0,
+                base_notional=base_notional,
+                final_notional=target_notional,
+                combined_scalar=combined_scalar,
+                scaling_applied=target_notional < base_notional,
+            )
 
-        return int(quantity)
+        return SizingResult(
+            quantity=int(quantity),
+            base_notional=base_notional,
+            final_notional=target_notional,
+            combined_scalar=combined_scalar,
+            scaling_applied=target_notional < base_notional,
+        )

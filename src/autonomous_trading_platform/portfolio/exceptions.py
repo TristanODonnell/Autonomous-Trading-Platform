@@ -98,6 +98,32 @@ class MissingCapitalDataError(PortfolioError):
         )
 
 
+class MissingPositionScalingDataError(PortfolioError):
+    """
+    Raised when volatility scaling is enabled and required, but the combined
+    scalar cannot be computed (e.g. insufficient bars, missing market data).
+
+    In live trading with require_vol_scalar_for_live=True this prevents a
+    full-size order from being placed silently during a high-volatility regime.
+    """
+
+    def __init__(
+        self,
+        strategy_id: str,
+        symbol: str,
+        trading_mode: str,
+        reason: str,
+    ) -> None:
+        self.strategy_id = strategy_id
+        self.symbol = symbol
+        self.trading_mode = trading_mode
+        self.reason = reason
+        super().__init__(
+            f"Volatility scalar unavailable for '{symbol}' (strategy='{strategy_id}', "
+            f"mode='{trading_mode}'): {reason}. Cannot size live order without scaling data."
+        )
+
+
 class AllocationBudgetExceededError(PortfolioError):
     """
     Raised when a proposed manual override would push aggregate portfolio

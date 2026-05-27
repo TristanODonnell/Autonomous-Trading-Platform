@@ -1366,3 +1366,28 @@ research_intelligence_overfit_estimate = meter.create_histogram(
     description="Research intelligence overfitting probability estimates",
     unit="1",
 )
+
+# =========================
+# POSITION SCALING METRICS  (FINDING-18)
+# =========================
+
+ratp_position_scaling_absent_total = meter.create_counter(
+    name="ratp_position_scaling_absent_total",
+    description=(
+        "Total number of position sizing calls where both vol_scalar and sharpe_scalar "
+        "were absent and full notional was used as fallback"
+    ),
+    unit="1",
+)
+
+ratp_vol_scalar_value = meter.create_histogram(
+    name="ratp_vol_scalar_value",
+    description="Distribution of combined vol/Sharpe scalar values applied to position sizing",
+    unit="1",
+)
+
+ratp_position_scaling_applied_total = meter.create_counter(
+    name="ratp_position_scaling_applied_total",
+    description="Total number of position sizing calls where a combined scalar reduced the notional",
+    unit="1",
+)
