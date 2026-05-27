@@ -7,6 +7,9 @@ from typing import Any, cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.live_performance_metrics_service import (
+    LivePerformanceMetricsService,
+)
 from autonomous_trading_platform.application.services.strategy_governance_service import (
     _REQUIRED_CRITERIA_BY_TRANSITION,
     _RULE_STATE_ALIASES,
@@ -98,6 +101,9 @@ class PromotionEligibilityResult:
     source_run_id: str | None = None
     fallback_allowed: bool = True
     metrics_source_type: str | None = None
+    # Live runtime metrics included for operator transparency; advisory only.
+    # Promotion eligibility is still determined by backtest/simulation metrics.
+    live_metrics: dict[str, float | int | None] | None = None
 
 
 @dataclass(frozen=True)
@@ -120,6 +126,7 @@ class AutoPromotionService:
         operator_settings_repo: OperatorSettingsRepository | None = None,
         audit_log_repo: AuditLogRepository | None = None,
         governance_service: StrategyGovernanceService | None = None,
+        live_perf_service: LivePerformanceMetricsService | None = None,
     ) -> None:
         self._session = session
         self._promotion_rules_repo = promotion_rules_repo or PromotionRulesRepository(session)
@@ -130,6 +137,7 @@ class AutoPromotionService:
             promotion_rules_repo=self._promotion_rules_repo,
             audit_log_repo=self._audit_log_repo,
         )
+        self._live_perf_service = live_perf_service or LivePerformanceMetricsService(session)
 
     def scan(self) -> list[PromotionEligibilityResult]:
         rules = self._active_rules_by_transition()
@@ -221,6 +229,18 @@ class AutoPromotionService:
         rule = rules.get((from_status, to_status))
         is_capital_bearing = (from_status, to_status) in _CAPITAL_BEARING_AUTO_PROMOTION_TRANSITIONS
 
+        # Fetch live metrics once for transparency across all return paths.
+        # Advisory only — does not affect promotion eligibility.
+        live_metrics_obj = self._live_perf_service.compute_for_strategy(governance.strategy_id)
+        live_metrics: dict[str, float | int | None] = {
+            "rolling_sharpe": live_metrics_obj.rolling_sharpe,
+            "realized_return": live_metrics_obj.realized_return,
+            "realized_drawdown": live_metrics_obj.realized_drawdown,
+            "live_win_rate": live_metrics_obj.live_win_rate,
+            "trade_count": live_metrics_obj.trade_count,
+            "days_live": live_metrics_obj.days_live,
+        }
+
         # Capital-bearing transitions fail closed when source_run_id is absent; no fallback.
         if is_capital_bearing and governance.source_run_id is None:
             self._audit_log_repo.record_operator_action(
@@ -270,6 +290,7 @@ class AutoPromotionService:
                 source_run_id=None,
                 fallback_allowed=False,
                 metrics_source_type=None,
+                live_metrics=live_metrics,
             )
 
         resolved_source_run_id = str(governance.source_run_id) if governance.source_run_id else None
@@ -288,6 +309,7 @@ class AutoPromotionService:
                 reasons=[f"No active PromotionRules row for {from_status} -> {to_status}."],
                 source_run_id=resolved_source_run_id,
                 fallback_allowed=not is_capital_bearing,
+                live_metrics=live_metrics,
             )
 
         # Check required criteria for null thresholds before evaluating strategy metrics.
@@ -341,6 +363,7 @@ class AutoPromotionService:
                 missing_required_criteria=null_required,
                 source_run_id=resolved_source_run_id,
                 fallback_allowed=not is_capital_bearing,
+                live_metrics=live_metrics,
             )
 
         criteria = self._evaluate_rule(
@@ -368,6 +391,7 @@ class AutoPromotionService:
             source_run_id=resolved_source_run_id,
             fallback_allowed=not is_capital_bearing,
             metrics_source_type=metrics_source_type,
+            live_metrics=live_metrics,
         )
 
     def _evaluate_rule(
@@ -633,6 +657,7 @@ class AutoPromotionService:
                     "metrics_source_type": candidate.metrics_source_type,
                     "fallback_allowed": candidate.fallback_allowed,
                     "metrics": candidate.metrics,
+                    "live_metrics": candidate.live_metrics,
                     "criteria": [
                         {
                             "name": criterion.name,

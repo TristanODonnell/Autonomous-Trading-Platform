@@ -36,6 +36,7 @@ from . import simulation_runs as simulation_runs
 from . import strategy_configs as strategy_configs
 from . import strategy_control_states as strategy_control_states
 from . import strategy_governance as strategy_governance
+from . import strategy_live_performance_snapshots as strategy_live_performance_snapshots
 from . import strategy_runtime_states as strategy_runtime_states
 from . import symbol_date_coverage as symbol_date_coverage
 from . import ticker_lifecycle_event as ticker_lifecycle_events
@@ -80,6 +81,7 @@ __all__ = [
     "simulation_runs",
     "metrics_summary",
     "strategy_governance",
+    "strategy_live_performance_snapshots",
     "allocation_overrides",
     "allocation_rebalance_history",
     "capital_allocation_policies",

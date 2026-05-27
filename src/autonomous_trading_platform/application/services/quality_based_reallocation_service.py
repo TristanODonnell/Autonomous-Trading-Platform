@@ -10,6 +10,10 @@ from uuid import uuid4
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.live_performance_metrics_service import (
+    LivePerformanceMetricsService,
+    compute_alpha,
+)
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.models.allocation_overrides import (
     AllocationOverrides,
@@ -75,8 +79,14 @@ class StrategyQualityInput:
     floor: Decimal
     manual_override_pct: Decimal | None
     current_allocation_pct: Decimal
+    # quality_score is the blended score (alpha * live + (1-alpha) * backtest)
     quality_score: Decimal
     metrics: dict[str, float | int | None]
+    # Live performance fields (populated when runtime data is available)
+    live_metrics: dict[str, float | int | None] = field(default_factory=dict)
+    live_score: Decimal = field(default=Decimal("0"))
+    backtest_score: Decimal = field(default=Decimal("0"))
+    alpha_weight: Decimal = field(default=Decimal("0"))
 
 
 @dataclass(frozen=True)
@@ -109,6 +119,8 @@ class QualityReallocationResult:
     allocation_changes_count: int
     noop: bool
     lock_acquired: bool = field(default=False)
+    # Per-strategy breakdown of blended scoring for operator transparency
+    blended_score_breakdown: dict[str, dict[str, float | None]] = field(default_factory=dict)
 
     @property
     def changed(self) -> bool:
@@ -124,6 +136,7 @@ class QualityBasedReallocationService:
         operator_settings_repo: OperatorSettingsRepository | None = None,
         allocation_overrides_repo: AllocationOverridesRepository | None = None,
         rebalance_history_repo: AllocationRebalanceHistoryRepository | None = None,
+        live_perf_service: LivePerformanceMetricsService | None = None,
     ) -> None:
         self._session = session
         self._audit_log_repo = audit_log_repo or AuditLogRepository(session)
@@ -134,6 +147,7 @@ class QualityBasedReallocationService:
         self._rebalance_history_repo = (
             rebalance_history_repo or AllocationRebalanceHistoryRepository(session)
         )
+        self._live_perf_service = live_perf_service or LivePerformanceMetricsService(session)
 
     def rebalance(
         self,
@@ -310,6 +324,17 @@ class QualityBasedReallocationService:
             turnover_metrics = self._compute_turnover_metrics(proposals, min_change, settings)
             duration_seconds = perf_counter() - wall_start
 
+            blended_breakdown = {
+                item.strategy_id: {
+                    "live_score": float(item.live_score),
+                    "backtest_score": float(item.backtest_score),
+                    "blended_score": float(item.quality_score),
+                    "alpha_weight": float(item.alpha_weight),
+                    "live_history_days": item.live_metrics.get("days_live"),
+                    "live_trade_count": item.live_metrics.get("trade_count"),
+                }
+                for item in inputs
+            }
             result = QualityReallocationResult(
                 run_id=run_id,
                 rebalance_id=rebalance_id,
@@ -326,6 +351,7 @@ class QualityBasedReallocationService:
                 allocation_changes_count=changes_count,
                 noop=noop,
                 lock_acquired=True,
+                blended_score_breakdown=blended_breakdown,
             )
 
             final_status = "noop" if noop else "completed"
@@ -647,7 +673,42 @@ class QualityBasedReallocationService:
                 # weighted assignment above the threshold is written on first run.
                 current_pct = Decimal("0")
             metrics = self._latest_metrics(governance.strategy_id)
-            quality_score = self._quality_score(metrics)
+            backtest_score = self._quality_score(metrics)
+            live_metrics_obj = self._live_perf_service.compute_for_strategy(governance.strategy_id)
+            live_metrics = {
+                "rolling_sharpe": live_metrics_obj.rolling_sharpe,
+                "realized_return": live_metrics_obj.realized_return,
+                "realized_drawdown": live_metrics_obj.realized_drawdown,
+                "live_win_rate": live_metrics_obj.live_win_rate,
+                "trade_count": live_metrics_obj.trade_count,
+            }
+            live_score = self._live_quality_score(live_metrics)
+            alpha = Decimal(
+                str(
+                    round(
+                        compute_alpha(
+                            days_live=live_metrics_obj.days_live or 0,
+                            trade_count=live_metrics_obj.trade_count or 0,
+                        ),
+                        6,
+                    )
+                )
+            )
+            blended_score = alpha * live_score + (Decimal("1") - alpha) * backtest_score
+            blended_score = max(blended_score, Decimal("0.01"))
+            logger.info(
+                "QUALITY_SCORE_BLENDED",
+                extra={
+                    "strategy_id": governance.strategy_id,
+                    "backtest_score": float(backtest_score),
+                    "live_score": float(live_score),
+                    "blended_score": float(blended_score),
+                    "alpha_weight": float(alpha),
+                    "days_live": live_metrics_obj.days_live,
+                    "live_trade_count": live_metrics_obj.trade_count,
+                    "rebalance_run_id": rebalance_id,
+                },
+            )
             policy_cap = self._decimal_pct(policy.max_pct_of_capital)
             inputs.append(
                 StrategyQualityInput(
@@ -660,8 +721,12 @@ class QualityBasedReallocationService:
                     floor=Decimal("0"),
                     manual_override_pct=manual_override_pct,
                     current_allocation_pct=current_pct,
-                    quality_score=quality_score,
+                    quality_score=blended_score,
                     metrics=metrics,
+                    live_metrics=live_metrics,
+                    live_score=live_score,
+                    backtest_score=backtest_score,
+                    alpha_weight=alpha,
                 )
             )
 
@@ -919,6 +984,7 @@ class QualityBasedReallocationService:
             "allocation_changes_count": result.allocation_changes_count,
             "noop": result.noop,
             "lock_acquired": result.lock_acquired,
+            "blended_score_breakdown": result.blended_score_breakdown,
         }
 
     def _latest_metrics(self, strategy_id: str) -> dict[str, float | int | None]:
@@ -992,6 +1058,26 @@ class QualityBasedReallocationService:
         trade_count = Decimal(
             str(metrics["trade_count"] if metrics["trade_count"] is not None else 0)
         )
+
+        score = Decimal("1")
+        score += max(sharpe, Decimal("-1")) * Decimal("0.40")
+        score += total_return * Decimal("1.50")
+        score += win_rate * Decimal("0.40")
+        score += min(trade_count / Decimal("100"), Decimal("0.25"))
+        score -= abs(drawdown) * Decimal("2.00")
+        return max(score, Decimal("0.01"))
+
+    def _live_quality_score(self, live_metrics: dict[str, float | int | None]) -> Decimal:
+        """Compute quality score from realized live/runtime metrics.
+
+        Uses the same weighting formula as the backtest score so that the two
+        are directly comparable when blended.
+        """
+        sharpe = Decimal(str(live_metrics.get("rolling_sharpe") or 0))
+        total_return = Decimal(str(live_metrics.get("realized_return") or 0))
+        drawdown = Decimal(str(live_metrics.get("realized_drawdown") or 0))
+        win_rate = Decimal(str(live_metrics.get("live_win_rate") or 0))
+        trade_count = Decimal(str(live_metrics.get("trade_count") or 0))
 
         score = Decimal("1")
         score += max(sharpe, Decimal("-1")) * Decimal("0.40")
