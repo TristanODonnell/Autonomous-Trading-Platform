@@ -980,6 +980,38 @@ rebalance_failed = meter.create_counter(
     unit="1",
 )
 
+# --- Portfolio drawdown governance (FINDING-16) ---
+
+ratp_portfolio_drawdown_pct = meter.create_histogram(
+    name="ratp_portfolio_drawdown_pct",
+    description="Realized portfolio drawdown as a fraction of peak equity (0.0 = at peak, 1.0 = fully drawn down)",
+    unit="1",
+)
+
+ratp_portfolio_peak_equity = meter.create_histogram(
+    name="ratp_portfolio_peak_equity",
+    description="Portfolio all-time peak equity in USD as recorded at each governance evaluation",
+    unit="USD",
+)
+
+ratp_portfolio_drawdown_breach_total = meter.create_counter(
+    name="ratp_portfolio_drawdown_breach_total",
+    description="Total number of portfolio drawdown governance breaches detected",
+    unit="1",
+)
+
+ratp_portfolio_governance_paused = meter.create_histogram(
+    name="ratp_portfolio_governance_paused",
+    description="Current portfolio governance pause state (1.0 = paused, 0.0 = active) recorded per evaluation",
+    unit="1",
+)
+
+ratp_portfolio_kill_switch_activations_total = meter.create_counter(
+    name="ratp_portfolio_kill_switch_activations_total",
+    description="Total number of times the global kill switch was automatically activated by portfolio drawdown governance",
+    unit="1",
+)
+
 # =========================
 # UNIVERSE METRICS
 # =========================

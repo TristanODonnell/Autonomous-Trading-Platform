@@ -9,6 +9,10 @@ from autonomous_trading_platform.common.errors import (
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
 from autonomous_trading_platform.contracts.runtime.runtime_job_run import RuntimeJobRun
 from autonomous_trading_platform.execution.errors import ExecutionError
+from autonomous_trading_platform.execution.services.portfolio_drawdown_governance_service import (
+    PortfolioDrawdownConfig,
+    PortfolioDrawdownGovernanceService,
+)
 from autonomous_trading_platform.execution.services.trading_freeze_service import (
     TradingFreezeService,
 )
@@ -63,6 +67,18 @@ from autonomous_trading_platform.scheduler.jobs.run_trading_evaluation_job impor
     run_trading_evaluation_job,
 )
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
+    AuditLogRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.cash_snapshot_repository import (
+    CashSnapshotRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
+    OperatorSettingsRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.portfolio_drawdown_governance_repository import (
+    PortfolioDrawdownGovernanceRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.runtime_control_state_repository import (
     RuntimeControlStateRepository,
 )
@@ -286,6 +302,55 @@ def run_trading_cycle(now_utc: datetime | None = None):
             },
         )
 
+        return
+
+    # Portfolio drawdown governance: evaluate current drawdown and block the
+    # cycle if the configured action pauses new trading.  This check sits
+    # between the kill-switch/runtime-control block and the strategy-control
+    # block so that governance semantics compose cleanly with existing guards.
+    portfolio_governance_skip = _evaluate_portfolio_governance_for_trading(
+        session=session,
+        logger=logger,
+        component=component,
+    )
+    if portfolio_governance_skip is not None:
+        logger.warning(
+            "trading_cycle_skipped_portfolio_drawdown_governance",
+            extra=LogContext(
+                run_id=str(run_id),
+                component=component,
+                incident_type=portfolio_governance_skip,
+            ).to_extra(),
+        )
+        audit_logger.record_run_completed(
+            run_id=str(run_id),
+            component=component,
+            metadata={
+                **base_metadata,
+                "status": "skipped",
+                "skip_reason": portfolio_governance_skip,
+            },
+        )
+        _save_runtime_job_run(
+            status="completed",
+            completed_at=datetime.now(UTC),
+            error_message=None,
+            output_summary_json={
+                "status": "skipped",
+                "skip_reason": portfolio_governance_skip,
+                "last_successful_step": manifest.last_successful_step,
+                "current_step": None,
+            },
+        )
+        manifest.status = "completed"
+        manifest.current_step = None
+        manifest.error_message = portfolio_governance_skip
+        manifest_service.save(manifest)
+        trading_cycle_runs.add(1, {"component": component, "status": "skipped"})
+        trading_cycle_duration.record(
+            perf_counter() - cycle_wall_start,
+            {"component": component, "status": "skipped"},
+        )
         return
 
     strategy_control_repository = StrategyControlStateRepository(session)
@@ -995,6 +1060,61 @@ def run_trading_cycle(now_utc: datetime | None = None):
             raise
         finally:
             session.close()
+
+
+def _evaluate_portfolio_governance_for_trading(*, session, logger, component: str) -> str | None:
+    """
+    Evaluate portfolio drawdown governance and return a skip_reason string if
+    trading should be blocked, or None if it may proceed.
+
+    Fails open: infrastructure errors never block trading.  The governance
+    check is a safety enrichment; it must not become a single point of failure.
+    """
+    try:
+        op_settings = OperatorSettingsRepository(session).get_or_create_default()
+        config = PortfolioDrawdownConfig.from_settings(op_settings)
+        if not config.enabled:
+            return None
+
+        snap = CashSnapshotRepository(session).get_latest()
+        governance_svc = PortfolioDrawdownGovernanceService(
+            governance_repo=PortfolioDrawdownGovernanceRepository(session),
+            audit_repo=AuditLogRepository(session),
+        )
+
+        if snap is not None and snap.equity is not None:
+            evaluation = governance_svc.evaluate(
+                current_equity=float(snap.equity),
+                config=config,
+            )
+            if evaluation.trading_blocked:
+                logger.warning(
+                    "trading_cycle_blocked_portfolio_drawdown_governance",
+                    extra={
+                        "component": component,
+                        "drawdown_pct": round(evaluation.drawdown_pct, 6),
+                        "threshold_pct": evaluation.threshold_pct,
+                        "triggered_action": evaluation.triggered_action,
+                    },
+                )
+                return "portfolio_drawdown_governance_paused"
+        else:
+            # No equity data — check whether a prior breach is persisted.
+            if governance_svc.is_trading_blocked():
+                logger.warning(
+                    "trading_cycle_blocked_portfolio_drawdown_governance_persisted_state",
+                    extra={"component": component},
+                )
+                return "portfolio_drawdown_governance_paused"
+
+        return None
+
+    except Exception as exc:
+        logger.warning(
+            "portfolio_governance.trading_check_error_fail_open",
+            extra={"component": component, "error": str(exc)},
+        )
+        return None
 
 
 if __name__ == "__main__":

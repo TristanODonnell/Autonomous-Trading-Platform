@@ -10,6 +10,10 @@ from autonomous_trading_platform.application.services.quality_based_reallocation
     QualityReallocationResult,
 )
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.execution.services.portfolio_drawdown_governance_service import (
+    PortfolioDrawdownConfig,
+    PortfolioDrawdownGovernanceService,
+)
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     CycleMetricSet,
@@ -44,8 +48,17 @@ from autonomous_trading_platform.scheduler.cycles.governance_automation_common i
     create_governance_manifest,
     fail_governance_manifest,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
+    AuditLogRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.cash_snapshot_repository import (
+    CashSnapshotRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
     OperatorSettingsRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.portfolio_drawdown_governance_repository import (
+    PortfolioDrawdownGovernanceRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_repository import (
     RuntimeJobRunRepository,
@@ -106,6 +119,24 @@ def run_strategy_allocation_rebalance_cycle(
 
     def job() -> dict:
         try:
+            # Portfolio drawdown governance guard: skip rebalance if breach
+            # has paused rebalancing.  Evaluated here (inside the job) so it
+            # runs under the existing run-manifest and lock infrastructure.
+            portfolio_skip = _evaluate_portfolio_governance_for_rebalance(
+                session=session,
+                settings=settings,
+                logger=logger,
+            )
+            if portfolio_skip is not None:
+                payload = {"status": "skipped", "skip_reason": portfolio_skip}
+                complete_governance_manifest(
+                    session=session,
+                    manifest=manifest,
+                    output_decisions=payload,
+                )
+                session.commit()
+                return payload
+
             result = QualityBasedReallocationService(session=session).rebalance(
                 run_id=str(run_id),
                 actor=trigger_source,
@@ -216,6 +247,55 @@ def _emit_rebalance_stability_metrics(result: QualityReallocationResult) -> None
     duration = result.turnover_metrics.get("duration_seconds")
     if duration is not None:
         rebalance_duration_seconds.record(float(duration), attrs)
+
+
+def _evaluate_portfolio_governance_for_rebalance(*, session, settings, logger) -> str | None:
+    """
+    Evaluate portfolio drawdown governance and return a skip_reason string if
+    rebalancing should be blocked, or None if it may proceed.
+
+    Fails open: infrastructure errors never block rebalancing.
+    """
+    try:
+        config = PortfolioDrawdownConfig.from_settings(settings)
+        if not config.enabled:
+            return None
+
+        snap = CashSnapshotRepository(session).get_latest()
+        governance_svc = PortfolioDrawdownGovernanceService(
+            governance_repo=PortfolioDrawdownGovernanceRepository(session),
+            audit_repo=AuditLogRepository(session),
+        )
+
+        if snap is not None and snap.equity is not None:
+            evaluation = governance_svc.evaluate(
+                current_equity=float(snap.equity),
+                config=config,
+            )
+            if evaluation.rebalancing_blocked:
+                logger.warning(
+                    "rebalance_skipped_portfolio_drawdown_governance",
+                    extra={
+                        "drawdown_pct": round(evaluation.drawdown_pct, 6),
+                        "threshold_pct": evaluation.threshold_pct,
+                        "triggered_action": evaluation.triggered_action,
+                    },
+                )
+                return "portfolio_drawdown_governance_paused"
+        else:
+            # No equity data available — check persisted block state only.
+            if governance_svc.is_rebalancing_blocked():
+                logger.warning("rebalance_skipped_portfolio_drawdown_governance_persisted_state")
+                return "portfolio_drawdown_governance_paused"
+
+        return None
+
+    except Exception as exc:
+        logger.warning(
+            "portfolio_governance.rebalance_check_error_fail_open",
+            extra={"error": str(exc)},
+        )
+        return None
 
 
 if __name__ == "__main__":

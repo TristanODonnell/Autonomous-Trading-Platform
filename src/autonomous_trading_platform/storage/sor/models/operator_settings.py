@@ -58,6 +58,17 @@ class OperatorSettingsRow(Base):
         Numeric(8, 4), nullable=True, default=None
     )
 
+    # Portfolio drawdown governance (FINDING-16)
+    portfolio_max_drawdown_pct: Mapped[float | None] = mapped_column(
+        Numeric(6, 4), nullable=True, default=0.15
+    )
+    portfolio_drawdown_action: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, default="pause_new_trading"
+    )
+    portfolio_drawdown_recovery_mode: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, default="manual_resume_required"
+    )
+
     updated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(

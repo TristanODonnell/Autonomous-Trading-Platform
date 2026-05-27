@@ -19,6 +19,7 @@ from . import missing_bar_incidents as missing_bar_incidents
 from . import operational_alerts as operational_alerts
 from . import operator_settings as operator_settings
 from . import order_intents as order_intents
+from . import portfolio_drawdown_governance_state as portfolio_drawdown_governance_state
 from . import position_snapshot_items as position_snapshot_items
 from . import position_snapshots as position_snapshots
 from . import promotion_rules as promotion_rules
@@ -90,6 +91,7 @@ __all__ = [
     "runtime_job_run_steps",
     "runtime_control_state",
     "kill_switch_state",
+    "portfolio_drawdown_governance_state",
     "reconciliation_snapshots",
     "runtime_soak_reports",
     "rebalance_runs",
