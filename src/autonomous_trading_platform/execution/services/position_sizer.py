@@ -5,7 +5,15 @@ from __future__ import annotations
 import logging
 from decimal import ROUND_DOWN, Decimal
 
+from autonomous_trading_platform.execution.services.drawdown_scaling_service import (
+    DrawdownScalingService,
+)
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
+from autonomous_trading_platform.observability.metrics import (
+    ratp_drawdown_scaling_applied_total,
+    ratp_strategy_drawdown_scalar,
+    ratp_strategy_drawdown_utilization,
+)
 from autonomous_trading_platform.portfolio.allocation_provider import IAllocationProvider
 
 ZERO = Decimal("0")
@@ -21,6 +29,7 @@ class PositionSizer:
         capital_fraction: Decimal = ONE,
         min_notional_usd: Decimal = Decimal("1.00"),
         max_symbol_exposure_usd: Decimal | None = None,
+        drawdown_scaling_service: DrawdownScalingService | None = None,
     ) -> None:
 
         if not (ZERO < capital_fraction <= ONE):
@@ -36,6 +45,7 @@ class PositionSizer:
         self._capital_fraction = capital_fraction
         self._min_notional_usd = min_notional_usd
         self._max_symbol_exposure_usd = max_symbol_exposure_usd
+        self._drawdown_scaling = drawdown_scaling_service
 
     def compute_quantity(
         self,
@@ -46,6 +56,7 @@ class PositionSizer:
         approval_status: GovernanceState | None = None,
         performance_tier: str | None = None,
         vol_scalar: Decimal | None = None,
+        realized_drawdown: float | None = None,
     ) -> int:
 
         if current_price <= ZERO:
@@ -67,6 +78,53 @@ class PositionSizer:
             if not (ZERO < vol_scalar <= ONE):
                 raise ValueError(f"vol_scalar must be in (0, 1], got {vol_scalar}")
             target_notional = target_notional * vol_scalar
+
+        # Apply drawdown scalar (FINDING-12) — strategy-level taper based on
+        # how close realized drawdown is to the policy-configured maximum.
+        # Must run after vol_scalar so the scaling composition is deterministic:
+        # final_notional = base * capital_fraction * vol_scalar * drawdown_scalar
+        # The max_drawdown_allowed comes from the already-resolved allocation so
+        # override and policy merging is respected without a second lookup.
+        if self._drawdown_scaling is not None and realized_drawdown is not None:
+            notional_before_drawdown = target_notional
+            dd_result = self._drawdown_scaling.compute_scalar(
+                strategy_id=strategy_id,
+                realized_drawdown=realized_drawdown,
+                max_drawdown_allowed=allocation.max_drawdown_allowed,
+            )
+
+            ratp_strategy_drawdown_utilization.record(
+                dd_result.drawdown_utilization,
+                {"strategy_id": strategy_id},
+            )
+            ratp_strategy_drawdown_scalar.record(
+                float(dd_result.drawdown_scalar),
+                {"strategy_id": strategy_id},
+            )
+
+            if dd_result.drawdown_scaling_applied:
+                target_notional = target_notional * dd_result.drawdown_scalar
+                ratp_drawdown_scaling_applied_total.add(
+                    1,
+                    {
+                        "strategy_id": strategy_id,
+                        "hard_limit_reached": str(dd_result.hard_limit_reached),
+                    },
+                )
+                logger.info(
+                    "position_sizer.drawdown_scaling_applied",
+                    extra={
+                        "strategy_id": strategy_id,
+                        "symbol": symbol,
+                        "realized_drawdown": round(dd_result.realized_drawdown, 6),
+                        "max_drawdown_allowed": round(dd_result.max_drawdown_allowed, 6),
+                        "drawdown_utilization": round(dd_result.drawdown_utilization, 4),
+                        "drawdown_scalar": float(dd_result.drawdown_scalar),
+                        "hard_limit_reached": dd_result.hard_limit_reached,
+                        "notional_before": float(notional_before_drawdown),
+                        "notional_after": float(target_notional),
+                    },
+                )
 
         # Apply max_position_size_usd — policy-level cap per strategy position
         if allocation.max_position_size_usd is not None:

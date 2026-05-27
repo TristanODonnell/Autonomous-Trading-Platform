@@ -874,6 +874,26 @@ ratp_allocation_blocked_stale_capital_total = meter.create_counter(
     unit="1",
 )
 
+# --- Drawdown-aware allocation scaling (FINDING-12) ---
+
+ratp_strategy_drawdown_utilization = meter.create_histogram(
+    name="ratp_strategy_drawdown_utilization",
+    description="Ratio of realized drawdown to max_drawdown_allowed per strategy per bar",
+    unit="1",
+)
+
+ratp_strategy_drawdown_scalar = meter.create_histogram(
+    name="ratp_strategy_drawdown_scalar",
+    description="Drawdown scaling factor applied to position notional (1.0 = no scaling)",
+    unit="1",
+)
+
+ratp_drawdown_scaling_applied_total = meter.create_counter(
+    name="ratp_drawdown_scaling_applied_total",
+    description="Total number of position sizing calls where drawdown scaling reduced the notional",
+    unit="1",
+)
+
 ratp_cash_snapshot_missing_total = meter.create_counter(
     name="ratp_cash_snapshot_missing_total",
     description="Total number of allocation attempts blocked due to a missing CashSnapshot",

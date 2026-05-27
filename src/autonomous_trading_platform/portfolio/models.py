@@ -37,6 +37,13 @@ class AllocationResult(BaseModel):
     cash_snapshot_as_of: datetime | None = None
     snapshot_age_seconds: float | None = None
     capital_source: str | None = None
+    # Drawdown scaling context (FINDING-12)
+    # Populated when DrawdownScalingService is active; None when scaling is
+    # disabled or no realized_drawdown is available for the strategy.
+    realized_drawdown: float | None = None
+    drawdown_utilization: float | None = None
+    drawdown_scalar: float | None = None
+    drawdown_scaling_applied: bool = False
 
 
 class PromotionEligibility(BaseModel):

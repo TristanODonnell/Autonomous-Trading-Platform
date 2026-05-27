@@ -77,6 +77,7 @@ class FakePositionSizer:
         current_price: object,
         performance_tier: str | None = None,
         vol_scalar: object | None = None,
+        realized_drawdown: float | None = None,
     ) -> int:
         if symbol == "TSLA":
             return 0

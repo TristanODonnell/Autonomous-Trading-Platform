@@ -133,7 +133,8 @@
       "PowerShell(Get-Command *)",
       "PowerShell(head *)",
       "Bash(grep -v \"^$\")",
-      "Bash(xargs grep -l \"class.*UnitOfWork\")"
+      "Bash(xargs grep -l \"class.*UnitOfWork\")",
+      "Bash(Get-ChildItem -Path . -Directory)"
     ]
   }
 }

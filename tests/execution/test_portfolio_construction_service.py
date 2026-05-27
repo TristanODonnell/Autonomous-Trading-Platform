@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import cast
 from uuid import UUID
 
@@ -21,6 +22,11 @@ from autonomous_trading_platform.safety.services.pre_trade_risk_service import (
 
 
 class FakePositionSizer:
+    def __init__(self, qty_by_symbol: dict[str, int] | None = None) -> None:
+        self.last_vol_scalar: Decimal | None = None
+        self.last_realized_drawdown: float | None = None
+        self._qty_by_symbol = qty_by_symbol or {"TSLA": 0}
+
     def compute_quantity(
         self,
         *,
@@ -29,11 +35,12 @@ class FakePositionSizer:
         symbol: str,
         current_price: object,
         performance_tier: str | None = None,
-        vol_scalar: object | None = None,
+        vol_scalar: Decimal | None = None,
+        realized_drawdown: float | None = None,
     ) -> int:
-        if symbol == "TSLA":
-            return 0
-        return 10
+        self.last_vol_scalar = vol_scalar
+        self.last_realized_drawdown = realized_drawdown
+        return self._qty_by_symbol.get(symbol, 10)
 
 
 @dataclass
@@ -309,3 +316,108 @@ class TestPortfolioConstructionService:
 
         assert intents == []
         assert risk_service.checked_intents == []
+
+
+class TestDrawdownScalingIntegration:
+    """
+    Verifies that realized_drawdown is threaded from generate_order_intents()
+    through to PositionSizer.compute_quantity().
+    """
+
+    def _make_service_with_tracking_sizer(
+        self,
+        risk_service: FakeRiskService,
+    ) -> tuple[PortfolioConstructionService, FakePositionSizer]:
+        sizer = FakePositionSizer()
+        service = PortfolioConstructionService(
+            pre_trade_risk_service=risk_service,
+            position_sizer=cast(PositionSizer, sizer),
+        )
+        return service, sizer
+
+    def test_realized_drawdown_passed_to_position_sizer(
+        self,
+        risk_service: FakeRiskService,
+        run_id: UUID,
+        strategy_id: str,
+        bar_timestamp: datetime,
+        now: datetime,
+    ) -> None:
+        service, sizer = self._make_service_with_tracking_sizer(risk_service)
+        signals = [make_signal(symbol="AAPL", direction="long")]
+        positions: dict[str, int] = {}
+        prices = {"AAPL": 100.0}
+
+        list(
+            service.generate_order_intents(
+                signals=signals,
+                positions=positions,
+                prices=prices,
+                run_id=run_id,
+                strategy_id=strategy_id,
+                bar_timestamp=bar_timestamp,
+                now=now,
+                approval_status=GovernanceState.APPROVED_RESEARCH,
+                realized_drawdown=0.04,
+            )
+        )
+
+        assert sizer.last_realized_drawdown == 0.04
+
+    def test_no_realized_drawdown_passes_none_to_sizer(
+        self,
+        risk_service: FakeRiskService,
+        run_id: UUID,
+        strategy_id: str,
+        bar_timestamp: datetime,
+        now: datetime,
+    ) -> None:
+        service, sizer = self._make_service_with_tracking_sizer(risk_service)
+        signals = [make_signal(symbol="AAPL", direction="long")]
+        positions: dict[str, int] = {}
+        prices = {"AAPL": 100.0}
+
+        list(
+            service.generate_order_intents(
+                signals=signals,
+                positions=positions,
+                prices=prices,
+                run_id=run_id,
+                strategy_id=strategy_id,
+                bar_timestamp=bar_timestamp,
+                now=now,
+                approval_status=GovernanceState.APPROVED_RESEARCH,
+            )
+        )
+
+        assert sizer.last_realized_drawdown is None
+
+    def test_sell_signal_does_not_invoke_position_sizer(
+        self,
+        risk_service: FakeRiskService,
+        run_id: UUID,
+        strategy_id: str,
+        bar_timestamp: datetime,
+        now: datetime,
+    ) -> None:
+        service, sizer = self._make_service_with_tracking_sizer(risk_service)
+        signals = [make_signal(symbol="TSLA", direction="sell")]
+        positions = {"TSLA": 5}
+        prices = {"TSLA": 200.0}
+
+        list(
+            service.generate_order_intents(
+                signals=signals,
+                positions=positions,
+                prices=prices,
+                run_id=run_id,
+                strategy_id=strategy_id,
+                bar_timestamp=bar_timestamp,
+                now=now,
+                approval_status=GovernanceState.APPROVED_RESEARCH,
+                realized_drawdown=0.04,
+            )
+        )
+
+        # SELL signals short-circuit to target_qty=0 without calling compute_quantity
+        assert sizer.last_realized_drawdown is None

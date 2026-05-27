@@ -65,6 +65,7 @@ class PortfolioConstructionService:
         approval_status: GovernanceState | None = None,
         performance_tier: str | None = None,
         recent_closes: dict[str, list[float]] | None = None,
+        realized_drawdown: float | None = None,
     ):
         signals_by_symbol = {signal.symbol: signal for signal in signals}
         target_positions = self._compute_target_positions(
@@ -74,6 +75,7 @@ class PortfolioConstructionService:
             approval_status=approval_status,
             performance_tier=performance_tier,
             recent_closes=recent_closes,
+            realized_drawdown=realized_drawdown,
         )
         deltas = self.calculate_deltas(positions, target_positions)
 
@@ -104,6 +106,7 @@ class PortfolioConstructionService:
         approval_status: GovernanceState | None = None,
         performance_tier: str | None = None,
         recent_closes: dict[str, list[float]] | None = None,
+        realized_drawdown: float | None = None,
     ) -> dict[str, int]:
         target_positions: dict[str, int] = {}
 
@@ -147,7 +150,8 @@ class PortfolioConstructionService:
                     symbol=signal.symbol,
                     current_price=current_price,
                     performance_tier=performance_tier,
-                    vol_scalar=combined_scalar,  # PositionSizer already handles this param
+                    vol_scalar=combined_scalar,
+                    realized_drawdown=realized_drawdown,
                 )
             except (AllocationDeniedError, NoPolicyFoundError) as exc:
                 logger.warning(
