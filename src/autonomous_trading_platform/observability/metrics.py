@@ -860,6 +860,26 @@ auto_demotion_scan_duration_seconds = meter.create_histogram(
     unit="s",
 )
 
+# --- Cash snapshot freshness (FINDING-13) ---
+
+ratp_cash_snapshot_age_seconds = meter.create_histogram(
+    name="ratp_cash_snapshot_age_seconds",
+    description="Age of the latest CashSnapshot at time of capital resolution for allocation",
+    unit="s",
+)
+
+ratp_allocation_blocked_stale_capital_total = meter.create_counter(
+    name="ratp_allocation_blocked_stale_capital_total",
+    description="Total number of allocation attempts blocked because the CashSnapshot was stale",
+    unit="1",
+)
+
+ratp_cash_snapshot_missing_total = meter.create_counter(
+    name="ratp_cash_snapshot_missing_total",
+    description="Total number of allocation attempts blocked due to a missing CashSnapshot",
+    unit="1",
+)
+
 allocation_cycle_runs = meter.create_counter(
     name="ratp_allocation_cycle_runs_total",
     description="Total number of allocation cycle executions",

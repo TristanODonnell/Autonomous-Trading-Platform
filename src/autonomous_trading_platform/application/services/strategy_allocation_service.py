@@ -11,7 +11,16 @@ from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
-from autonomous_trading_platform.portfolio.exceptions import AllocationBudgetExceededError
+from autonomous_trading_platform.observability.metrics import (
+    ratp_allocation_blocked_stale_capital_total,
+    ratp_cash_snapshot_age_seconds,
+    ratp_cash_snapshot_missing_total,
+)
+from autonomous_trading_platform.portfolio.exceptions import (
+    AllocationBudgetExceededError,
+    MissingCapitalDataError,
+    StaleCapitalDataError,
+)
 from autonomous_trading_platform.portfolio.portfolio_engine import PortfolioEngine
 from autonomous_trading_platform.storage.sor.models.allocation_overrides import (
     AllocationOverrides,
@@ -44,10 +53,23 @@ from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_r
 
 logger = logging.getLogger(__name__)
 
+# Environments where the freshness check is gated off (simulation/test/local-dev paths).
+# Production deployments use APP_ENV values outside this set (e.g. "production", "staging").
+_FRESHNESS_CHECK_BYPASS_ENVS: frozenset[str] = frozenset({"test", "dev", "local", "development"})
+
 _ACTIVE_ALLOCATION_STATES = {
     "approved_for_paper_trading": GovernanceState.APPROVED_PAPER,
     "approved_for_live_trading": GovernanceState.APPROVED_LIVE,
 }
+
+
+@dataclass(frozen=True)
+class _CapitalResolution:
+    total_capital: Decimal
+    cash_snapshot_id: str | None
+    cash_snapshot_as_of: datetime | None
+    snapshot_age_seconds: float | None
+    capital_source: str
 
 
 @dataclass(frozen=True)
@@ -293,11 +315,16 @@ class StrategyAllocationService:
         return total
 
     def _portfolio_engine(self) -> PortfolioEngine:
+        resolution = self._resolve_capital_with_snapshot_meta()
         return PortfolioEngine(
             policies_repo=self._capital_policies_repo,
             overrides_repo=self._allocation_overrides_repo,
             promotion_rules_repo=self._promotion_rules_repo,
-            total_capital=float(self._resolve_total_portfolio_capital()),
+            total_capital=float(resolution.total_capital),
+            cash_snapshot_id=resolution.cash_snapshot_id,
+            cash_snapshot_as_of=resolution.cash_snapshot_as_of,
+            snapshot_age_seconds=resolution.snapshot_age_seconds,
+            capital_source=resolution.capital_source,
         )
 
     def _allocation_participating_entries(
@@ -346,8 +373,105 @@ class StrategyAllocationService:
         return 1.0
 
     def _resolve_total_portfolio_capital(self) -> Decimal:
-        latest_cash = self._cash_snapshot_repo.get_latest()
-        if latest_cash is not None and latest_cash.equity is not None:
-            return Decimal(latest_cash.equity)
+        return self._resolve_capital_with_snapshot_meta().total_capital
 
-        return Decimal(str(self._settings.initial_capital))
+    def _resolve_capital_with_snapshot_meta(self) -> _CapitalResolution:
+        """
+        Load the latest CashSnapshot and validate its freshness.
+
+        In live/paper modes (app_env not in test bypass list), stale or missing
+        snapshots raise StaleCapitalDataError / MissingCapitalDataError so that
+        allocation cannot proceed with bad equity data.
+
+        In test/simulation modes the check is skipped and initial_capital_config
+        is returned when no snapshot is present.
+        """
+        now = datetime.now(UTC)
+        latest_cash = self._cash_snapshot_repo.get_latest()
+
+        freshness_enabled = (
+            self._settings.enable_cash_snapshot_freshness_check
+            and self._settings.app_env not in _FRESHNESS_CHECK_BYPASS_ENVS
+        )
+
+        if latest_cash is None or latest_cash.equity is None:
+            if freshness_enabled:
+                logger.warning(
+                    "cash snapshot missing for capital allocation",
+                    extra={"trading_environment": self._settings.trading_environment.value},
+                )
+                ratp_cash_snapshot_missing_total.add(1)
+                self._audit_log_repo.record_operator_action(
+                    action="MISSING_CAPITAL_DATA",
+                    actor="system",
+                    reason="No cash snapshot available for allocation",
+                    occurred_at=now,
+                    component="portfolio_allocation",
+                    metadata={"trading_environment": self._settings.trading_environment.value},
+                )
+                self._session.flush()
+                self._session.commit()
+                raise MissingCapitalDataError(self._settings.trading_environment.value)
+
+            return _CapitalResolution(
+                total_capital=Decimal(str(self._settings.initial_capital)),
+                cash_snapshot_id=None,
+                cash_snapshot_as_of=None,
+                snapshot_age_seconds=None,
+                capital_source="initial_capital_config",
+            )
+
+        age_seconds = (now - latest_cash.timestamp).total_seconds()
+        max_age = self._settings.max_cash_snapshot_age_seconds
+
+        logger.info(
+            "cash snapshot selected for allocation",
+            extra={
+                "cash_snapshot_id": str(latest_cash.snapshot_id),
+                "snapshot_timestamp": latest_cash.timestamp.isoformat(),
+                "snapshot_age_seconds": age_seconds,
+                "max_allowed_age_seconds": max_age,
+            },
+        )
+        ratp_cash_snapshot_age_seconds.record(max(0.0, age_seconds))
+
+        if freshness_enabled and age_seconds > max_age:
+            logger.warning(
+                "allocation blocked: cash snapshot is stale",
+                extra={
+                    "cash_snapshot_id": str(latest_cash.snapshot_id),
+                    "snapshot_age_seconds": age_seconds,
+                    "max_allowed_age_seconds": max_age,
+                },
+            )
+            ratp_allocation_blocked_stale_capital_total.add(1)
+            self._audit_log_repo.record_operator_action(
+                action="CASH_SNAPSHOT_STALE",
+                actor="system",
+                reason=f"Cash snapshot is {age_seconds:.1f}s old (max: {max_age}s)",
+                occurred_at=now,
+                component="portfolio_allocation",
+                metadata={
+                    "cash_snapshot_id": str(latest_cash.snapshot_id),
+                    "snapshot_timestamp": latest_cash.timestamp.isoformat(),
+                    "snapshot_age_seconds": age_seconds,
+                    "max_allowed_age_seconds": max_age,
+                    "trading_environment": self._settings.trading_environment.value,
+                },
+            )
+            self._session.flush()
+            self._session.commit()
+            raise StaleCapitalDataError(
+                snapshot_id=str(latest_cash.snapshot_id),
+                snapshot_timestamp=latest_cash.timestamp,
+                age_seconds=age_seconds,
+                max_age_seconds=max_age,
+            )
+
+        return _CapitalResolution(
+            total_capital=Decimal(latest_cash.equity),
+            cash_snapshot_id=str(latest_cash.snapshot_id),
+            cash_snapshot_as_of=latest_cash.timestamp,
+            snapshot_age_seconds=age_seconds,
+            capital_source="cash_snapshot",
+        )

@@ -43,11 +43,19 @@ class PortfolioEngine:
         overrides_repo: AllocationOverridesRepository,
         promotion_rules_repo: PromotionRulesRepository,
         total_capital: float,
+        cash_snapshot_id: str | None = None,
+        cash_snapshot_as_of: datetime | None = None,
+        snapshot_age_seconds: float | None = None,
+        capital_source: str | None = None,
     ) -> None:
         self._policies = policies_repo
         self._overrides = overrides_repo
         self._promotion_rules = promotion_rules_repo
         self._total_capital = total_capital
+        self._cash_snapshot_id = cash_snapshot_id
+        self._cash_snapshot_as_of = cash_snapshot_as_of
+        self._snapshot_age_seconds = snapshot_age_seconds
+        self._capital_source = capital_source
 
     def get_allocation(
         self,
@@ -127,6 +135,10 @@ class PortfolioEngine:
             override_applied=override is not None,
             override_id=override.override_id if override is not None else None,
             policy_id=policy.policy_id,
+            cash_snapshot_id=self._cash_snapshot_id,
+            cash_snapshot_as_of=self._cash_snapshot_as_of,
+            snapshot_age_seconds=self._snapshot_age_seconds,
+            capital_source=self._capital_source,
         )
 
     def get_allocations_for_many(

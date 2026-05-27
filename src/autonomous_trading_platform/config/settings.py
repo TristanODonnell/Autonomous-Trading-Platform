@@ -64,6 +64,14 @@ class Settings:
             15,
         )
 
+        self.enable_cash_snapshot_freshness_check = self._get_bool(
+            "ENABLE_CASH_SNAPSHOT_FRESHNESS_CHECK", default=True
+        )
+        self.max_cash_snapshot_age_seconds = self._get_int(
+            "MAX_CASH_SNAPSHOT_AGE_SECONDS",
+            600 if self.trading_environment == TradingEnvironment.LIVE else 900,
+        )
+
         self.market_bar_freshness_sla_seconds = self._get_int(
             "MARKET_BAR_FRESHNESS_SLA_SECONDS",
             30,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 
 class PortfolioError(Exception):
     """Base exception for all portfolio errors."""
@@ -56,6 +58,43 @@ class InsufficientCapitalError(PortfolioError):
         super().__init__(
             f"Strategy '{strategy_id}' requested ${requested:,.2f} "
             f"but only ${available:,.2f} is available."
+        )
+
+
+class StaleCapitalDataError(PortfolioError):
+    """
+    Raised when the latest CashSnapshot is too old to safely use for allocation.
+    Capital sizing cannot proceed with stale equity data in live/paper modes.
+    """
+
+    def __init__(
+        self,
+        snapshot_id: str | None,
+        snapshot_timestamp: datetime,
+        age_seconds: float,
+        max_age_seconds: int,
+    ) -> None:
+        self.snapshot_id = snapshot_id
+        self.snapshot_timestamp = snapshot_timestamp
+        self.age_seconds = age_seconds
+        self.max_age_seconds = max_age_seconds
+        super().__init__(
+            f"Cash snapshot is {age_seconds:.1f}s old (max allowed: {max_age_seconds}s, "
+            f"snapshot_at={snapshot_timestamp.isoformat()})."
+        )
+
+
+class MissingCapitalDataError(PortfolioError):
+    """
+    Raised when no CashSnapshot exists and live/paper allocation cannot proceed
+    without verified equity data.
+    """
+
+    def __init__(self, trading_environment: str) -> None:
+        self.trading_environment = trading_environment
+        super().__init__(
+            f"No cash snapshot available for capital allocation in '{trading_environment}' mode. "
+            "Allocation cannot proceed without current equity data."
         )
 
 
