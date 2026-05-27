@@ -1204,6 +1204,40 @@ def record_rejected_trade_outside_universe(count: int = 1) -> None:
 
 
 # =========================
+# SIGNAL AGGREGATION METRICS  (FINDING-08)
+# =========================
+
+ratp_signal_conflicts_total = meter.create_counter(
+    name="ratp_signal_conflicts_total",
+    description="Total number of cross-strategy signal conflicts detected during portfolio aggregation",
+    unit="1",
+)
+
+ratp_signal_netting_suppressed_total = meter.create_counter(
+    name="ratp_signal_netting_suppressed_total",
+    description="Total number of symbols whose signals were suppressed by portfolio signal netting",
+    unit="1",
+)
+
+ratp_signal_gross_exposure = meter.create_histogram(
+    name="ratp_signal_gross_exposure",
+    description="Gross exposure (sum of absolute signal notionals or counts) before netting per aggregation",
+    unit="1",
+)
+
+ratp_signal_net_exposure = meter.create_histogram(
+    name="ratp_signal_net_exposure",
+    description="Net directional exposure (buy minus sell notional or count) after netting per aggregation",
+    unit="1",
+)
+
+ratp_signal_aggregation_duration_seconds = meter.create_histogram(
+    name="ratp_signal_aggregation_duration_seconds",
+    description="Duration of portfolio signal aggregation per trading cycle",
+    unit="s",
+)
+
+# =========================
 # RESEARCH PIPELINE METRICS
 # =========================
 

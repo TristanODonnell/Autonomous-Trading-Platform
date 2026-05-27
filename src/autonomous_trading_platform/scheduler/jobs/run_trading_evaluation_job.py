@@ -10,6 +10,10 @@ from autonomous_trading_platform.common.errors import (
 from autonomous_trading_platform.contracts.accounting.position_snapshot import Position
 from autonomous_trading_platform.contracts.common.enums import StrategyEvent
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
+from autonomous_trading_platform.contracts.trading.signal_aggregate import SignalNettingPolicy
+from autonomous_trading_platform.execution.services.portfolio_signal_aggregator import (
+    PortfolioSignalAggregator,
+)
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
@@ -244,9 +248,42 @@ def run_trading_evaluation_job(
 
             approval_status = GovernanceState(manifest.governance_state)
 
+            # Portfolio-level signal aggregation: reconcile multi-strategy intent before
+            # order generation.  With a single active strategy the aggregator is a
+            # transparent pass-through; it becomes load-bearing as additional strategies
+            # are introduced into the same trading cycle.
+            aggregator = PortfolioSignalAggregator(policy=SignalNettingPolicy.CONSERVATIVE)
+            aggregation_result = aggregator.aggregate(
+                signals_by_strategy={manifest.strategy_id: strategy_job_result.signals},
+                run_id=manifest.run_id,
+                bar_timestamp=strategy_job_result.target_bar_timestamp,
+                prices=prices,
+            )
+
+            job_span.set_attribute(
+                "ratp.aggregation_conflicts", aggregation_result.total_conflicts_detected
+            )
+            job_span.set_attribute(
+                "ratp.aggregation_suppressed", aggregation_result.total_suppressed_symbols
+            )
+            job_span.set_attribute(
+                "ratp.aggregation_reconciled_count", len(aggregation_result.reconciled_signals)
+            )
+
+            if aggregation_result.total_conflicts_detected > 0:
+                logger.warning(
+                    "evaluation_job.signal_conflicts_detected",
+                    extra={
+                        "run_id": str(manifest.run_id),
+                        "conflict_count": aggregation_result.total_conflicts_detected,
+                        "suppressed_count": aggregation_result.total_suppressed_symbols,
+                        "policy": aggregation_result.policy.value,
+                    },
+                )
+
             generated_intents = (
                 execution_context.portfolio_construction_service.generate_order_intents(
-                    signals=strategy_job_result.signals,
+                    signals=aggregation_result.reconciled_signals,
                     positions=positions,
                     prices=prices,
                     run_id=manifest.run_id,
