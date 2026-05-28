@@ -143,7 +143,9 @@
       "Bash(Select-Object Name, Directory -First 20)",
       "Bash(/d/PythonVenvs/autonomous-trading-platform/.venv/Scripts/ruff.exe check *)",
       "Bash(grep -E \"\\\\.\\(py\\)$\")",
-      "Bash(xargs grep -l \"factor\\\\|exposure\")"
+      "Bash(xargs grep -l \"factor\\\\|exposure\")",
+      "Bash(xargs wc -l)",
+      "Bash(D:\\\\PythonVenvs\\\\autonomous-trading-platform\\\\.venv\\\\Scripts\\\\ruff.exe check *)"
     ]
   }
 }

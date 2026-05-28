@@ -1724,3 +1724,67 @@ ratp_shadow_validation_duration_seconds = meter.create_histogram(
     description="Wall-clock time to finalize a shadow validation run",
     unit="s",
 )
+
+# =========================
+# METRIC LINEAGE METRICS
+# =========================
+
+ratp_live_strategy_sharpe = meter.create_histogram(
+    name="ratp_live_strategy_sharpe",
+    description="Rolling Sharpe ratio computed from realized live fills for a strategy",
+    unit="1",
+)
+
+ratp_live_strategy_drawdown = meter.create_histogram(
+    name="ratp_live_strategy_drawdown",
+    description="Realized maximum drawdown from live equity curve for a strategy",
+    unit="1",
+)
+
+ratp_blended_strategy_score = meter.create_histogram(
+    name="ratp_blended_strategy_score",
+    description="Blended quality score (alpha*live + (1-alpha)*research) for a strategy",
+    unit="1",
+)
+
+ratp_live_metric_weight_alpha = meter.create_histogram(
+    name="ratp_live_metric_weight_alpha",
+    description="Live-vs-research blending weight alpha for a strategy (0=all research, 1=all live)",
+    unit="1",
+)
+
+ratp_strategy_runtime_maturity = meter.create_histogram(
+    name="ratp_strategy_runtime_maturity",
+    description="Number of days a strategy has been live in production",
+    unit="d",
+)
+
+ratp_live_metrics_computed_total = meter.create_counter(
+    name="ratp_live_metrics_computed_total",
+    description="Total number of live metric computation events",
+    unit="1",
+)
+
+ratp_research_metrics_resolved_total = meter.create_counter(
+    name="ratp_research_metrics_resolved_total",
+    description="Total number of research metric resolution events",
+    unit="1",
+)
+
+ratp_blended_metrics_computed_total = meter.create_counter(
+    name="ratp_blended_metrics_computed_total",
+    description="Total number of blended metric computation events",
+    unit="1",
+)
+
+ratp_metric_lineage_resolved_total = meter.create_counter(
+    name="ratp_metric_lineage_resolved_total",
+    description="Total number of metric lineage resolution events",
+    unit="1",
+)
+
+ratp_live_metric_weight_updated_total = meter.create_counter(
+    name="ratp_live_metric_weight_updated_total",
+    description="Total number of live metric weight (alpha) update events",
+    unit="1",
+)

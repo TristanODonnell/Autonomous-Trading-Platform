@@ -22,6 +22,9 @@ from autonomous_trading_platform.interfaces.rest.routes.control_routes import (
 from autonomous_trading_platform.interfaces.rest.routes.metadata_routes import (
     router as metadata_router,
 )
+from autonomous_trading_platform.interfaces.rest.routes.metrics_routes import (
+    router as metrics_router,
+)
 from autonomous_trading_platform.interfaces.rest.routes.operations_routes import (
     router as operations_router,
 )
@@ -76,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(control_router, prefix="/api/v1")
     app.include_router(operations_router, prefix="/api/v1")
     app.include_router(shadow_router, prefix="/api/v1")
+    app.include_router(metrics_router, prefix="/api/v1")
 
     @app.get("/health", tags=["ops"])
     def health() -> dict:

@@ -34,3 +34,10 @@ class MetricsSummary(Base):
     volatility: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     metrics_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+
+    # Lineage columns — nullable so existing rows remain valid.
+    metric_lineage_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    environment: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    calculation_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    lookback_window_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_strategy_ids: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)

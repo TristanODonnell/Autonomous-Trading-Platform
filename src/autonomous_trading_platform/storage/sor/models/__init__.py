@@ -2,6 +2,7 @@ from . import allocation_overrides as allocation_overrides
 from . import allocation_rebalance_history as allocation_rebalance_history
 from . import audit_logs as audit_logs
 from . import black_litterman_research_runs as black_litterman_research_runs
+from . import blended_metrics_snapshots as blended_metrics_snapshots
 from . import broker_account_snapshots as broker_account_snapshots
 from . import broker_orders as broker_orders
 from . import capital_allocation_policies as capital_allocation_policies
@@ -57,6 +58,7 @@ from .base import Base as Base
 
 __all__ = [
     "Base",
+    "blended_metrics_snapshots",
     "broker_account_snapshots",
     "broker_orders",
     "cash_snapshots",
