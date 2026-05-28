@@ -1,6 +1,7 @@
 from . import allocation_overrides as allocation_overrides
 from . import allocation_rebalance_history as allocation_rebalance_history
 from . import audit_logs as audit_logs
+from . import black_litterman_research_runs as black_litterman_research_runs
 from . import broker_account_snapshots as broker_account_snapshots
 from . import broker_orders as broker_orders
 from . import capital_allocation_policies as capital_allocation_policies
@@ -97,6 +98,7 @@ __all__ = [
     "allocation_overrides",
     "correlation_snapshots",
     "optimizer_runs",
+    "black_litterman_research_runs",
     "risk_budget_snapshots",
     "allocation_rebalance_history",
     "capital_allocation_policies",

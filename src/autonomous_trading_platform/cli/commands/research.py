@@ -33,6 +33,10 @@ import yaml
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.research.black_litterman.black_litterman_research_service import (
+    BlackLittermanInput,
+    BlackLittermanResearchService,
+)
 from autonomous_trading_platform.research.checkpoints.research_checkpoint import (
     ResearchCheckpointIdentity,
 )
@@ -340,6 +344,23 @@ def _load_artifact(path: str) -> dict[str, Any]:
     return loaded
 
 
+def _load_black_litterman_config(path: str) -> BlackLittermanInput:
+    raw = Path(path).read_text(encoding="utf-8")
+    loaded = yaml.safe_load(raw) if path.endswith((".yaml", ".yml")) else json.loads(raw)
+    if not isinstance(loaded, dict):
+        raise ValueError("Black-Litterman config must contain a mapping")
+
+    payload = dict(loaded)
+    if "benchmark_weights" not in payload and isinstance(payload.get("benchmark"), dict):
+        payload["benchmark_weights"] = payload["benchmark"]
+    if "benchmark_weights" not in payload:
+        raise ValueError("Black-Litterman config requires benchmark_weights")
+    if "universe" not in payload and isinstance(payload.get("assets"), list):
+        payload["universe"] = payload["assets"]
+    payload.setdefault("run_context", "research_cli")
+    return BlackLittermanInput(**payload)
+
+
 def _print_payload(title: str, payload: dict[str, Any], output_format: str) -> None:
     print_header(title)
     if output_format == "json":
@@ -381,6 +402,7 @@ def register(subparsers) -> None:
     _register_inspect_checkpoints(research_subparsers)
     _register_plan_restart(research_subparsers)
     _register_resume_experiment(research_subparsers)
+    _register_black_litterman(research_subparsers)
 
 
 # ---------------------------------------------------------------------------
@@ -458,6 +480,44 @@ def _register_run_simulation(subparsers) -> None:
         help="Fail if any requested symbol has no bars in the requested window",
     )
     parser.set_defaults(func=handle_run_simulation)
+
+
+# ---------------------------------------------------------------------------
+# black-litterman
+# ---------------------------------------------------------------------------
+
+
+def _register_black_litterman(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "black-litterman",
+        help="Research-only Black-Litterman allocation prototype",
+    )
+    bl_subparsers = parser.add_subparsers(dest="black_litterman_command", required=True)
+
+    run_parser = bl_subparsers.add_parser(
+        "run",
+        help="Run a research-only Black-Litterman analysis from YAML/JSON config",
+    )
+    run_parser.add_argument("--config", required=True, help="Path to YAML/JSON views config")
+    run_parser.add_argument(
+        "--format",
+        choices=["json", "yaml", "text"],
+        default="json",
+        help="Output format",
+    )
+    run_parser.set_defaults(func=handle_black_litterman_run)
+
+
+def handle_black_litterman_run(args: argparse.Namespace) -> int:
+    config = _load_black_litterman_config(args.config)
+    with get_session() as session:
+        artifact = BlackLittermanResearchService(session=session).run(config)
+        _print_payload(
+            "Black-Litterman Research Run",
+            artifact.model_dump(mode="json"),
+            args.format,
+        )
+    return 0
 
 
 def _register_inspect_checkpoints(subparsers) -> None:

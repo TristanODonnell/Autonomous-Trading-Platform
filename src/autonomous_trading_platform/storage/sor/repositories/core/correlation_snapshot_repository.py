@@ -94,6 +94,16 @@ class CorrelationSnapshotRepository:
             ).first(),
         )
 
+    def get_covariance_by_snapshot_id(self, snapshot_id: str) -> CovarianceSnapshotRow | None:
+        return cast(
+            CovarianceSnapshotRow | None,
+            self._session.scalars(
+                select(CovarianceSnapshotRow).where(
+                    CovarianceSnapshotRow.snapshot_id == snapshot_id
+                )
+            ).first(),
+        )
+
     def get_covariance_history(
         self,
         *,
