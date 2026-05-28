@@ -36,6 +36,9 @@ from autonomous_trading_platform.application.services.strategy_control_service i
 from autonomous_trading_platform.application.services.strategy_governance_service import (
     StrategyGovernanceService,
 )
+from autonomous_trading_platform.application.services.strategy_health_monitor import (
+    StrategyHealthMonitor,
+)
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.interfaces.rest.schemas.active_strategies_schema import (
     ActiveStrategiesResponse,
@@ -56,10 +59,18 @@ from autonomous_trading_platform.interfaces.rest.schemas.active_strategies_schem
     StrategyEquityCurveResponse,
     StrategyGovernanceTransitionRequest,
     StrategyGovernanceTransitionResponse,
+    StrategyHealthListResponse,
+    StrategyHealthResponse,
     StrategyListResponse,
     StrategyStatus,
 )
 from autonomous_trading_platform.portfolio.exceptions import AllocationBudgetExceededError
+from autonomous_trading_platform.storage.sor.repositories.core.governance_repository import (
+    GovernanceRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_health_state_repository import (
+    StrategyHealthStateRepository,
+)
 
 router = APIRouter(prefix="/strategies", tags=["strategies"])
 experiments_router = APIRouter(prefix="/experiments", tags=["experiments"])
@@ -530,5 +541,99 @@ def get_experiment_detail(
 
     return success_response(
         data=ExperimentDetailResponse(**result),
+        request_id=request_id,
+    )
+
+
+# ------------------------------------------------------------------
+# Strategy Health endpoints (FINDING-09)
+# ------------------------------------------------------------------
+
+
+@router.get(
+    "/health",
+    response_model=SuccessEnvelope[StrategyHealthListResponse],
+    summary="List health status for all monitored strategies",
+)
+def get_strategies_health(
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[StrategyHealthListResponse]:
+    health_repo = StrategyHealthStateRepository(session)
+    governance_repo = GovernanceRepository(session)
+    rows = health_repo.get_all()
+    items: list[StrategyHealthResponse] = []
+    for row in rows:
+        gov = governance_repo.get_latest_by_strategy(row.strategy_id)
+        gov_state = gov.current_state if gov is not None else "unknown"
+        items.append(
+            StrategyHealthResponse(
+                strategy_id=row.strategy_id,
+                governance_state=gov_state,
+                health_status=row.health_status,
+                health_reason=row.health_reason,
+                latest_quality_score=row.latest_quality_score,
+                quality_score_trend=row.quality_score_trend,
+                consecutive_decline_count=row.consecutive_decline_count or 0,
+                realized_drawdown=row.realized_drawdown,
+                last_health_evaluated_at=row.last_health_evaluated_at,
+            )
+        )
+    return success_response(
+        data=StrategyHealthListResponse(strategies=items),
+        request_id=request_id,
+    )
+
+
+@router.get(
+    "/{strategy_id}/health",
+    response_model=SuccessEnvelope[StrategyHealthResponse],
+    summary="Get health status for a single strategy",
+)
+def get_strategy_health(
+    strategy_id: str,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[StrategyHealthResponse]:
+    health_repo = StrategyHealthStateRepository(session)
+    governance_repo = GovernanceRepository(session)
+    row = health_repo.get_for_strategy(strategy_id)
+    if row is None:
+        monitor = StrategyHealthMonitor(session=session)
+        eval_result = monitor.evaluate_strategy(strategy_id)
+        gov = governance_repo.get_latest_by_strategy(strategy_id)
+        if gov is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No governance record found for strategy {strategy_id!r}",
+            )
+        return success_response(
+            data=StrategyHealthResponse(
+                strategy_id=strategy_id,
+                governance_state=gov.current_state,
+                health_status=eval_result.new_health_status,
+                health_reason=eval_result.health_reason,
+                latest_quality_score=eval_result.quality_score,
+                quality_score_trend=eval_result.quality_score_trend,
+                consecutive_decline_count=eval_result.consecutive_decline_count,
+                realized_drawdown=eval_result.realized_drawdown,
+                last_health_evaluated_at=eval_result.evaluated_at,
+            ),
+            request_id=request_id,
+        )
+    gov = governance_repo.get_latest_by_strategy(strategy_id)
+    gov_state = gov.current_state if gov is not None else "unknown"
+    return success_response(
+        data=StrategyHealthResponse(
+            strategy_id=strategy_id,
+            governance_state=gov_state,
+            health_status=row.health_status,
+            health_reason=row.health_reason,
+            latest_quality_score=row.latest_quality_score,
+            quality_score_trend=row.quality_score_trend,
+            consecutive_decline_count=row.consecutive_decline_count or 0,
+            realized_drawdown=row.realized_drawdown,
+            last_health_evaluated_at=row.last_health_evaluated_at,
+        ),
         request_id=request_id,
     )

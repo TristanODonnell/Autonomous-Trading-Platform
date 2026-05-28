@@ -28,6 +28,15 @@ class GovernanceRepository(BaseRepository):
         stmt = select(StrategyGovernance).where(StrategyGovernance.experiment_id == experiment_id)
         return list(self.session.scalars(stmt).all())
 
+    def get_latest_by_strategy(self, strategy_id: str) -> StrategyGovernance | None:
+        stmt = (
+            select(StrategyGovernance)
+            .where(StrategyGovernance.strategy_id == strategy_id)
+            .order_by(StrategyGovernance.updated_at.desc())
+            .limit(1)
+        )
+        return cast(StrategyGovernance | None, self.session.scalars(stmt).one_or_none())
+
     def upsert(self, row: StrategyGovernance) -> StrategyGovernance:
         existing = self.get_by_strategy(row.strategy_id, row.config_hash)
         if existing is None:

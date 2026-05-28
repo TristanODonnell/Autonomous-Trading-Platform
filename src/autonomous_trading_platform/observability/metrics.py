@@ -1417,3 +1417,31 @@ ratp_position_scaling_applied_total = meter.create_counter(
     description="Total number of position sizing calls where a combined scalar reduced the notional",
     unit="1",
 )
+
+# ==========================================
+# STRATEGY HEALTH MONITORING (FINDING-09)
+# ==========================================
+
+strategy_health_degrading_total = meter.create_counter(
+    name="ratp_strategy_health_degrading_total",
+    description="Total number of strategy health evaluations resulting in degrading status",
+    unit="1",
+)
+
+strategy_health_critical_total = meter.create_counter(
+    name="ratp_strategy_health_critical_total",
+    description="Total number of strategy health evaluations resulting in critical status",
+    unit="1",
+)
+
+strategy_health_quality_decline_streak = meter.create_histogram(
+    name="ratp_strategy_quality_decline_streak",
+    description="Distribution of consecutive quality score decline counts across strategies",
+    unit="1",
+)
+
+strategy_health_evaluation_duration_seconds = meter.create_histogram(
+    name="ratp_strategy_health_evaluation_duration_seconds",
+    description="Duration of a full strategy health monitor evaluation run",
+    unit="s",
+)

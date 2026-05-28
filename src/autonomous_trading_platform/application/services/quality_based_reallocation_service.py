@@ -34,6 +34,9 @@ from autonomous_trading_platform.storage.sor.models.strategy_control_states impo
 from autonomous_trading_platform.storage.sor.models.strategy_governance import (
     StrategyGovernance,
 )
+from autonomous_trading_platform.storage.sor.models.strategy_quality_score_history import (
+    StrategyQualityScoreHistory,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.allocation_overrides_repository import (
     AllocationOverridesRepository,
 )
@@ -45,6 +48,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_reposi
 )
 from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
     OperatorSettingsRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_quality_score_repository import (
+    StrategyQualityScoreRepository,
 )
 
 ACTIVE_STATES = {"approved_for_paper_trading", "approved_for_live_trading"}
@@ -137,6 +143,7 @@ class QualityBasedReallocationService:
         allocation_overrides_repo: AllocationOverridesRepository | None = None,
         rebalance_history_repo: AllocationRebalanceHistoryRepository | None = None,
         live_perf_service: LivePerformanceMetricsService | None = None,
+        quality_score_repo: StrategyQualityScoreRepository | None = None,
     ) -> None:
         self._session = session
         self._audit_log_repo = audit_log_repo or AuditLogRepository(session)
@@ -148,6 +155,7 @@ class QualityBasedReallocationService:
             rebalance_history_repo or AllocationRebalanceHistoryRepository(session)
         )
         self._live_perf_service = live_perf_service or LivePerformanceMetricsService(session)
+        self._quality_score_repo = quality_score_repo or StrategyQualityScoreRepository(session)
 
     def rebalance(
         self,
@@ -301,6 +309,7 @@ class QualityBasedReallocationService:
             )
             before = {item.strategy_id: item.current_allocation_pct for item in inputs}
             proposals = self._compute_proposals(inputs)
+            self._persist_quality_scores(inputs=inputs, rebalance_id=rebalance_id, now=now)
 
             min_change = Decimal(
                 str(
@@ -418,6 +427,39 @@ class QualityBasedReallocationService:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _persist_quality_scores(
+        self,
+        *,
+        inputs: list[StrategyQualityInput],
+        rebalance_id: str,
+        now: datetime,
+    ) -> None:
+        for item in inputs:
+            record = StrategyQualityScoreHistory(
+                score_id=str(uuid4()),
+                strategy_id=item.strategy_id,
+                rebalance_run_id=rebalance_id,
+                quality_score=float(item.quality_score),
+                live_score=float(item.live_score),
+                backtest_score=float(item.backtest_score),
+                blended_score=float(item.quality_score),
+                alpha_weight=float(item.alpha_weight),
+                score_components={
+                    "sharpe": item.metrics.get("sharpe_ratio"),
+                    "total_return": item.metrics.get("total_return"),
+                    "win_rate": item.metrics.get("win_rate"),
+                    "max_drawdown": item.metrics.get("max_drawdown"),
+                    "trade_count": item.metrics.get("trade_count"),
+                },
+                data_window={
+                    "days_live": item.live_metrics.get("days_live"),
+                    "trade_count": item.live_metrics.get("trade_count"),
+                },
+                governance_state=item.governance_state,
+                computed_at=now,
+            )
+            self._quality_score_repo.insert(record)
 
     def _record_skipped(
         self,

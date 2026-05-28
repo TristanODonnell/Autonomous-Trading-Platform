@@ -169,6 +169,22 @@ class StrategyEquityCurveResponse(BaseModel):
     points: list[StrategyEquityCurvePointResponse]
 
 
+class StrategyHealthResponse(BaseModel):
+    strategy_id: str
+    governance_state: str
+    health_status: str
+    health_reason: str | None
+    latest_quality_score: float | None
+    quality_score_trend: str | None
+    consecutive_decline_count: int
+    realized_drawdown: float | None
+    last_health_evaluated_at: datetime | None
+
+
+class StrategyHealthListResponse(BaseModel):
+    strategies: list[StrategyHealthResponse]
+
+
 StrategyType = Literal["momentum", "mean_reversion", "breakout", "pairs"]
 RiskLevel = Literal["low", "medium", "high"]
 TimeHorizon = Literal["1w", "1m", "3m", "1y"]
