@@ -1604,3 +1604,37 @@ ratp_factor_exposure_compute_duration_seconds = meter.create_histogram(
     description="Wall-clock time to compute and persist a factor exposure snapshot",
     unit="s",
 )
+
+# =========================
+# FACTOR NEUTRALIZATION CONTROLS (TASK-5.5)
+# =========================
+
+ratp_portfolio_beta_exposure_post_neutralization = meter.create_histogram(
+    name="ratp_portfolio_beta_exposure_post_neutralization",
+    description="Portfolio beta exposure after factor neutralization controls are evaluated",
+    unit="1",
+)
+
+ratp_factor_exposure_reduction = meter.create_histogram(
+    name="ratp_factor_exposure_reduction",
+    description="Absolute factor exposure reduction achieved by neutralization",
+    unit="1",
+)
+
+ratp_factor_constraint_binding_total = meter.create_counter(
+    name="ratp_factor_constraint_binding_total",
+    description="Total number of binding factor-neutralization constraints",
+    unit="1",
+)
+
+ratp_factor_neutralization_failures_total = meter.create_counter(
+    name="ratp_factor_neutralization_failures_total",
+    description="Total number of infeasible or fallback factor-neutralization attempts",
+    unit="1",
+)
+
+ratp_factor_neutralization_duration_seconds = meter.create_histogram(
+    name="ratp_factor_neutralization_duration_seconds",
+    description="Wall-clock time to evaluate factor neutralization controls",
+    unit="s",
+)

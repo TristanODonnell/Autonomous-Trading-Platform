@@ -69,6 +69,13 @@ SCHEDULER_REGISTRY = {
         manual_trigger_enabled=True,
         lock_key="scheduler:factor_exposure_monitoring_cycle",
     ),
+    "factor_neutralization_verification_cycle": SchedulerJobDefinition(
+        job_name="factor_neutralization_verification_cycle",
+        cron="30 22 * * 1-5",
+        interval_seconds=None,
+        manual_trigger_enabled=True,
+        lock_key="scheduler:factor_neutralization_verification_cycle",
+    ),
     "experiment_pipeline_cycle": SchedulerJobDefinition(
         job_name="experiment_pipeline_cycle",
         cron="0 23 * * 1-5",

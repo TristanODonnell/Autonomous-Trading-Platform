@@ -15,6 +15,9 @@ from autonomous_trading_platform.api.envelope import SuccessEnvelope, success_re
 from autonomous_trading_platform.application.services.alpaca_portfolio_service import (
     AlpacaPortfolioService,
 )
+from autonomous_trading_platform.application.services.factor_neutralization_service import (
+    FactorNeutralizationConfig,
+)
 from autonomous_trading_platform.application.services.portfolio_analytics_service import (
     PortfolioAnalyticsService,
 )
@@ -32,6 +35,9 @@ from autonomous_trading_platform.execution.clients.alpaca_broker_client import A
 from autonomous_trading_platform.interfaces.rest.schemas.portfolio_schemas import (
     FactorExposureHistoryResponse,
     FactorExposureSnapshotResponse,
+    FactorNeutralizationConfigResponse,
+    FactorNeutralizationHistoryResponse,
+    FactorNeutralizationRunResponse,
     PortfolioAllocationResponse,
     PortfolioEquityCurvePeriod,
     PortfolioEquityCurveResponse,
@@ -44,6 +50,9 @@ from autonomous_trading_platform.interfaces.rest.schemas.portfolio_schemas impor
 )
 from autonomous_trading_platform.storage.sor.repositories.core.factor_exposure_snapshot_repository import (
     FactorExposureSnapshotRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.factor_neutralization_repository import (
+    FactorNeutralizationRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.runtime_control_state_repository import (
     RuntimeControlStateRepository,
@@ -363,4 +372,110 @@ def _factor_snapshot_response(row) -> FactorExposureSnapshotResponse:
         factor_methodology=row.factor_methodology,
         data_lineage=row.data_lineage,
         duration_seconds=row.duration_seconds,
+    )
+
+
+@router.get(
+    "/factor-neutralization/config",
+    response_model=SuccessEnvelope[FactorNeutralizationConfigResponse],
+)
+def get_factor_neutralization_config(
+    request_id: str = _request_id_dependency,
+) -> SuccessEnvelope[FactorNeutralizationConfigResponse]:
+    config = FactorNeutralizationConfig().to_payload()
+    return success_response(
+        data=FactorNeutralizationConfigResponse(**config.model_dump(mode="json")),
+        request_id=request_id,
+    )
+
+
+@router.get(
+    "/factor-neutralization/current",
+    response_model=SuccessEnvelope[FactorNeutralizationRunResponse],
+)
+def get_current_factor_neutralization(
+    portfolio_id: Annotated[str | None, Query()] = None,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[FactorNeutralizationRunResponse]:
+    row = FactorNeutralizationRepository(session).get_latest(portfolio_id=portfolio_id)
+    if row is None:
+        empty = FactorNeutralizationRunResponse(
+            run_id="",
+            generated_at=datetime.now(UTC),
+            status="missing",
+            mode="observe_only",
+            portfolio_id=portfolio_id,
+            factor_snapshot_id=None,
+            covariance_snapshot_id=None,
+            optimization_run_id=None,
+            config_json={},
+            original_weights={},
+            target_weights={},
+            pre_exposures={},
+            post_exposures={},
+            exposure_reduction={},
+            residual_exposure={},
+            constraint_utilization={},
+            binding_constraints=[],
+            constraint_violations=[],
+            fallback_mode=None,
+            infeasibility_reason="No factor neutralization run available",
+            duration_seconds=0.0,
+            warnings=["No factor neutralization run available"],
+            metadata_json={},
+        )
+        return success_response(data=empty, request_id=request_id)
+    return success_response(data=_factor_neutralization_response(row), request_id=request_id)
+
+
+@router.get(
+    "/factor-neutralization/history",
+    response_model=SuccessEnvelope[FactorNeutralizationHistoryResponse],
+)
+def get_factor_neutralization_history(
+    portfolio_id: Annotated[str | None, Query()] = None,
+    days: Annotated[int, Query(ge=1, le=3650)] = 30,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[FactorNeutralizationHistoryResponse]:
+    rows = FactorNeutralizationRepository(session).get_history(
+        since=datetime.now(UTC) - timedelta(days=days),
+        portfolio_id=portfolio_id,
+        limit=limit,
+    )
+    return success_response(
+        data=FactorNeutralizationHistoryResponse(
+            runs=[_factor_neutralization_response(row) for row in rows]
+        ),
+        request_id=request_id,
+    )
+
+
+def _factor_neutralization_response(row) -> FactorNeutralizationRunResponse:
+    return FactorNeutralizationRunResponse(
+        run_id=row.run_id,
+        generated_at=row.generated_at,
+        status=row.status,
+        mode=row.mode,
+        portfolio_id=row.portfolio_id,
+        factor_snapshot_id=row.factor_snapshot_id,
+        covariance_snapshot_id=row.covariance_snapshot_id,
+        optimization_run_id=row.optimization_run_id,
+        config_json=row.config_json,
+        original_weights=row.original_weights,
+        target_weights=row.target_weights,
+        pre_exposures=row.pre_exposures,
+        post_exposures=row.post_exposures,
+        exposure_reduction=row.exposure_reduction,
+        residual_exposure=row.residual_exposure,
+        constraint_utilization=row.constraint_utilization,
+        binding_constraints=row.binding_constraints,
+        constraint_violations=row.constraint_violations,
+        fallback_mode=row.fallback_mode,
+        infeasibility_reason=row.infeasibility_reason,
+        duration_seconds=row.duration_seconds,
+        warnings=row.warnings,
+        metadata_json=row.metadata_json,
     )

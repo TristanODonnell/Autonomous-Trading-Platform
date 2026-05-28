@@ -11,6 +11,7 @@ from . import correlation_snapshots as correlation_snapshots
 from . import dataset_versions as dataset_versions
 from . import experiments as experiments
 from . import factor_exposure_snapshots as factor_exposure_snapshots
+from . import factor_neutralization_runs as factor_neutralization_runs
 from . import fills as fills
 from . import ingestion_checkpoint as ingestion_checkpoint
 from . import ingestion_runs as ingestion_runs
@@ -84,6 +85,7 @@ __all__ = [
     "ingestion_checkpoint",
     "experiments",
     "factor_exposure_snapshots",
+    "factor_neutralization_runs",
     "strategy_configs",
     "strategy_control_states",
     "simulation_runs",

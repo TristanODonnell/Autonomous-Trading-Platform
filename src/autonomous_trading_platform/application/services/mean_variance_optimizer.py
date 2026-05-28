@@ -783,6 +783,8 @@ class MeanVarianceOptimizer:
             applied.append(f"max_turnover={constraints.max_turnover:.2f}")
         if constraints.turnover_penalty > 0:
             applied.append(f"turnover_penalty={constraints.turnover_penalty:.4f}")
+        if constraints.factor_neutralization:
+            applied.append("factor_neutralization")
         return applied
 
     @staticmethod

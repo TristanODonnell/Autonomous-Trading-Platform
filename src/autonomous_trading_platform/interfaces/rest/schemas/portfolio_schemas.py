@@ -117,3 +117,42 @@ class FactorExposureHistoryResponse(BaseModel):
 
 class StrategyFactorExposureHistoryResponse(BaseModel):
     exposures: list[dict]
+
+
+class FactorNeutralizationConfigResponse(BaseModel):
+    enabled: bool
+    mode: str
+    constraints: list
+    max_iterations: int
+    convergence_tolerance: float
+    max_turnover: float | None
+
+
+class FactorNeutralizationRunResponse(BaseModel):
+    run_id: str
+    generated_at: datetime
+    status: str
+    mode: str
+    portfolio_id: str | None
+    factor_snapshot_id: str | None
+    covariance_snapshot_id: str | None
+    optimization_run_id: str | None
+    config_json: dict
+    original_weights: dict
+    target_weights: dict
+    pre_exposures: dict
+    post_exposures: dict
+    exposure_reduction: dict
+    residual_exposure: dict
+    constraint_utilization: dict
+    binding_constraints: list
+    constraint_violations: list
+    fallback_mode: str | None
+    infeasibility_reason: str | None
+    duration_seconds: float
+    warnings: list
+    metadata_json: dict
+
+
+class FactorNeutralizationHistoryResponse(BaseModel):
+    runs: list[FactorNeutralizationRunResponse]

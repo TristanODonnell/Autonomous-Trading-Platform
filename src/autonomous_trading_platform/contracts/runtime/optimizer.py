@@ -42,6 +42,7 @@ class OptimizerConstraints(BaseModel):
     turnover_penalty: float = 0.0
     long_only: bool = True
     cash_reserve: float = 0.0
+    factor_neutralization: dict[str, Any] = {}
 
 
 class OptimizationResult(BaseModel):
