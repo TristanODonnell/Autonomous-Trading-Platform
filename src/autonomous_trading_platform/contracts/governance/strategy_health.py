@@ -11,6 +11,9 @@ class StrategyHealthStatus(StrEnum):
     WATCH = "watch"
     DEGRADING = "degrading"
     CRITICAL = "critical"
+    # Operational risk containment: allocation halted, operator review required.
+    # Does NOT imply governance revocation.
+    SUSPENDED = "suspended"
 
 
 class StrategyQualityScoreRecord(BaseModel):
@@ -56,3 +59,7 @@ class StrategyHealthSummary(BaseModel):
     consecutive_decline_count: int
     realized_drawdown: float | None
     last_health_evaluated_at: datetime | None
+    # Lifecycle fields (populated when StrategyHealthLifecycleService has run)
+    allocation_penalty: float | None = None
+    operator_review_required: bool = False
+    suspended_at: datetime | None = None

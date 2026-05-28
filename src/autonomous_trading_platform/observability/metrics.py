@@ -1446,6 +1446,52 @@ strategy_health_evaluation_duration_seconds = meter.create_histogram(
     unit="s",
 )
 
+# ==========================================
+# STRATEGY HEALTH LIFECYCLE (REC 6.3)
+# ==========================================
+
+strategy_health_lifecycle_watch_total = meter.create_counter(
+    name="ratp_strategy_health_lifecycle_watch_total",
+    description="Total strategy health lifecycle evaluations resulting in watch status",
+    unit="1",
+)
+
+strategy_health_lifecycle_degrading_total = meter.create_counter(
+    name="ratp_strategy_health_lifecycle_degrading_total",
+    description="Total strategy health lifecycle evaluations resulting in degrading status",
+    unit="1",
+)
+
+strategy_health_lifecycle_critical_total = meter.create_counter(
+    name="ratp_strategy_health_lifecycle_critical_total",
+    description="Total strategy health lifecycle evaluations resulting in critical status",
+    unit="1",
+)
+
+strategy_health_lifecycle_suspended_total = meter.create_counter(
+    name="ratp_strategy_suspended_total",
+    description="Total strategy auto-suspension events from health lifecycle",
+    unit="1",
+)
+
+strategy_health_lifecycle_transition_total = meter.create_counter(
+    name="ratp_strategy_health_transition_total",
+    description="Total strategy health lifecycle state transitions",
+    unit="1",
+)
+
+strategy_health_lifecycle_allocation_penalty = meter.create_histogram(
+    name="ratp_strategy_health_allocation_penalty",
+    description="Distribution of health-driven allocation penalty scalars (0=healthy, 1=suspended)",
+    unit="1",
+)
+
+strategy_health_lifecycle_duration_seconds = meter.create_histogram(
+    name="ratp_strategy_health_lifecycle_duration_seconds",
+    description="Duration of a full strategy health lifecycle evaluation run",
+    unit="s",
+)
+
 # =========================
 # CORRELATION / COVARIANCE MONITORING (TASK-5.1)
 # =========================

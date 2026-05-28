@@ -45,6 +45,7 @@ from . import strategy_configs as strategy_configs
 from . import strategy_control_states as strategy_control_states
 from . import strategy_governance as strategy_governance
 from . import strategy_health_state as strategy_health_state
+from . import strategy_health_transitions as strategy_health_transitions
 from . import strategy_live_performance_snapshots as strategy_live_performance_snapshots
 from . import strategy_quality_score_history as strategy_quality_score_history
 from . import strategy_runtime_states as strategy_runtime_states
@@ -95,6 +96,7 @@ __all__ = [
     "metrics_summary",
     "strategy_governance",
     "strategy_health_state",
+    "strategy_health_transitions",
     "strategy_live_performance_snapshots",
     "strategy_quality_score_history",
     "allocation_overrides",

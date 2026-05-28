@@ -36,6 +36,9 @@ from autonomous_trading_platform.application.services.strategy_control_service i
 from autonomous_trading_platform.application.services.strategy_governance_service import (
     StrategyGovernanceService,
 )
+from autonomous_trading_platform.application.services.strategy_health_lifecycle_service import (
+    StrategyHealthLifecycleService,
+)
 from autonomous_trading_platform.application.services.strategy_health_monitor import (
     StrategyHealthMonitor,
 )
@@ -59,8 +62,14 @@ from autonomous_trading_platform.interfaces.rest.schemas.active_strategies_schem
     StrategyEquityCurveResponse,
     StrategyGovernanceTransitionRequest,
     StrategyGovernanceTransitionResponse,
+    StrategyHealthAllocationPenaltyResponse,
+    StrategyHealthClearSuspensionRequest,
+    StrategyHealthLifecycleListResponse,
+    StrategyHealthLifecycleResponse,
     StrategyHealthListResponse,
     StrategyHealthResponse,
+    StrategyHealthTransitionListResponse,
+    StrategyHealthTransitionResponse,
     StrategyListResponse,
     StrategyStatus,
 )
@@ -70,6 +79,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.governance_reposi
 )
 from autonomous_trading_platform.storage.sor.repositories.core.strategy_health_state_repository import (
     StrategyHealthStateRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_health_transition_repository import (
+    StrategyHealthTransitionRepository,
 )
 
 router = APIRouter(prefix="/strategies", tags=["strategies"])
@@ -634,6 +646,209 @@ def get_strategy_health(
             consecutive_decline_count=row.consecutive_decline_count or 0,
             realized_drawdown=row.realized_drawdown,
             last_health_evaluated_at=row.last_health_evaluated_at,
+        ),
+        request_id=request_id,
+    )
+
+
+# ------------------------------------------------------------------
+# Strategy Health Lifecycle endpoints (Rec 6.3)
+# ------------------------------------------------------------------
+
+
+@router.get(
+    "/health/lifecycle",
+    response_model=SuccessEnvelope[StrategyHealthLifecycleListResponse],
+    summary="List lifecycle health state for all strategies (includes allocation penalty)",
+)
+def get_strategies_health_lifecycle(
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[StrategyHealthLifecycleListResponse]:
+    health_repo = StrategyHealthStateRepository(session)
+    governance_repo = GovernanceRepository(session)
+    rows = health_repo.get_all()
+    pending_review = sum(1 for r in rows if r.operator_review_required)
+    items: list[StrategyHealthLifecycleResponse] = []
+    for row in rows:
+        gov = governance_repo.get_latest_by_strategy(row.strategy_id)
+        gov_state = gov.current_state if gov is not None else "unknown"
+        items.append(
+            StrategyHealthLifecycleResponse(
+                strategy_id=row.strategy_id,
+                governance_state=gov_state,
+                health_status=row.health_status,
+                health_reason=row.health_reason,
+                allocation_penalty=float(row.allocation_penalty or 0.0),
+                allocation_scalar=1.0 - float(row.allocation_penalty or 0.0),
+                operator_review_required=bool(row.operator_review_required),
+                suspended_at=row.suspended_at,
+                suspension_reason=row.suspension_reason,
+                consecutive_critical_count=int(row.consecutive_critical_count or 0),
+                cooldown_expires_at=row.cooldown_expires_at,
+                last_transition_at=row.last_transition_at,
+                last_evaluated_at=row.last_health_evaluated_at,
+                latest_quality_score=row.latest_quality_score,
+                realized_drawdown=row.realized_drawdown,
+            )
+        )
+    return success_response(
+        data=StrategyHealthLifecycleListResponse(
+            strategies=items,
+            pending_operator_review=pending_review,
+        ),
+        request_id=request_id,
+    )
+
+
+@router.get(
+    "/{strategy_id}/health/lifecycle",
+    response_model=SuccessEnvelope[StrategyHealthLifecycleResponse],
+    summary="Get lifecycle health state for a single strategy",
+)
+def get_strategy_health_lifecycle(
+    strategy_id: str,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[StrategyHealthLifecycleResponse]:
+    health_repo = StrategyHealthStateRepository(session)
+    governance_repo = GovernanceRepository(session)
+    row = health_repo.get_for_strategy(strategy_id)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"No lifecycle health state found for strategy {strategy_id!r}. "
+                "Run the health lifecycle cycle to initialize state."
+            ),
+        )
+    gov = governance_repo.get_latest_by_strategy(strategy_id)
+    gov_state = gov.current_state if gov is not None else "unknown"
+    return success_response(
+        data=StrategyHealthLifecycleResponse(
+            strategy_id=strategy_id,
+            governance_state=gov_state,
+            health_status=row.health_status,
+            health_reason=row.health_reason,
+            allocation_penalty=float(row.allocation_penalty or 0.0),
+            allocation_scalar=1.0 - float(row.allocation_penalty or 0.0),
+            operator_review_required=bool(row.operator_review_required),
+            suspended_at=row.suspended_at,
+            suspension_reason=row.suspension_reason,
+            consecutive_critical_count=int(row.consecutive_critical_count or 0),
+            cooldown_expires_at=row.cooldown_expires_at,
+            last_transition_at=row.last_transition_at,
+            last_evaluated_at=row.last_health_evaluated_at,
+            latest_quality_score=row.latest_quality_score,
+            realized_drawdown=row.realized_drawdown,
+        ),
+        request_id=request_id,
+    )
+
+
+@router.get(
+    "/{strategy_id}/health/lifecycle/transitions",
+    response_model=SuccessEnvelope[StrategyHealthTransitionListResponse],
+    summary="Get health lifecycle transition history for a strategy",
+)
+def get_strategy_health_transitions(
+    strategy_id: str,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[StrategyHealthTransitionListResponse]:
+    transition_repo = StrategyHealthTransitionRepository(session)
+    rows = transition_repo.get_recent_for_strategy(strategy_id, limit=limit)
+    transitions = [
+        StrategyHealthTransitionResponse(
+            transition_id=row.transition_id,
+            strategy_id=row.strategy_id,
+            from_status=row.from_status,
+            to_status=row.to_status,
+            transition_reason=row.transition_reason,
+            triggered_by=row.triggered_by,
+            drawdown_utilization=row.drawdown_utilization,
+            quality_score=row.quality_score,
+            allocation_penalty_after=row.allocation_penalty_after,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
+    return success_response(
+        data=StrategyHealthTransitionListResponse(transitions=transitions),
+        request_id=request_id,
+    )
+
+
+@router.get(
+    "/{strategy_id}/health/lifecycle/allocation-penalty",
+    response_model=SuccessEnvelope[StrategyHealthAllocationPenaltyResponse],
+    summary="Get current health-driven allocation penalty for a strategy",
+)
+def get_strategy_allocation_penalty(
+    strategy_id: str,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[StrategyHealthAllocationPenaltyResponse]:
+    service = StrategyHealthLifecycleService(session=session)
+    health_repo = StrategyHealthStateRepository(session)
+    row = health_repo.get_for_strategy(strategy_id)
+    health_status = row.health_status if row else "healthy"
+    penalty = service.get_allocation_penalty(strategy_id)
+    return success_response(
+        data=StrategyHealthAllocationPenaltyResponse(
+            strategy_id=strategy_id,
+            health_status=health_status,
+            allocation_penalty=penalty,
+            allocation_scalar=1.0 - penalty,
+            operator_review_required=bool(row.operator_review_required) if row else False,
+        ),
+        request_id=request_id,
+    )
+
+
+@router.post(
+    "/{strategy_id}/health/lifecycle/clear-suspension",
+    response_model=SuccessEnvelope[StrategyHealthLifecycleResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Operator: clear suspension and recover strategy to watch state",
+)
+def clear_strategy_suspension(
+    strategy_id: str,
+    payload: StrategyHealthClearSuspensionRequest,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+    actor: str = Depends(require_risk_manager_or_admin),
+) -> SuccessEnvelope[StrategyHealthLifecycleResponse]:
+    service = StrategyHealthLifecycleService(session=session)
+    try:
+        result = service.clear_suspension(
+            strategy_id=strategy_id,
+            actor=actor,
+            reason=payload.reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    return success_response(
+        data=StrategyHealthLifecycleResponse(
+            strategy_id=result.strategy_id,
+            governance_state=result.governance_state,
+            health_status=result.new_health_status,
+            health_reason=result.transition_reason,
+            allocation_penalty=result.allocation_penalty,
+            allocation_scalar=result.allocation_scalar,
+            operator_review_required=result.operator_review_required,
+            suspended_at=None,
+            suspension_reason=None,
+            consecutive_critical_count=result.consecutive_critical_count,
+            cooldown_expires_at=result.cooldown_expires_at,
+            last_transition_at=result.evaluated_at,
+            last_evaluated_at=result.evaluated_at,
+            latest_quality_score=None,
+            realized_drawdown=None,
         ),
         request_id=request_id,
     )

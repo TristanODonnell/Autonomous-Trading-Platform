@@ -41,6 +41,17 @@ class StrategyHealthStateRepository:
             existing.evaluation_count = (existing.evaluation_count or 0) + 1
             existing.last_rebalance_run_id = row.last_rebalance_run_id
             existing.updated_at = row.updated_at
+            # Lifecycle fields (all nullable-safe; old StrategyHealthMonitor rows may omit them)
+            if row.suspended_at is not None or row.health_status == "suspended":
+                existing.suspended_at = row.suspended_at
+                existing.suspension_reason = row.suspension_reason
+            if row.operator_review_required is not None:
+                existing.operator_review_required = bool(row.operator_review_required)
+            existing.cooldown_expires_at = row.cooldown_expires_at
+            if row.consecutive_critical_count is not None:
+                existing.consecutive_critical_count = int(row.consecutive_critical_count)
+            existing.allocation_penalty = row.allocation_penalty
+            existing.lifecycle_mode = row.lifecycle_mode
         self._session.flush()
 
     def get_all(self) -> list[StrategyHealthStateRow]:
@@ -51,6 +62,15 @@ class StrategyHealthStateRepository:
             self._session.scalars(
                 select(StrategyHealthStateRow).where(
                     StrategyHealthStateRow.health_status == health_status
+                )
+            ).all()
+        )
+
+    def get_pending_operator_review(self) -> list[StrategyHealthStateRow]:
+        return list(
+            self._session.scalars(
+                select(StrategyHealthStateRow).where(
+                    StrategyHealthStateRow.operator_review_required.is_(True)
                 )
             ).all()
         )
