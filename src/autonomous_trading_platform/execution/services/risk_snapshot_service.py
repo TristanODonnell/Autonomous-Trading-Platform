@@ -1,13 +1,21 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from autonomous_trading_platform.contracts.accounting.cash_snapshot import CashSnapshot
 from autonomous_trading_platform.contracts.accounting.position_snapshot import PositionSnapshot
 from autonomous_trading_platform.contracts.accounting.risk_snapshot import RiskSnapshot
+from autonomous_trading_platform.safety.readers.portfolio_risk_state_reader import (
+    PortfolioRiskStateReader,
+)
+
+if TYPE_CHECKING:
+    from autonomous_trading_platform.safety.readers.sector_exposure_reader import (
+        SectorExposureReader,
+    )
 
 ZERO = Decimal("0")
 
@@ -17,6 +25,11 @@ class RiskLimitConfig:
     max_gross_exposure: Decimal | None = None
     max_net_exposure: Decimal | None = None
     max_leverage: Decimal | None = None
+    max_portfolio_symbol_exposure_usd: Decimal | None = None
+    max_portfolio_symbol_pct: Decimal | None = None
+    max_sector_exposure_pct: dict[str, float] = field(default_factory=dict)
+    default_max_sector_exposure_pct: float | None = None
+    unknown_sector_policy: str = "reject"
 
 
 class RiskSnapshotService:
@@ -31,6 +44,7 @@ class RiskSnapshotService:
         cash_snapshot: CashSnapshot | None,
         limits_config: RiskLimitConfig | None = None,
         drawdown_pct: float | None = None,
+        sector_exposure_reader: SectorExposureReader | None = None,
     ) -> RiskSnapshot:
         limits_config = limits_config or RiskLimitConfig()
 
@@ -41,13 +55,19 @@ class RiskSnapshotService:
             gross_exposure=gross_exposure,
             equity=equity,
         )
+        portfolio_reader = PortfolioRiskStateReader.from_position_snapshot(
+            position_snapshot,
+            total_equity=equity,
+        )
 
         limits = self._build_limits_dict(limits_config)
         utilization = self._build_utilization_dict(
             gross_exposure=gross_exposure,
             net_exposure=net_exposure,
             leverage=leverage,
+            portfolio_reader=portfolio_reader,
             limits_config=limits_config,
+            sector_exposure_reader=sector_exposure_reader,
         )
 
         block_reasons = self._build_block_reasons(
@@ -126,6 +146,11 @@ class RiskSnapshotService:
             "max_gross_exposure": limits_config.max_gross_exposure,
             "max_net_exposure": limits_config.max_net_exposure,
             "max_leverage": limits_config.max_leverage,
+            "max_portfolio_symbol_exposure_usd": (limits_config.max_portfolio_symbol_exposure_usd),
+            "max_portfolio_symbol_pct": limits_config.max_portfolio_symbol_pct,
+            "max_sector_exposure_pct": limits_config.max_sector_exposure_pct or None,
+            "default_max_sector_exposure_pct": limits_config.default_max_sector_exposure_pct,
+            "unknown_sector_policy": limits_config.unknown_sector_policy,
         }
 
     def _build_utilization_dict(
@@ -134,9 +159,14 @@ class RiskSnapshotService:
         gross_exposure: Decimal,
         net_exposure: Decimal,
         leverage: Decimal,
+        portfolio_reader: PortfolioRiskStateReader,
         limits_config: RiskLimitConfig,
+        sector_exposure_reader: SectorExposureReader | None = None,
     ) -> dict[str, Any]:
-        return {
+        concentration_metrics = portfolio_reader.get_concentration_metrics(
+            max_portfolio_symbol_pct=limits_config.max_portfolio_symbol_pct,
+        )
+        result: dict[str, Any] = {
             "gross_exposure_pct": self._safe_ratio(
                 numerator=gross_exposure,
                 denominator=limits_config.max_gross_exposure,
@@ -149,7 +179,16 @@ class RiskSnapshotService:
                 numerator=leverage,
                 denominator=limits_config.max_leverage,
             ),
+            "portfolio_symbol_concentration": concentration_metrics,
         }
+        if sector_exposure_reader is not None:
+            result["sector_concentration"] = (
+                sector_exposure_reader.get_sector_concentration_metrics(
+                    sector_limits=limits_config.max_sector_exposure_pct or None,
+                    default_limit=limits_config.default_max_sector_exposure_pct,
+                )
+            )
+        return result
 
     def _build_block_reasons(
         self,

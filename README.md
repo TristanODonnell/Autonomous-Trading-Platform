@@ -68,19 +68,13 @@ MacOS / Linux:
 Populate required variables before running the app.
 
 ## Canonical Docs
-- docs/v1-boundaries.md
-- docs/safety-doctrine.md
-- docs/invariants.md
-- docs/compile-vs-runtime.md
-- docs/contracts/index.md
-- docs/decisions.md
-
-- docs/storage/index.md
-- docs/storage/postgres-system-of-record.md
-- docs/storage/parquet-datasets.md
-- docs/storage/dataset-versioning.md
-- docs/storage/universe-versioning.md
-- docs/storage/audit-log.md
+- docs/README.md
+- docs/architecture/system-overview.md
+- docs/architecture/layering.md
+- docs/architecture/data-flow.md
+- docs/backend/
+- docs/operations/
+- docs/audits/
 
 ## Status
 

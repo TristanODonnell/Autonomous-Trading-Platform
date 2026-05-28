@@ -11,7 +11,10 @@ from autonomous_trading_platform.contracts.trading.signal import Signal
 from autonomous_trading_platform.execution.services.portfolio_construction_service import (
     PortfolioConstructionService,
 )
-from autonomous_trading_platform.execution.services.position_sizer import PositionSizer
+from autonomous_trading_platform.execution.services.position_sizer import (
+    PositionSizer,
+    SizingResult,
+)
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.safety.services.pre_trade_risk_service import (
     PreTradeRiskService,
@@ -76,11 +79,20 @@ class FakePositionSizer:
         symbol: str,
         current_price: object,
         performance_tier: str | None = None,
-        vol_scalar: object | None = None,
-    ) -> int:
-        if symbol == "TSLA":
-            return 0
-        return 10
+        combined_scalar: object | None = None,
+        realized_drawdown: float | None = None,
+    ) -> SizingResult:
+        from decimal import Decimal
+
+        qty = 0 if symbol == "TSLA" else 10
+        base = Decimal("10000")
+        return SizingResult(
+            quantity=qty,
+            base_notional=base,
+            final_notional=base,
+            combined_scalar=None,
+            scaling_applied=False,
+        )
 
 
 class StubStrategy(BaseStrategy):

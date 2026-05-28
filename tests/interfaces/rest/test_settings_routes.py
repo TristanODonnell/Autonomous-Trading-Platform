@@ -36,6 +36,7 @@ def test_get_settings_returns_default_operator_settings(client: TestClient) -> N
         "target_portfolio_volatility": "0.15",
         "slippage_model": "fixed",
         "transaction_cost_model": "per_share",
+        "max_total_strategy_allocation_pct": "1.0",
         "metadata": {
             "source_of_truth": {
                 "automation_controls_source": "settings",

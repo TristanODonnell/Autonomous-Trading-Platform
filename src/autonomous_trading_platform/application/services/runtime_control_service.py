@@ -22,6 +22,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_reposi
 from autonomous_trading_platform.storage.sor.repositories.core.broker_order_repository import (
     BrokerOrderRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.kill_switch_state_repository import (
+    KillSwitchStateRepository,
+)
 
 RuntimeControlStateRepository = runtime_control_state_repository.RuntimeControlStateRepository
 
@@ -153,6 +156,7 @@ class RuntimeControlService:
         runtime_control_repo: RuntimeControlStateWriter | None = None,
         broker_order_repo: BrokerOrderWriter | None = None,
         audit_log_repo: AuditLogWriter | None = None,
+        kill_switch_repo: KillSwitchStateRepository | None = None,
     ) -> None:
         self.session = session
         self.runtime_control_repo = runtime_control_repo or RuntimeControlStateRepository(
@@ -160,6 +164,7 @@ class RuntimeControlService:
         )
         self.broker_order_repo = broker_order_repo or BrokerOrderRepository(session=session)
         self.audit_log_repo = audit_log_repo or AuditLogRepository(session=session)
+        self.kill_switch_repo = kill_switch_repo or KillSwitchStateRepository(session=session)
 
     def activate_kill_switch(
         self,
@@ -178,6 +183,12 @@ class RuntimeControlService:
             triggered_by=triggered_by,
             reason=reason,
             triggered_at=triggered_at,
+        )
+
+        self.kill_switch_repo.enable(
+            reason=reason,
+            updated_by=triggered_by,
+            updated_at=triggered_at,
         )
 
         self.audit_log_repo.record_operator_action(
@@ -249,6 +260,11 @@ class RuntimeControlService:
             state = self.runtime_control_repo.release_kill_switch(
                 reason=rationale,
                 updated_by=updated_by,
+            )
+            self.kill_switch_repo.disable(
+                reason=rationale,
+                cleared_by=updated_by,
+                cleared_at=updated_at,
             )
         else:
             state = self.runtime_control_repo.set_trading_paused(

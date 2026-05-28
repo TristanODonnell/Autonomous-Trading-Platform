@@ -43,11 +43,19 @@ class PortfolioEngine:
         overrides_repo: AllocationOverridesRepository,
         promotion_rules_repo: PromotionRulesRepository,
         total_capital: float,
+        cash_snapshot_id: str | None = None,
+        cash_snapshot_as_of: datetime | None = None,
+        snapshot_age_seconds: float | None = None,
+        capital_source: str | None = None,
     ) -> None:
         self._policies = policies_repo
         self._overrides = overrides_repo
         self._promotion_rules = promotion_rules_repo
         self._total_capital = total_capital
+        self._cash_snapshot_id = cash_snapshot_id
+        self._cash_snapshot_as_of = cash_snapshot_as_of
+        self._snapshot_age_seconds = snapshot_age_seconds
+        self._capital_source = capital_source
 
     def get_allocation(
         self,
@@ -127,6 +135,10 @@ class PortfolioEngine:
             override_applied=override is not None,
             override_id=override.override_id if override is not None else None,
             policy_id=policy.policy_id,
+            cash_snapshot_id=self._cash_snapshot_id,
+            cash_snapshot_as_of=self._cash_snapshot_as_of,
+            snapshot_age_seconds=self._snapshot_age_seconds,
+            capital_source=self._capital_source,
         )
 
     def get_allocations_for_many(
@@ -296,6 +308,47 @@ class PortfolioEngine:
             is_eligible=is_eligible,
             criteria_results=criteria,
         )
+
+    def get_aggregate_allocation_pct(
+        self,
+        strategy_entries: list[tuple[str, GovernanceState, str | None]],
+        *,
+        proposed_overrides: dict[str, float] | None = None,
+    ) -> float:
+        """
+        Canonical aggregate allocation calculation.
+
+        Returns the sum of resolved max_pct_of_capital across all provided
+        strategy entries (e.g. 1.2 means 120% total allocation).
+        Entries that fail policy/state lookup are excluded rather than erroring.
+        Proposed overrides can replace resolved allocations for validation before
+        persistence.
+        """
+        proposed_overrides = proposed_overrides or {}
+        total = 0.0
+        now = datetime.now(tz=UTC)
+        for strategy_id, approval_status, performance_tier in strategy_entries:
+            try:
+                self._assert_allocatable(strategy_id, approval_status)
+            except AllocationDeniedError:
+                continue
+
+            if strategy_id in proposed_overrides:
+                total += proposed_overrides[strategy_id]
+                continue
+
+            override = self._overrides.get_active_override(strategy_id=strategy_id, now=now)
+            if override is not None and override.max_pct_of_capital is not None:
+                total += override.max_pct_of_capital
+                continue
+
+            policy = self._policies.get_active_policy(
+                approval_status=approval_status.value,
+                performance_tier=performance_tier,
+            )
+            if policy is not None:
+                total += policy.max_pct_of_capital
+        return total
 
     @property
     def total_capital(self) -> float:

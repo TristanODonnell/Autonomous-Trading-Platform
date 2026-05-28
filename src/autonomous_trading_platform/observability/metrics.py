@@ -308,6 +308,32 @@ ratp_equity_drift_amount = meter.create_histogram(
     unit="USD",
 )
 
+# --- Sector Concentration ---
+
+sector_concentration_blocks = meter.create_counter(
+    name="ratp_sector_concentration_blocks_total",
+    description="Total number of orders blocked due to sector concentration limits",
+    unit="1",
+)
+
+missing_sector_metadata = meter.create_counter(
+    name="ratp_missing_sector_metadata_total",
+    description="Total number of pre-trade sector lookups with no symbol-to-sector mapping",
+    unit="1",
+)
+
+sector_exposure_pct = meter.create_histogram(
+    name="ratp_sector_exposure_pct",
+    description="Portfolio sector exposure as a fraction of total equity at pre-trade check time",
+    unit="1",
+)
+
+sector_limit_utilization = meter.create_histogram(
+    name="ratp_sector_limit_utilization",
+    description="Sector exposure as a fraction of the configured sector limit (1.0 = at limit)",
+    unit="1",
+)
+
 # --- Risk Snapshot ---
 
 risk_snapshot_job_runs = meter.create_counter(
@@ -836,6 +862,70 @@ governance_cycle_duration = meter.create_histogram(
     unit="s",
 )
 
+auto_demotion_scan_total = meter.create_counter(
+    name="ratp_auto_demotion_scan_total",
+    description="Total number of auto-demotion scans",
+    unit="1",
+)
+
+auto_demotion_breach_total = meter.create_counter(
+    name="ratp_auto_demotion_breach_total",
+    description="Total number of auto-demotion breaches detected",
+    unit="1",
+)
+
+strategy_demotion_total = meter.create_counter(
+    name="ratp_strategy_demotion_total",
+    description="Total number of strategy demotions executed",
+    unit="1",
+)
+
+auto_demotion_scan_duration_seconds = meter.create_histogram(
+    name="ratp_auto_demotion_scan_duration_seconds",
+    description="Auto-demotion scan duration",
+    unit="s",
+)
+
+# --- Cash snapshot freshness (FINDING-13) ---
+
+ratp_cash_snapshot_age_seconds = meter.create_histogram(
+    name="ratp_cash_snapshot_age_seconds",
+    description="Age of the latest CashSnapshot at time of capital resolution for allocation",
+    unit="s",
+)
+
+ratp_allocation_blocked_stale_capital_total = meter.create_counter(
+    name="ratp_allocation_blocked_stale_capital_total",
+    description="Total number of allocation attempts blocked because the CashSnapshot was stale",
+    unit="1",
+)
+
+# --- Drawdown-aware allocation scaling (FINDING-12) ---
+
+ratp_strategy_drawdown_utilization = meter.create_histogram(
+    name="ratp_strategy_drawdown_utilization",
+    description="Ratio of realized drawdown to max_drawdown_allowed per strategy per bar",
+    unit="1",
+)
+
+ratp_strategy_drawdown_scalar = meter.create_histogram(
+    name="ratp_strategy_drawdown_scalar",
+    description="Drawdown scaling factor applied to position notional (1.0 = no scaling)",
+    unit="1",
+)
+
+ratp_drawdown_scaling_applied_total = meter.create_counter(
+    name="ratp_drawdown_scaling_applied_total",
+    description="Total number of position sizing calls where drawdown scaling reduced the notional",
+    unit="1",
+)
+
+ratp_cash_snapshot_missing_total = meter.create_counter(
+    name="ratp_cash_snapshot_missing_total",
+    description="Total number of allocation attempts blocked due to a missing CashSnapshot",
+    unit="1",
+)
+
 allocation_cycle_runs = meter.create_counter(
     name="ratp_allocation_cycle_runs_total",
     description="Total number of allocation cycle executions",
@@ -852,6 +942,100 @@ allocation_cycle_duration = meter.create_histogram(
     name="ratp_allocation_cycle_duration_seconds",
     description="Allocation cycle execution duration",
     unit="s",
+)
+
+# --- Rebalance stability metrics ---
+
+rebalance_runs = meter.create_counter(
+    name="ratp_rebalance_runs_total",
+    description="Total number of allocation rebalance executions (applied + noop)",
+    unit="1",
+)
+
+rebalance_skipped = meter.create_counter(
+    name="ratp_rebalance_skipped_total",
+    description="Total number of allocation rebalances skipped by stability guards",
+    unit="1",
+)
+
+rebalance_noop = meter.create_counter(
+    name="ratp_rebalance_noop_total",
+    description="Total number of no-op allocation rebalances (all changes below threshold)",
+    unit="1",
+)
+
+rebalance_turnover_pct = meter.create_histogram(
+    name="ratp_rebalance_turnover_pct",
+    description="Sum of absolute allocation deltas per rebalance (churn fraction)",
+    unit="1",
+)
+
+rebalance_allocation_changes = meter.create_counter(
+    name="ratp_rebalance_allocation_changes_total",
+    description="Total number of strategy allocation overrides written per rebalance",
+    unit="1",
+)
+
+rebalance_duration_seconds = meter.create_histogram(
+    name="ratp_rebalance_duration_seconds",
+    description="Allocation rebalance service execution duration",
+    unit="s",
+)
+
+rebalance_lock_acquired = meter.create_counter(
+    name="ratp_rebalance_lock_acquired_total",
+    description="Total number of times the rebalance advisory/row lock was successfully acquired",
+    unit="1",
+)
+
+rebalance_lock_contention = meter.create_counter(
+    name="ratp_rebalance_lock_contention_total",
+    description="Total number of times the rebalance lock could not be acquired due to contention",
+    unit="1",
+)
+
+rebalance_skipped_concurrent = meter.create_counter(
+    name="ratp_rebalance_skipped_concurrent_total",
+    description="Total number of rebalance cycles skipped because a concurrent run held the lock",
+    unit="1",
+)
+
+rebalance_failed = meter.create_counter(
+    name="ratp_rebalance_failed_total",
+    description="Total number of rebalance cycles that failed with an unhandled exception",
+    unit="1",
+)
+
+# --- Portfolio drawdown governance (FINDING-16) ---
+
+ratp_portfolio_drawdown_pct = meter.create_histogram(
+    name="ratp_portfolio_drawdown_pct",
+    description="Realized portfolio drawdown as a fraction of peak equity (0.0 = at peak, 1.0 = fully drawn down)",
+    unit="1",
+)
+
+ratp_portfolio_peak_equity = meter.create_histogram(
+    name="ratp_portfolio_peak_equity",
+    description="Portfolio all-time peak equity in USD as recorded at each governance evaluation",
+    unit="USD",
+)
+
+ratp_portfolio_drawdown_breach_total = meter.create_counter(
+    name="ratp_portfolio_drawdown_breach_total",
+    description="Total number of portfolio drawdown governance breaches detected",
+    unit="1",
+)
+
+ratp_portfolio_governance_paused = meter.create_histogram(
+    name="ratp_portfolio_governance_paused",
+    description="Current portfolio governance pause state (1.0 = paused, 0.0 = active) recorded per evaluation",
+    unit="1",
+)
+
+ratp_portfolio_kill_switch_activations_total = meter.create_counter(
+    name="ratp_portfolio_kill_switch_activations_total",
+    description="Total number of times the global kill switch was automatically activated by portfolio drawdown governance",
+    unit="1",
 )
 
 # =========================
@@ -1046,6 +1230,40 @@ def record_rejected_trade_outside_universe(count: int = 1) -> None:
 
 
 # =========================
+# SIGNAL AGGREGATION METRICS  (FINDING-08)
+# =========================
+
+ratp_signal_conflicts_total = meter.create_counter(
+    name="ratp_signal_conflicts_total",
+    description="Total number of cross-strategy signal conflicts detected during portfolio aggregation",
+    unit="1",
+)
+
+ratp_signal_netting_suppressed_total = meter.create_counter(
+    name="ratp_signal_netting_suppressed_total",
+    description="Total number of symbols whose signals were suppressed by portfolio signal netting",
+    unit="1",
+)
+
+ratp_signal_gross_exposure = meter.create_histogram(
+    name="ratp_signal_gross_exposure",
+    description="Gross exposure (sum of absolute signal notionals or counts) before netting per aggregation",
+    unit="1",
+)
+
+ratp_signal_net_exposure = meter.create_histogram(
+    name="ratp_signal_net_exposure",
+    description="Net directional exposure (buy minus sell notional or count) after netting per aggregation",
+    unit="1",
+)
+
+ratp_signal_aggregation_duration_seconds = meter.create_histogram(
+    name="ratp_signal_aggregation_duration_seconds",
+    description="Duration of portfolio signal aggregation per trading cycle",
+    unit="s",
+)
+
+# =========================
 # RESEARCH PIPELINE METRICS
 # =========================
 
@@ -1173,4 +1391,336 @@ research_intelligence_overfit_estimate = meter.create_histogram(
     name="ratp_research_intelligence_overfit_estimate",
     description="Research intelligence overfitting probability estimates",
     unit="1",
+)
+
+# =========================
+# POSITION SCALING METRICS  (FINDING-18)
+# =========================
+
+ratp_position_scaling_absent_total = meter.create_counter(
+    name="ratp_position_scaling_absent_total",
+    description=(
+        "Total number of position sizing calls where both vol_scalar and sharpe_scalar "
+        "were absent and full notional was used as fallback"
+    ),
+    unit="1",
+)
+
+ratp_vol_scalar_value = meter.create_histogram(
+    name="ratp_vol_scalar_value",
+    description="Distribution of combined vol/Sharpe scalar values applied to position sizing",
+    unit="1",
+)
+
+ratp_position_scaling_applied_total = meter.create_counter(
+    name="ratp_position_scaling_applied_total",
+    description="Total number of position sizing calls where a combined scalar reduced the notional",
+    unit="1",
+)
+
+# ==========================================
+# STRATEGY HEALTH MONITORING (FINDING-09)
+# ==========================================
+
+strategy_health_degrading_total = meter.create_counter(
+    name="ratp_strategy_health_degrading_total",
+    description="Total number of strategy health evaluations resulting in degrading status",
+    unit="1",
+)
+
+strategy_health_critical_total = meter.create_counter(
+    name="ratp_strategy_health_critical_total",
+    description="Total number of strategy health evaluations resulting in critical status",
+    unit="1",
+)
+
+strategy_health_quality_decline_streak = meter.create_histogram(
+    name="ratp_strategy_quality_decline_streak",
+    description="Distribution of consecutive quality score decline counts across strategies",
+    unit="1",
+)
+
+strategy_health_evaluation_duration_seconds = meter.create_histogram(
+    name="ratp_strategy_health_evaluation_duration_seconds",
+    description="Duration of a full strategy health monitor evaluation run",
+    unit="s",
+)
+
+# =========================
+# CORRELATION / COVARIANCE MONITORING (TASK-5.1)
+# =========================
+
+ratp_average_portfolio_correlation = meter.create_histogram(
+    name="ratp_average_portfolio_correlation",
+    description=(
+        "Average pairwise symbol correlation across the portfolio at each monitoring cycle"
+    ),
+    unit="1",
+)
+
+ratp_max_strategy_correlation = meter.create_histogram(
+    name="ratp_max_strategy_correlation",
+    description="Maximum pairwise strategy correlation observed in the latest monitoring run",
+    unit="1",
+)
+
+ratp_max_symbol_correlation = meter.create_histogram(
+    name="ratp_max_symbol_correlation",
+    description="Maximum pairwise symbol correlation observed in the latest monitoring run",
+    unit="1",
+)
+
+ratp_covariance_snapshot_duration_seconds = meter.create_histogram(
+    name="ratp_covariance_snapshot_duration_seconds",
+    description="Total wall-clock time to compute and persist all correlation/covariance snapshots",
+    unit="s",
+)
+
+ratp_correlation_cluster_count = meter.create_histogram(
+    name="ratp_correlation_cluster_count",
+    description=(
+        "Number of high-correlation clusters detected across symbols and strategies "
+        "per monitoring run"
+    ),
+    unit="1",
+)
+
+# =========================
+# RISK BUDGETING / RISK PARITY  (TASK-5.2)
+# =========================
+
+ratp_portfolio_volatility_estimate = meter.create_histogram(
+    name="ratp_portfolio_volatility_estimate",
+    description=(
+        "Annualised portfolio volatility estimate produced by the risk budgeting service "
+        "per computation run"
+    ),
+    unit="1",
+)
+
+ratp_strategy_risk_contribution = meter.create_histogram(
+    name="ratp_strategy_risk_contribution",
+    description=(
+        "Fraction of total portfolio variance contributed by each strategy at each "
+        "risk budgeting computation (0.0–1.0)"
+    ),
+    unit="1",
+)
+
+ratp_risk_budget_utilization = meter.create_histogram(
+    name="ratp_risk_budget_utilization",
+    description=(
+        "Ratio of realized risk contribution to target risk budget per strategy "
+        "(1.0 = exactly at budget)"
+    ),
+    unit="1",
+)
+
+ratp_diversification_ratio = meter.create_histogram(
+    name="ratp_diversification_ratio",
+    description=(
+        "Portfolio diversification ratio: weighted average of individual strategy "
+        "volatilities divided by portfolio volatility (>1 indicates diversification benefit)"
+    ),
+    unit="1",
+)
+
+ratp_risk_parity_compute_duration_seconds = meter.create_histogram(
+    name="ratp_risk_parity_compute_duration_seconds",
+    description="Wall-clock time to compute and persist a full risk budgeting run",
+    unit="s",
+)
+
+# =========================
+# MEAN-VARIANCE OPTIMIZER  (TASK-5.3)
+# =========================
+
+ratp_mvo_run_total = meter.create_counter(
+    name="ratp_mvo_run_total",
+    description="Total number of mean-variance optimizer invocations",
+    unit="1",
+)
+
+ratp_mvo_infeasible_total = meter.create_counter(
+    name="ratp_mvo_infeasible_total",
+    description="Total number of mean-variance optimizer runs that produced an infeasible result",
+    unit="1",
+)
+
+ratp_mvo_expected_return = meter.create_histogram(
+    name="ratp_mvo_expected_return",
+    description="Expected portfolio return produced by the MVO optimizer per run",
+    unit="1",
+)
+
+ratp_mvo_expected_volatility = meter.create_histogram(
+    name="ratp_mvo_expected_volatility",
+    description="Expected portfolio volatility produced by the MVO optimizer per run",
+    unit="1",
+)
+
+ratp_mvo_turnover = meter.create_histogram(
+    name="ratp_mvo_turnover",
+    description=("Realized turnover (sum of absolute weight changes) per MVO optimizer run"),
+    unit="1",
+)
+
+ratp_mvo_duration_seconds = meter.create_histogram(
+    name="ratp_mvo_duration_seconds",
+    description="Wall-clock time for a complete MVO optimizer run including persistence",
+    unit="s",
+)
+
+# =========================
+# FACTOR EXPOSURE MONITORING (TASK-5.4)
+# =========================
+
+ratp_portfolio_beta_exposure = meter.create_histogram(
+    name="ratp_portfolio_beta_exposure",
+    description="Benchmark-relative portfolio beta exposure per factor monitoring run",
+    unit="1",
+)
+
+ratp_portfolio_momentum_exposure = meter.create_histogram(
+    name="ratp_portfolio_momentum_exposure",
+    description="Portfolio momentum factor exposure per factor monitoring run",
+    unit="1",
+)
+
+ratp_portfolio_volatility_exposure = meter.create_histogram(
+    name="ratp_portfolio_volatility_exposure",
+    description="Portfolio realized-volatility factor exposure per factor monitoring run",
+    unit="1",
+)
+
+ratp_factor_concentration_alerts_total = meter.create_counter(
+    name="ratp_factor_concentration_alerts_total",
+    description="Total number of observed factor concentration alerts",
+    unit="1",
+)
+
+ratp_factor_exposure_compute_duration_seconds = meter.create_histogram(
+    name="ratp_factor_exposure_compute_duration_seconds",
+    description="Wall-clock time to compute and persist a factor exposure snapshot",
+    unit="s",
+)
+
+# =========================
+# FACTOR NEUTRALIZATION CONTROLS (TASK-5.5)
+# =========================
+
+ratp_portfolio_beta_exposure_post_neutralization = meter.create_histogram(
+    name="ratp_portfolio_beta_exposure_post_neutralization",
+    description="Portfolio beta exposure after factor neutralization controls are evaluated",
+    unit="1",
+)
+
+ratp_factor_exposure_reduction = meter.create_histogram(
+    name="ratp_factor_exposure_reduction",
+    description="Absolute factor exposure reduction achieved by neutralization",
+    unit="1",
+)
+
+ratp_factor_constraint_binding_total = meter.create_counter(
+    name="ratp_factor_constraint_binding_total",
+    description="Total number of binding factor-neutralization constraints",
+    unit="1",
+)
+
+ratp_factor_neutralization_failures_total = meter.create_counter(
+    name="ratp_factor_neutralization_failures_total",
+    description="Total number of infeasible or fallback factor-neutralization attempts",
+    unit="1",
+)
+
+ratp_factor_neutralization_duration_seconds = meter.create_histogram(
+    name="ratp_factor_neutralization_duration_seconds",
+    description="Wall-clock time to evaluate factor neutralization controls",
+    unit="s",
+)
+
+# =========================
+# OPTIMIZATION BACKEND (TASK-5.6)
+# =========================
+
+ratp_optimizer_runs_total = meter.create_counter(
+    name="ratp_optimizer_runs_total",
+    description="Total number of generic optimizer backend runs",
+    unit="1",
+)
+
+ratp_optimizer_infeasible_total = meter.create_counter(
+    name="ratp_optimizer_infeasible_total",
+    description="Total number of generic optimizer backend infeasible results",
+    unit="1",
+)
+
+ratp_optimizer_fallback_total = meter.create_counter(
+    name="ratp_optimizer_fallback_total",
+    description="Total number of generic optimizer backend fallback results",
+    unit="1",
+)
+
+ratp_optimizer_duration_seconds = meter.create_histogram(
+    name="ratp_optimizer_duration_seconds",
+    description="Wall-clock time for generic optimizer backend execution",
+    unit="s",
+)
+
+ratp_optimizer_constraint_binding_total = meter.create_counter(
+    name="ratp_optimizer_constraint_binding_total",
+    description="Total number of binding constraints reported by optimizer backend runs",
+    unit="1",
+)
+
+# ============================================
+# SHADOW RUNTIME VALIDATION METRICS (5.5)
+# ============================================
+
+ratp_shadow_runs_total = meter.create_counter(
+    name="ratp_shadow_runs_total",
+    description="Total number of shadow validation runs started",
+    unit="1",
+)
+
+ratp_shadow_divergence_total = meter.create_counter(
+    name="ratp_shadow_divergence_total",
+    description="Total number of threshold-exceeding divergences detected in shadow mode",
+    unit="1",
+)
+
+ratp_shadow_threshold_exceedances_total = meter.create_counter(
+    name="ratp_shadow_threshold_exceedances_total",
+    description="Total number of threshold exceedances across all shadow validation categories",
+    unit="1",
+)
+
+ratp_shadow_weight_drift = meter.create_histogram(
+    name="ratp_shadow_weight_drift",
+    description="Absolute portfolio weight drift between simulation and live execution",
+    unit="1",
+)
+
+ratp_shadow_factor_exposure_drift = meter.create_histogram(
+    name="ratp_shadow_factor_exposure_drift",
+    description="Absolute factor or risk exposure drift between simulation and live execution",
+    unit="1",
+)
+
+ratp_shadow_execution_slippage_drift = meter.create_histogram(
+    name="ratp_shadow_execution_slippage_drift",
+    description="Execution slippage drift in basis points between simulation and live fills",
+    unit="bps",
+)
+
+ratp_shadow_optimizer_divergence = meter.create_histogram(
+    name="ratp_shadow_optimizer_divergence",
+    description="Maximum optimizer weight divergence between simulation and live portfolio construction",
+    unit="1",
+)
+
+ratp_shadow_validation_duration_seconds = meter.create_histogram(
+    name="ratp_shadow_validation_duration_seconds",
+    description="Wall-clock time to finalize a shadow validation run",
+    unit="s",
 )

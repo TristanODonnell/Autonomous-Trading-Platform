@@ -26,6 +26,11 @@ class OperatorSettingsDTO:
     target_portfolio_volatility: float
     slippage_model: str
     transaction_cost_model: str
+    max_total_strategy_allocation_pct: float
+    # Portfolio drawdown governance (FINDING-16)
+    portfolio_max_drawdown_pct: float
+    portfolio_drawdown_action: str
+    portfolio_drawdown_recovery_mode: str
 
 
 class OperatorSettingsService:
@@ -123,4 +128,16 @@ class OperatorSettingsService:
             target_portfolio_volatility=float(row.target_portfolio_volatility),
             slippage_model=row.slippage_model or "fixed",
             transaction_cost_model=row.transaction_cost_model or "per_share",
+            max_total_strategy_allocation_pct=float(
+                getattr(row, "max_total_strategy_allocation_pct", 1.0) or 1.0
+            ),
+            portfolio_max_drawdown_pct=float(
+                getattr(row, "portfolio_max_drawdown_pct", None) or 0.15
+            ),
+            portfolio_drawdown_action=str(
+                getattr(row, "portfolio_drawdown_action", None) or "pause_new_trading"
+            ),
+            portfolio_drawdown_recovery_mode=str(
+                getattr(row, "portfolio_drawdown_recovery_mode", None) or "manual_resume_required"
+            ),
         )

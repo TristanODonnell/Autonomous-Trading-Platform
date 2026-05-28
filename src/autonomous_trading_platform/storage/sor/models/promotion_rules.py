@@ -32,6 +32,11 @@ class PromotionRules(Base):
     min_cagr: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Optional minimum compound annual growth rate
     min_win_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lookback_window_bars: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    lookback_window_trades: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    maintenance_min_sharpe: Mapped[float | None] = mapped_column(Float, nullable=True)
+    maintenance_min_win_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    maintenance_max_drawdown: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
     notes: Mapped[str | None] = mapped_column(String(512), nullable=True)

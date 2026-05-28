@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
 
 from autonomous_trading_platform.application.services.quality_based_reallocation_service import (
     QualityBasedReallocationService,
+    QualityReallocationResult,
 )
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.execution.services.portfolio_drawdown_governance_service import (
+    PortfolioDrawdownConfig,
+    PortfolioDrawdownGovernanceService,
+)
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     CycleMetricSet,
@@ -20,6 +26,16 @@ from autonomous_trading_platform.observability.metrics import (
     allocation_cycle_duration,
     allocation_cycle_failures,
     allocation_cycle_runs,
+    rebalance_allocation_changes,
+    rebalance_duration_seconds,
+    rebalance_failed,
+    rebalance_lock_acquired,
+    rebalance_lock_contention,
+    rebalance_noop,
+    rebalance_runs,
+    rebalance_skipped,
+    rebalance_skipped_concurrent,
+    rebalance_turnover_pct,
 )
 from autonomous_trading_platform.observability.runtime_context import runtime_context
 from autonomous_trading_platform.observability.tracing import start_span
@@ -32,8 +48,17 @@ from autonomous_trading_platform.scheduler.cycles.governance_automation_common i
     create_governance_manifest,
     fail_governance_manifest,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
+    AuditLogRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.cash_snapshot_repository import (
+    CashSnapshotRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
     OperatorSettingsRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.portfolio_drawdown_governance_repository import (
+    PortfolioDrawdownGovernanceRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_repository import (
     RuntimeJobRunRepository,
@@ -75,6 +100,12 @@ def run_strategy_allocation_rebalance_cycle(
         input_settings={
             "auto_rebalance_enabled": bool(settings.auto_rebalance_enabled),
             "rebalance_frequency": settings.rebalance_frequency,
+            "min_rebalance_interval_hours": float(
+                getattr(settings, "min_rebalance_interval_hours", 24.0) or 24.0
+            ),
+            "min_allocation_change_pct": float(
+                getattr(settings, "min_allocation_change_pct", 0.01) or 0.01
+            ),
             "allocation_targets_source": "capital_allocation_policies + allocation_overrides",
             "now_utc": now_utc.isoformat(),
         },
@@ -88,10 +119,30 @@ def run_strategy_allocation_rebalance_cycle(
 
     def job() -> dict:
         try:
+            # Portfolio drawdown governance guard: skip rebalance if breach
+            # has paused rebalancing.  Evaluated here (inside the job) so it
+            # runs under the existing run-manifest and lock infrastructure.
+            portfolio_skip = _evaluate_portfolio_governance_for_rebalance(
+                session=session,
+                settings=settings,
+                logger=logger,
+            )
+            if portfolio_skip is not None:
+                payload = {"status": "skipped", "skip_reason": portfolio_skip}
+                complete_governance_manifest(
+                    session=session,
+                    manifest=manifest,
+                    output_decisions=payload,
+                )
+                session.commit()
+                return payload
+
             result = QualityBasedReallocationService(session=session).rebalance(
                 run_id=str(run_id),
                 actor=trigger_source,
+                trigger_source=trigger_source,
             )
+            _emit_rebalance_stability_metrics(result)
             payload = QualityBasedReallocationService.result_to_jsonable(result)
             complete_governance_manifest(
                 session=session,
@@ -148,6 +199,8 @@ def run_strategy_allocation_rebalance_cycle(
                 session.commit()
                 return result or {}
             except Exception as exc:
+                environment = os.getenv("APP_ENV") or os.getenv("TRADING_ENVIRONMENT") or "unknown"
+                rebalance_failed.add(1, {"environment": environment, "component": COMPONENT})
                 record_cycle_failed(
                     logger=logger,
                     metrics=ALLOCATION_CYCLE_METRICS,
@@ -161,6 +214,88 @@ def run_strategy_allocation_rebalance_cycle(
                 raise
     finally:
         session.close()
+
+
+def _emit_rebalance_stability_metrics(result: QualityReallocationResult) -> None:
+    environment = os.getenv("APP_ENV") or os.getenv("TRADING_ENVIRONMENT") or "unknown"
+    attrs = {"environment": environment, "component": COMPONENT}
+
+    if result.skipped_reason is not None and not result.noop:
+        skip_reason = result.skipped_reason
+        rebalance_skipped.add(1, {**attrs, "skip_reason": skip_reason})
+        if skip_reason == "concurrent_lock":
+            rebalance_skipped_concurrent.add(1, attrs)
+            rebalance_lock_contention.add(1, attrs)
+        return
+
+    if result.lock_acquired:
+        rebalance_lock_acquired.add(1, attrs)
+
+    rebalance_runs.add(1, attrs)
+
+    if result.noop:
+        rebalance_noop.add(1, attrs)
+        return
+
+    if result.allocation_changes_count > 0:
+        rebalance_allocation_changes.add(result.allocation_changes_count, attrs)
+
+    churn = result.turnover_metrics.get("churn_pct")
+    if churn is not None:
+        rebalance_turnover_pct.record(float(churn), attrs)
+
+    duration = result.turnover_metrics.get("duration_seconds")
+    if duration is not None:
+        rebalance_duration_seconds.record(float(duration), attrs)
+
+
+def _evaluate_portfolio_governance_for_rebalance(*, session, settings, logger) -> str | None:
+    """
+    Evaluate portfolio drawdown governance and return a skip_reason string if
+    rebalancing should be blocked, or None if it may proceed.
+
+    Fails open: infrastructure errors never block rebalancing.
+    """
+    try:
+        config = PortfolioDrawdownConfig.from_settings(settings)
+        if not config.enabled:
+            return None
+
+        snap = CashSnapshotRepository(session).get_latest()
+        governance_svc = PortfolioDrawdownGovernanceService(
+            governance_repo=PortfolioDrawdownGovernanceRepository(session),
+            audit_repo=AuditLogRepository(session),
+        )
+
+        if snap is not None and snap.equity is not None:
+            evaluation = governance_svc.evaluate(
+                current_equity=float(snap.equity),
+                config=config,
+            )
+            if evaluation.rebalancing_blocked:
+                logger.warning(
+                    "rebalance_skipped_portfolio_drawdown_governance",
+                    extra={
+                        "drawdown_pct": round(evaluation.drawdown_pct, 6),
+                        "threshold_pct": evaluation.threshold_pct,
+                        "triggered_action": evaluation.triggered_action,
+                    },
+                )
+                return "portfolio_drawdown_governance_paused"
+        else:
+            # No equity data available — check persisted block state only.
+            if governance_svc.is_rebalancing_blocked():
+                logger.warning("rebalance_skipped_portfolio_drawdown_governance_persisted_state")
+                return "portfolio_drawdown_governance_paused"
+
+        return None
+
+    except Exception as exc:
+        logger.warning(
+            "portfolio_governance.rebalance_check_error_fail_open",
+            extra={"error": str(exc)},
+        )
+        return None
 
 
 if __name__ == "__main__":

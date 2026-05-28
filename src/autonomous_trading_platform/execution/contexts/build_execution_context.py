@@ -53,7 +53,7 @@ from autonomous_trading_platform.execution.services.strategy_state_machine_servi
 from autonomous_trading_platform.execution.services.volatility_scaling_service import (
     VolatilityScalingService,
 )
-from autonomous_trading_platform.portfolio.portfolio_engine import PortfolioEngine
+from autonomous_trading_platform.portfolio.allocation_provider import IAllocationProvider
 from autonomous_trading_platform.storage.sor.repositories.core.fill_quality_metrics_repository import (
     FillQualityMetricsRepository,
 )
@@ -65,7 +65,7 @@ def build_execution_context(
     pre_trade_risk_service,
     audit_log_repository,
     alpaca_settings,
-    portfolio_engine: PortfolioEngine,
+    portfolio_engine: IAllocationProvider,
     broker_client=None,
 ) -> ExecutionContext:
     if broker_client is None:

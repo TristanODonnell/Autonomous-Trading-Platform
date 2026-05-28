@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -68,6 +69,13 @@ class StrategyEnabledUpdateResponse(BaseModel):
 class StrategyGovernanceTransitionRequest(BaseModel):
     to_state: str = Field(min_length=1, max_length=100)
     reason: str = Field(min_length=1, max_length=500)
+    source_run_id: UUID | None = Field(
+        default=None,
+        description=(
+            "ID of the simulation run whose metrics justify this promotion. "
+            "Required for capital-bearing transitions (approved_paper, approved_live)."
+        ),
+    )
 
 
 class StrategyGovernanceTransitionResponse(BaseModel):
@@ -159,6 +167,22 @@ class StrategyEquityCurveResponse(BaseModel):
     strategy_id: str
     run_id: str | None
     points: list[StrategyEquityCurvePointResponse]
+
+
+class StrategyHealthResponse(BaseModel):
+    strategy_id: str
+    governance_state: str
+    health_status: str
+    health_reason: str | None
+    latest_quality_score: float | None
+    quality_score_trend: str | None
+    consecutive_decline_count: int
+    realized_drawdown: float | None
+    last_health_evaluated_at: datetime | None
+
+
+class StrategyHealthListResponse(BaseModel):
+    strategies: list[StrategyHealthResponse]
 
 
 StrategyType = Literal["momentum", "mean_reversion", "breakout", "pairs"]

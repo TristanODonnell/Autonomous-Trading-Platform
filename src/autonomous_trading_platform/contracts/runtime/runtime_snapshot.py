@@ -102,6 +102,14 @@ class StrategyAllocationEntry(BaseModel):
     total_portfolio_capital: Decimal | None = None
 
 
+class AggregateAllocationSnapshot(BaseModel):
+    aggregate_allocation_pct: Decimal
+    max_total_strategy_allocation_pct: Decimal
+    remaining_allocation_capacity_pct: Decimal
+    allocation_utilization: Decimal
+    allocation_budget_exceeded: bool
+
+
 class DatasetVersionEntry(BaseModel):
     dataset_name: str
     version_id: str | None = None
@@ -129,6 +137,7 @@ class RuntimeSnapshot(BaseModel):
     operator_settings: OperatorSettingsSnapshot | None = None
     strategy_controls: list[StrategyControlEntry] = []
     strategy_allocations: list[StrategyAllocationEntry] = []
+    aggregate_allocation: AggregateAllocationSnapshot | None = None
     datasets: list[DatasetVersionEntry] = []
     recent_activity: list[RecentActivityEntry] = []
     experiments: list[ExperimentEntry] = []

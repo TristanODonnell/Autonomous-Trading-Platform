@@ -87,6 +87,14 @@ def run_risk_snapshot_job(
                         max_gross_exposure=Decimal(str(settings.max_gross_exposure)),
                         max_net_exposure=Decimal(str(settings.max_net_exposure)),
                         max_leverage=Decimal(str(settings.max_leverage)),
+                        max_portfolio_symbol_exposure_usd=_optional_decimal_setting(
+                            settings,
+                            "max_portfolio_symbol_exposure_usd",
+                        ),
+                        max_portfolio_symbol_pct=_optional_decimal_setting(
+                            settings,
+                            "max_portfolio_symbol_pct",
+                        ),
                     ),
                     drawdown_pct=None,
                 )
@@ -240,6 +248,13 @@ def _run_story29_risk_checks(
             extra={"run_id": str(run_id), "error": str(exc)},
             exc_info=True,
         )
+
+
+def _optional_decimal_setting(settings, name: str) -> Decimal | None:
+    value = getattr(settings, name, None)
+    if value is None:
+        return None
+    return Decimal(str(value))
 
 
 # ---------------------------------------------------------------------------

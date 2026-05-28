@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -9,10 +10,25 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
+from autonomous_trading_platform.observability.metrics import (
+    ratp_allocation_blocked_stale_capital_total,
+    ratp_cash_snapshot_age_seconds,
+    ratp_cash_snapshot_missing_total,
+)
+from autonomous_trading_platform.portfolio.exceptions import (
+    AllocationBudgetExceededError,
+    MissingCapitalDataError,
+    StaleCapitalDataError,
+)
+from autonomous_trading_platform.portfolio.portfolio_engine import PortfolioEngine
 from autonomous_trading_platform.storage.sor.models.allocation_overrides import (
     AllocationOverrides,
 )
 from autonomous_trading_platform.storage.sor.models.strategy_configs import StrategyConfigs
+from autonomous_trading_platform.storage.sor.models.strategy_control_states import (
+    StrategyControlState,
+)
 from autonomous_trading_platform.storage.sor.models.strategy_governance import (
     StrategyGovernance,
 )
@@ -22,9 +38,38 @@ from autonomous_trading_platform.storage.sor.repositories.core.allocation_overri
 from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
     AuditLogRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.capital_allocation_policies_repository import (
+    CapitalAllocationPoliciesRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.cash_snapshot_repository import (
     CashSnapshotRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
+    OperatorSettingsRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_repository import (
+    PromotionRulesRepository,
+)
+
+logger = logging.getLogger(__name__)
+
+# Environments where the freshness check is gated off (simulation/test/local-dev paths).
+# Production deployments use APP_ENV values outside this set (e.g. "production", "staging").
+_FRESHNESS_CHECK_BYPASS_ENVS: frozenset[str] = frozenset({"test", "dev", "local", "development"})
+
+_ACTIVE_ALLOCATION_STATES = {
+    "approved_for_paper_trading": GovernanceState.APPROVED_PAPER,
+    "approved_for_live_trading": GovernanceState.APPROVED_LIVE,
+}
+
+
+@dataclass(frozen=True)
+class _CapitalResolution:
+    total_capital: Decimal
+    cash_snapshot_id: str | None
+    cash_snapshot_as_of: datetime | None
+    snapshot_age_seconds: float | None
+    capital_source: str
 
 
 @dataclass(frozen=True)
@@ -47,6 +92,9 @@ class StrategyAllocationService:
         allocation_overrides_repo: AllocationOverridesRepository | None = None,
         audit_log_repo: AuditLogRepository | None = None,
         cash_snapshot_repo: CashSnapshotRepository | None = None,
+        operator_settings_repo: OperatorSettingsRepository | None = None,
+        capital_policies_repo: CapitalAllocationPoliciesRepository | None = None,
+        promotion_rules_repo: PromotionRulesRepository | None = None,
     ) -> None:
         self._session = session
         self._settings = settings or Settings()
@@ -55,6 +103,11 @@ class StrategyAllocationService:
         )
         self._audit_log_repo = audit_log_repo or AuditLogRepository(session)
         self._cash_snapshot_repo = cash_snapshot_repo or CashSnapshotRepository(session)
+        self._operator_settings_repo = operator_settings_repo or OperatorSettingsRepository(session)
+        self._capital_policies_repo = capital_policies_repo or CapitalAllocationPoliciesRepository(
+            session
+        )
+        self._promotion_rules_repo = promotion_rules_repo or PromotionRulesRepository(session)
 
     def override_allocation(
         self,
@@ -69,6 +122,35 @@ class StrategyAllocationService:
 
         if not self._strategy_exists(strategy_id):
             raise LookupError(f"Strategy not found: {strategy_id}")
+
+        proposed_fraction = float(allocation_pct / Decimal("100"))
+        resulting_total = self._compute_projected_aggregate_pct(strategy_id, proposed_fraction)
+        max_total = self._get_max_total_allocation_pct()
+
+        if resulting_total > max_total:
+            now = datetime.now(UTC)
+            self._audit_log_repo.record_operator_action(
+                action="ALLOCATION_BUDGET_EXCEEDED",
+                actor=updated_by,
+                reason=reason,
+                occurred_at=now,
+                component="strategies",
+                metadata={
+                    "requested_strategy_id": strategy_id,
+                    "requested_allocation_pct": str(allocation_pct),
+                    "resulting_total_pct": f"{resulting_total:.4f}",
+                    "configured_max_pct": f"{max_total:.4f}",
+                    "actor": updated_by,
+                },
+            )
+            self._session.flush()
+            self._session.commit()
+            raise AllocationBudgetExceededError(
+                strategy_id=strategy_id,
+                requested_pct=proposed_fraction,
+                resulting_total_pct=resulting_total,
+                configured_max_pct=max_total,
+            )
 
         total_portfolio_capital = self._resolve_total_portfolio_capital()
         allocated_capital = allocation_pct / Decimal("100") * total_portfolio_capital
@@ -103,6 +185,7 @@ class StrategyAllocationService:
                 "allocation_pct": str(allocation_pct),
                 "allocated_capital": str(allocated_capital),
                 "total_portfolio_capital": str(total_portfolio_capital),
+                "resulting_aggregate_pct": f"{resulting_total:.4f}",
             },
         )
         self._session.flush()
@@ -171,15 +254,224 @@ class StrategyAllocationService:
 
         return results
 
+    def get_aggregate_allocation_status(self) -> dict[str, float | bool]:
+        max_total = self._get_max_total_allocation_pct()
+        current_total = self._compute_current_aggregate_pct()
+        remaining = max(max_total - current_total, 0.0)
+        utilization = current_total / max_total if max_total > 0 else 0.0
+        return {
+            "aggregate_allocation_pct": current_total,
+            "max_total_strategy_allocation_pct": max_total,
+            "remaining_allocation_capacity_pct": remaining,
+            "allocation_utilization": utilization,
+            "allocation_budget_exceeded": current_total > max_total,
+        }
+
     def _strategy_exists(self, strategy_id: str) -> bool:
         stmt = select(StrategyGovernance.strategy_id).where(
             StrategyGovernance.strategy_id == strategy_id
         )
         return self._session.execute(stmt).first() is not None
 
-    def _resolve_total_portfolio_capital(self) -> Decimal:
-        latest_cash = self._cash_snapshot_repo.get_latest()
-        if latest_cash is not None and latest_cash.equity is not None:
-            return Decimal(latest_cash.equity)
+    def _compute_projected_aggregate_pct(
+        self,
+        proposed_strategy_id: str,
+        proposed_fraction: float,
+    ) -> float:
+        """
+        Returns the aggregate allocation fraction that would result from applying
+        the proposed override.
 
-        return Decimal(str(self._settings.initial_capital))
+        Only enabled, allocation-participating strategies count. In this service,
+        those are approved paper and approved live strategies. Research, disabled,
+        retired, rejected, and draft strategies do not consume manual override budget.
+        """
+        entries = self._allocation_participating_entries()
+        total = self._portfolio_engine().get_aggregate_allocation_pct(
+            entries,
+            proposed_overrides={proposed_strategy_id: proposed_fraction},
+        )
+        logger.info(
+            "aggregate allocation projected",
+            extra={
+                "requested_strategy_id": proposed_strategy_id,
+                "requested_allocation_pct": proposed_fraction,
+                "resulting_total_pct": total,
+                "participating_strategy_count": len(entries),
+            },
+        )
+        return total
+
+    def _compute_current_aggregate_pct(self) -> float:
+        entries = self._allocation_participating_entries()
+        total = self._portfolio_engine().get_aggregate_allocation_pct(entries)
+        logger.info(
+            "aggregate allocation calculated",
+            extra={
+                "aggregate_allocation_pct": total,
+                "participating_strategy_count": len(entries),
+            },
+        )
+        return total
+
+    def _portfolio_engine(self) -> PortfolioEngine:
+        resolution = self._resolve_capital_with_snapshot_meta()
+        return PortfolioEngine(
+            policies_repo=self._capital_policies_repo,
+            overrides_repo=self._allocation_overrides_repo,
+            promotion_rules_repo=self._promotion_rules_repo,
+            total_capital=float(resolution.total_capital),
+            cash_snapshot_id=resolution.cash_snapshot_id,
+            cash_snapshot_as_of=resolution.cash_snapshot_as_of,
+            snapshot_age_seconds=resolution.snapshot_age_seconds,
+            capital_source=resolution.capital_source,
+        )
+
+    def _allocation_participating_entries(
+        self,
+    ) -> list[tuple[str, GovernanceState, str | None]]:
+        rows = list(
+            self._session.scalars(
+                select(StrategyGovernance)
+                .where(StrategyGovernance.current_state.in_(_ACTIVE_ALLOCATION_STATES))
+                .order_by(
+                    StrategyGovernance.strategy_id.asc(),
+                    StrategyGovernance.updated_at.desc(),
+                )
+            ).all()
+        )
+        controls = {
+            row.strategy_id: row
+            for row in self._session.scalars(select(StrategyControlState)).all()
+        }
+        latest_by_strategy: dict[str, StrategyGovernance] = {}
+        for row in rows:
+            latest_by_strategy.setdefault(row.strategy_id, row)
+
+        entries: list[tuple[str, GovernanceState, str | None]] = []
+        for row in latest_by_strategy.values():
+            control = controls.get(row.strategy_id)
+            if control is not None and not bool(control.enabled):
+                continue
+            state = _ACTIVE_ALLOCATION_STATES.get(row.current_state)
+            if state is None:
+                continue
+            entries.append((row.strategy_id, state, self._performance_tier(row.strategy_id)))
+        return entries
+
+    def _performance_tier(self, strategy_id: str) -> str | None:
+        config = self._session.get(StrategyConfigs, strategy_id)
+        if config is None or config.metadata_json is None:
+            return None
+        value = config.metadata_json.get("performance_tier")
+        return str(value) if value is not None else None
+
+    def _get_max_total_allocation_pct(self) -> float:
+        settings = self._operator_settings_repo.get_current()
+        if settings is not None and settings.max_total_strategy_allocation_pct is not None:
+            return float(settings.max_total_strategy_allocation_pct)
+        return 1.0
+
+    def _resolve_total_portfolio_capital(self) -> Decimal:
+        return self._resolve_capital_with_snapshot_meta().total_capital
+
+    def _resolve_capital_with_snapshot_meta(self) -> _CapitalResolution:
+        """
+        Load the latest CashSnapshot and validate its freshness.
+
+        In live/paper modes (app_env not in test bypass list), stale or missing
+        snapshots raise StaleCapitalDataError / MissingCapitalDataError so that
+        allocation cannot proceed with bad equity data.
+
+        In test/simulation modes the check is skipped and initial_capital_config
+        is returned when no snapshot is present.
+        """
+        now = datetime.now(UTC)
+        latest_cash = self._cash_snapshot_repo.get_latest()
+
+        freshness_enabled = (
+            self._settings.enable_cash_snapshot_freshness_check
+            and self._settings.app_env not in _FRESHNESS_CHECK_BYPASS_ENVS
+        )
+
+        if latest_cash is None or latest_cash.equity is None:
+            if freshness_enabled:
+                logger.warning(
+                    "cash snapshot missing for capital allocation",
+                    extra={"trading_environment": self._settings.trading_environment.value},
+                )
+                ratp_cash_snapshot_missing_total.add(1)
+                self._audit_log_repo.record_operator_action(
+                    action="MISSING_CAPITAL_DATA",
+                    actor="system",
+                    reason="No cash snapshot available for allocation",
+                    occurred_at=now,
+                    component="portfolio_allocation",
+                    metadata={"trading_environment": self._settings.trading_environment.value},
+                )
+                self._session.flush()
+                self._session.commit()
+                raise MissingCapitalDataError(self._settings.trading_environment.value)
+
+            return _CapitalResolution(
+                total_capital=Decimal(str(self._settings.initial_capital)),
+                cash_snapshot_id=None,
+                cash_snapshot_as_of=None,
+                snapshot_age_seconds=None,
+                capital_source="initial_capital_config",
+            )
+
+        age_seconds = (now - latest_cash.timestamp).total_seconds()
+        max_age = self._settings.max_cash_snapshot_age_seconds
+
+        logger.info(
+            "cash snapshot selected for allocation",
+            extra={
+                "cash_snapshot_id": str(latest_cash.snapshot_id),
+                "snapshot_timestamp": latest_cash.timestamp.isoformat(),
+                "snapshot_age_seconds": age_seconds,
+                "max_allowed_age_seconds": max_age,
+            },
+        )
+        ratp_cash_snapshot_age_seconds.record(max(0.0, age_seconds))
+
+        if freshness_enabled and age_seconds > max_age:
+            logger.warning(
+                "allocation blocked: cash snapshot is stale",
+                extra={
+                    "cash_snapshot_id": str(latest_cash.snapshot_id),
+                    "snapshot_age_seconds": age_seconds,
+                    "max_allowed_age_seconds": max_age,
+                },
+            )
+            ratp_allocation_blocked_stale_capital_total.add(1)
+            self._audit_log_repo.record_operator_action(
+                action="CASH_SNAPSHOT_STALE",
+                actor="system",
+                reason=f"Cash snapshot is {age_seconds:.1f}s old (max: {max_age}s)",
+                occurred_at=now,
+                component="portfolio_allocation",
+                metadata={
+                    "cash_snapshot_id": str(latest_cash.snapshot_id),
+                    "snapshot_timestamp": latest_cash.timestamp.isoformat(),
+                    "snapshot_age_seconds": age_seconds,
+                    "max_allowed_age_seconds": max_age,
+                    "trading_environment": self._settings.trading_environment.value,
+                },
+            )
+            self._session.flush()
+            self._session.commit()
+            raise StaleCapitalDataError(
+                snapshot_id=str(latest_cash.snapshot_id),
+                snapshot_timestamp=latest_cash.timestamp,
+                age_seconds=age_seconds,
+                max_age_seconds=max_age,
+            )
+
+        return _CapitalResolution(
+            total_capital=Decimal(latest_cash.equity),
+            cash_snapshot_id=str(latest_cash.snapshot_id),
+            cash_snapshot_as_of=latest_cash.timestamp,
+            snapshot_age_seconds=age_seconds,
+            capital_source="cash_snapshot",
+        )

@@ -25,6 +25,7 @@ dependencies = [
   "pyyaml>=6.0",
   "tenacity>=8.2",
   "packaging>=24.0",
+  "cvxpy>=1.5",
 
   # Data + storage
   "pandas>=2.2",
@@ -70,6 +71,9 @@ cli = [
   "typer>=0.12",
   "rich>=13.7",
 ]
+
+[project.scripts]
+atp = "autonomous_trading_platform.cli.main:main"
 
 [project.urls]
 Homepage = "https://github.com/TristanODonnell/Autonomous-Trading-Platform"

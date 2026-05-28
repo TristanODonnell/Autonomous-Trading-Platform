@@ -450,8 +450,9 @@ def _seed_risk_snapshot(
 
 
 def _sqlite_round_trip_utc(timestamp: datetime) -> datetime:
-    local_offset = timestamp.astimezone().utcoffset() or timedelta(0)
-    return timestamp + local_offset
+    # UTCDateTimeType.process_result_value now uses replace(tzinfo=UTC) for naive
+    # datetimes, so no pre-shift is needed to compensate for local-time conversion.
+    return timestamp
 
 
 def test_verify_returns_runtime_soak_report(db_session: Session) -> None:

@@ -88,3 +88,71 @@ class PortfolioPeriodReturnResponse(BaseModel):
 
 class PortfolioPerformanceByPeriodResponse(BaseModel):
     periods: list[PortfolioPeriodReturnResponse]
+
+
+class FactorExposureSnapshotResponse(BaseModel):
+    snapshot_id: str
+    run_id: str | None
+    portfolio_id: str | None
+    computed_at: datetime
+    as_of_date: datetime
+    lookback_window: int
+    benchmark_symbol: str
+    benchmark_source: str
+    factor_computation_version: str
+    portfolio_exposures: dict
+    strategy_exposures: list
+    symbol_exposures: list
+    sector_exposures: dict
+    concentration_diagnostics: list
+    warnings: list
+    factor_methodology: dict
+    data_lineage: dict
+    duration_seconds: float
+
+
+class FactorExposureHistoryResponse(BaseModel):
+    snapshots: list[FactorExposureSnapshotResponse]
+
+
+class StrategyFactorExposureHistoryResponse(BaseModel):
+    exposures: list[dict]
+
+
+class FactorNeutralizationConfigResponse(BaseModel):
+    enabled: bool
+    mode: str
+    constraints: list
+    max_iterations: int
+    convergence_tolerance: float
+    max_turnover: float | None
+
+
+class FactorNeutralizationRunResponse(BaseModel):
+    run_id: str
+    generated_at: datetime
+    status: str
+    mode: str
+    portfolio_id: str | None
+    factor_snapshot_id: str | None
+    covariance_snapshot_id: str | None
+    optimization_run_id: str | None
+    config_json: dict
+    original_weights: dict
+    target_weights: dict
+    pre_exposures: dict
+    post_exposures: dict
+    exposure_reduction: dict
+    residual_exposure: dict
+    constraint_utilization: dict
+    binding_constraints: list
+    constraint_violations: list
+    fallback_mode: str | None
+    infeasibility_reason: str | None
+    duration_seconds: float
+    warnings: list
+    metadata_json: dict
+
+
+class FactorNeutralizationHistoryResponse(BaseModel):
+    runs: list[FactorNeutralizationRunResponse]

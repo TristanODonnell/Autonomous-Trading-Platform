@@ -1,15 +1,25 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, datetime
+import hashlib
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
+from time import perf_counter
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.live_performance_metrics_service import (
+    LivePerformanceMetricsService,
+    compute_alpha,
+)
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.models.allocation_overrides import (
     AllocationOverrides,
+)
+from autonomous_trading_platform.storage.sor.models.allocation_rebalance_history import (
+    AllocationRebalanceHistory,
 )
 from autonomous_trading_platform.storage.sor.models.capital_allocation_policies import (
     CapitalAllocationPolicies,
@@ -24,8 +34,14 @@ from autonomous_trading_platform.storage.sor.models.strategy_control_states impo
 from autonomous_trading_platform.storage.sor.models.strategy_governance import (
     StrategyGovernance,
 )
+from autonomous_trading_platform.storage.sor.models.strategy_quality_score_history import (
+    StrategyQualityScoreHistory,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.allocation_overrides_repository import (
     AllocationOverridesRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.allocation_rebalance_history_repository import (
+    AllocationRebalanceHistoryRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
     AuditLogRepository,
@@ -33,11 +49,29 @@ from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_reposi
 from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
     OperatorSettingsRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_quality_score_repository import (
+    StrategyQualityScoreRepository,
+)
 
 ACTIVE_STATES = {"approved_for_paper_trading", "approved_for_live_trading"}
 AUTO_REBALANCE_ACTOR = "auto_rebalance"
 DEFAULT_TOTAL_ALLOCATION = Decimal("1")
 PCT_QUANT = Decimal("0.000001")
+_DEFAULT_INTERVAL_HOURS = 24.0
+_DEFAULT_MIN_CHANGE_PCT = Decimal("0.01")
+
+# Stable positive int64 advisory lock key for the rebalance cycle.
+# Transaction-scoped (pg_try_advisory_xact_lock) so it auto-releases on commit/rollback.
+_REBALANCE_ADVISORY_LOCK_KEY = (
+    int.from_bytes(hashlib.sha256(b"ratp_rebalance_cycle_lock").digest()[:8], "big")
+    & 0x7FFFFFFFFFFFFFFF
+)
+
+_TERMINAL_STATUSES = frozenset(
+    {"completed", "noop", "skipped_interval", "skipped_concurrent", "skipped_disabled", "failed"}
+)
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -51,8 +85,14 @@ class StrategyQualityInput:
     floor: Decimal
     manual_override_pct: Decimal | None
     current_allocation_pct: Decimal
+    # quality_score is the blended score (alpha * live + (1-alpha) * backtest)
     quality_score: Decimal
     metrics: dict[str, float | int | None]
+    # Live performance fields (populated when runtime data is available)
+    live_metrics: dict[str, float | int | None] = field(default_factory=dict)
+    live_score: Decimal = field(default=Decimal("0"))
+    backtest_score: Decimal = field(default=Decimal("0"))
+    alpha_weight: Decimal = field(default=Decimal("0"))
 
 
 @dataclass(frozen=True)
@@ -71,6 +111,7 @@ class StrategyAllocationProposal:
 @dataclass(frozen=True)
 class QualityReallocationResult:
     run_id: str | None
+    rebalance_id: str | None
     auto_rebalance_enabled: bool
     before_allocation: dict[str, Decimal]
     after_allocation: dict[str, Decimal]
@@ -80,6 +121,12 @@ class QualityReallocationResult:
     allocation_overrides: list[dict[str, str | float | bool | None]]
     skipped_reason: str | None
     audit_event_type: str
+    turnover_metrics: dict[str, float | int]
+    allocation_changes_count: int
+    noop: bool
+    lock_acquired: bool = field(default=False)
+    # Per-strategy breakdown of blended scoring for operator transparency
+    blended_score_breakdown: dict[str, dict[str, float | None]] = field(default_factory=dict)
 
     @property
     def changed(self) -> bool:
@@ -94,6 +141,9 @@ class QualityBasedReallocationService:
         audit_log_repo: AuditLogRepository | None = None,
         operator_settings_repo: OperatorSettingsRepository | None = None,
         allocation_overrides_repo: AllocationOverridesRepository | None = None,
+        rebalance_history_repo: AllocationRebalanceHistoryRepository | None = None,
+        live_perf_service: LivePerformanceMetricsService | None = None,
+        quality_score_repo: StrategyQualityScoreRepository | None = None,
     ) -> None:
         self._session = session
         self._audit_log_repo = audit_log_repo or AuditLogRepository(session)
@@ -101,57 +151,484 @@ class QualityBasedReallocationService:
         self._allocation_overrides_repo = (
             allocation_overrides_repo or AllocationOverridesRepository(session)
         )
+        self._rebalance_history_repo = (
+            rebalance_history_repo or AllocationRebalanceHistoryRepository(session)
+        )
+        self._live_perf_service = live_perf_service or LivePerformanceMetricsService(session)
+        self._quality_score_repo = quality_score_repo or StrategyQualityScoreRepository(session)
 
     def rebalance(
         self,
         *,
         run_id: str | None = None,
+        rebalance_run_id: str | None = None,
         actor: str = AUTO_REBALANCE_ACTOR,
         enforce_enabled: bool = True,
+        trigger_source: str | None = None,
     ) -> QualityReallocationResult:
         now = datetime.now(UTC)
+        # Use caller-supplied ID for idempotency; otherwise generate a fresh one.
+        rebalance_id = rebalance_run_id or str(uuid4())
         settings = self._operator_settings_repo.get_or_create_default()
+
         if enforce_enabled and not bool(settings.auto_rebalance_enabled):
-            result = self._build_skipped_result(
+            return self._record_skipped(
                 run_id=run_id,
+                rebalance_id=rebalance_id,
+                actor=actor,
+                trigger_source=trigger_source,
                 settings=settings,
                 skipped_reason="auto_rebalance_disabled",
+                status="skipped_disabled",
+                now=now,
             )
+
+        # --- Idempotency guard: detect retries of an already-completed run ---
+        if rebalance_run_id is not None:
+            existing = self._rebalance_history_repo.get_by_rebalance_id(rebalance_run_id)
+            if existing is not None and existing.status in _TERMINAL_STATUSES:
+                return self._record_retry_detected(
+                    run_id=run_id,
+                    rebalance_id=rebalance_id,
+                    existing=existing,
+                    actor=actor,
+                    settings=settings,
+                    now=now,
+                )
+
+        # --- Interval guard ---
+        _raw_interval = getattr(settings, "min_rebalance_interval_hours", None)
+        interval_hours = (
+            float(_raw_interval) if _raw_interval is not None else _DEFAULT_INTERVAL_HOURS
+        )
+        if interval_hours > 0:
+            last = self._rebalance_history_repo.get_last_completed()
+            if last is not None and last.completed_at is not None:
+                # Normalize to UTC: SQLite returns naive datetimes; treat as UTC.
+                last_completed_at = last.completed_at
+                if last_completed_at.tzinfo is None:
+                    last_completed_at = last_completed_at.replace(tzinfo=UTC)
+                next_allowed = last_completed_at + timedelta(hours=interval_hours)
+                if now < next_allowed:
+                    logger.info(
+                        "REBALANCE_SKIPPED_INTERVAL_GUARD",
+                        extra={
+                            "rebalance_id": rebalance_id,
+                            "last_completed_at": last.completed_at.isoformat(),
+                            "next_allowed_at": next_allowed.isoformat(),
+                            "interval_hours": interval_hours,
+                        },
+                    )
+                    return self._record_skipped(
+                        run_id=run_id,
+                        rebalance_id=rebalance_id,
+                        actor=actor,
+                        trigger_source=trigger_source,
+                        settings=settings,
+                        skipped_reason="interval_guard",
+                        status="skipped_interval",
+                        now=now,
+                    )
+
+        # --- Advisory lock (PostgreSQL): transaction-scoped, auto-releases on commit/rollback ---
+        if not self._try_acquire_advisory_lock(self._session):
+            logger.warning(
+                "REBALANCE_SKIPPED_CONCURRENT",
+                extra={
+                    "rebalance_id": rebalance_id,
+                    "skip_reason": "advisory_lock_unavailable",
+                    "lock_key": _REBALANCE_ADVISORY_LOCK_KEY,
+                    "actor": actor,
+                    "run_id": run_id,
+                },
+            )
+            return self._record_skipped(
+                run_id=run_id,
+                rebalance_id=rebalance_id,
+                actor=actor,
+                trigger_source=trigger_source,
+                settings=settings,
+                skipped_reason="concurrent_lock",
+                status="skipped_concurrent",
+                now=now,
+            )
+
+        # --- Row-based concurrent guard (defense-in-depth; primary guard for SQLite) ---
+        active_lock = self._rebalance_history_repo.get_active_lock(now=now)
+        if active_lock is not None:
+            logger.warning(
+                "REBALANCE_SKIPPED_CONCURRENT",
+                extra={
+                    "rebalance_id": rebalance_id,
+                    "skip_reason": "active_running_row",
+                    "lock_held_by": active_lock.rebalance_id,
+                    "lock_started_at": active_lock.started_at.isoformat(),
+                    "actor": actor,
+                    "run_id": run_id,
+                },
+            )
+            return self._record_skipped(
+                run_id=run_id,
+                rebalance_id=rebalance_id,
+                actor=actor,
+                trigger_source=trigger_source,
+                settings=settings,
+                skipped_reason="concurrent_lock",
+                status="skipped_concurrent",
+                now=now,
+            )
+
+        # --- Lock acquired: log and persist the running row ---
+        logger.info(
+            "REBALANCE_LOCK_ACQUIRED",
+            extra={
+                "rebalance_id": rebalance_id,
+                "lock_key": _REBALANCE_ADVISORY_LOCK_KEY,
+                "actor": actor,
+                "run_id": run_id,
+                "started_at": now.isoformat(),
+            },
+        )
+        running_row = AllocationRebalanceHistory(
+            rebalance_id=rebalance_id,
+            run_id=run_id,
+            actor=actor,
+            trigger_source=trigger_source,
+            status="running",
+            skipped_reason=None,
+            started_at=now,
+            completed_at=None,
+        )
+        self._rebalance_history_repo.insert(running_row)
+
+        wall_start = perf_counter()
+
+        try:
+            inputs = self._load_strategy_inputs(
+                settings=settings, now=now, rebalance_id=rebalance_id
+            )
+            before = {item.strategy_id: item.current_allocation_pct for item in inputs}
+            proposals = self._compute_proposals(inputs)
+            self._persist_quality_scores(inputs=inputs, rebalance_id=rebalance_id, now=now)
+
+            min_change = Decimal(
+                str(
+                    getattr(settings, "min_allocation_change_pct", None)
+                    or float(_DEFAULT_MIN_CHANGE_PCT)
+                )
+            )
+            changes_count, total_delta = self._write_auto_overrides(
+                proposals=proposals,
+                actor=actor,
+                now=now,
+                min_allocation_change_pct=min_change,
+                rebalance_id=rebalance_id,
+            )
+            noop = changes_count == 0
+            after = before if noop else {p.strategy_id: p.after_pct for p in proposals}
+            audit_event = (
+                "STRATEGY_ALLOCATION_REBALANCE_NOOP" if noop else "STRATEGY_ALLOCATION_REBALANCED"
+            )
+
+            turnover_metrics = self._compute_turnover_metrics(proposals, min_change, settings)
+            duration_seconds = perf_counter() - wall_start
+
+            blended_breakdown = {
+                item.strategy_id: {
+                    "live_score": float(item.live_score),
+                    "backtest_score": float(item.backtest_score),
+                    "blended_score": float(item.quality_score),
+                    "alpha_weight": float(item.alpha_weight),
+                    "live_history_days": item.live_metrics.get("days_live"),
+                    "live_trade_count": item.live_metrics.get("trade_count"),
+                }
+                for item in inputs
+            }
+            result = QualityReallocationResult(
+                run_id=run_id,
+                rebalance_id=rebalance_id,
+                auto_rebalance_enabled=bool(settings.auto_rebalance_enabled),
+                before_allocation=before,
+                after_allocation=after,
+                proposals=proposals,
+                quality_metrics={item.strategy_id: item.metrics for item in inputs},
+                active_policies=self._active_policy_payloads(),
+                allocation_overrides=self._active_override_payloads(now=now),
+                skipped_reason="all_changes_below_threshold" if noop else None,
+                audit_event_type=audit_event,
+                turnover_metrics={**turnover_metrics, "duration_seconds": duration_seconds},
+                allocation_changes_count=changes_count,
+                noop=noop,
+                lock_acquired=True,
+                blended_score_breakdown=blended_breakdown,
+            )
+
+            final_status = "noop" if noop else "completed"
+            self._rebalance_history_repo.update_status(
+                rebalance_id=rebalance_id,
+                status=final_status,
+                completed_at=datetime.now(UTC),
+                strategies_evaluated=len(inputs),
+                allocation_changes_count=changes_count,
+                total_allocation_delta_pct=float(total_delta),
+                churn_pct=float(total_delta),
+                skipped_reason="all_changes_below_threshold" if noop else None,
+                result_summary_json={
+                    "proposals_count": len(proposals),
+                    "noop": noop,
+                    "changes_count": changes_count,
+                },
+            )
+
+            if noop:
+                logger.info(
+                    "REBALANCE_NOOP",
+                    extra={
+                        "rebalance_id": rebalance_id,
+                        "strategies_evaluated": len(inputs),
+                        "min_change_pct": float(min_change),
+                        "duration_seconds": duration_seconds,
+                    },
+                )
+            else:
+                logger.info(
+                    "REBALANCE_APPLIED",
+                    extra={
+                        "rebalance_id": rebalance_id,
+                        "run_id": run_id,
+                        "actor": actor,
+                        "changes_count": changes_count,
+                        "churn_pct": float(total_delta),
+                        "strategies_evaluated": len(inputs),
+                        "duration_seconds": duration_seconds,
+                        "lock_key": _REBALANCE_ADVISORY_LOCK_KEY,
+                    },
+                )
+
             self._audit(result=result, actor=actor, occurred_at=now)
+            if not noop and bool(settings.notify_allocation_rebalance_events):
+                self._emit_rebalance_notification(result=result, actor=actor, occurred_at=now)
             self._session.flush()
             self._session.commit()
             return result
 
-        inputs = self._load_strategy_inputs(settings=settings, now=now)
-        before = {item.strategy_id: item.current_allocation_pct for item in inputs}
-        proposals = self._compute_proposals(inputs)
-        after = {proposal.strategy_id: proposal.after_pct for proposal in proposals}
+        except Exception as exc:
+            self._session.rollback()
+            self._record_failed(
+                run_id=run_id,
+                rebalance_id=rebalance_id,
+                actor=actor,
+                trigger_source=trigger_source,
+                now=now,
+                exc=exc,
+            )
+            raise
 
-        self._write_auto_overrides(proposals=proposals, actor=actor, now=now)
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
-        result = QualityReallocationResult(
+    def _persist_quality_scores(
+        self,
+        *,
+        inputs: list[StrategyQualityInput],
+        rebalance_id: str,
+        now: datetime,
+    ) -> None:
+        for item in inputs:
+            record = StrategyQualityScoreHistory(
+                score_id=str(uuid4()),
+                strategy_id=item.strategy_id,
+                rebalance_run_id=rebalance_id,
+                quality_score=float(item.quality_score),
+                live_score=float(item.live_score),
+                backtest_score=float(item.backtest_score),
+                blended_score=float(item.quality_score),
+                alpha_weight=float(item.alpha_weight),
+                score_components={
+                    "sharpe": item.metrics.get("sharpe_ratio"),
+                    "total_return": item.metrics.get("total_return"),
+                    "win_rate": item.metrics.get("win_rate"),
+                    "max_drawdown": item.metrics.get("max_drawdown"),
+                    "trade_count": item.metrics.get("trade_count"),
+                },
+                data_window={
+                    "days_live": item.live_metrics.get("days_live"),
+                    "trade_count": item.live_metrics.get("trade_count"),
+                },
+                governance_state=item.governance_state,
+                computed_at=now,
+            )
+            self._quality_score_repo.insert(record)
+
+    def _record_skipped(
+        self,
+        *,
+        run_id: str | None,
+        rebalance_id: str,
+        actor: str,
+        trigger_source: str | None = None,
+        settings: OperatorSettingsRow,
+        skipped_reason: str,
+        status: str,
+        now: datetime,
+    ) -> QualityReallocationResult:
+        result = self._build_skipped_result(
             run_id=run_id,
-            auto_rebalance_enabled=bool(settings.auto_rebalance_enabled),
-            before_allocation=before,
-            after_allocation=after,
-            proposals=proposals,
-            quality_metrics={item.strategy_id: item.metrics for item in inputs},
-            active_policies=self._active_policy_payloads(),
-            allocation_overrides=self._active_override_payloads(now=now),
-            skipped_reason=None,
-            audit_event_type="STRATEGY_ALLOCATION_REBALANCED",
+            rebalance_id=rebalance_id,
+            settings=settings,
+            skipped_reason=skipped_reason,
         )
+        history_row = AllocationRebalanceHistory(
+            rebalance_id=rebalance_id,
+            run_id=run_id,
+            actor=actor,
+            trigger_source=trigger_source,
+            status=status,
+            skipped_reason=skipped_reason,
+            started_at=now,
+            completed_at=now,
+        )
+        self._rebalance_history_repo.insert(history_row)
         self._audit(result=result, actor=actor, occurred_at=now)
-        if bool(settings.notify_allocation_rebalance_events):
-            self._emit_rebalance_notification(result=result, actor=actor, occurred_at=now)
         self._session.flush()
         self._session.commit()
         return result
+
+    def _record_retry_detected(
+        self,
+        *,
+        run_id: str | None,
+        rebalance_id: str,
+        existing: AllocationRebalanceHistory,
+        actor: str,
+        settings: OperatorSettingsRow,
+        now: datetime,
+    ) -> QualityReallocationResult:
+        logger.info(
+            "REBALANCE_RETRY_DETECTED",
+            extra={
+                "rebalance_id": rebalance_id,
+                "run_id": run_id,
+                "actor": actor,
+                "existing_status": existing.status,
+                "existing_started_at": existing.started_at.isoformat(),
+            },
+        )
+        inputs = self._load_strategy_inputs(settings=settings, now=now)
+        before = {item.strategy_id: item.current_allocation_pct for item in inputs}
+        result = QualityReallocationResult(
+            run_id=run_id,
+            rebalance_id=rebalance_id,
+            auto_rebalance_enabled=bool(settings.auto_rebalance_enabled),
+            before_allocation=before,
+            after_allocation=before,
+            proposals=[],
+            quality_metrics={item.strategy_id: item.metrics for item in inputs},
+            active_policies=self._active_policy_payloads(),
+            allocation_overrides=self._active_override_payloads(now=now),
+            skipped_reason="retry_detected",
+            audit_event_type="STRATEGY_ALLOCATION_REBALANCE_SKIPPED",
+            turnover_metrics={},
+            allocation_changes_count=0,
+            noop=False,
+            lock_acquired=False,
+        )
+        self._audit_log_repo.record_operator_action(
+            action="STRATEGY_ALLOCATION_REBALANCE_RETRY_DETECTED",
+            actor=actor,
+            reason="rebalance retry detected: run already processed",
+            occurred_at=now,
+            component="allocations",
+            metadata={
+                "rebalance_id": rebalance_id,
+                "run_id": run_id,
+                "existing_rebalance_id": existing.rebalance_id,
+                "existing_status": existing.status,
+            },
+        )
+        self._session.flush()
+        self._session.commit()
+        return result
+
+    def _record_failed(
+        self,
+        *,
+        run_id: str | None,
+        rebalance_id: str,
+        actor: str,
+        trigger_source: str | None,
+        now: datetime,
+        exc: BaseException,
+    ) -> None:
+        logger.error(
+            "REBALANCE_FAILED",
+            extra={
+                "rebalance_id": rebalance_id,
+                "run_id": run_id,
+                "actor": actor,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+        )
+        try:
+            failed_row = AllocationRebalanceHistory(
+                rebalance_id=str(uuid4()),
+                run_id=run_id,
+                actor=actor,
+                trigger_source=trigger_source,
+                status="failed",
+                skipped_reason=type(exc).__name__,
+                started_at=now,
+                completed_at=datetime.now(UTC),
+                result_summary_json={"original_rebalance_id": rebalance_id},
+            )
+            self._rebalance_history_repo.insert(failed_row)
+            self._audit_log_repo.record_operator_action(
+                action="STRATEGY_ALLOCATION_REBALANCE_FAILED",
+                actor=actor,
+                reason=f"rebalance failed: {type(exc).__name__}",
+                occurred_at=datetime.now(UTC),
+                component="allocations",
+                metadata={
+                    "rebalance_id": rebalance_id,
+                    "run_id": run_id,
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+            )
+            self._session.flush()
+            self._session.commit()
+        except Exception:
+            logger.exception(
+                "REBALANCE_FAILED_AUDIT_ERROR",
+                extra={"rebalance_id": rebalance_id},
+            )
+
+    @staticmethod
+    def _try_acquire_advisory_lock(session: Session) -> bool:
+        """Attempt a PostgreSQL transaction-scoped advisory lock.
+
+        Returns True when acquired or when running against a non-PostgreSQL backend
+        (advisory locks are not available in SQLite; the row-based guard handles that path).
+        """
+        try:
+            dialect = session.bind.dialect.name  # type: ignore[union-attr]
+        except Exception:
+            return True
+        if dialect != "postgresql":
+            return True
+        result = session.execute(
+            text("SELECT pg_try_advisory_xact_lock(:key)"),
+            {"key": _REBALANCE_ADVISORY_LOCK_KEY},
+        ).scalar()
+        return bool(result)
 
     def _build_skipped_result(
         self,
         *,
         run_id: str | None,
+        rebalance_id: str,
         settings: OperatorSettingsRow,
         skipped_reason: str,
     ) -> QualityReallocationResult:
@@ -160,6 +637,7 @@ class QualityBasedReallocationService:
         before = {item.strategy_id: item.current_allocation_pct for item in inputs}
         return QualityReallocationResult(
             run_id=run_id,
+            rebalance_id=rebalance_id,
             auto_rebalance_enabled=bool(settings.auto_rebalance_enabled),
             before_allocation=before,
             after_allocation=before,
@@ -169,6 +647,9 @@ class QualityBasedReallocationService:
             allocation_overrides=self._active_override_payloads(now=now),
             skipped_reason=skipped_reason,
             audit_event_type="STRATEGY_ALLOCATION_REBALANCE_SKIPPED",
+            turnover_metrics={},
+            allocation_changes_count=0,
+            noop=False,
         )
 
     def _load_strategy_inputs(
@@ -176,6 +657,7 @@ class QualityBasedReallocationService:
         *,
         settings: OperatorSettingsRow,
         now: datetime,
+        rebalance_id: str | None = None,
     ) -> list[StrategyQualityInput]:
         rows = list(
             self._session.scalars(
@@ -187,6 +669,20 @@ class QualityBasedReallocationService:
         policies = self._policies_by_status_and_tier()
         controls = self._controls_by_strategy()
         overrides = self._active_overrides_by_strategy(now=now)
+        expired_overrides = self._expired_active_overrides_by_strategy(now=now)
+        for strategy_id, expired_list in expired_overrides.items():
+            for exp in expired_list:
+                if exp.overridden_by != AUTO_REBALANCE_ACTOR:
+                    logger.info(
+                        "ALLOCATION_OVERRIDE_EXPIRED_IGNORED",
+                        extra={
+                            "strategy_id": strategy_id,
+                            "override_id": exp.override_id,
+                            "overridden_by": exp.overridden_by,
+                            "expires_at": exp.expires_at.isoformat() if exp.expires_at else None,
+                            "rebalance_run_id": rebalance_id,
+                        },
+                    )
 
         inputs: list[StrategyQualityInput] = []
         for governance in rows:
@@ -204,13 +700,57 @@ class QualityBasedReallocationService:
             control = controls.get(governance.strategy_id)
             override = overrides.get(governance.strategy_id)
             manual_override_pct = self._manual_override_pct(override)
-            current_pct = (
-                manual_override_pct
-                if manual_override_pct is not None
-                else self._decimal_pct(policy.max_pct_of_capital)
-            )
+            if manual_override_pct is not None:
+                current_pct = manual_override_pct
+            elif (
+                override is not None
+                and override.overridden_by == AUTO_REBALANCE_ACTOR
+                and override.max_pct_of_capital is not None
+            ):
+                # Use the previous auto-rebalance value as the baseline so hysteresis
+                # detects real drift from the last committed allocation.
+                current_pct = self._decimal_pct(override.max_pct_of_capital)
+            else:
+                # No prior committed allocation: baseline is zero so any quality-
+                # weighted assignment above the threshold is written on first run.
+                current_pct = Decimal("0")
             metrics = self._latest_metrics(governance.strategy_id)
-            quality_score = self._quality_score(metrics)
+            backtest_score = self._quality_score(metrics)
+            live_metrics_obj = self._live_perf_service.compute_for_strategy(governance.strategy_id)
+            live_metrics = {
+                "rolling_sharpe": live_metrics_obj.rolling_sharpe,
+                "realized_return": live_metrics_obj.realized_return,
+                "realized_drawdown": live_metrics_obj.realized_drawdown,
+                "live_win_rate": live_metrics_obj.live_win_rate,
+                "trade_count": live_metrics_obj.trade_count,
+            }
+            live_score = self._live_quality_score(live_metrics)
+            alpha = Decimal(
+                str(
+                    round(
+                        compute_alpha(
+                            days_live=live_metrics_obj.days_live or 0,
+                            trade_count=live_metrics_obj.trade_count or 0,
+                        ),
+                        6,
+                    )
+                )
+            )
+            blended_score = alpha * live_score + (Decimal("1") - alpha) * backtest_score
+            blended_score = max(blended_score, Decimal("0.01"))
+            logger.info(
+                "QUALITY_SCORE_BLENDED",
+                extra={
+                    "strategy_id": governance.strategy_id,
+                    "backtest_score": float(backtest_score),
+                    "live_score": float(live_score),
+                    "blended_score": float(blended_score),
+                    "alpha_weight": float(alpha),
+                    "days_live": live_metrics_obj.days_live,
+                    "live_trade_count": live_metrics_obj.trade_count,
+                    "rebalance_run_id": rebalance_id,
+                },
+            )
             policy_cap = self._decimal_pct(policy.max_pct_of_capital)
             inputs.append(
                 StrategyQualityInput(
@@ -223,8 +763,12 @@ class QualityBasedReallocationService:
                     floor=Decimal("0"),
                     manual_override_pct=manual_override_pct,
                     current_allocation_pct=current_pct,
-                    quality_score=quality_score,
+                    quality_score=blended_score,
                     metrics=metrics,
+                    live_metrics=live_metrics,
+                    live_score=live_score,
+                    backtest_score=backtest_score,
+                    alpha_weight=alpha,
                 )
             )
 
@@ -328,25 +872,46 @@ class QualityBasedReallocationService:
         proposals: list[StrategyAllocationProposal],
         actor: str,
         now: datetime,
-    ) -> None:
+        min_allocation_change_pct: Decimal,
+        rebalance_id: str,
+    ) -> tuple[int, Decimal]:
+        """Write auto-rebalance overrides, skipping changes below the hysteresis threshold.
+
+        Returns (changes_written, total_absolute_delta).
+        """
         active = self._active_overrides_by_strategy(now=now)
-        for proposal in proposals:
+
+        def _should_write(proposal: StrategyAllocationProposal) -> bool:
             existing = active.get(proposal.strategy_id)
             if existing is not None and existing.overridden_by != AUTO_REBALANCE_ACTOR:
+                return False
+            if proposal.manual_override_respected:
+                return False
+            delta = abs(proposal.after_pct - proposal.before_pct)
+            return delta >= min_allocation_change_pct
+
+        for proposal in proposals:
+            if not _should_write(proposal):
                 continue
+            existing = active.get(proposal.strategy_id)
             if existing is not None:
                 existing.is_active = False
         self._session.flush()
 
+        changes_written = 0
+        total_delta = Decimal("0")
         for proposal in proposals:
-            if proposal.manual_override_respected:
+            if not _should_write(proposal):
                 continue
+            delta = abs(proposal.after_pct - proposal.before_pct)
             self._allocation_overrides_repo.create_override(
                 AllocationOverrides(
                     override_id=str(uuid4()),
                     strategy_id=proposal.strategy_id,
                     overridden_by=actor,
-                    override_reason=f"quality-based reallocation: {proposal.reason}",
+                    override_reason=(
+                        f"quality-based reallocation: {proposal.reason} [rebalance:{rebalance_id}]"
+                    ),
                     max_pct_of_capital=float(proposal.after_pct),
                     max_position_size_usd=None,
                     max_drawdown_allowed=None,
@@ -355,6 +920,38 @@ class QualityBasedReallocationService:
                     expires_at=None,
                 )
             )
+            changes_written += 1
+            total_delta += delta
+
+        return changes_written, total_delta
+
+    def _compute_turnover_metrics(
+        self,
+        proposals: list[StrategyAllocationProposal],
+        min_allocation_change_pct: Decimal,
+        settings: OperatorSettingsRow,
+    ) -> dict[str, float | int]:
+        variable_proposals = [p for p in proposals if not p.manual_override_respected]
+        total_delta = sum(abs(p.after_pct - p.before_pct) for p in variable_proposals)
+        strategies_changed = sum(
+            1
+            for p in variable_proposals
+            if abs(p.after_pct - p.before_pct) >= min_allocation_change_pct
+        )
+        churn_pct = float(total_delta)
+
+        metrics: dict[str, float | int] = {
+            "total_allocation_delta_pct": churn_pct,
+            "strategies_changed": strategies_changed,
+            "strategies_evaluated": len(proposals),
+            "churn_pct": churn_pct,
+        }
+
+        turnover_penalty_weight = getattr(settings, "turnover_penalty_weight", None)
+        if turnover_penalty_weight is not None:
+            metrics["turnover_penalty"] = float(turnover_penalty_weight) * churn_pct
+
+        return metrics
 
     def _audit(
         self,
@@ -398,6 +995,7 @@ class QualityBasedReallocationService:
     def result_to_jsonable(result: QualityReallocationResult) -> dict:
         return {
             "run_id": result.run_id,
+            "rebalance_id": result.rebalance_id,
             "auto_rebalance_enabled": result.auto_rebalance_enabled,
             "before_allocation": {
                 key: float(value) for key, value in result.before_allocation.items()
@@ -424,6 +1022,11 @@ class QualityBasedReallocationService:
             "allocation_overrides": result.allocation_overrides,
             "skipped_reason": result.skipped_reason,
             "audit_event_emitted": result.audit_event_type,
+            "turnover_metrics": result.turnover_metrics,
+            "allocation_changes_count": result.allocation_changes_count,
+            "noop": result.noop,
+            "lock_acquired": result.lock_acquired,
+            "blended_score_breakdown": result.blended_score_breakdown,
         }
 
     def _latest_metrics(self, strategy_id: str) -> dict[str, float | int | None]:
@@ -506,6 +1109,26 @@ class QualityBasedReallocationService:
         score -= abs(drawdown) * Decimal("2.00")
         return max(score, Decimal("0.01"))
 
+    def _live_quality_score(self, live_metrics: dict[str, float | int | None]) -> Decimal:
+        """Compute quality score from realized live/runtime metrics.
+
+        Uses the same weighting formula as the backtest score so that the two
+        are directly comparable when blended.
+        """
+        sharpe = Decimal(str(live_metrics.get("rolling_sharpe") or 0))
+        total_return = Decimal(str(live_metrics.get("realized_return") or 0))
+        drawdown = Decimal(str(live_metrics.get("realized_drawdown") or 0))
+        win_rate = Decimal(str(live_metrics.get("live_win_rate") or 0))
+        trade_count = Decimal(str(live_metrics.get("trade_count") or 0))
+
+        score = Decimal("1")
+        score += max(sharpe, Decimal("-1")) * Decimal("0.40")
+        score += total_return * Decimal("1.50")
+        score += win_rate * Decimal("0.40")
+        score += min(trade_count / Decimal("100"), Decimal("0.25"))
+        score -= abs(drawdown) * Decimal("2.00")
+        return max(score, Decimal("0.01"))
+
     def _policies_by_status_and_tier(
         self,
     ) -> dict[tuple[str, str | None], CapitalAllocationPolicies]:
@@ -525,16 +1148,20 @@ class QualityBasedReallocationService:
         }
 
     def _active_overrides_by_strategy(self, *, now: datetime) -> dict[str, AllocationOverrides]:
-        rows = self._session.scalars(
-            select(AllocationOverrides)
-            .where(AllocationOverrides.is_active.is_(True))
-            .order_by(AllocationOverrides.created_at.desc(), AllocationOverrides.override_id.asc())
-        ).all()
+        """Return the most-recent non-expired active override keyed by strategy_id."""
+        rows = self._allocation_overrides_repo.get_all_active_non_expired(now=now)
         result: dict[str, AllocationOverrides] = {}
         for row in rows:
-            if row.expires_at is not None and row.expires_at <= now:
-                continue
             result.setdefault(row.strategy_id, row)
+        return result
+
+    def _expired_active_overrides_by_strategy(
+        self, *, now: datetime
+    ) -> dict[str, list[AllocationOverrides]]:
+        """Return all expired-but-still-active overrides grouped by strategy_id."""
+        result: dict[str, list[AllocationOverrides]] = {}
+        for row in self._allocation_overrides_repo.get_all_expired_active(now=now):
+            result.setdefault(row.strategy_id, []).append(row)
         return result
 
     def _resolve_policy(

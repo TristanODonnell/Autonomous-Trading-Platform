@@ -1,15 +1,21 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.live_performance_metrics_service import (
+    LivePerformanceMetricsService,
+)
 from autonomous_trading_platform.application.services.strategy_governance_service import (
+    _REQUIRED_CRITERIA_BY_TRANSITION,
+    _RULE_STATE_ALIASES,
     StrategyGovernanceService,
 )
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
 from autonomous_trading_platform.storage.sor.models.operator_settings import OperatorSettingsRow
 from autonomous_trading_platform.storage.sor.models.promotion_rules import PromotionRules
@@ -28,6 +34,7 @@ from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_r
 )
 
 AUTO_PROMOTION_ACTOR = "auto_promotion"
+logger = get_logger(__name__)
 
 _CANDIDATE_STATES = {
     "approved_research",
@@ -57,6 +64,16 @@ _SERVICE_TO_STATE = {
     "live": "approved_for_live_trading",
 }
 
+# Auto-promotion transitions that require an explicit source_run_id on the governance record.
+# The (from_status, to_status) pairs use the rule-alias conventions.
+# If a strategy is in one of these transitions and has no source_run_id, it is skipped.
+_CAPITAL_BEARING_AUTO_PROMOTION_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("approved_research", "approved_paper"),
+        ("approved_paper", "approved_live"),
+    }
+)
+
 
 @dataclass(frozen=True)
 class PromotionCriterionResult:
@@ -65,6 +82,7 @@ class PromotionCriterionResult:
     required: float | int | None
     actual: float | int | None
     reason: str
+    skipped: bool = False
 
 
 @dataclass(frozen=True)
@@ -78,6 +96,14 @@ class PromotionEligibilityResult:
     metrics: dict[str, float | int | None]
     criteria: list[PromotionCriterionResult]
     reasons: list[str]
+    skipped_criteria: list[str] = field(default_factory=list)
+    missing_required_criteria: list[str] = field(default_factory=list)
+    source_run_id: str | None = None
+    fallback_allowed: bool = True
+    metrics_source_type: str | None = None
+    # Live runtime metrics included for operator transparency; advisory only.
+    # Promotion eligibility is still determined by backtest/simulation metrics.
+    live_metrics: dict[str, float | int | None] | None = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +126,7 @@ class AutoPromotionService:
         operator_settings_repo: OperatorSettingsRepository | None = None,
         audit_log_repo: AuditLogRepository | None = None,
         governance_service: StrategyGovernanceService | None = None,
+        live_perf_service: LivePerformanceMetricsService | None = None,
     ) -> None:
         self._session = session
         self._promotion_rules_repo = promotion_rules_repo or PromotionRulesRepository(session)
@@ -110,6 +137,7 @@ class AutoPromotionService:
             promotion_rules_repo=self._promotion_rules_repo,
             audit_log_repo=self._audit_log_repo,
         )
+        self._live_perf_service = live_perf_service or LivePerformanceMetricsService(session)
 
     def scan(self) -> list[PromotionEligibilityResult]:
         rules = self._active_rules_by_transition()
@@ -199,7 +227,74 @@ class AutoPromotionService:
         to_status = "approved_paper" if from_status == "approved_research" else "approved_live"
         to_state = _TARGET_STATE[governance.current_state]
         rule = rules.get((from_status, to_status))
-        metrics = self._metrics_for_strategy(governance)
+        is_capital_bearing = (from_status, to_status) in _CAPITAL_BEARING_AUTO_PROMOTION_TRANSITIONS
+
+        # Fetch live metrics once for transparency across all return paths.
+        # Advisory only — does not affect promotion eligibility.
+        live_metrics_obj = self._live_perf_service.compute_for_strategy(governance.strategy_id)
+        live_metrics: dict[str, float | int | None] = {
+            "rolling_sharpe": live_metrics_obj.rolling_sharpe,
+            "realized_return": live_metrics_obj.realized_return,
+            "realized_drawdown": live_metrics_obj.realized_drawdown,
+            "live_win_rate": live_metrics_obj.live_win_rate,
+            "trade_count": live_metrics_obj.trade_count,
+            "days_live": live_metrics_obj.days_live,
+        }
+
+        # Capital-bearing transitions fail closed when source_run_id is absent; no fallback.
+        if is_capital_bearing and governance.source_run_id is None:
+            self._audit_log_repo.record_operator_action(
+                action="PROMOTION_MISSING_SOURCE_RUN",
+                actor=AUTO_PROMOTION_ACTOR,
+                reason=(
+                    f"Strategy {governance.strategy_id!r} skipped: no source_run_id for "
+                    f"capital-bearing auto-promotion to {to_status!r}"
+                ),
+                occurred_at=datetime.now(UTC),
+                component="governance",
+                metadata={
+                    "strategy_id": governance.strategy_id,
+                    "from_state": governance.current_state,
+                    "to_state": to_state,
+                    "from_status": from_status,
+                    "to_status": to_status,
+                    "error": "missing_source_run_id",
+                    "fallback_allowed": False,
+                    "source": "auto_promotion_scan",
+                },
+            )
+            null_metrics: dict[str, float | int | None] = {
+                k: None
+                for k in (
+                    "sharpe",
+                    "max_drawdown",
+                    "days_tested",
+                    "trade_count",
+                    "cagr",
+                    "win_rate",
+                )
+            }
+            return PromotionEligibilityResult(
+                strategy_id=governance.strategy_id,
+                from_state=governance.current_state,
+                to_state=to_state,
+                rule_id=rule.rule_id if rule else None,
+                eligible=False,
+                status="missing_source_run",
+                metrics=null_metrics,
+                criteria=[],
+                reasons=[
+                    f"Capital-bearing promotion to {to_status!r} requires explicit source_run_id. "
+                    "Set source_run_id on the governance record to enable auto-promotion."
+                ],
+                source_run_id=None,
+                fallback_allowed=False,
+                metrics_source_type=None,
+                live_metrics=live_metrics,
+            )
+
+        resolved_source_run_id = str(governance.source_run_id) if governance.source_run_id else None
+        metrics = self._metrics_for_strategy(governance, is_capital_bearing=is_capital_bearing)
 
         if rule is None:
             return PromotionEligibilityResult(
@@ -212,11 +307,76 @@ class AutoPromotionService:
                 metrics=metrics,
                 criteria=[],
                 reasons=[f"No active PromotionRules row for {from_status} -> {to_status}."],
+                source_run_id=resolved_source_run_id,
+                fallback_allowed=not is_capital_bearing,
+                live_metrics=live_metrics,
             )
 
-        criteria = self._evaluate_rule(rule=rule, metrics=metrics)
-        failures = [criterion.reason for criterion in criteria if not criterion.passed]
+        # Check required criteria for null thresholds before evaluating strategy metrics.
+        # A null required criterion is a configuration error, not a strategy eligibility failure.
+        required_criteria = _REQUIRED_CRITERIA_BY_TRANSITION.get(
+            (_RULE_STATE_ALIASES.get(from_status, from_status), to_status), frozenset()
+        )
+        null_required = [f for f in sorted(required_criteria) if getattr(rule, f) is None]
+        if null_required:
+            logger.warning(
+                "auto_promotion.invalid_rule_config",
+                extra={
+                    "strategy_id": governance.strategy_id,
+                    "rule_id": rule.rule_id,
+                    "from_status": from_status,
+                    "to_status": to_status,
+                    "missing_required_criteria": null_required,
+                },
+            )
+            self._audit_log_repo.record_operator_action(
+                action="PROMOTION_RULES_CONFIGURATION_ERROR",
+                actor=AUTO_PROMOTION_ACTOR,
+                reason=(
+                    f"Required criteria null on rule {rule.rule_id!r} "
+                    f"for {from_status} -> {to_status}: {null_required}"
+                ),
+                occurred_at=datetime.now(UTC),
+                component="governance",
+                metadata={
+                    "strategy_id": governance.strategy_id,
+                    "rule_id": rule.rule_id,
+                    "from_status": from_status,
+                    "to_status": to_status,
+                    "missing_required_criteria": null_required,
+                    "source": "auto_promotion_scan",
+                },
+            )
+            return PromotionEligibilityResult(
+                strategy_id=governance.strategy_id,
+                from_state=governance.current_state,
+                to_state=to_state,
+                rule_id=rule.rule_id,
+                eligible=False,
+                status="invalid_rule_config",
+                metrics=metrics,
+                criteria=[],
+                reasons=[
+                    f"PromotionRules configuration error: required criteria "
+                    f"{null_required} are null for {from_status} -> {to_status}."
+                ],
+                missing_required_criteria=null_required,
+                source_run_id=resolved_source_run_id,
+                fallback_allowed=not is_capital_bearing,
+                live_metrics=live_metrics,
+            )
+
+        criteria = self._evaluate_rule(
+            rule=rule, metrics=metrics, required_criteria=required_criteria
+        )
+        failures = [
+            criterion.reason
+            for criterion in criteria
+            if not criterion.passed and not criterion.skipped
+        ]
+        skipped = [criterion.name for criterion in criteria if criterion.skipped]
         eligible = not failures
+        metrics_source_type = "explicit_source_run" if resolved_source_run_id else "fallback"
         return PromotionEligibilityResult(
             strategy_id=governance.strategy_id,
             from_state=governance.current_state,
@@ -227,6 +387,11 @@ class AutoPromotionService:
             metrics=metrics,
             criteria=criteria,
             reasons=["eligible"] if eligible else failures,
+            skipped_criteria=skipped,
+            source_run_id=resolved_source_run_id,
+            fallback_allowed=not is_capital_bearing,
+            metrics_source_type=metrics_source_type,
+            live_metrics=live_metrics,
         )
 
     def _evaluate_rule(
@@ -234,63 +399,113 @@ class AutoPromotionService:
         *,
         rule: PromotionRules,
         metrics: dict[str, float | int | None],
+        required_criteria: frozenset[str] = frozenset(),
     ) -> list[PromotionCriterionResult]:
         criteria: list[PromotionCriterionResult] = []
-        self._append_min(criteria, "min_sharpe", rule.min_sharpe, metrics.get("sharpe"))
-        self._append_max_drawdown(criteria, rule.max_drawdown, metrics.get("max_drawdown"))
+        self._append_min(
+            criteria,
+            "min_sharpe",
+            rule.min_sharpe,
+            metrics.get("sharpe"),
+            is_required=("min_sharpe" in required_criteria),
+        )
+        self._append_max_drawdown(
+            criteria,
+            rule.max_drawdown,
+            metrics.get("max_drawdown"),
+            is_required=("max_drawdown" in required_criteria),
+        )
         self._append_min(
             criteria,
             "min_days_tested",
             rule.min_days_tested,
             metrics.get("days_tested"),
+            is_required=("min_days_tested" in required_criteria),
         )
         self._append_min(
             criteria,
             "min_trade_count",
             rule.min_trade_count,
             metrics.get("trade_count"),
+            is_required=("min_trade_count" in required_criteria),
         )
-        self._append_min(criteria, "min_cagr", rule.min_cagr, metrics.get("cagr"))
-        self._append_min(criteria, "min_win_rate", rule.min_win_rate, metrics.get("win_rate"))
+        self._append_min(
+            criteria,
+            "min_cagr",
+            rule.min_cagr,
+            metrics.get("cagr"),
+            is_required=("min_cagr" in required_criteria),
+        )
+        self._append_min(
+            criteria,
+            "min_win_rate",
+            rule.min_win_rate,
+            metrics.get("win_rate"),
+            is_required=("min_win_rate" in required_criteria),
+        )
         return criteria
 
     def _append_min(
         self,
         criteria: list[PromotionCriterionResult],
         name: str,
-        required: float | int | None,
+        threshold: float | int | None,
         actual: float | int | None,
+        *,
+        is_required: bool = False,
     ) -> None:
-        if required is None:
+        if threshold is None:
+            criteria.append(
+                PromotionCriterionResult(
+                    name,
+                    passed=False,
+                    required=None,
+                    actual=None,
+                    reason=f"{name} not configured (optional, skipped)",
+                    skipped=True,
+                )
+            )
             return
-        passed = actual is not None and actual >= required
+        passed = actual is not None and actual >= threshold
         reason = (
-            f"{name} {actual} >= required {required}"
+            f"{name} {actual} >= required {threshold}"
             if passed
-            else f"{name} {actual} < required {required}"
+            else f"{name} {actual} < required {threshold}"
         )
-        criteria.append(PromotionCriterionResult(name, passed, required, actual, reason))
+        criteria.append(PromotionCriterionResult(name, passed, threshold, actual, reason))
 
     def _append_max_drawdown(
         self,
         criteria: list[PromotionCriterionResult],
-        required: float | None,
+        threshold: float | None,
         actual: float | int | None,
+        *,
+        is_required: bool = False,
     ) -> None:
-        if required is None:
+        if threshold is None:
+            criteria.append(
+                PromotionCriterionResult(
+                    "max_drawdown",
+                    passed=False,
+                    required=None,
+                    actual=None,
+                    reason="max_drawdown not configured (optional, skipped)",
+                    skipped=True,
+                )
+            )
             return
         if actual is None:
             passed = False
-        elif required < 0:
-            passed = float(actual) >= required
+        elif threshold < 0:
+            passed = float(actual) >= threshold
         else:
-            passed = abs(float(actual)) <= required
+            passed = abs(float(actual)) <= threshold
         reason = (
-            f"max_drawdown {actual} within limit {required}"
+            f"max_drawdown {actual} within limit {threshold}"
             if passed
-            else f"max_drawdown {actual} exceeds limit {required}"
+            else f"max_drawdown {actual} exceeds limit {threshold}"
         )
-        criteria.append(PromotionCriterionResult("max_drawdown", passed, required, actual, reason))
+        criteria.append(PromotionCriterionResult("max_drawdown", passed, threshold, actual, reason))
 
     def _candidate_rows(self) -> list[StrategyGovernance]:
         rows = self._session.scalars(
@@ -312,6 +527,8 @@ class AutoPromotionService:
     def _metrics_for_strategy(
         self,
         governance: StrategyGovernance,
+        *,
+        is_capital_bearing: bool = False,
     ) -> dict[str, float | int | None]:
         metrics_row: MetricsSummary | None = None
         run_row: SimulationRuns | None = None
@@ -323,7 +540,7 @@ class AutoPromotionService:
                 select(MetricsSummary).where(MetricsSummary.run_id == run_id)
             ).one_or_none()
 
-        if metrics_row is None:
+        if not is_capital_bearing and metrics_row is None:
             row = self._session.execute(
                 select(MetricsSummary, SimulationRuns)
                 .join(SimulationRuns, MetricsSummary.run_id == SimulationRuns.run_id)
@@ -336,7 +553,7 @@ class AutoPromotionService:
             if row is not None:
                 metrics_row, run_row = row
 
-        if metrics_row is None:
+        if not is_capital_bearing and metrics_row is None:
             metrics_row = self._latest_metrics_from_json(governance.strategy_id)
 
         if metrics_row is None:
@@ -381,21 +598,30 @@ class AutoPromotionService:
         return None
 
     def _active_rule_payloads(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "rule_id": row.rule_id,
-                "from_status": row.from_status,
-                "to_status": row.to_status,
-                "min_sharpe": row.min_sharpe,
-                "max_drawdown": row.max_drawdown,
-                "min_days_tested": row.min_days_tested,
-                "min_trade_count": row.min_trade_count,
-                "min_cagr": row.min_cagr,
-                "min_win_rate": row.min_win_rate,
-                "is_active": row.is_active,
-            }
-            for row in self._promotion_rules_repo.get_all_active()
-        ]
+        payloads = []
+        for row in self._promotion_rules_repo.get_all_active():
+            required = _REQUIRED_CRITERIA_BY_TRANSITION.get(
+                (row.from_status, row.to_status), frozenset()
+            )
+            missing_required = [f for f in sorted(required) if getattr(row, f) is None]
+            payloads.append(
+                {
+                    "rule_id": row.rule_id,
+                    "from_status": row.from_status,
+                    "to_status": row.to_status,
+                    "min_sharpe": row.min_sharpe,
+                    "max_drawdown": row.max_drawdown,
+                    "min_days_tested": row.min_days_tested,
+                    "min_trade_count": row.min_trade_count,
+                    "min_cagr": row.min_cagr,
+                    "min_win_rate": row.min_win_rate,
+                    "is_active": row.is_active,
+                    "is_valid": not missing_required,
+                    "missing_required_criteria": missing_required,
+                    "required_criteria": sorted(required),
+                }
+            )
+        return payloads
 
     def _audit(
         self,
@@ -427,7 +653,11 @@ class AutoPromotionService:
                     "rule_id": candidate.rule_id,
                     "eligible": candidate.eligible,
                     "status": candidate.status,
+                    "source_run_id": candidate.source_run_id,
+                    "metrics_source_type": candidate.metrics_source_type,
+                    "fallback_allowed": candidate.fallback_allowed,
                     "metrics": candidate.metrics,
+                    "live_metrics": candidate.live_metrics,
                     "criteria": [
                         {
                             "name": criterion.name,

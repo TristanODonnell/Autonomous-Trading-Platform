@@ -109,9 +109,10 @@ def run_order_reconciliation_job(
                     ) from exc
 
                 with SorUnitOfWork(session) as uow:
-                    uow.broker_orders.upsert(
-                        execution_context.broker_order_mapper.to_orm_row(result.broker_order)
-                    )
+                    if result.broker_order is not None:
+                        uow.broker_orders.upsert(
+                            execution_context.broker_order_mapper.to_orm_row(result.broker_order)
+                        )
 
                     if result.fill is not None:
                         uow.fills.upsert(

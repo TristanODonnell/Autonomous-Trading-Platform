@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 
 class PortfolioError(Exception):
     """Base exception for all portfolio errors."""
@@ -56,4 +58,91 @@ class InsufficientCapitalError(PortfolioError):
         super().__init__(
             f"Strategy '{strategy_id}' requested ${requested:,.2f} "
             f"but only ${available:,.2f} is available."
+        )
+
+
+class StaleCapitalDataError(PortfolioError):
+    """
+    Raised when the latest CashSnapshot is too old to safely use for allocation.
+    Capital sizing cannot proceed with stale equity data in live/paper modes.
+    """
+
+    def __init__(
+        self,
+        snapshot_id: str | None,
+        snapshot_timestamp: datetime,
+        age_seconds: float,
+        max_age_seconds: int,
+    ) -> None:
+        self.snapshot_id = snapshot_id
+        self.snapshot_timestamp = snapshot_timestamp
+        self.age_seconds = age_seconds
+        self.max_age_seconds = max_age_seconds
+        super().__init__(
+            f"Cash snapshot is {age_seconds:.1f}s old (max allowed: {max_age_seconds}s, "
+            f"snapshot_at={snapshot_timestamp.isoformat()})."
+        )
+
+
+class MissingCapitalDataError(PortfolioError):
+    """
+    Raised when no CashSnapshot exists and live/paper allocation cannot proceed
+    without verified equity data.
+    """
+
+    def __init__(self, trading_environment: str) -> None:
+        self.trading_environment = trading_environment
+        super().__init__(
+            f"No cash snapshot available for capital allocation in '{trading_environment}' mode. "
+            "Allocation cannot proceed without current equity data."
+        )
+
+
+class MissingPositionScalingDataError(PortfolioError):
+    """
+    Raised when volatility scaling is enabled and required, but the combined
+    scalar cannot be computed (e.g. insufficient bars, missing market data).
+
+    In live trading with require_vol_scalar_for_live=True this prevents a
+    full-size order from being placed silently during a high-volatility regime.
+    """
+
+    def __init__(
+        self,
+        strategy_id: str,
+        symbol: str,
+        trading_mode: str,
+        reason: str,
+    ) -> None:
+        self.strategy_id = strategy_id
+        self.symbol = symbol
+        self.trading_mode = trading_mode
+        self.reason = reason
+        super().__init__(
+            f"Volatility scalar unavailable for '{symbol}' (strategy='{strategy_id}', "
+            f"mode='{trading_mode}'): {reason}. Cannot size live order without scaling data."
+        )
+
+
+class AllocationBudgetExceededError(PortfolioError):
+    """
+    Raised when a proposed manual override would push aggregate portfolio
+    allocation above the configured maximum (default 100%).
+    """
+
+    def __init__(
+        self,
+        strategy_id: str,
+        requested_pct: float,
+        resulting_total_pct: float,
+        configured_max_pct: float,
+    ) -> None:
+        self.strategy_id = strategy_id
+        self.requested_pct = requested_pct
+        self.resulting_total_pct = resulting_total_pct
+        self.configured_max_pct = configured_max_pct
+        super().__init__(
+            f"Allocation override for '{strategy_id}' ({requested_pct:.1%}) would bring "
+            f"aggregate portfolio allocation to {resulting_total_pct:.1%}, "
+            f"exceeding the configured maximum of {configured_max_pct:.1%}."
         )

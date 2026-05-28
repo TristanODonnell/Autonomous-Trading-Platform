@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
@@ -14,6 +16,11 @@ class AllocationResult(BaseModel):
 
     This is the output of PortfolioEngine.get_allocation() and is what the
     execution layer consumes to know how much capital a strategy may use.
+
+    Snapshot freshness fields are populated whenever PortfolioEngine is
+    constructed with capital resolved from a CashSnapshot (live/paper modes).
+    They are None when capital came from the initial_capital_config fallback
+    (test/simulation modes or when no snapshot exists).
     """
 
     strategy_id: str
@@ -25,6 +32,18 @@ class AllocationResult(BaseModel):
     override_applied: bool
     override_id: str | None = None
     policy_id: str
+    # Capital freshness metadata (FINDING-13)
+    cash_snapshot_id: str | None = None
+    cash_snapshot_as_of: datetime | None = None
+    snapshot_age_seconds: float | None = None
+    capital_source: str | None = None
+    # Drawdown scaling context (FINDING-12)
+    # Populated when DrawdownScalingService is active; None when scaling is
+    # disabled or no realized_drawdown is available for the strategy.
+    realized_drawdown: float | None = None
+    drawdown_utilization: float | None = None
+    drawdown_scalar: float | None = None
+    drawdown_scaling_applied: bool = False
 
 
 class PromotionEligibility(BaseModel):

@@ -45,6 +45,7 @@ def test_manual_promotion_uses_promotion_rules_not_deprecated_operator_settings(
         reason="manual promotion",
         updated_by="risk-manager",
         actor_role="risk_manager",
+        source_run_id="run_promotion_candidate",
     )
 
     assert result.to_state == "approved_for_paper_trading"

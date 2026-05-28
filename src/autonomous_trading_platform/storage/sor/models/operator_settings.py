@@ -39,6 +39,35 @@ class OperatorSettingsRow(Base):
     transaction_cost_model: Mapped[str | None] = mapped_column(
         String(32), nullable=True, default="per_share"
     )
+    max_total_strategy_allocation_pct: Mapped[float | None] = mapped_column(
+        Numeric(6, 4), nullable=True, default=1.0
+    )
+    max_portfolio_symbol_exposure_usd: Mapped[float | None] = mapped_column(
+        Numeric(16, 2), nullable=True, default=None
+    )
+    max_portfolio_symbol_pct: Mapped[float | None] = mapped_column(
+        Numeric(6, 4), nullable=True, default=None
+    )
+    min_rebalance_interval_hours: Mapped[float] = mapped_column(
+        Numeric(8, 2), nullable=False, default=24.0
+    )
+    min_allocation_change_pct: Mapped[float] = mapped_column(
+        Numeric(6, 4), nullable=False, default=0.01
+    )
+    turnover_penalty_weight: Mapped[float | None] = mapped_column(
+        Numeric(8, 4), nullable=True, default=None
+    )
+
+    # Portfolio drawdown governance (FINDING-16)
+    portfolio_max_drawdown_pct: Mapped[float | None] = mapped_column(
+        Numeric(6, 4), nullable=True, default=0.15
+    )
+    portfolio_drawdown_action: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, default="pause_new_trading"
+    )
+    portfolio_drawdown_recovery_mode: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, default="manual_resume_required"
+    )
 
     updated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 

@@ -77,6 +77,7 @@ def build_cli_execution_dependencies(session: Session) -> ExecutionCliDependenci
         risk_state_reader=StubRiskStateReader(),
         order_activity_reader=StubOrderActivityReader(),
         audit_log_repository=audit_log_repository,
+        session=session,
     )
     portfolio_engine = PortfolioEngine(
         policies_repo=CapitalAllocationPoliciesRepository(session),
@@ -184,8 +185,9 @@ def handle_reconcile_order(args: argparse.Namespace) -> int:
                 tracked_order=tracked_order,
             )
 
-            if getattr(result, "broker_order", None) is not None:
-                uow.broker_orders.upsert(result.broker_order)
+            broker_order = getattr(result, "broker_order", None)
+            if broker_order is not None:
+                uow.broker_orders.upsert(broker_order)
 
             ctx.order_runtime_state_service.apply_reconciliation_result(
                 uow=uow, result=result, now_utc=now_utc

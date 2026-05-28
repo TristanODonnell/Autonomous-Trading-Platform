@@ -5,12 +5,19 @@ from dataclasses import dataclass
 
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.safety.environment_policy import EnvironmentSafetyPolicy
 from autonomous_trading_platform.safety.services.kill_switch_service import KillSwitchService
 from autonomous_trading_platform.safety.services.live_trading_gate_service import (
     LiveTradingGateService,
 )
 from autonomous_trading_platform.safety.services.runtime_gate_service import RuntimeGateService
+from autonomous_trading_platform.storage.sor.repositories.core.kill_switch_state_repository import (
+    KillSwitchStateRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.runtime_control_state_repository import (
+    RuntimeControlStateRepository,
+)
 
 
 def register(subparsers) -> None:
@@ -59,9 +66,13 @@ class SafetyDependencies:
 def build_dependencies() -> SafetyDependencies:
     settings = Settings()
     environment_policy = EnvironmentSafetyPolicy(settings)
+    session = get_session()
 
     runtime_gate_service = RuntimeGateService()
-    kill_switch_service = KillSwitchService()
+    kill_switch_service = KillSwitchService(
+        repository=KillSwitchStateRepository(session=session),
+        runtime_control_repo=RuntimeControlStateRepository(session=session),
+    )
     live_gate_service = LiveTradingGateService(
         environment_policy=environment_policy,
         runtime_gate_service=runtime_gate_service,

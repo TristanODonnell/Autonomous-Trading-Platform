@@ -27,7 +27,11 @@ class UTCDateTimeType(TypeDecorator):
     def process_result_value(self, value: datetime | None, dialect):
         if value is None:
             return None
-        # Postgres returns tz-aware; normalize anyway
+        if value.tzinfo is None:
+            # SQLite stores UTC datetimes as naive ISO strings.  Use replace() so
+            # the naive value is tagged as UTC rather than treated as local time.
+            return value.replace(tzinfo=UTC)
+        # Postgres returns tz-aware; normalize to UTC.
         return value.astimezone(UTC)
 
 

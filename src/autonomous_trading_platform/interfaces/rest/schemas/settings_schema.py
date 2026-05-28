@@ -42,6 +42,7 @@ class OperatorSettingsResponse(BaseModel):
     target_portfolio_volatility: Decimal
     slippage_model: SlippageModel
     transaction_cost_model: TransactionCostModel
+    max_total_strategy_allocation_pct: Decimal = Decimal("1")
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -82,6 +83,11 @@ class OperatorSettingsUpdateRequest(BaseModel):
     )
     slippage_model: SlippageModel | None = None
     transaction_cost_model: TransactionCostModel | None = None
+    max_total_strategy_allocation_pct: Decimal | None = Field(
+        default=None,
+        gt=Decimal("0"),
+        le=Decimal("10"),
+    )
     reason: str | None = Field(default=None, max_length=500)
 
 

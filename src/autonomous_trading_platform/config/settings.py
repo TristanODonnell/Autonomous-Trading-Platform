@@ -46,6 +46,15 @@ class Settings:
 
         self.max_gross_exposure = self._get_float("MAX_GROSS_EXPOSURE", 100000.0)
         self.max_symbol_exposure = self._get_float("MAX_SYMBOL_EXPOSURE", 10000.0)
+        self.max_portfolio_symbol_exposure_usd = self._get_optional_float(
+            "MAX_PORTFOLIO_SYMBOL_EXPOSURE_USD",
+        )
+        self.max_portfolio_symbol_pct = self._get_optional_float("MAX_PORTFOLIO_SYMBOL_PCT")
+        self.max_sector_exposure_pct = self._get_optional_json_dict("MAX_SECTOR_EXPOSURE_PCT")
+        self.default_max_sector_exposure_pct = self._get_optional_float(
+            "DEFAULT_MAX_SECTOR_EXPOSURE_PCT"
+        )
+        self.unknown_sector_policy = os.getenv("UNKNOWN_SECTOR_POLICY", "reject")
         self.max_daily_notional_traded = self._get_float("MAX_DAILY_NOTIONAL_TRADED", 25000.0)
         self.max_reserved_cash = self._get_float("MAX_RESERVED_CASH", 25000.0)
 
@@ -58,6 +67,14 @@ class Settings:
         self.idempotency_deduplication_window_minutes = self._get_int(
             "IDEMPOTENCY_DEDUPLICATION_WINDOW_MINUTES",
             15,
+        )
+
+        self.enable_cash_snapshot_freshness_check = self._get_bool(
+            "ENABLE_CASH_SNAPSHOT_FRESHNESS_CHECK", default=True
+        )
+        self.max_cash_snapshot_age_seconds = self._get_int(
+            "MAX_CASH_SNAPSHOT_AGE_SECONDS",
+            600 if self.trading_environment == TradingEnvironment.LIVE else 900,
         )
 
         self.market_bar_freshness_sla_seconds = self._get_int(
@@ -204,6 +221,20 @@ class Settings:
         if value is None:
             return default
         return float(value.strip())
+
+    def _get_optional_float(self, key: str) -> float | None:
+        value = os.getenv(key)
+        if value is None or value.strip() == "":
+            return None
+        return float(value.strip())
+
+    def _get_optional_json_dict(self, key: str) -> dict[str, float] | None:
+        import json
+
+        value = os.getenv(key)
+        if not value or not value.strip():
+            return None
+        return {k: float(v) for k, v in json.loads(value).items()}
 
     def _get_decimal(self, key: str, default: Decimal) -> Decimal:
         value = os.getenv(key)
