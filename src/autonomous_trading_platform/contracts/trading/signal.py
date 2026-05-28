@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from autonomous_trading_platform.contracts.common.enums import SignalDirection
-from autonomous_trading_platform.contracts.common.types import Quantity, UTCDateTime
+from autonomous_trading_platform.contracts.common.types import Money, Quantity, UTCDateTime
 
 
 class Signal(BaseModel):
@@ -21,3 +21,7 @@ class Signal(BaseModel):
     confidence: float | None = None
     target_position: Quantity | None = None
     params: dict[str, Any] | None = None
+    # Portfolio construction enrichment fields (optional; all backward-compatible)
+    strategy_version: str | None = None
+    feature_snapshot_ref: str | None = None
+    target_exposure: Money | None = None

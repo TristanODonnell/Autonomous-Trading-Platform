@@ -30,6 +30,17 @@ _DEFAULT_CONFIDENCE = 0.5
 # Minimum absolute net score required to emit an order; below this the symbol is suppressed.
 _DEFAULT_NEAR_ZERO_THRESHOLD = 0.10
 
+# Policy groupings for dispatch
+_CONSERVATIVE_POLICIES = {SignalNettingPolicy.CONSERVATIVE, SignalNettingPolicy.SUPPRESS_CONFLICTS}
+_DOMINANT_POLICIES = {SignalNettingPolicy.DOMINANT, SignalNettingPolicy.DOMINANT_SIGNAL}
+_PROPORTIONAL_POLICIES = {
+    SignalNettingPolicy.PROPORTIONAL,
+    SignalNettingPolicy.NETTING_ONLY,
+    SignalNettingPolicy.NET,
+    SignalNettingPolicy.ALLOCATION_WEIGHTED,
+    SignalNettingPolicy.CONFIDENCE_WEIGHTED,
+}
+
 
 def _raw_confidence(signal: Signal) -> float:
     return signal.confidence if signal.confidence is not None else _DEFAULT_CONFIDENCE
@@ -39,8 +50,29 @@ def _direction_score(direction: SignalDirection) -> float:
     return 1.0 if direction == SignalDirection.BUY else -1.0
 
 
-def _build_contributions(symbol_signals: list[Signal]) -> list[StrategySignalContribution]:
-    total_weight = sum(_raw_confidence(s) for s in symbol_signals)
+def _build_contributions(
+    symbol_signals: list[Signal],
+    allocation_weights: dict[str, float] | None = None,
+    confidence_only: bool = False,
+) -> list[StrategySignalContribution]:
+    """
+    Build normalized contribution objects for each strategy signal.
+
+    Weight computation:
+    - allocation_weights provided → use allocation weight (ALLOCATION_WEIGHTED policy)
+    - confidence_only=True → use raw confidence score (CONFIDENCE_WEIGHTED policy)
+    - default → confidence-normalized equal across strategies
+    """
+    if allocation_weights is not None:
+        raw_weights = [
+            allocation_weights.get(s.strategy_id, _DEFAULT_CONFIDENCE) for s in symbol_signals
+        ]
+    elif confidence_only:
+        raw_weights = [_raw_confidence(s) for s in symbol_signals]
+    else:
+        raw_weights = [_raw_confidence(s) for s in symbol_signals]
+
+    total_weight = sum(raw_weights)
     if total_weight == 0.0:
         total_weight = len(symbol_signals) * _DEFAULT_CONFIDENCE
 
@@ -50,9 +82,9 @@ def _build_contributions(symbol_signals: list[Signal]) -> list[StrategySignalCon
             signal_id=s.signal_id,
             direction=s.direction,
             confidence=s.confidence,
-            weight=_raw_confidence(s) / total_weight,
+            weight=raw_weights[i] / total_weight,
         )
-        for s in symbol_signals
+        for i, s in enumerate(symbol_signals)
     ]
 
 
@@ -88,7 +120,7 @@ def _emit_event(
     contributions: list[StrategySignalContribution],
     policy: SignalNettingPolicy,
     **extra,
-) -> None:  # noqa: E501
+) -> None:
     logger.info(
         f"portfolio_signal_aggregator.{event_type.lower()}",
         extra={
@@ -112,10 +144,11 @@ class PortfolioSignalAggregator:
     preserves per-strategy attribution for governance and performance review.
 
     Policy variants:
-    - CONSERVATIVE: suppress the entire symbol on any directional conflict
-    - DOMINANT:     highest-conviction strategy wins; opposing signals suppressed
-    - PROPORTIONAL: weighted net direction; near-zero suppressed
-    - NETTING_ONLY: same as proportional but explicitly framed as external net order
+    - CONSERVATIVE / SUPPRESS_CONFLICTS: suppress the entire symbol on any directional conflict
+    - DOMINANT / DOMINANT_SIGNAL:        highest-conviction strategy wins; opposing suppressed
+    - PROPORTIONAL / NETTING_ONLY / NET: weighted net direction; near-zero suppressed
+    - ALLOCATION_WEIGHTED:               weight by external allocation weight per strategy
+    - CONFIDENCE_WEIGHTED:               weight purely by per-signal confidence scores
     """
 
     def __init__(
@@ -132,7 +165,18 @@ class PortfolioSignalAggregator:
         run_id: UUID,
         bar_timestamp: UTCDateTime,
         prices: dict[str, float] | None = None,
+        allocation_weights: dict[str, float] | None = None,
     ) -> AggregatedSignalBundle:
+        """
+        Aggregate cross-strategy signals into a reconciled bundle.
+
+        Args:
+            signals_by_strategy: Raw signals keyed by strategy_id.
+            run_id: Correlation ID for the current evaluation cycle.
+            bar_timestamp: Bar timestamp these signals were generated for.
+            prices: Optional symbol→price map for notional exposure calculation.
+            allocation_weights: Optional strategy→weight map for ALLOCATION_WEIGHTED policy.
+        """
         start = perf_counter()
 
         by_symbol: dict[str, list[Signal]] = defaultdict(list)
@@ -148,7 +192,13 @@ class PortfolioSignalAggregator:
 
         for symbol in sorted(by_symbol):
             symbol_signals = by_symbol[symbol]
-            contributions = _build_contributions(symbol_signals)
+            contributions = _build_contributions(
+                symbol_signals,
+                allocation_weights=allocation_weights
+                if self.policy == SignalNettingPolicy.ALLOCATION_WEIGHTED
+                else None,
+                confidence_only=self.policy == SignalNettingPolicy.CONFIDENCE_WEIGHTED,
+            )
             attributions[symbol] = contributions
 
             conflict_detected = _has_conflict(contributions)
@@ -235,18 +285,18 @@ class PortfolioSignalAggregator:
         bar_timestamp: UTCDateTime,
         run_id: UUID,
     ) -> tuple[Signal | None, SignalAggregationConflict]:
-        if self.policy == SignalNettingPolicy.CONSERVATIVE:
+        if self.policy in _CONSERVATIVE_POLICIES:
             return self._conservative(symbol, contributions, symbol_signals, conflict_detected)
-        if self.policy == SignalNettingPolicy.DOMINANT:
+        if self.policy in _DOMINANT_POLICIES:
             return self._dominant(symbol, contributions, symbol_signals, conflict_detected)
-        if self.policy in (SignalNettingPolicy.PROPORTIONAL, SignalNettingPolicy.NETTING_ONLY):
+        if self.policy in _PROPORTIONAL_POLICIES:
             return self._proportional(
                 symbol, contributions, symbol_signals, conflict_detected, bar_timestamp, run_id
             )
         return self._conservative(symbol, contributions, symbol_signals, conflict_detected)
 
     # ------------------------------------------------------------------
-    # CONSERVATIVE
+    # CONSERVATIVE / SUPPRESS_CONFLICTS
     # ------------------------------------------------------------------
 
     def _conservative(
@@ -280,7 +330,7 @@ class PortfolioSignalAggregator:
         )
 
     # ------------------------------------------------------------------
-    # DOMINANT
+    # DOMINANT / DOMINANT_SIGNAL
     # ------------------------------------------------------------------
 
     def _dominant(
@@ -313,7 +363,7 @@ class PortfolioSignalAggregator:
         )
 
     # ------------------------------------------------------------------
-    # PROPORTIONAL / NETTING_ONLY
+    # PROPORTIONAL / NETTING_ONLY / NET / ALLOCATION_WEIGHTED / CONFIDENCE_WEIGHTED
     # ------------------------------------------------------------------
 
     def _proportional(

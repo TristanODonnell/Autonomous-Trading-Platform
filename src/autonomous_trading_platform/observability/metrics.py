@@ -1834,3 +1834,31 @@ ratp_live_metric_weight_updated_total = meter.create_counter(
     description="Total number of live metric weight (alpha) update events",
     unit="1",
 )
+
+# =========================
+# PORTFOLIO CONSTRUCTION PIPELINE METRICS (REC 6.5)
+# =========================
+
+ratp_signal_suppressed_notional = meter.create_histogram(
+    name="ratp_signal_suppressed_notional",
+    description="Total USD notional of BUY signals suppressed by netting or constraint application per construction cycle",
+    unit="USD",
+)
+
+ratp_portfolio_raw_gross_signal_exposure = meter.create_histogram(
+    name="ratp_portfolio_raw_gross_signal_exposure",
+    description="Gross portfolio signal exposure (sum of absolute signal notionals) before netting per construction cycle",
+    unit="USD",
+)
+
+ratp_portfolio_net_signal_exposure = meter.create_histogram(
+    name="ratp_portfolio_net_signal_exposure",
+    description="Net portfolio signal exposure (buy minus sell notional) after netting per construction cycle",
+    unit="USD",
+)
+
+ratp_portfolio_construction_duration_seconds = meter.create_histogram(
+    name="ratp_portfolio_construction_duration_seconds",
+    description="Total wall-clock time for the full two-phase portfolio construction pipeline",
+    unit="s",
+)

@@ -25,6 +25,7 @@ from . import operational_alerts as operational_alerts
 from . import operator_settings as operator_settings
 from . import optimizer_runs as optimizer_runs
 from . import order_intents as order_intents
+from . import portfolio_construction as portfolio_construction
 from . import portfolio_drawdown_governance_state as portfolio_drawdown_governance_state
 from . import position_snapshot_items as position_snapshot_items
 from . import position_snapshots as position_snapshots
@@ -100,6 +101,7 @@ __all__ = [
     "strategy_live_performance_snapshots",
     "strategy_quality_score_history",
     "allocation_overrides",
+    "portfolio_construction",
     "correlation_snapshots",
     "optimizer_runs",
     "black_litterman_research_runs",
