@@ -88,3 +88,32 @@ class PortfolioPeriodReturnResponse(BaseModel):
 
 class PortfolioPerformanceByPeriodResponse(BaseModel):
     periods: list[PortfolioPeriodReturnResponse]
+
+
+class FactorExposureSnapshotResponse(BaseModel):
+    snapshot_id: str
+    run_id: str | None
+    portfolio_id: str | None
+    computed_at: datetime
+    as_of_date: datetime
+    lookback_window: int
+    benchmark_symbol: str
+    benchmark_source: str
+    factor_computation_version: str
+    portfolio_exposures: dict
+    strategy_exposures: list
+    symbol_exposures: list
+    sector_exposures: dict
+    concentration_diagnostics: list
+    warnings: list
+    factor_methodology: dict
+    data_lineage: dict
+    duration_seconds: float
+
+
+class FactorExposureHistoryResponse(BaseModel):
+    snapshots: list[FactorExposureSnapshotResponse]
+
+
+class StrategyFactorExposureHistoryResponse(BaseModel):
+    exposures: list[dict]

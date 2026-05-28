@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -30,6 +30,8 @@ from autonomous_trading_platform.application.services.strategy_allocation_servic
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.execution.clients.alpaca_broker_client import AlpacaBrokerClient
 from autonomous_trading_platform.interfaces.rest.schemas.portfolio_schemas import (
+    FactorExposureHistoryResponse,
+    FactorExposureSnapshotResponse,
     PortfolioAllocationResponse,
     PortfolioEquityCurvePeriod,
     PortfolioEquityCurveResponse,
@@ -38,6 +40,10 @@ from autonomous_trading_platform.interfaces.rest.schemas.portfolio_schemas impor
     PortfolioPerformanceResponse,
     PortfolioRiskResponse,
     PortfolioSummaryResponse,
+    StrategyFactorExposureHistoryResponse,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.factor_exposure_snapshot_repository import (
+    FactorExposureSnapshotRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.runtime_control_state_repository import (
     RuntimeControlStateRepository,
@@ -226,4 +232,135 @@ def get_portfolio_performance_by_period(
     return success_response(
         data=PortfolioPerformanceByPeriodResponse(**result),
         request_id=request_id,
+    )
+
+
+@router.get(
+    "/factor-exposures/current",
+    response_model=SuccessEnvelope[FactorExposureSnapshotResponse],
+)
+def get_current_factor_exposures(
+    portfolio_id: Annotated[str | None, Query()] = None,
+    lookback_window: Annotated[int | None, Query()] = None,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[FactorExposureSnapshotResponse]:
+    repo = FactorExposureSnapshotRepository(session)
+    row = repo.get_latest_snapshot(portfolio_id=portfolio_id, lookback_window=lookback_window)
+    if row is None:
+        empty = FactorExposureSnapshotResponse(
+            snapshot_id="",
+            run_id=None,
+            portfolio_id=portfolio_id,
+            computed_at=datetime.now(UTC),
+            as_of_date=datetime.now(UTC),
+            lookback_window=lookback_window or 0,
+            benchmark_symbol="",
+            benchmark_source="",
+            factor_computation_version="",
+            portfolio_exposures={},
+            strategy_exposures=[],
+            symbol_exposures=[],
+            sector_exposures={},
+            concentration_diagnostics=[],
+            warnings=["No factor exposure snapshot available"],
+            factor_methodology={},
+            data_lineage={},
+            duration_seconds=0.0,
+        )
+        return success_response(data=empty, request_id=request_id)
+    return success_response(data=_factor_snapshot_response(row), request_id=request_id)
+
+
+@router.get(
+    "/factor-exposures/history",
+    response_model=SuccessEnvelope[FactorExposureHistoryResponse],
+)
+def get_factor_exposure_history(
+    portfolio_id: Annotated[str | None, Query()] = None,
+    lookback_window: Annotated[int | None, Query()] = None,
+    days: Annotated[int, Query(ge=1, le=3650)] = 30,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[FactorExposureHistoryResponse]:
+    repo = FactorExposureSnapshotRepository(session)
+    rows = repo.get_snapshot_history(
+        since=datetime.now(UTC) - timedelta(days=days),
+        portfolio_id=portfolio_id,
+        lookback_window=lookback_window,
+        limit=limit,
+    )
+    return success_response(
+        data=FactorExposureHistoryResponse(
+            snapshots=[_factor_snapshot_response(row) for row in rows]
+        ),
+        request_id=request_id,
+    )
+
+
+@router.get(
+    "/factor-exposures/strategies/{strategy_id}",
+    response_model=SuccessEnvelope[StrategyFactorExposureHistoryResponse],
+)
+def get_strategy_factor_decomposition(
+    strategy_id: str,
+    lookback_window: Annotated[int | None, Query()] = None,
+    days: Annotated[int, Query(ge=1, le=3650)] = 30,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+) -> SuccessEnvelope[StrategyFactorExposureHistoryResponse]:
+    repo = FactorExposureSnapshotRepository(session)
+    rows = repo.get_strategy_history(
+        strategy_id=strategy_id,
+        since=datetime.now(UTC) - timedelta(days=days),
+        lookback_window=lookback_window,
+        limit=limit,
+    )
+    return success_response(
+        data=StrategyFactorExposureHistoryResponse(
+            exposures=[
+                {
+                    "exposure_id": row.exposure_id,
+                    "snapshot_id": row.snapshot_id,
+                    "run_id": row.run_id,
+                    "portfolio_id": row.portfolio_id,
+                    "strategy_id": row.strategy_id,
+                    "computed_at": row.computed_at,
+                    "as_of_date": row.as_of_date,
+                    "lookback_window": row.lookback_window,
+                    "benchmark_symbol": row.benchmark_symbol,
+                    "strategy_weight": row.strategy_weight,
+                    "symbol_count": row.symbol_count,
+                    "exposures": row.exposures,
+                    "top_symbol_contributors": row.top_symbol_contributors,
+                }
+                for row in rows
+            ]
+        ),
+        request_id=request_id,
+    )
+
+
+def _factor_snapshot_response(row) -> FactorExposureSnapshotResponse:
+    return FactorExposureSnapshotResponse(
+        snapshot_id=row.snapshot_id,
+        run_id=row.run_id,
+        portfolio_id=row.portfolio_id,
+        computed_at=row.computed_at,
+        as_of_date=row.as_of_date,
+        lookback_window=row.lookback_window,
+        benchmark_symbol=row.benchmark_symbol,
+        benchmark_source=row.benchmark_source,
+        factor_computation_version=row.factor_computation_version,
+        portfolio_exposures=row.portfolio_exposures,
+        strategy_exposures=row.strategy_exposures,
+        symbol_exposures=row.symbol_exposures,
+        sector_exposures=row.sector_exposures,
+        concentration_diagnostics=row.concentration_diagnostics,
+        warnings=row.warnings,
+        factor_methodology=row.factor_methodology,
+        data_lineage=row.data_lineage,
+        duration_seconds=row.duration_seconds,
     )

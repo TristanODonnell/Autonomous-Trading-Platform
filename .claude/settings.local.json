@@ -141,7 +141,9 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\application\\\\services\" -Filter \"*.py\")",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\tests\" -Recurse -Filter \"*.py\")",
       "Bash(Select-Object Name, Directory -First 20)",
-      "Bash(/d/PythonVenvs/autonomous-trading-platform/.venv/Scripts/ruff.exe check *)"
+      "Bash(/d/PythonVenvs/autonomous-trading-platform/.venv/Scripts/ruff.exe check *)",
+      "Bash(grep -E \"\\\\.\\(py\\)$\")",
+      "Bash(xargs grep -l \"factor\\\\|exposure\")"
     ]
   }
 }

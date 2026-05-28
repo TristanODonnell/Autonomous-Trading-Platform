@@ -1570,3 +1570,37 @@ ratp_mvo_duration_seconds = meter.create_histogram(
     description="Wall-clock time for a complete MVO optimizer run including persistence",
     unit="s",
 )
+
+# =========================
+# FACTOR EXPOSURE MONITORING (TASK-5.4)
+# =========================
+
+ratp_portfolio_beta_exposure = meter.create_histogram(
+    name="ratp_portfolio_beta_exposure",
+    description="Benchmark-relative portfolio beta exposure per factor monitoring run",
+    unit="1",
+)
+
+ratp_portfolio_momentum_exposure = meter.create_histogram(
+    name="ratp_portfolio_momentum_exposure",
+    description="Portfolio momentum factor exposure per factor monitoring run",
+    unit="1",
+)
+
+ratp_portfolio_volatility_exposure = meter.create_histogram(
+    name="ratp_portfolio_volatility_exposure",
+    description="Portfolio realized-volatility factor exposure per factor monitoring run",
+    unit="1",
+)
+
+ratp_factor_concentration_alerts_total = meter.create_counter(
+    name="ratp_factor_concentration_alerts_total",
+    description="Total number of observed factor concentration alerts",
+    unit="1",
+)
+
+ratp_factor_exposure_compute_duration_seconds = meter.create_histogram(
+    name="ratp_factor_exposure_compute_duration_seconds",
+    description="Wall-clock time to compute and persist a factor exposure snapshot",
+    unit="s",
+)
