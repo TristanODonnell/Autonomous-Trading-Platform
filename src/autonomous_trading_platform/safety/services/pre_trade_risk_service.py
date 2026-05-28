@@ -5,17 +5,24 @@ from decimal import Decimal
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.contracts.common.enums import Side
 from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
+from autonomous_trading_platform.observability import metrics
 from autonomous_trading_platform.safety.errors import (
     DailyNotionalLimitExceededError,
     GrossExposureLimitExceededError,
     PortfolioSymbolExposureLimitExceededError,
+    SectorConcentrationLimitExceededError,
     SymbolExposureLimitExceededError,
 )
 from autonomous_trading_platform.safety.readers.portfolio_risk_state_reader import (
     PortfolioRiskStateReader,
 )
+from autonomous_trading_platform.safety.readers.sector_exposure_reader import (
+    SectorExposureReader,
+)
 
 logger = logging.getLogger(__name__)
+
+_UNKNOWN_SECTOR_POLICIES = frozenset({"reject", "use_unknown_bucket", "warn_allow"})
 
 
 class PreTradeRiskService:
@@ -27,6 +34,10 @@ class PreTradeRiskService:
         portfolio_risk_state_reader: PortfolioRiskStateReader | None = None,
         max_portfolio_symbol_exposure_usd: float | None = None,
         max_portfolio_symbol_pct: float | None = None,
+        sector_exposure_reader: SectorExposureReader | None = None,
+        max_sector_exposure_pct: dict[str, float] | None = None,
+        default_max_sector_exposure_pct: float | None = None,
+        unknown_sector_policy: str = "reject",
         audit_log_repo=None,
     ) -> None:
         self.settings = settings
@@ -40,6 +51,23 @@ class PreTradeRiskService:
             explicit=max_portfolio_symbol_pct,
             configured=getattr(settings, "max_portfolio_symbol_pct", None),
         )
+        self._sector_reader = sector_exposure_reader
+        self._max_sector_exposure_pct: dict[str, float] = (
+            max_sector_exposure_pct
+            if max_sector_exposure_pct is not None
+            else (getattr(settings, "max_sector_exposure_pct", None) or {})
+        )
+        self._default_max_sector_exposure_pct: float | None = (
+            default_max_sector_exposure_pct
+            if default_max_sector_exposure_pct is not None
+            else getattr(settings, "default_max_sector_exposure_pct", None)
+        )
+        if unknown_sector_policy not in _UNKNOWN_SECTOR_POLICIES:
+            raise ValueError(
+                f"unknown_sector_policy must be one of {sorted(_UNKNOWN_SECTOR_POLICIES)}, "
+                f"got {unknown_sector_policy!r}."
+            )
+        self._unknown_sector_policy = unknown_sector_policy
         self._audit_log_repo = audit_log_repo
 
     def assert_order_allowed(self, order_intent: OrderIntent, now: datetime) -> None:
@@ -90,6 +118,12 @@ class PreTradeRiskService:
         )
 
         self._assert_portfolio_symbol_exposure(
+            order_intent=order_intent,
+            order_notional=order_notional,
+            now=now,
+        )
+
+        self._assert_sector_concentration(
             order_intent=order_intent,
             order_notional=order_notional,
             now=now,
@@ -310,6 +344,151 @@ class PreTradeRiskService:
             return order_notional
 
         raise ValueError(f"Unsupported order side: {order_intent.side}")
+
+    def _assert_sector_concentration(
+        self,
+        *,
+        order_intent: OrderIntent,
+        order_notional: float,
+        now: datetime,
+    ) -> None:
+        if self._sector_reader is None:
+            return
+        if not self._max_sector_exposure_pct and self._default_max_sector_exposure_pct is None:
+            return
+
+        symbol = order_intent.symbol
+        sector = self._sector_reader.get_symbol_sector(symbol)
+
+        if sector is None:
+            metrics.missing_sector_metadata.add(1, {"symbol": symbol})
+            logger.warning(
+                "pre_trade_risk.sector_metadata_missing",
+                extra={
+                    "symbol": symbol,
+                    "strategy_id": order_intent.strategy_id,
+                    "run_id": str(order_intent.run_id),
+                    "unknown_sector_policy": self._unknown_sector_policy,
+                },
+            )
+            if self._unknown_sector_policy == "reject":
+                raise SectorConcentrationLimitExceededError(
+                    symbol=symbol,
+                    sector=SectorExposureReader.UNKNOWN_SECTOR,
+                    strategy_id=order_intent.strategy_id,
+                    current_sector_exposure_pct=0.0,
+                    projected_sector_exposure_pct=0.0,
+                    configured_limit_pct=0.0,
+                    proposed_order_notional=order_notional,
+                    run_id=str(order_intent.run_id),
+                )
+            if self._unknown_sector_policy == "warn_allow":
+                return
+            # "use_unknown_bucket": route to UNKNOWN sector and apply limit if configured
+            sector = SectorExposureReader.UNKNOWN_SECTOR
+
+        sector_limit = self._max_sector_exposure_pct.get(sector)
+        if sector_limit is None:
+            sector_limit = self._default_max_sector_exposure_pct
+        if sector_limit is None:
+            logger.debug(
+                "pre_trade_risk.sector_no_limit_configured",
+                extra={"symbol": symbol, "sector": sector},
+            )
+            return
+
+        current_symbol_usd = float(self._sector_reader.get_symbol_exposure_usd(symbol))
+        current_sector_usd = float(self._sector_reader.get_sector_exposure_usd(sector))
+        total_equity = float(self._sector_reader.total_equity)
+
+        portfolio_delta = self._calculate_portfolio_symbol_exposure_delta(
+            order_intent=order_intent,
+            order_notional=order_notional,
+            current_symbol_exposure=current_symbol_usd,
+        )
+        projected_sector_usd = current_sector_usd + portfolio_delta
+
+        current_sector_pct = (current_sector_usd / total_equity) if total_equity > 0 else 0.0
+        projected_sector_pct = (projected_sector_usd / total_equity) if total_equity > 0 else 0.0
+
+        metrics.sector_exposure_pct.record(current_sector_pct, {"sector": sector})
+        if sector_limit > 0:
+            metrics.sector_limit_utilization.record(
+                current_sector_pct / sector_limit, {"sector": sector}
+            )
+
+        if projected_sector_usd <= current_sector_usd:
+            logger.debug(
+                "pre_trade_risk.sector_exposure_reduced",
+                extra={
+                    "symbol": symbol,
+                    "sector": sector,
+                    "strategy_id": order_intent.strategy_id,
+                    "current_sector_pct": current_sector_pct,
+                    "projected_sector_pct": projected_sector_pct,
+                },
+            )
+            return
+
+        if projected_sector_pct <= sector_limit:
+            logger.debug(
+                "pre_trade_risk.sector_concentration_ok",
+                extra={
+                    "symbol": symbol,
+                    "sector": sector,
+                    "strategy_id": order_intent.strategy_id,
+                    "current_sector_pct": current_sector_pct,
+                    "projected_sector_pct": projected_sector_pct,
+                    "limit_pct": sector_limit,
+                },
+            )
+            return
+
+        logger.warning(
+            "pre_trade_risk.sector_concentration_blocked",
+            extra={
+                "symbol": symbol,
+                "sector": sector,
+                "strategy_id": order_intent.strategy_id,
+                "current_sector_pct": current_sector_pct,
+                "projected_sector_pct": projected_sector_pct,
+                "limit_pct": sector_limit,
+                "order_notional": order_notional,
+                "run_id": str(order_intent.run_id),
+            },
+        )
+
+        metrics.sector_concentration_blocks.add(1, {"sector": sector})
+
+        if self._audit_log_repo is not None:
+            self._audit_log_repo.record_operator_action(
+                action="SECTOR_CONCENTRATION_LIMIT_BLOCKED",
+                actor=order_intent.strategy_id,
+                reason="sector concentration limit exceeded",
+                occurred_at=now,
+                component="pre_trade_risk",
+                metadata={
+                    "strategy_id": order_intent.strategy_id,
+                    "symbol": symbol,
+                    "sector": sector,
+                    "current_sector_exposure_pct": f"{current_sector_pct:.4f}",
+                    "projected_sector_exposure_pct": f"{projected_sector_pct:.4f}",
+                    "configured_limit_pct": f"{sector_limit:.4f}",
+                    "order_notional": f"{order_notional:.2f}",
+                    "run_id": str(order_intent.run_id),
+                },
+            )
+
+        raise SectorConcentrationLimitExceededError(
+            symbol=symbol,
+            sector=sector,
+            strategy_id=order_intent.strategy_id,
+            current_sector_exposure_pct=current_sector_pct,
+            projected_sector_exposure_pct=projected_sector_pct,
+            configured_limit_pct=sector_limit,
+            proposed_order_notional=order_notional,
+            run_id=str(order_intent.run_id),
+        )
 
     def _resolve_optional_limit(
         self,

@@ -308,6 +308,32 @@ ratp_equity_drift_amount = meter.create_histogram(
     unit="USD",
 )
 
+# --- Sector Concentration ---
+
+sector_concentration_blocks = meter.create_counter(
+    name="ratp_sector_concentration_blocks_total",
+    description="Total number of orders blocked due to sector concentration limits",
+    unit="1",
+)
+
+missing_sector_metadata = meter.create_counter(
+    name="ratp_missing_sector_metadata_total",
+    description="Total number of pre-trade sector lookups with no symbol-to-sector mapping",
+    unit="1",
+)
+
+sector_exposure_pct = meter.create_histogram(
+    name="ratp_sector_exposure_pct",
+    description="Portfolio sector exposure as a fraction of total equity at pre-trade check time",
+    unit="1",
+)
+
+sector_limit_utilization = meter.create_histogram(
+    name="ratp_sector_limit_utilization",
+    description="Sector exposure as a fraction of the configured sector limit (1.0 = at limit)",
+    unit="1",
+)
+
 # --- Risk Snapshot ---
 
 risk_snapshot_job_runs = meter.create_counter(

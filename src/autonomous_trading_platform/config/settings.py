@@ -50,6 +50,11 @@ class Settings:
             "MAX_PORTFOLIO_SYMBOL_EXPOSURE_USD",
         )
         self.max_portfolio_symbol_pct = self._get_optional_float("MAX_PORTFOLIO_SYMBOL_PCT")
+        self.max_sector_exposure_pct = self._get_optional_json_dict("MAX_SECTOR_EXPOSURE_PCT")
+        self.default_max_sector_exposure_pct = self._get_optional_float(
+            "DEFAULT_MAX_SECTOR_EXPOSURE_PCT"
+        )
+        self.unknown_sector_policy = os.getenv("UNKNOWN_SECTOR_POLICY", "reject")
         self.max_daily_notional_traded = self._get_float("MAX_DAILY_NOTIONAL_TRADED", 25000.0)
         self.max_reserved_cash = self._get_float("MAX_RESERVED_CASH", 25000.0)
 
@@ -222,6 +227,14 @@ class Settings:
         if value is None or value.strip() == "":
             return None
         return float(value.strip())
+
+    def _get_optional_json_dict(self, key: str) -> dict[str, float] | None:
+        import json
+
+        value = os.getenv(key)
+        if not value or not value.strip():
+            return None
+        return {k: float(v) for k, v in json.loads(value).items()}
 
     def _get_decimal(self, key: str, default: Decimal) -> Decimal:
         value = os.getenv(key)

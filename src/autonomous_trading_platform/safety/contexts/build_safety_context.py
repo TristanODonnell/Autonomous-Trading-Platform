@@ -6,6 +6,7 @@ from autonomous_trading_platform.safety.contexts.safety_context import SafetyCon
 from autonomous_trading_platform.safety.readers.portfolio_risk_state_reader import (
     PortfolioRiskStateReader,
 )
+from autonomous_trading_platform.safety.readers.sector_exposure_reader import SectorExposureReader
 from autonomous_trading_platform.safety.services.kill_switch_service import KillSwitchService
 from autonomous_trading_platform.safety.services.live_trading_gate_service import (
     LiveTradingGateService,
@@ -36,6 +37,7 @@ def build_safety_context(
     order_activity_reader,
     audit_log_repository,
     session: Session,
+    symbol_sector_map: dict[str, str] | None = None,
 ) -> SafetyContext:
     ks_repo = KillSwitchStateRepository(session=session)
     runtime_control_repo = RuntimeControlStateRepository(session=session)
@@ -69,10 +71,22 @@ def build_safety_context(
         order_activity_reader=order_activity_reader,
     )
     portfolio_risk_state_reader = PortfolioRiskStateReader.from_session(session)
+    sector_exposure_reader = (
+        SectorExposureReader.from_portfolio_reader(
+            portfolio_risk_state_reader,
+            symbol_sector_map,
+        )
+        if symbol_sector_map is not None
+        else None
+    )
     pre_trade_risk_service = PreTradeRiskService(
         settings=settings,
         risk_state_reader=risk_state_reader,
         portfolio_risk_state_reader=portfolio_risk_state_reader,
+        sector_exposure_reader=sector_exposure_reader,
+        max_sector_exposure_pct=getattr(settings, "max_sector_exposure_pct", None),
+        default_max_sector_exposure_pct=getattr(settings, "default_max_sector_exposure_pct", None),
+        unknown_sector_policy=getattr(settings, "unknown_sector_policy", "reject"),
         audit_log_repo=audit_log_repository,
     )
     shadow_mode_service = ShadowModeService(settings=settings)
