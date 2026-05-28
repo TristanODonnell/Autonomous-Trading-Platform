@@ -1638,3 +1638,37 @@ ratp_factor_neutralization_duration_seconds = meter.create_histogram(
     description="Wall-clock time to evaluate factor neutralization controls",
     unit="s",
 )
+
+# =========================
+# OPTIMIZATION BACKEND (TASK-5.6)
+# =========================
+
+ratp_optimizer_runs_total = meter.create_counter(
+    name="ratp_optimizer_runs_total",
+    description="Total number of generic optimizer backend runs",
+    unit="1",
+)
+
+ratp_optimizer_infeasible_total = meter.create_counter(
+    name="ratp_optimizer_infeasible_total",
+    description="Total number of generic optimizer backend infeasible results",
+    unit="1",
+)
+
+ratp_optimizer_fallback_total = meter.create_counter(
+    name="ratp_optimizer_fallback_total",
+    description="Total number of generic optimizer backend fallback results",
+    unit="1",
+)
+
+ratp_optimizer_duration_seconds = meter.create_histogram(
+    name="ratp_optimizer_duration_seconds",
+    description="Wall-clock time for generic optimizer backend execution",
+    unit="s",
+)
+
+ratp_optimizer_constraint_binding_total = meter.create_counter(
+    name="ratp_optimizer_constraint_binding_total",
+    description="Total number of binding constraints reported by optimizer backend runs",
+    unit="1",
+)

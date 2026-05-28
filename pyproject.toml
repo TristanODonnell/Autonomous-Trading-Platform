@@ -25,6 +25,7 @@ dependencies = [
   "pyyaml>=6.0",
   "tenacity>=8.2",
   "packaging>=24.0",
+  "cvxpy>=1.5",
 
   # Data + storage
   "pandas>=2.2",

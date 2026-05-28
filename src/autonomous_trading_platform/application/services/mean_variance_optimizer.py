@@ -12,6 +12,19 @@ from uuid import uuid4
 import numpy as np
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.optimization_backend import (
+    CvxpyOptimizerBackend,
+    OptimizerBackend,
+)
+from autonomous_trading_platform.contracts.runtime.optimization_backend import (
+    OptimizationBackendConfig,
+    OptimizationBackendConstraintType,
+    OptimizationBackendObjectiveType,
+    OptimizationConstraintTerm,
+    OptimizationFallbackPolicy,
+    OptimizationObjectiveTerm,
+    OptimizationProblem,
+)
 from autonomous_trading_platform.contracts.runtime.optimizer import (
     FallbackMode,
     OptimizationObjective,
@@ -67,6 +80,7 @@ class MeanVarianceConfig:
     pgd_tol: float = _PGD_TOL
     fallback_mode: FallbackMode = FallbackMode.EQUAL_WEIGHTS
     dry_run: bool = True
+    use_convex_backend: bool = False
 
 
 @dataclass
@@ -258,12 +272,14 @@ class MeanVarianceOptimizer:
         optimizer_run_repo: OptimizerRunRepository | None = None,
         correlation_repo: CorrelationSnapshotRepository | None = None,
         solver: _NumpyQPSolver | None = None,
+        optimizer_backend: OptimizerBackend | None = None,
     ) -> None:
         self._session = session
         self._config = config or MeanVarianceConfig()
         self._run_repo = optimizer_run_repo or OptimizerRunRepository(session)
         self._corr_repo = correlation_repo or CorrelationSnapshotRepository(session)
         self._solver = solver or _NumpyQPSolver()
+        self._optimizer_backend = optimizer_backend
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -343,6 +359,87 @@ class MeanVarianceOptimizer:
                 warnings=cov_warnings,
                 duration=perf_counter() - wall_start,
             )
+
+        if self._config.use_convex_backend:
+            backend_config = OptimizationBackendConfig(
+                fallback_policy=(
+                    OptimizationFallbackPolicy.PREVIOUS_WEIGHTS
+                    if self._config.fallback_mode == FallbackMode.PREVIOUS_WEIGHTS
+                    else OptimizationFallbackPolicy.EQUAL_WEIGHTS
+                )
+            )
+            backend_result = (
+                self._optimizer_backend or CvxpyOptimizerBackend(config=backend_config)
+            ).solve(
+                self._build_backend_problem(
+                    assets=assets,
+                    expected_returns=expected_returns,
+                    current_weights=current_weights,
+                    constraints=constraints,
+                    objective=objective,
+                    covariance_matrix={
+                        a: {b: float(cov_matrix_np[i, j]) for j, b in enumerate(assets)}
+                        for i, a in enumerate(assets)
+                    },
+                    covariance_snapshot_id=effective_snapshot_id,
+                    expected_return_source=expected_return_source,
+                )
+            )
+            backend_result.metadata["mean_variance_optimizer_run_id"] = run_id
+            backend_assets = backend_result.assets
+            target_weights = backend_result.target_weights
+            port_return = sum(
+                expected_returns.get(asset, 0.0) * target_weights[asset] for asset in backend_assets
+            )
+            cov_dict_for_stats = {
+                a: {b: float(cov_matrix_np[i, j]) for j, b in enumerate(assets)}
+                for i, a in enumerate(assets)
+            }
+            cov_for_stats = np.array(
+                [[cov_dict_for_stats[a][b] for b in backend_assets] for a in backend_assets],
+                dtype=float,
+            )
+            w_vec = np.array([target_weights[asset] for asset in backend_assets], dtype=float)
+            port_vol = math.sqrt(max(float(w_vec @ cov_for_stats @ w_vec), 0.0))
+            result = OptimizationResult(
+                run_id=run_id,
+                objective=objective,
+                solver_status=SolverStatus(backend_result.solver_status.value),
+                assets=backend_assets,
+                target_weights=target_weights,
+                current_weights={
+                    a: current_weights.get(a, 1.0 / len(backend_assets)) for a in backend_assets
+                },
+                expected_return=round(port_return, 8),
+                expected_volatility=round(port_vol, 8),
+                objective_value=None,
+                realized_turnover=sum(
+                    abs(target_weights[a] - current_weights.get(a, 1.0 / len(backend_assets)))
+                    for a in backend_assets
+                ),
+                constraints_applied=backend_result.constraint_summary,
+                binding_constraints=backend_result.binding_constraints,
+                infeasibility_reason=backend_result.infeasibility_reason,
+                fallback_mode=FallbackMode.EQUAL_WEIGHTS
+                if backend_result.fallback_used
+                else FallbackMode.NONE,
+                covariance_snapshot_id=effective_snapshot_id,
+                expected_return_source=expected_return_source,
+                risk_aversion=self._config.risk_aversion,
+                iterations_to_convergence=None,
+                convergence_achieved=backend_result.solver_status.value
+                in {"optimal", "suboptimal"},
+                generated_at=now,
+                duration_seconds=round(perf_counter() - wall_start, 4),
+                dry_run=self._config.dry_run,
+                warnings=backend_result.violated_constraints,
+                metadata={"backend_result": backend_result.model_dump(mode="json")},
+            )
+            if not self._config.dry_run:
+                self._persist(result)
+            self._emit_events(result)
+            self._record_metrics(result)
+            return result
 
         # Validate inputs
         mu = np.array([expected_returns.get(a, 0.0) for a in assets], dtype=float)
@@ -486,6 +583,100 @@ class MeanVarianceOptimizer:
     # ------------------------------------------------------------------
     # Objectives dispatch
     # ------------------------------------------------------------------
+
+    def _build_backend_problem(
+        self,
+        *,
+        assets: list[str],
+        expected_returns: dict[str, float],
+        current_weights: dict[str, float],
+        constraints: OptimizerConstraints,
+        objective: OptimizationObjective,
+        covariance_matrix: dict[str, dict[str, float]],
+        covariance_snapshot_id: str | None,
+        expected_return_source: str,
+    ) -> OptimizationProblem:
+        objective_terms = [
+            OptimizationObjectiveTerm(
+                objective_type=_backend_objective(objective),
+                weight=1.0,
+                risk_aversion=self._config.risk_aversion,
+            )
+        ]
+        if constraints.turnover_penalty > 0:
+            objective_terms.append(
+                OptimizationObjectiveTerm(
+                    objective_type=OptimizationBackendObjectiveType.MINIMIZE_TURNOVER,
+                    weight=constraints.turnover_penalty,
+                )
+            )
+
+        backend_constraints = [
+            OptimizationConstraintTerm(
+                constraint_type=OptimizationBackendConstraintType.WEIGHTS_SUM_TO,
+                value=1.0 - constraints.cash_reserve,
+            )
+        ]
+        if constraints.long_only:
+            backend_constraints.append(
+                OptimizationConstraintTerm(
+                    constraint_type=OptimizationBackendConstraintType.LONG_ONLY
+                )
+            )
+        if constraints.global_min_weight > 0 or constraints.per_asset_min:
+            backend_constraints.append(
+                OptimizationConstraintTerm(
+                    constraint_type=OptimizationBackendConstraintType.MIN_WEIGHT,
+                    value=constraints.global_min_weight,
+                    per_asset=constraints.per_asset_min,
+                )
+            )
+        if constraints.global_max_weight < 1.0 or constraints.per_asset_max:
+            backend_constraints.append(
+                OptimizationConstraintTerm(
+                    constraint_type=OptimizationBackendConstraintType.MAX_WEIGHT,
+                    value=constraints.global_max_weight,
+                    per_asset=constraints.per_asset_max,
+                )
+            )
+        if constraints.sector_caps:
+            backend_constraints.append(
+                OptimizationConstraintTerm(
+                    constraint_type=OptimizationBackendConstraintType.SECTOR_CAP,
+                    sector_map=constraints.sector_map,
+                    sector_caps=constraints.sector_caps,
+                )
+            )
+        if constraints.max_turnover is not None:
+            backend_constraints.append(
+                OptimizationConstraintTerm(
+                    constraint_type=OptimizationBackendConstraintType.TURNOVER_LIMIT,
+                    value=constraints.max_turnover,
+                )
+            )
+
+        fallback_policy = (
+            OptimizationFallbackPolicy.PREVIOUS_WEIGHTS
+            if self._config.fallback_mode == FallbackMode.PREVIOUS_WEIGHTS
+            else OptimizationFallbackPolicy.EQUAL_WEIGHTS
+        )
+        backend_config = OptimizationBackendConfig(fallback_policy=fallback_policy)
+        return OptimizationProblem(
+            problem_type="mean_variance",
+            assets=assets,
+            covariance_matrix=covariance_matrix,
+            expected_returns=expected_returns,
+            current_weights=current_weights,
+            objectives=objective_terms,
+            constraints=backend_constraints,
+            dry_run=self._config.dry_run,
+            covariance_snapshot_id=covariance_snapshot_id,
+            expected_return_source=expected_return_source,
+            metadata={
+                "backend_config": backend_config.model_dump(mode="json"),
+                "factor_neutralization": constraints.factor_neutralization,
+            },
+        )
 
     def _solve_by_objective(
         self,
@@ -1014,3 +1205,15 @@ class MeanVarianceOptimizer:
     @staticmethod
     def result_to_jsonable(result: OptimizationResult) -> dict[str, Any]:
         return dict(result.model_dump(mode="json"))
+
+
+def _backend_objective(
+    objective: OptimizationObjective,
+) -> OptimizationBackendObjectiveType:
+    if objective == OptimizationObjective.MAXIMUM_UTILITY:
+        return OptimizationBackendObjectiveType.MAXIMIZE_UTILITY
+    if objective == OptimizationObjective.TARGET_RETURN:
+        return OptimizationBackendObjectiveType.MINIMIZE_VARIANCE
+    if objective == OptimizationObjective.TARGET_VOLATILITY:
+        return OptimizationBackendObjectiveType.MINIMIZE_VARIANCE
+    return OptimizationBackendObjectiveType.MINIMIZE_VARIANCE
