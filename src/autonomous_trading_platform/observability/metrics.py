@@ -1672,3 +1672,55 @@ ratp_optimizer_constraint_binding_total = meter.create_counter(
     description="Total number of binding constraints reported by optimizer backend runs",
     unit="1",
 )
+
+# ============================================
+# SHADOW RUNTIME VALIDATION METRICS (5.5)
+# ============================================
+
+ratp_shadow_runs_total = meter.create_counter(
+    name="ratp_shadow_runs_total",
+    description="Total number of shadow validation runs started",
+    unit="1",
+)
+
+ratp_shadow_divergence_total = meter.create_counter(
+    name="ratp_shadow_divergence_total",
+    description="Total number of threshold-exceeding divergences detected in shadow mode",
+    unit="1",
+)
+
+ratp_shadow_threshold_exceedances_total = meter.create_counter(
+    name="ratp_shadow_threshold_exceedances_total",
+    description="Total number of threshold exceedances across all shadow validation categories",
+    unit="1",
+)
+
+ratp_shadow_weight_drift = meter.create_histogram(
+    name="ratp_shadow_weight_drift",
+    description="Absolute portfolio weight drift between simulation and live execution",
+    unit="1",
+)
+
+ratp_shadow_factor_exposure_drift = meter.create_histogram(
+    name="ratp_shadow_factor_exposure_drift",
+    description="Absolute factor or risk exposure drift between simulation and live execution",
+    unit="1",
+)
+
+ratp_shadow_execution_slippage_drift = meter.create_histogram(
+    name="ratp_shadow_execution_slippage_drift",
+    description="Execution slippage drift in basis points between simulation and live fills",
+    unit="bps",
+)
+
+ratp_shadow_optimizer_divergence = meter.create_histogram(
+    name="ratp_shadow_optimizer_divergence",
+    description="Maximum optimizer weight divergence between simulation and live portfolio construction",
+    unit="1",
+)
+
+ratp_shadow_validation_duration_seconds = meter.create_histogram(
+    name="ratp_shadow_validation_duration_seconds",
+    description="Wall-clock time to finalize a shadow validation run",
+    unit="s",
+)
