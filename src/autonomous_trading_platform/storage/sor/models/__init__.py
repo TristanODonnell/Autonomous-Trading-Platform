@@ -19,6 +19,7 @@ from . import metrics_summary as metrics_summary
 from . import missing_bar_incidents as missing_bar_incidents
 from . import operational_alerts as operational_alerts
 from . import operator_settings as operator_settings
+from . import optimizer_runs as optimizer_runs
 from . import order_intents as order_intents
 from . import portfolio_drawdown_governance_state as portfolio_drawdown_governance_state
 from . import position_snapshot_items as position_snapshot_items
@@ -91,6 +92,7 @@ __all__ = [
     "strategy_quality_score_history",
     "allocation_overrides",
     "correlation_snapshots",
+    "optimizer_runs",
     "risk_budget_snapshots",
     "allocation_rebalance_history",
     "capital_allocation_policies",

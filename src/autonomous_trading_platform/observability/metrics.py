@@ -1530,3 +1530,43 @@ ratp_risk_parity_compute_duration_seconds = meter.create_histogram(
     description="Wall-clock time to compute and persist a full risk budgeting run",
     unit="s",
 )
+
+# =========================
+# MEAN-VARIANCE OPTIMIZER  (TASK-5.3)
+# =========================
+
+ratp_mvo_run_total = meter.create_counter(
+    name="ratp_mvo_run_total",
+    description="Total number of mean-variance optimizer invocations",
+    unit="1",
+)
+
+ratp_mvo_infeasible_total = meter.create_counter(
+    name="ratp_mvo_infeasible_total",
+    description="Total number of mean-variance optimizer runs that produced an infeasible result",
+    unit="1",
+)
+
+ratp_mvo_expected_return = meter.create_histogram(
+    name="ratp_mvo_expected_return",
+    description="Expected portfolio return produced by the MVO optimizer per run",
+    unit="1",
+)
+
+ratp_mvo_expected_volatility = meter.create_histogram(
+    name="ratp_mvo_expected_volatility",
+    description="Expected portfolio volatility produced by the MVO optimizer per run",
+    unit="1",
+)
+
+ratp_mvo_turnover = meter.create_histogram(
+    name="ratp_mvo_turnover",
+    description=("Realized turnover (sum of absolute weight changes) per MVO optimizer run"),
+    unit="1",
+)
+
+ratp_mvo_duration_seconds = meter.create_histogram(
+    name="ratp_mvo_duration_seconds",
+    description="Wall-clock time for a complete MVO optimizer run including persistence",
+    unit="s",
+)
