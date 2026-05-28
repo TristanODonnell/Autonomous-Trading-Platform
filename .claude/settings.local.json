@@ -137,7 +137,11 @@
       "Bash(Get-ChildItem -Path . -Directory)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\tests\" -Recurse -File)",
       "PowerShell(python -m ruff check src/autonomous_trading_platform/safety/readers/sector_exposure_reader.py src/autonomous_trading_platform/safety/services/pre_trade_risk_service.py src/autonomous_trading_platform/execution/services/risk_snapshot_service.py src/autonomous_trading_platform/safety/contexts/build_safety_context.py src/autonomous_trading_platform/safety/errors.py src/autonomous_trading_platform/config/settings.py 2>&1)",
-      "Bash(Select-String \"passed|failed\")"
+      "Bash(Select-String \"passed|failed\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\src\\\\autonomous_trading_platform\\\\application\\\\services\" -Filter \"*.py\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\tests\" -Recurse -Filter \"*.py\")",
+      "Bash(Select-Object Name, Directory -First 20)",
+      "Bash(/d/PythonVenvs/autonomous-trading-platform/.venv/Scripts/ruff.exe check *)"
     ]
   }
 }

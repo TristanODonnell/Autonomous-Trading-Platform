@@ -1445,3 +1445,88 @@ strategy_health_evaluation_duration_seconds = meter.create_histogram(
     description="Duration of a full strategy health monitor evaluation run",
     unit="s",
 )
+
+# =========================
+# CORRELATION / COVARIANCE MONITORING (TASK-5.1)
+# =========================
+
+ratp_average_portfolio_correlation = meter.create_histogram(
+    name="ratp_average_portfolio_correlation",
+    description=(
+        "Average pairwise symbol correlation across the portfolio at each monitoring cycle"
+    ),
+    unit="1",
+)
+
+ratp_max_strategy_correlation = meter.create_histogram(
+    name="ratp_max_strategy_correlation",
+    description="Maximum pairwise strategy correlation observed in the latest monitoring run",
+    unit="1",
+)
+
+ratp_max_symbol_correlation = meter.create_histogram(
+    name="ratp_max_symbol_correlation",
+    description="Maximum pairwise symbol correlation observed in the latest monitoring run",
+    unit="1",
+)
+
+ratp_covariance_snapshot_duration_seconds = meter.create_histogram(
+    name="ratp_covariance_snapshot_duration_seconds",
+    description="Total wall-clock time to compute and persist all correlation/covariance snapshots",
+    unit="s",
+)
+
+ratp_correlation_cluster_count = meter.create_histogram(
+    name="ratp_correlation_cluster_count",
+    description=(
+        "Number of high-correlation clusters detected across symbols and strategies "
+        "per monitoring run"
+    ),
+    unit="1",
+)
+
+# =========================
+# RISK BUDGETING / RISK PARITY  (TASK-5.2)
+# =========================
+
+ratp_portfolio_volatility_estimate = meter.create_histogram(
+    name="ratp_portfolio_volatility_estimate",
+    description=(
+        "Annualised portfolio volatility estimate produced by the risk budgeting service "
+        "per computation run"
+    ),
+    unit="1",
+)
+
+ratp_strategy_risk_contribution = meter.create_histogram(
+    name="ratp_strategy_risk_contribution",
+    description=(
+        "Fraction of total portfolio variance contributed by each strategy at each "
+        "risk budgeting computation (0.0–1.0)"
+    ),
+    unit="1",
+)
+
+ratp_risk_budget_utilization = meter.create_histogram(
+    name="ratp_risk_budget_utilization",
+    description=(
+        "Ratio of realized risk contribution to target risk budget per strategy "
+        "(1.0 = exactly at budget)"
+    ),
+    unit="1",
+)
+
+ratp_diversification_ratio = meter.create_histogram(
+    name="ratp_diversification_ratio",
+    description=(
+        "Portfolio diversification ratio: weighted average of individual strategy "
+        "volatilities divided by portfolio volatility (>1 indicates diversification benefit)"
+    ),
+    unit="1",
+)
+
+ratp_risk_parity_compute_duration_seconds = meter.create_histogram(
+    name="ratp_risk_parity_compute_duration_seconds",
+    description="Wall-clock time to compute and persist a full risk budgeting run",
+    unit="s",
+)

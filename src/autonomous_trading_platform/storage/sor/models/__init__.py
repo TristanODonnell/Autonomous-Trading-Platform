@@ -7,6 +7,7 @@ from . import capital_allocation_policies as capital_allocation_policies
 from . import cash_snapshots as cash_snapshots
 from . import checksums as checksums
 from . import corporate_actions as corporate_actions
+from . import correlation_snapshots as correlation_snapshots
 from . import dataset_versions as dataset_versions
 from . import experiments as experiments
 from . import fills as fills
@@ -26,6 +27,7 @@ from . import promotion_rules as promotion_rules
 from . import raw_market_pool as raw_market_pool
 from . import rebalance_runs as rebalance_runs
 from . import reconciliation_snapshots as reconciliation_snapshots
+from . import risk_budget_snapshots as risk_budget_snapshots
 from . import risk_snapshots as risk_snapshots
 from . import run_manifests as run_manifests
 from . import runtime_control_state as runtime_control_state
@@ -88,6 +90,8 @@ __all__ = [
     "strategy_live_performance_snapshots",
     "strategy_quality_score_history",
     "allocation_overrides",
+    "correlation_snapshots",
+    "risk_budget_snapshots",
     "allocation_rebalance_history",
     "capital_allocation_policies",
     "promotion_rules",
