@@ -145,7 +145,11 @@
       "Bash(grep -E \"\\\\.\\(py\\)$\")",
       "Bash(xargs grep -l \"factor\\\\|exposure\")",
       "Bash(xargs wc -l)",
-      "Bash(D:\\\\PythonVenvs\\\\autonomous-trading-platform\\\\.venv\\\\Scripts\\\\ruff.exe check *)"
+      "Bash(D:\\\\PythonVenvs\\\\autonomous-trading-platform\\\\.venv\\\\Scripts\\\\ruff.exe check *)",
+      "Bash(xargs grep -l \"class.*Allocation.*Result\")",
+      "Bash(xargs grep -l \"6.6\\\\|DrawdownGovernance\\\\|drawdown.*ladder\")",
+      "Bash(awk '{print $NF}')",
+      "Bash(.venv/Scripts/mypy.exe src/autonomous_trading_platform/application/services/drawdown_governance_service.py src/autonomous_trading_platform/contracts/governance/drawdown_governance.py tests/application/services/test_drawdown_governance_service.py --ignore-missing-imports)"
     ]
   }
 }

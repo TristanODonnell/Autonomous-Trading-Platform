@@ -1862,3 +1862,37 @@ ratp_portfolio_construction_duration_seconds = meter.create_histogram(
     description="Total wall-clock time for the full two-phase portfolio construction pipeline",
     unit="s",
 )
+
+# =========================
+# DRAWDOWN GOVERNANCE LADDER (REC 6.6)
+# =========================
+
+drawdown_governance_utilization = meter.create_histogram(
+    name="ratp_drawdown_utilization",
+    description="Per-strategy drawdown utilization (realized_drawdown / max_drawdown_allowed)",
+    unit="1",
+)
+
+drawdown_governance_state = meter.create_histogram(
+    name="ratp_drawdown_governance_state",
+    description="Numeric severity of current drawdown governance ladder state (0=normal … 4=breached)",
+    unit="1",
+)
+
+strategy_allocation_scalar = meter.create_histogram(
+    name="ratp_strategy_allocation_scalar",
+    description="Allocation scalar applied to a strategy by the drawdown governance ladder (0.0–1.0)",
+    unit="1",
+)
+
+drawdown_governance_breaches_total = meter.create_counter(
+    name="ratp_drawdown_breaches_total",
+    description="Total number of drawdown limit breach events across all strategies",
+    unit="1",
+)
+
+drawdown_governance_recoveries_total = meter.create_counter(
+    name="ratp_drawdown_recoveries_total",
+    description="Total number of drawdown governance ladder recovery transitions",
+    unit="1",
+)
