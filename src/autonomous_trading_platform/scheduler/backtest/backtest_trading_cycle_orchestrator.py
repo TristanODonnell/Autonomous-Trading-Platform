@@ -38,7 +38,10 @@ from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.execution.contexts.build_execution_context import (
     build_execution_context,
 )
-from autonomous_trading_platform.portfolio.portfolio_engine import PortfolioEngine
+from autonomous_trading_platform.portfolio.simulation_allocation_provider import (
+    SimulationAllocationProvider,
+    snapshot_allocation_config,
+)
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
 from autonomous_trading_platform.safety.contexts.build_safety_context import build_safety_context
@@ -82,9 +85,6 @@ from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_reposi
 from autonomous_trading_platform.storage.sor.repositories.core.capital_allocation_policies_repository import (
     CapitalAllocationPoliciesRepository,
 )
-from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_repository import (
-    PromotionRulesRepository,
-)
 from autonomous_trading_platform.strategy.contexts.build_strategy_runtime_context import (
     build_strategy_runtime_context,
 )
@@ -122,6 +122,7 @@ def _build_backtest_dependencies(
     broker_client: BacktestBrokerClient,
     raw_dataset_version_id: str,
     run_id: uuid.UUID,
+    allocation_provider: SimulationAllocationProvider,
 ) -> TradingCycleDependencies:
     audit_logger = AuditLoggingService(session)
     audit_log_repository = AuditLogRepository(session)
@@ -145,18 +146,14 @@ def _build_backtest_dependencies(
         session=session,
     )
 
-    portfolio_engine = PortfolioEngine(
-        policies_repo=CapitalAllocationPoliciesRepository(session),
-        overrides_repo=AllocationOverridesRepository(session),
-        promotion_rules_repo=PromotionRulesRepository(session),
-        total_capital=float(broker_client.portfolio_equity()),
-    )
+    # Update live capital from current broker equity — policy params stay pinned (FINDING-11)
+    allocation_provider.update_total_capital(float(broker_client.portfolio_equity()))
 
     execution_context = build_execution_context(
         pre_trade_risk_service=safety_context.pre_trade_risk_service,
         audit_log_repository=audit_log_repository,
         alpaca_settings=settings,
-        portfolio_engine=portfolio_engine,
+        portfolio_engine=allocation_provider,
         session=session,
         broker_client=broker_client,
     )
@@ -169,7 +166,7 @@ def _build_backtest_dependencies(
         strategy_context=strategy_context,
         safety_context=safety_context,
         execution_context=execution_context,
-        portfolio_engine=portfolio_engine,
+        portfolio_engine=allocation_provider,
     )
 
 
@@ -266,6 +263,24 @@ class BacktestTradingCycleOrchestrator:
             settings = Settings()
             broker_client = BacktestBrokerClient(config=cfg)
 
+            # ── FINDING-11: Snapshot allocation config once before the bar loop ─
+            # Reads CapitalAllocationPolicies + AllocationOverrides from DB exactly once.
+            # The pinned AllocationConfig is immutable for the full simulation run so
+            # production policy edits after this point cannot change backtest behavior.
+            allocation_config = snapshot_allocation_config(
+                policies_repo=CapitalAllocationPoliciesRepository(session),
+                overrides_repo=AllocationOverridesRepository(session),
+                total_capital=float(cfg.initial_capital),
+                strategy_ids=[cfg.strategy_id] if cfg.strategy_id else None,
+            )
+            allocation_provider = SimulationAllocationProvider(allocation_config)
+            if progress:
+                print(
+                    f"[Backtest] Allocation config: hash={allocation_config.allocation_config_hash}"
+                    f"  strategies={len(allocation_config.strategy_entries)}"
+                    f"  default_pct={allocation_config.default_max_pct_of_capital:.1%}"
+                )
+
             fills_created = 0
             snapshots_written = 0
             bars_processed = 0
@@ -277,13 +292,16 @@ class BacktestTradingCycleOrchestrator:
                 # Refresh broker client with current bar prices
                 broker_client.set_current_prices(close_prices)
 
-                # Build fresh deps each bar so portfolio_engine has current equity
+                # Build fresh deps each bar so allocation_provider tracks current equity.
+                # The pinned AllocationConfig (policies, percentages) stays frozen — only
+                # total_capital is updated inside _build_backtest_dependencies (FINDING-11).
                 deps = _build_backtest_dependencies(
                     session=session,
                     settings=settings,
                     broker_client=broker_client,
                     raw_dataset_version_id=str(raw_dataset.dataset_version_id),
                     run_id=run_id,
+                    allocation_provider=allocation_provider,
                 )
 
                 manifest = build_trading_run_manifest(

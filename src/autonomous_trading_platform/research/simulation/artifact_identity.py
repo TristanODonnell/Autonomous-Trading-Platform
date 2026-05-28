@@ -29,6 +29,7 @@ class SimulationArtifactIdentity:
     window_id: str | None = None
     universe_version: str | None = None
     config_hash: str | None = None
+    allocation_config_hash: str | None = None
     price_basis: str | None = None
     start_date: date | None = None
     end_date: date | None = None
@@ -78,6 +79,8 @@ class SimulationArtifactIdentity:
             d["universe_version"] = self.universe_version
         if self.config_hash is not None:
             d["config_hash"] = self.config_hash
+        if self.allocation_config_hash is not None:
+            d["allocation_config_hash"] = self.allocation_config_hash
         if self.price_basis is not None:
             d["price_basis"] = self.price_basis
         if self.start_date is not None:

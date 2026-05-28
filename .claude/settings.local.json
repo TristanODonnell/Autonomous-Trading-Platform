@@ -136,7 +136,8 @@
       "Bash(xargs grep -l \"class.*UnitOfWork\")",
       "Bash(Get-ChildItem -Path . -Directory)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tristan\\\\PycharmProjects\\\\Autonomous-Trading-Platform\\\\tests\" -Recurse -File)",
-      "PowerShell(python -m ruff check src/autonomous_trading_platform/safety/readers/sector_exposure_reader.py src/autonomous_trading_platform/safety/services/pre_trade_risk_service.py src/autonomous_trading_platform/execution/services/risk_snapshot_service.py src/autonomous_trading_platform/safety/contexts/build_safety_context.py src/autonomous_trading_platform/safety/errors.py src/autonomous_trading_platform/config/settings.py 2>&1)"
+      "PowerShell(python -m ruff check src/autonomous_trading_platform/safety/readers/sector_exposure_reader.py src/autonomous_trading_platform/safety/services/pre_trade_risk_service.py src/autonomous_trading_platform/execution/services/risk_snapshot_service.py src/autonomous_trading_platform/safety/contexts/build_safety_context.py src/autonomous_trading_platform/safety/errors.py src/autonomous_trading_platform/config/settings.py 2>&1)",
+      "Bash(Select-String \"passed|failed\")"
     ]
   }
 }

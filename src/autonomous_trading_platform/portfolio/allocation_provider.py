@@ -13,7 +13,7 @@ class IAllocationProvider(Protocol):
     """
     Contract for resolving capital allocation for a strategy.
 
-    Simulation path:  SimulationAllocationProvider (flat math, no DB)
+    Simulation path:  SimulationAllocationProvider (static config, no DB)
     Live/paper path:  PortfolioEngine (DB policies + governance gate)
     """
 
@@ -26,3 +26,5 @@ class IAllocationProvider(Protocol):
 
     @property
     def total_capital(self) -> float: ...
+
+    def update_total_capital(self, new_total: float) -> None: ...

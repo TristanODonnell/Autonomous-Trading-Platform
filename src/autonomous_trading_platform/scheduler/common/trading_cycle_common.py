@@ -20,6 +20,7 @@ from autonomous_trading_platform.execution.contexts.build_execution_context impo
     build_execution_context,
 )
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
+from autonomous_trading_platform.portfolio.allocation_provider import IAllocationProvider
 from autonomous_trading_platform.portfolio.portfolio_engine import PortfolioEngine
 from autonomous_trading_platform.runtime.services.audit_logging_service import AuditLoggingService
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
@@ -72,7 +73,7 @@ class TradingCycleDependencies:
     strategy_context: StrategyRuntimeContext
     safety_context: SafetyContext
     execution_context: ExecutionContext
-    portfolio_engine: PortfolioEngine
+    portfolio_engine: IAllocationProvider
 
 
 def floor_to_five_minutes(timestamp: datetime) -> datetime:
