@@ -191,6 +191,7 @@ No current `backtesting` command should be broker/live external-facing. Keep rep
 - `read-dashboard` is named like a backtest utility but is actually a frontend/API state snapshot.
 - Verification commands write artifacts under `artifacts/backtesting`; after migration, artifact paths should move to `artifacts/risk`, `artifacts/operations`, `artifacts/governance`, or `artifacts/platform`.
 - Verification commands intentionally mutate/probe local state; their cleanup/rollback semantics should be explicit in command output and docs.
+- `_GOVERNANCE_SETTING_WIRING` in `backtesting.py` (used by `verify-governance-allocation`) hardcodes `auto_promote_enabled` and `auto_demote_on_breach` as `FLAG_NOT_WIRED`. This is stale: `AutoPromotionService.run()` checks `auto_promote_enabled` (returns `skipped_reason="auto_promote_disabled"` if false), and `AutoDemotionService.run()` checks `auto_demote_on_breach` (returns `skipped_reason="auto_demote_disabled"` if false). The verification artifacts emitted by `verify-governance-allocation` will reflect this stale classification until the handler is updated.
 - `verify-notification-events` activates kill switch behavior as part of verification. It is local-service backed, but it still needs an obvious safety/fixture guard because the action name is operationally serious.
 - Handler signatures match parser wiring; no parser/handler mismatch was found in registration.
 
