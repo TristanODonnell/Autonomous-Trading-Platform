@@ -2,6 +2,7 @@ from . import allocation_overrides as allocation_overrides
 from . import allocation_rebalance_history as allocation_rebalance_history
 from . import audit_logs as audit_logs
 from . import black_litterman_research_runs as black_litterman_research_runs
+from . import blended_metrics_snapshots as blended_metrics_snapshots
 from . import broker_account_snapshots as broker_account_snapshots
 from . import broker_orders as broker_orders
 from . import capital_allocation_policies as capital_allocation_policies
@@ -14,6 +15,7 @@ from . import experiments as experiments
 from . import factor_exposure_snapshots as factor_exposure_snapshots
 from . import factor_neutralization_runs as factor_neutralization_runs
 from . import fills as fills
+from . import governance_audit_events as governance_audit_events
 from . import ingestion_checkpoint as ingestion_checkpoint
 from . import ingestion_runs as ingestion_runs
 from . import kill_switch_state as kill_switch_state
@@ -24,6 +26,7 @@ from . import operational_alerts as operational_alerts
 from . import operator_settings as operator_settings
 from . import optimizer_runs as optimizer_runs
 from . import order_intents as order_intents
+from . import portfolio_construction as portfolio_construction
 from . import portfolio_drawdown_governance_state as portfolio_drawdown_governance_state
 from . import position_snapshot_items as position_snapshot_items
 from . import position_snapshots as position_snapshots
@@ -44,6 +47,7 @@ from . import strategy_configs as strategy_configs
 from . import strategy_control_states as strategy_control_states
 from . import strategy_governance as strategy_governance
 from . import strategy_health_state as strategy_health_state
+from . import strategy_health_transitions as strategy_health_transitions
 from . import strategy_live_performance_snapshots as strategy_live_performance_snapshots
 from . import strategy_quality_score_history as strategy_quality_score_history
 from . import strategy_runtime_states as strategy_runtime_states
@@ -57,11 +61,13 @@ from .base import Base as Base
 
 __all__ = [
     "Base",
+    "blended_metrics_snapshots",
     "broker_account_snapshots",
     "broker_orders",
     "cash_snapshots",
     "corporate_actions",
     "fills",
+    "governance_audit_events",
     "market_bars",
     "order_intents",
     "operator_settings",
@@ -93,9 +99,11 @@ __all__ = [
     "metrics_summary",
     "strategy_governance",
     "strategy_health_state",
+    "strategy_health_transitions",
     "strategy_live_performance_snapshots",
     "strategy_quality_score_history",
     "allocation_overrides",
+    "portfolio_construction",
     "correlation_snapshots",
     "optimizer_runs",
     "black_litterman_research_runs",

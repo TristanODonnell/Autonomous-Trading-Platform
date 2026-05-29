@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -14,7 +15,14 @@ from autonomous_trading_platform.contracts.common.enums import Side
 from autonomous_trading_platform.contracts.runtime.live_performance_metrics import (
     LivePerformanceMetrics,
 )
+from autonomous_trading_platform.contracts.runtime.metric_lineage import MetricLineageType
 from autonomous_trading_platform.observability.logging import get_logger
+from autonomous_trading_platform.observability.metrics import (
+    ratp_live_metrics_computed_total,
+    ratp_live_strategy_drawdown,
+    ratp_live_strategy_sharpe,
+    ratp_strategy_runtime_maturity,
+)
 from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
 from autonomous_trading_platform.storage.sor.models.fills import Fill
 from autonomous_trading_platform.storage.sor.models.order_intents import OrderIntents
@@ -71,13 +79,17 @@ def compute_alpha(days_live: int, trade_count: int) -> float:
     return min(days_factor, trades_factor)
 
 
+_CALCULATION_VERSION = "1.0"
+
+
 class LivePerformanceMetricsService:
     DEFAULT_WINDOW_DAYS = 20
     DEFAULT_WINDOW_TRADES = 50
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, *, environment: str | None = None) -> None:
         self._session = session
         self._snapshot_repo = LivePerformanceSnapshotRepository(session)
+        self._environment = environment or os.getenv("APP_ENV")
 
     # ------------------------------------------------------------------
     # Public API
@@ -144,8 +156,19 @@ class LivePerformanceMetricsService:
                 "live_win_rate": live_win_rate,
                 "window_days": window_days,
                 "window_trades": window_trades,
+                "metric_lineage_type": MetricLineageType.LIVE.value,
+                "environment": self._environment,
             },
         )
+
+        attrs = {"strategy_id": strategy_id}
+        ratp_live_metrics_computed_total.add(1, attrs)
+        if rolling_sharpe is not None:
+            ratp_live_strategy_sharpe.record(rolling_sharpe, attrs)
+        if realized_drawdown is not None:
+            ratp_live_strategy_drawdown.record(abs(realized_drawdown), attrs)
+        if days_live is not None:
+            ratp_strategy_runtime_maturity.record(days_live, attrs)
 
         return LivePerformanceMetrics(
             snapshot_id=str(uuid4()),
@@ -163,6 +186,9 @@ class LivePerformanceMetricsService:
             winning_trade_count=winning_trade_count,
             days_live=days_live,
             days_since_profitable_day=days_since_profitable,
+            metric_lineage_type=MetricLineageType.LIVE,
+            environment=self._environment,
+            calculation_version=_CALCULATION_VERSION,
         )
 
     def compute_and_persist(
@@ -199,6 +225,11 @@ class LivePerformanceMetricsService:
                 winning_trade_count=metrics.winning_trade_count,
                 days_live=metrics.days_live,
                 days_since_profitable_day=metrics.days_since_profitable_day,
+                metric_lineage_type=metrics.metric_lineage_type.value
+                if metrics.metric_lineage_type
+                else None,
+                environment=metrics.environment,
+                calculation_version=metrics.calculation_version,
             )
         )
         return metrics
@@ -208,6 +239,13 @@ class LivePerformanceMetricsService:
         row = self._snapshot_repo.get_latest(strategy_id)
         if row is None:
             return None
+        lineage_type: MetricLineageType | None = None
+        if row.metric_lineage_type:
+            try:
+                lineage_type = MetricLineageType(row.metric_lineage_type)
+            except ValueError:
+                lineage_type = MetricLineageType.LIVE
+
         return LivePerformanceMetrics(
             snapshot_id=row.snapshot_id,
             strategy_id=row.strategy_id,
@@ -224,6 +262,9 @@ class LivePerformanceMetricsService:
             winning_trade_count=row.winning_trade_count,
             days_live=row.days_live,
             days_since_profitable_day=row.days_since_profitable_day,
+            metric_lineage_type=lineage_type or MetricLineageType.LIVE,
+            environment=row.environment,
+            calculation_version=row.calculation_version,
         )
 
     # ------------------------------------------------------------------

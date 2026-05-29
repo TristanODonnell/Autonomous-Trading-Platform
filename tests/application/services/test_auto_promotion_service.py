@@ -382,6 +382,11 @@ def test_auto_promotion_does_not_execute_for_missing_source_run(db_session: Sess
 
     assert result.promotions_executed == []
     assert result.candidates[0].status == "missing_source_run"
+    missing_evidence = (
+        db_session.query(AuditLogRow).filter_by(event_type="MISSING_GOVERNANCE_EVIDENCE").one()
+    )
+    assert missing_evidence.event_metadata["strategy_id"] == "no_source"
+    assert missing_evidence.event_metadata["trigger_source"] == "auto_promotion"
 
 
 def test_auto_promotion_emits_audit_for_missing_source_run(db_session: Session) -> None:

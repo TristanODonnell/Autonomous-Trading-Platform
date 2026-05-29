@@ -7,10 +7,17 @@ from typing import cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.governance_audit_service import (
+    GovernanceAuditService,
+)
 from autonomous_trading_platform.application.services.governance_exceptions import (
     MissingSourceRunError,
     PromotionCriteriaConfigurationError,
     PromotionRulesMissingError,
+)
+from autonomous_trading_platform.contracts.governance.governance_audit import (
+    GovernanceCriteriaEvaluation,
+    TriggerSource,
 )
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
@@ -120,6 +127,7 @@ class StrategyGovernanceService:
         updated_by: str,
         actor_role: str,
         source_run_id: str | None = None,
+        record_governance_audit: bool = True,
     ) -> StrategyGovernanceTransitionResult:
         governance = self._latest_governance(strategy_id)
         if governance is None:
@@ -176,6 +184,17 @@ class StrategyGovernanceService:
                     "to_state": target_state,
                 },
             )
+        if record_governance_audit:
+            self._record_governance_decision(
+                strategy_id=strategy_id,
+                from_state=previous_state,
+                to_state=target_state,
+                reason=reason,
+                updated_by=updated_by,
+                criteria_summary=criteria_summary,
+                source_run_id=resolved_source_run_id,
+                now=now,
+            )
         self._session.flush()
         self._session.commit()
 
@@ -186,6 +205,74 @@ class StrategyGovernanceService:
             reason=reason,
             updated_by=updated_by,
             updated_at=now,
+        )
+
+    def _record_governance_decision(
+        self,
+        *,
+        strategy_id: str,
+        from_state: str,
+        to_state: str,
+        reason: str,
+        updated_by: str,
+        criteria_summary: dict[str, object],
+        source_run_id: str | None,
+        now: datetime,
+    ) -> None:
+        audit = GovernanceAuditService(
+            session=self._session,
+            audit_log_repo=self._audit_log_repo,
+        )
+        criteria = [
+            GovernanceCriteriaEvaluation(
+                criterion=str(row.get("criterion")),
+                threshold=cast(float | None, row.get("threshold", row.get("required"))),
+                actual=cast(float | None, row.get("actual")),
+                passed=bool(row.get("passed")),
+                evaluated_at=now,
+            )
+            for row in cast(
+                list[dict[str, object]],
+                criteria_summary.get("promotion_criteria_evaluated", []),
+            )
+        ]
+        if self._is_promotion_transition(from_state=from_state, target_state=to_state):
+            audit.record_promotion_decision(
+                strategy_id=strategy_id,
+                from_state=from_state,
+                to_state=to_state,
+                actor=updated_by,
+                trigger_source=TriggerSource.OPERATOR_MANUAL,
+                eligible=True,
+                criteria=criteria,
+                metrics_snapshot={
+                    "metrics_source_type": criteria_summary.get("metrics_source_type"),
+                    "fallback_allowed": criteria_summary.get("fallback_allowed"),
+                    "rule_from_status": criteria_summary.get("rule_from_status"),
+                    "rule_to_status": criteria_summary.get("rule_to_status"),
+                },
+                source_run_id=source_run_id,
+                rule_id=cast(str | None, criteria_summary.get("rule_id")),
+                reasons=[reason],
+                now=now,
+            )
+            return
+
+        audit.record_demotion_decision(
+            strategy_id=strategy_id,
+            from_state=from_state,
+            to_state=to_state,
+            actor=updated_by,
+            trigger_source=TriggerSource.OPERATOR_MANUAL,
+            breach=True,
+            breached_metric=None,
+            breached_value=None,
+            threshold=None,
+            source_id=source_run_id,
+            source_type="operator_manual",
+            reasons=[reason],
+            status="manual_transition",
+            now=now,
         )
 
     def _latest_governance(self, strategy_id: str) -> StrategyGovernance | None:

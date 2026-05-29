@@ -185,6 +185,63 @@ class StrategyHealthListResponse(BaseModel):
     strategies: list[StrategyHealthResponse]
 
 
+# ---------------------------------------------------------------------------
+# Strategy Health Lifecycle (Rec 6.3)
+# ---------------------------------------------------------------------------
+
+
+class StrategyHealthLifecycleResponse(BaseModel):
+    strategy_id: str
+    governance_state: str
+    health_status: str
+    health_reason: str | None
+    allocation_penalty: float
+    allocation_scalar: float
+    operator_review_required: bool
+    suspended_at: datetime | None
+    suspension_reason: str | None
+    consecutive_critical_count: int
+    cooldown_expires_at: datetime | None
+    last_transition_at: datetime | None
+    last_evaluated_at: datetime | None
+    latest_quality_score: float | None
+    realized_drawdown: float | None
+
+
+class StrategyHealthLifecycleListResponse(BaseModel):
+    strategies: list[StrategyHealthLifecycleResponse]
+    pending_operator_review: int
+
+
+class StrategyHealthTransitionResponse(BaseModel):
+    transition_id: str
+    strategy_id: str
+    from_status: str | None
+    to_status: str
+    transition_reason: str | None
+    triggered_by: str
+    drawdown_utilization: float | None
+    quality_score: float | None
+    allocation_penalty_after: float | None
+    created_at: datetime
+
+
+class StrategyHealthTransitionListResponse(BaseModel):
+    transitions: list[StrategyHealthTransitionResponse]
+
+
+class StrategyHealthClearSuspensionRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class StrategyHealthAllocationPenaltyResponse(BaseModel):
+    strategy_id: str
+    health_status: str
+    allocation_penalty: float
+    allocation_scalar: float
+    operator_review_required: bool
+
+
 StrategyType = Literal["momentum", "mean_reversion", "breakout", "pairs"]
 RiskLevel = Literal["low", "medium", "high"]
 TimeHorizon = Literal["1w", "1m", "3m", "1y"]

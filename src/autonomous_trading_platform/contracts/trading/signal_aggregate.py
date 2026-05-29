@@ -12,10 +12,18 @@ from autonomous_trading_platform.contracts.trading.signal import Signal
 
 
 class SignalNettingPolicy(enum.StrEnum):
+    # Original policies
     CONSERVATIVE = "conservative"
     DOMINANT = "dominant"
     PROPORTIONAL = "proportional"
     NETTING_ONLY = "netting_only"
+    # Rec 6.5 aliases with clearer semantics
+    SUPPRESS_CONFLICTS = "suppress_conflicts"  # alias for CONSERVATIVE
+    DOMINANT_SIGNAL = "dominant_signal"  # alias for DOMINANT
+    NET = "net"  # alias for PROPORTIONAL
+    # New weighting policies (Rec 6.5)
+    ALLOCATION_WEIGHTED = "allocation_weighted"  # weight by strategy allocation weight
+    CONFIDENCE_WEIGHTED = "confidence_weighted"  # weight purely by confidence score
 
 
 class StrategySignalContribution(BaseModel):

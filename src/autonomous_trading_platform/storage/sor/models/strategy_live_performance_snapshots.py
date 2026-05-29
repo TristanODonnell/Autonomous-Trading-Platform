@@ -34,3 +34,8 @@ class StrategyLivePerformanceSnapshot(Base):
     days_since_profitable_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+
+    # Lineage columns — nullable so existing rows remain valid.
+    metric_lineage_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    environment: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    calculation_version: Mapped[str | None] = mapped_column(String(32), nullable=True)

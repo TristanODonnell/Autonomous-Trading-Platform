@@ -1446,6 +1446,52 @@ strategy_health_evaluation_duration_seconds = meter.create_histogram(
     unit="s",
 )
 
+# ==========================================
+# STRATEGY HEALTH LIFECYCLE (REC 6.3)
+# ==========================================
+
+strategy_health_lifecycle_watch_total = meter.create_counter(
+    name="ratp_strategy_health_lifecycle_watch_total",
+    description="Total strategy health lifecycle evaluations resulting in watch status",
+    unit="1",
+)
+
+strategy_health_lifecycle_degrading_total = meter.create_counter(
+    name="ratp_strategy_health_lifecycle_degrading_total",
+    description="Total strategy health lifecycle evaluations resulting in degrading status",
+    unit="1",
+)
+
+strategy_health_lifecycle_critical_total = meter.create_counter(
+    name="ratp_strategy_health_lifecycle_critical_total",
+    description="Total strategy health lifecycle evaluations resulting in critical status",
+    unit="1",
+)
+
+strategy_health_lifecycle_suspended_total = meter.create_counter(
+    name="ratp_strategy_suspended_total",
+    description="Total strategy auto-suspension events from health lifecycle",
+    unit="1",
+)
+
+strategy_health_lifecycle_transition_total = meter.create_counter(
+    name="ratp_strategy_health_transition_total",
+    description="Total strategy health lifecycle state transitions",
+    unit="1",
+)
+
+strategy_health_lifecycle_allocation_penalty = meter.create_histogram(
+    name="ratp_strategy_health_allocation_penalty",
+    description="Distribution of health-driven allocation penalty scalars (0=healthy, 1=suspended)",
+    unit="1",
+)
+
+strategy_health_lifecycle_duration_seconds = meter.create_histogram(
+    name="ratp_strategy_health_lifecycle_duration_seconds",
+    description="Duration of a full strategy health lifecycle evaluation run",
+    unit="s",
+)
+
 # =========================
 # CORRELATION / COVARIANCE MONITORING (TASK-5.1)
 # =========================
@@ -1723,4 +1769,164 @@ ratp_shadow_validation_duration_seconds = meter.create_histogram(
     name="ratp_shadow_validation_duration_seconds",
     description="Wall-clock time to finalize a shadow validation run",
     unit="s",
+)
+
+# =========================
+# METRIC LINEAGE METRICS
+# =========================
+
+ratp_live_strategy_sharpe = meter.create_histogram(
+    name="ratp_live_strategy_sharpe",
+    description="Rolling Sharpe ratio computed from realized live fills for a strategy",
+    unit="1",
+)
+
+ratp_live_strategy_drawdown = meter.create_histogram(
+    name="ratp_live_strategy_drawdown",
+    description="Realized maximum drawdown from live equity curve for a strategy",
+    unit="1",
+)
+
+ratp_blended_strategy_score = meter.create_histogram(
+    name="ratp_blended_strategy_score",
+    description="Blended quality score (alpha*live + (1-alpha)*research) for a strategy",
+    unit="1",
+)
+
+ratp_live_metric_weight_alpha = meter.create_histogram(
+    name="ratp_live_metric_weight_alpha",
+    description="Live-vs-research blending weight alpha for a strategy (0=all research, 1=all live)",
+    unit="1",
+)
+
+ratp_strategy_runtime_maturity = meter.create_histogram(
+    name="ratp_strategy_runtime_maturity",
+    description="Number of days a strategy has been live in production",
+    unit="d",
+)
+
+ratp_live_metrics_computed_total = meter.create_counter(
+    name="ratp_live_metrics_computed_total",
+    description="Total number of live metric computation events",
+    unit="1",
+)
+
+ratp_research_metrics_resolved_total = meter.create_counter(
+    name="ratp_research_metrics_resolved_total",
+    description="Total number of research metric resolution events",
+    unit="1",
+)
+
+ratp_blended_metrics_computed_total = meter.create_counter(
+    name="ratp_blended_metrics_computed_total",
+    description="Total number of blended metric computation events",
+    unit="1",
+)
+
+ratp_metric_lineage_resolved_total = meter.create_counter(
+    name="ratp_metric_lineage_resolved_total",
+    description="Total number of metric lineage resolution events",
+    unit="1",
+)
+
+ratp_live_metric_weight_updated_total = meter.create_counter(
+    name="ratp_live_metric_weight_updated_total",
+    description="Total number of live metric weight (alpha) update events",
+    unit="1",
+)
+
+# =========================
+# PORTFOLIO CONSTRUCTION PIPELINE METRICS (REC 6.5)
+# =========================
+
+ratp_signal_suppressed_notional = meter.create_histogram(
+    name="ratp_signal_suppressed_notional",
+    description="Total USD notional of BUY signals suppressed by netting or constraint application per construction cycle",
+    unit="USD",
+)
+
+ratp_portfolio_raw_gross_signal_exposure = meter.create_histogram(
+    name="ratp_portfolio_raw_gross_signal_exposure",
+    description="Gross portfolio signal exposure (sum of absolute signal notionals) before netting per construction cycle",
+    unit="USD",
+)
+
+ratp_portfolio_net_signal_exposure = meter.create_histogram(
+    name="ratp_portfolio_net_signal_exposure",
+    description="Net portfolio signal exposure (buy minus sell notional) after netting per construction cycle",
+    unit="USD",
+)
+
+ratp_portfolio_construction_duration_seconds = meter.create_histogram(
+    name="ratp_portfolio_construction_duration_seconds",
+    description="Total wall-clock time for the full two-phase portfolio construction pipeline",
+    unit="s",
+)
+
+# =========================
+# DRAWDOWN GOVERNANCE LADDER (REC 6.6)
+# =========================
+
+drawdown_governance_utilization = meter.create_histogram(
+    name="ratp_drawdown_utilization",
+    description="Per-strategy drawdown utilization (realized_drawdown / max_drawdown_allowed)",
+    unit="1",
+)
+
+drawdown_governance_state = meter.create_histogram(
+    name="ratp_drawdown_governance_state",
+    description="Numeric severity of current drawdown governance ladder state (0=normal … 4=breached)",
+    unit="1",
+)
+
+strategy_allocation_scalar = meter.create_histogram(
+    name="ratp_strategy_allocation_scalar",
+    description="Allocation scalar applied to a strategy by the drawdown governance ladder (0.0–1.0)",
+    unit="1",
+)
+
+drawdown_governance_breaches_total = meter.create_counter(
+    name="ratp_drawdown_breaches_total",
+    description="Total number of drawdown limit breach events across all strategies",
+    unit="1",
+)
+
+drawdown_governance_recoveries_total = meter.create_counter(
+    name="ratp_drawdown_recoveries_total",
+    description="Total number of drawdown governance ladder recovery transitions",
+    unit="1",
+)
+
+# ==========================================
+# GOVERNANCE AUDIT COMPLETENESS METRICS (Rec 6.7)
+# ==========================================
+
+governance_decisions_total = meter.create_counter(
+    name="ratp_governance_decisions_total",
+    description="Total number of governance decisions recorded (promotions, demotions, health, drawdown)",
+    unit="1",
+)
+
+governance_promotions_total = meter.create_counter(
+    name="ratp_governance_promotions_total",
+    description="Total number of governance promotion decisions recorded",
+    unit="1",
+)
+
+governance_demotions_total = meter.create_counter(
+    name="ratp_governance_demotions_total",
+    description="Total number of governance demotion decisions recorded",
+    unit="1",
+)
+
+governance_auto_actions_total = meter.create_counter(
+    name="ratp_governance_auto_actions_total",
+    description="Total number of automated governance actions (auto-promotion, auto-demotion, drawdown escalation)",
+    unit="1",
+)
+
+governance_superseded_events_total = meter.create_counter(
+    name="ratp_governance_superseded_events_total",
+    description="Total number of governance audit events marked as superseded by an amendment",
+    unit="1",
 )

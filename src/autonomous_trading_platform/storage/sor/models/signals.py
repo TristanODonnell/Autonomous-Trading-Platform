@@ -11,10 +11,10 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from autonomous_trading_platform.contracts.common.enums import SignalDirection
-from autonomous_trading_platform.contracts.common.types import Quantity, UTCDateTime
+from autonomous_trading_platform.contracts.common.types import Money, Quantity, UTCDateTime
 
 from .base import Base
-from .helpers.sa_types import UUID_PK, QuantityType, UTCDateTimeType
+from .helpers.sa_types import UUID_PK, MoneyType, QuantityType, UTCDateTimeType
 
 
 class Signal(Base):
@@ -32,6 +32,9 @@ class Signal(Base):
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     target_position: Mapped[Quantity | None] = mapped_column(QuantityType(), nullable=True)
     params: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    strategy_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    feature_snapshot_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    target_exposure: Mapped[Money | None] = mapped_column(MoneyType(), nullable=True)
 
     __table_args__ = (
         UniqueConstraint(

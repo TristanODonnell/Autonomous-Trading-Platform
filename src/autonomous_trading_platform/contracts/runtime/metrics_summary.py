@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from autonomous_trading_platform.contracts.common.types import UTCDateTime
+from autonomous_trading_platform.contracts.runtime.metric_lineage import MetricLineageType
 
 
 class MetricsSummary(BaseModel):
@@ -21,3 +22,10 @@ class MetricsSummary(BaseModel):
     volatility: float | None = None
 
     metrics_json: dict[str, Any] | None = None
+
+    # Lineage fields — optional for backward compatibility; populated for all new writes.
+    metric_lineage_type: MetricLineageType | None = MetricLineageType.RESEARCH
+    environment: str | None = None
+    calculation_version: str | None = None
+    lookback_window_days: int | None = None
+    source_strategy_ids: list[str] | None = None
