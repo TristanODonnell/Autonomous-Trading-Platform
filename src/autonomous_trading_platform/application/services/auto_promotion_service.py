@@ -7,6 +7,9 @@ from typing import Any, cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.governance_audit_service import (
+    GovernanceAuditService,
+)
 from autonomous_trading_platform.application.services.live_performance_metrics_service import (
     LivePerformanceMetricsService,
 )
@@ -14,6 +17,10 @@ from autonomous_trading_platform.application.services.strategy_governance_servic
     _REQUIRED_CRITERIA_BY_TRANSITION,
     _RULE_STATE_ALIASES,
     StrategyGovernanceService,
+)
+from autonomous_trading_platform.contracts.governance.governance_audit import (
+    GovernanceCriteriaEvaluation,
+    TriggerSource,
 )
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
@@ -25,6 +32,9 @@ from autonomous_trading_platform.storage.sor.models.strategy_governance import (
 )
 from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
     AuditLogRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.governance_audit_repository import (
+    GovernanceAuditRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
     OperatorSettingsRepository,
@@ -127,6 +137,7 @@ class AutoPromotionService:
         audit_log_repo: AuditLogRepository | None = None,
         governance_service: StrategyGovernanceService | None = None,
         live_perf_service: LivePerformanceMetricsService | None = None,
+        governance_audit_service: GovernanceAuditService | None = None,
     ) -> None:
         self._session = session
         self._promotion_rules_repo = promotion_rules_repo or PromotionRulesRepository(session)
@@ -138,6 +149,10 @@ class AutoPromotionService:
             audit_log_repo=self._audit_log_repo,
         )
         self._live_perf_service = live_perf_service or LivePerformanceMetricsService(session)
+        self._governance_audit_service = governance_audit_service or GovernanceAuditService(
+            session=session,
+            repo=GovernanceAuditRepository(session),
+        )
 
     def scan(self) -> list[PromotionEligibilityResult]:
         rules = self._active_rules_by_transition()
@@ -180,6 +195,22 @@ class AutoPromotionService:
                     reason=f"automatic promotion via rule {candidate.rule_id}",
                     updated_by=actor,
                     actor_role=_TARGET_ROLE[candidate.to_state],
+                    record_governance_audit=False,
+                )
+                self._governance_audit_service.record_promotion_decision(
+                    strategy_id=candidate.strategy_id,
+                    from_state=candidate.from_state,
+                    to_state=candidate.to_state,
+                    actor=actor,
+                    trigger_source=TriggerSource.AUTO_PROMOTION,
+                    eligible=True,
+                    criteria=_criteria_to_evaluations(candidate.criteria, now),
+                    metrics_snapshot=candidate.metrics,
+                    source_run_id=candidate.source_run_id,
+                    rule_id=candidate.rule_id,
+                    reasons=candidate.reasons,
+                    evaluation_run_id=run_id,
+                    now=now,
                 )
                 promotions.append(
                     {
@@ -202,6 +233,39 @@ class AutoPromotionService:
                         "error": str(exc),
                     }
                 )
+
+        # Emit evidence-complete audit for ineligible candidates (rejected promotions)
+        for candidate in candidates:
+            if candidate.eligible:
+                continue
+            if candidate.status == "missing_source_run":
+                self._governance_audit_service.record_missing_evidence(
+                    strategy_id=candidate.strategy_id,
+                    transition=f"{candidate.from_state}->{candidate.to_state}",
+                    trigger_source=TriggerSource.AUTO_PROMOTION,
+                    reason="; ".join(candidate.reasons),
+                    source_run_id=candidate.source_run_id,
+                    criteria_count=len(candidate.criteria),
+                    now=now,
+                )
+                continue
+            if candidate.status in ("invalid_rule_config", "missing_rule"):
+                continue
+            self._governance_audit_service.record_promotion_decision(
+                strategy_id=candidate.strategy_id,
+                from_state=candidate.from_state,
+                to_state=candidate.to_state or candidate.from_state,
+                actor=actor,
+                trigger_source=TriggerSource.AUTO_PROMOTION,
+                eligible=False,
+                criteria=_criteria_to_evaluations(candidate.criteria, now),
+                metrics_snapshot=candidate.metrics,
+                source_run_id=candidate.source_run_id,
+                rule_id=candidate.rule_id,
+                reasons=candidate.reasons,
+                evaluation_run_id=run_id,
+                now=now,
+            )
 
         result = AutoPromotionRunResult(
             run_id=run_id,
@@ -692,3 +756,19 @@ class AutoPromotionService:
                 "min_paper_trading_period_days": int(settings.min_paper_trading_period_days),
             },
         }
+
+
+def _criteria_to_evaluations(
+    criteria: list[PromotionCriterionResult],
+    evaluated_at: datetime,
+) -> list[GovernanceCriteriaEvaluation]:
+    return [
+        GovernanceCriteriaEvaluation(
+            criterion=criterion.name,
+            threshold=float(criterion.required) if criterion.required is not None else None,
+            actual=float(criterion.actual) if criterion.actual is not None else None,
+            passed=criterion.passed,
+            evaluated_at=evaluated_at,
+        )
+        for criterion in criteria
+    ]

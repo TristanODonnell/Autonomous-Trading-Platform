@@ -9,9 +9,13 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.governance_audit_service import (
+    GovernanceAuditService,
+)
 from autonomous_trading_platform.application.services.strategy_governance_service import (
     StrategyGovernanceService,
 )
+from autonomous_trading_platform.contracts.governance.governance_audit import TriggerSource
 from autonomous_trading_platform.execution.services.trading_freeze_service import (
     TradingFreezeService,
 )
@@ -38,6 +42,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.allocation_overri
 )
 from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
     AuditLogRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.governance_audit_repository import (
+    GovernanceAuditRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
     OperatorSettingsRepository,
@@ -151,6 +158,7 @@ class AutoDemotionService:
         allocation_overrides_repo: AllocationOverridesRepository | None = None,
         governance_service: StrategyGovernanceService | None = None,
         freeze_service: TradingFreezeService | None = None,
+        governance_audit_service: GovernanceAuditService | None = None,
     ) -> None:
         self._session = session
         self._operator_settings_repo = operator_settings_repo or OperatorSettingsRepository(session)
@@ -166,6 +174,11 @@ class AutoDemotionService:
             audit_log_repo=self._audit_log_repo,
         )
         self._freeze_service = freeze_service or TradingFreezeService()
+        self._governance_audit_service = governance_audit_service or GovernanceAuditService(
+            session=session,
+            repo=GovernanceAuditRepository(session),
+            audit_log_repo=self._audit_log_repo,
+        )
 
     def scan(self) -> list[DemotionCandidate]:
         start = perf_counter()
@@ -222,6 +235,16 @@ class AutoDemotionService:
                 dry_run=dry_run,
             )
             self._audit_run(result=result, actor=actor, occurred_at=now)
+            for candidate in candidates:
+                self._record_governance_demotion_evidence(
+                    candidate=candidate,
+                    actor=actor,
+                    from_state=candidate.old_state,
+                    to_state=candidate.recommended_state,
+                    status="auto_demote_disabled",
+                    run_id=run_id,
+                    now=now,
+                )
             self._emit_drawdown_alerts_if_enabled(settings=settings, candidates=candidates, now=now)
             self._session.flush()
             self._session.commit()
@@ -239,6 +262,16 @@ class AutoDemotionService:
                 dry_run=True,
             )
             self._audit_run(result=result, actor=actor, occurred_at=now)
+            for candidate in candidates:
+                self._record_governance_demotion_evidence(
+                    candidate=candidate,
+                    actor=actor,
+                    from_state=candidate.old_state,
+                    to_state=candidate.recommended_state,
+                    status="dry_run",
+                    run_id=run_id,
+                    now=now,
+                )
             self._session.flush()
             self._session.commit()
             return result
@@ -259,6 +292,7 @@ class AutoDemotionService:
                     reason="; ".join(candidate.reasons),
                     updated_by=actor,
                     actor_role="system_risk",
+                    record_governance_audit=False,
                 )
             except Exception as exc:
                 self._session.rollback()
@@ -307,6 +341,15 @@ class AutoDemotionService:
                 now=now,
                 notify=bool(settings.notify_strategy_demotion_events),
             )
+            self._record_governance_demotion_evidence(
+                candidate=candidate,
+                actor=actor,
+                from_state=transition.from_state,
+                to_state=transition.to_state,
+                status="demoted",
+                run_id=run_id,
+                now=now,
+            )
             self._emit_drawdown_alerts_if_enabled(
                 settings=settings,
                 candidates=[candidate],
@@ -341,6 +384,21 @@ class AutoDemotionService:
             dry_run=False,
         )
         self._audit_run(result=result, actor=actor, occurred_at=now)
+        executed_strategy_ids = {
+            row["strategy_id"] for row in executed if row.get("status") == "demoted"
+        }
+        for candidate in candidates:
+            if candidate.strategy_id in executed_strategy_ids:
+                continue
+            self._record_governance_demotion_evidence(
+                candidate=candidate,
+                actor=actor,
+                from_state=candidate.old_state,
+                to_state=candidate.recommended_state,
+                status=candidate.status if not dry_run else "dry_run",
+                run_id=run_id,
+                now=now,
+            )
         self._session.flush()
         self._session.commit()
         logger.info(
@@ -355,6 +413,35 @@ class AutoDemotionService:
             },
         )
         return result
+
+    def _record_governance_demotion_evidence(
+        self,
+        *,
+        candidate: DemotionCandidate,
+        actor: str,
+        from_state: str,
+        to_state: str | None,
+        status: str,
+        run_id: str | None,
+        now: datetime,
+    ) -> None:
+        self._governance_audit_service.record_demotion_decision(
+            strategy_id=candidate.strategy_id,
+            from_state=from_state,
+            to_state=to_state,
+            actor=actor,
+            trigger_source=TriggerSource.AUTO_DEMOTION,
+            breach=candidate.breach,
+            breached_metric=candidate.breached_metric,
+            breached_value=candidate.breached_value,
+            threshold=candidate.threshold,
+            source_id=candidate.source_id,
+            source_type=candidate.source_type,
+            reasons=candidate.reasons,
+            status=status,
+            evaluation_run_id=run_id,
+            now=now,
+        )
 
     def _evaluate_strategy(
         self,

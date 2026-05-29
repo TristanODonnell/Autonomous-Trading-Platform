@@ -8,9 +8,13 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.governance_audit_service import (
+    GovernanceAuditService,
+)
 from autonomous_trading_platform.application.services.live_performance_metrics_service import (
     LivePerformanceMetricsService,
 )
+from autonomous_trading_platform.contracts.governance.governance_audit import TriggerSource
 from autonomous_trading_platform.contracts.governance.strategy_health import StrategyHealthStatus
 from autonomous_trading_platform.contracts.governance.strategy_health_lifecycle import (
     HealthLifecycleConfig,
@@ -359,6 +363,7 @@ class StrategyHealthLifecycleService:
         audit_log_repo: AuditLogRepository | None = None,
         operator_settings_repo: OperatorSettingsRepository | None = None,
         live_perf_service: LivePerformanceMetricsService | None = None,
+        governance_audit_service: GovernanceAuditService | None = None,
     ) -> None:
         self._session = session
         self._quality_score_repo = quality_score_repo or StrategyQualityScoreRepository(session)
@@ -367,6 +372,10 @@ class StrategyHealthLifecycleService:
         self._audit_log_repo = audit_log_repo or AuditLogRepository(session)
         self._operator_settings_repo = operator_settings_repo or OperatorSettingsRepository(session)
         self._live_perf_service = live_perf_service or LivePerformanceMetricsService(session)
+        self._governance_audit_service = governance_audit_service or GovernanceAuditService(
+            session=session,
+            audit_log_repo=self._audit_log_repo,
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -759,6 +768,21 @@ class StrategyHealthLifecycleService:
                 )
 
         self._emit_otel(actual_status, strategy_id)
+        self._governance_audit_service.record_health_transition(
+            strategy_id=strategy_id,
+            from_status=current_status,
+            to_status=actual_status,
+            actor=_LIFECYCLE_ACTOR,
+            trigger_source=TriggerSource.HEALTH_MONITOR,
+            transition_reason=transition_reason,
+            eval_metrics=self._metrics_to_dict(metrics),
+            allocation_penalty=penalty,
+            allocation_scalar=1.0 - penalty,
+            did_transition=did_transition,
+            governance_state=governance.current_state,
+            evaluation_run_id=rebalance_run_id,
+            now=now,
+        )
 
         logger.info(
             "strategy_health_lifecycle.evaluated",

@@ -15,6 +15,7 @@ from . import experiments as experiments
 from . import factor_exposure_snapshots as factor_exposure_snapshots
 from . import factor_neutralization_runs as factor_neutralization_runs
 from . import fills as fills
+from . import governance_audit_events as governance_audit_events
 from . import ingestion_checkpoint as ingestion_checkpoint
 from . import ingestion_runs as ingestion_runs
 from . import kill_switch_state as kill_switch_state
@@ -66,6 +67,7 @@ __all__ = [
     "cash_snapshots",
     "corporate_actions",
     "fills",
+    "governance_audit_events",
     "market_bars",
     "order_intents",
     "operator_settings",

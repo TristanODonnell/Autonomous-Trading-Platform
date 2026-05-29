@@ -1896,3 +1896,37 @@ drawdown_governance_recoveries_total = meter.create_counter(
     description="Total number of drawdown governance ladder recovery transitions",
     unit="1",
 )
+
+# ==========================================
+# GOVERNANCE AUDIT COMPLETENESS METRICS (Rec 6.7)
+# ==========================================
+
+governance_decisions_total = meter.create_counter(
+    name="ratp_governance_decisions_total",
+    description="Total number of governance decisions recorded (promotions, demotions, health, drawdown)",
+    unit="1",
+)
+
+governance_promotions_total = meter.create_counter(
+    name="ratp_governance_promotions_total",
+    description="Total number of governance promotion decisions recorded",
+    unit="1",
+)
+
+governance_demotions_total = meter.create_counter(
+    name="ratp_governance_demotions_total",
+    description="Total number of governance demotion decisions recorded",
+    unit="1",
+)
+
+governance_auto_actions_total = meter.create_counter(
+    name="ratp_governance_auto_actions_total",
+    description="Total number of automated governance actions (auto-promotion, auto-demotion, drawdown escalation)",
+    unit="1",
+)
+
+governance_superseded_events_total = meter.create_counter(
+    name="ratp_governance_superseded_events_total",
+    description="Total number of governance audit events marked as superseded by an amendment",
+    unit="1",
+)

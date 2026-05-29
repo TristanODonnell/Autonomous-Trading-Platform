@@ -8,6 +8,9 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.governance_audit_service import (
+    GovernanceAuditService,
+)
 from autonomous_trading_platform.application.services.live_performance_metrics_service import (
     LivePerformanceMetricsService,
 )
@@ -20,6 +23,7 @@ from autonomous_trading_platform.contracts.governance.drawdown_governance import
     ladder_severity,
     ladder_state_one_step_better,
 )
+from autonomous_trading_platform.contracts.governance.governance_audit import TriggerSource
 from autonomous_trading_platform.contracts.runtime.audit_log import AuditLogEvent
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metrics import (
@@ -252,6 +256,7 @@ class DrawdownGovernanceService:
         audit_log_repo: AuditLogRepository | None = None,
         operator_settings_repo: OperatorSettingsRepository | None = None,
         live_perf_service: LivePerformanceMetricsService | None = None,
+        governance_audit_service: GovernanceAuditService | None = None,
     ) -> None:
         self._session = session
         self._ladder_state_repo = ladder_state_repo or DrawdownGovernanceLadderStateRepository(
@@ -263,6 +268,10 @@ class DrawdownGovernanceService:
         self._audit_log_repo = audit_log_repo or AuditLogRepository(session)
         self._operator_settings_repo = operator_settings_repo or OperatorSettingsRepository(session)
         self._live_perf_service = live_perf_service or LivePerformanceMetricsService(session)
+        self._governance_audit_service = governance_audit_service or GovernanceAuditService(
+            session=session,
+            audit_log_repo=self._audit_log_repo,
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -650,6 +659,20 @@ class DrawdownGovernanceService:
                 realized_drawdown=realized_drawdown,
                 max_drawdown_allowed=max_drawdown_allowed,
                 allocation_scalar=allocation_scalar,
+                now=now,
+            )
+            self._governance_audit_service.record_drawdown_transition(
+                strategy_id=strategy_id,
+                from_state=current_state,
+                to_state=actual_state,
+                actor=_LADDER_ACTOR,
+                trigger_source=TriggerSource.DRAWDOWN_GOVERNANCE,
+                transition_reason=reason,
+                realized_drawdown=realized_drawdown,
+                max_drawdown_allowed=max_drawdown_allowed,
+                drawdown_utilization=utilization,
+                allocation_scalar_after=allocation_scalar,
+                evaluation_run_id=run_id,
                 now=now,
             )
 
