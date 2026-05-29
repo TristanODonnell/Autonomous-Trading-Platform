@@ -661,7 +661,7 @@ def test_evaluate_strategy_recovery_blocked_by_cooldown(db_session: Session) -> 
         db_session,
         "s_eval_cooldown",
         StrategyHealthStatus.DEGRADING,
-        cooldown_expires_at=_NOW + timedelta(hours=10),
+        cooldown_expires_at=datetime.now(UTC) + timedelta(hours=10),
         evaluation_count=10,
     )
 
