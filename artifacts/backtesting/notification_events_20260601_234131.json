@@ -1,0 +1,48 @@
+{
+  "run_id": "111cc770-a741-476c-80b5-b1226006b8cf",
+  "results": [
+    {
+      "channel": "notify_drawdown_alerts",
+      "status": "FIRES_AND_FLAG_RESPECTED",
+      "flag_respected": true,
+      "evidence": {
+        "enabled_orders_blocked": 8,
+        "disabled_orders_blocked": 8,
+        "enabled_risk_snapshots_blocked": 4,
+        "disabled_risk_snapshots_blocked": 4,
+        "enabled_drawdown_alerts": 1,
+        "disabled_drawdown_alerts": 0,
+        "risk_alert_service_wired_to_loop": true,
+        "note": "max_drawdown_limit blocks new orders in both branches. notify_drawdown_alerts controls whether the loop persists a drawdown_breach risk alert on the first breached tick."
+      }
+    },
+    {
+      "channel": "kill_switch_events",
+      "status": "FIRES_UNCONDITIONALLY",
+      "flag_respected": null,
+      "evidence": {
+        "audit_log_entries": 13,
+        "canceled_orders": 0,
+        "note": "No notify_kill_switch flag. RuntimeControlService.activate_kill_switch() always writes KILL_SWITCH_ACTIVATED to audit_logs. Mandatory, not configurable."
+      }
+    },
+    {
+      "channel": "notify_strategy_promotion_events",
+      "status": "ERROR",
+      "error": "(psycopg.errors.UndefinedTable) relation \"governance_audit_events\" does not exist\nLINE 1: INSERT INTO governance_audit_events (governance_audit_id, st...\n                    ^\n[SQL: INSERT INTO governance_audit_events (governance_audit_id, strategy_id, event_type, trigger_source, transition_from, transition_to, actor, decision_outcome, decision_rationale, criteria_evaluated, source_run_id, simulation_run_id, experiment_run_id, allocation_config_hash, covariance_snapshot_id, factor_snapshot_id, metrics_lineage, state_snapshot_before, state_snapshot_after, promotion_rule_version, governance_policy_version, evaluation_version, shadow_validation_status, shadow_divergence_metrics, superseded_by, evaluation_run_id, recorded_at) VALUES (%(governance_audit_id)s::VARCHAR, %(strategy_id)s::VARCHAR, %(event_type)s::VARCHAR, %(trigger_source)s::VARCHAR, %(transition_from)s::VARCHAR, %(transition_to)s::VARCHAR, %(actor)s::VARCHAR, %(decision_outcome)s::VARCHAR, %(decision_rationale)s::VARCHAR, %(criteria_evaluated)s::JSONB, %(source_run_id)s::VARCHAR, %(simulation_run_id)s::VARCHAR, %(experiment_run_id)s::VARCHAR, %(allocation_config_hash)s::VARCHAR, %(covariance_snapshot_id)s::VARCHAR, %(factor_snapshot_id)s::VARCHAR, %(metrics_lineage)s::JSONB, %(state_snapshot_before)s::JSONB, %(state_snapshot_after)s::JSONB, %(promotion_rule_version)s::VARCHAR, %(governance_policy_version)s::VARCHAR, %(evaluation_version)s::VARCHAR, %(shadow_validation_status)s::VARCHAR, %(shadow_divergence_metrics)s::JSONB, %(superseded_by)s::VARCHAR, %(evaluation_run_id)s::VARCHAR, %(recorded_at)s::TIMESTAMP WITH TIME ZONE)]\n[parameters: {'governance_audit_id': '6f694a9d-df25-45df-8f81-39a1006c32fb', 'strategy_id': 'verify_promotion_true_a24222bf', 'event_type': 'GOVERNANCE_PROMOTION_APPROVED', 'trigger_source': 'operator_manual', 'transition_from': 'approved_research', 'transition_to': 'approved_for_paper_trading', 'actor': 'verify-notification-events', 'decision_outcome': 'approved', 'decision_rationale': 'Promotion evaluation: approved_research -> approved_for_paper_trading\\nDecision: APPROVED - all required criteria passed.', 'criteria_evaluated': Jsonb([]), 'source_run_id': 'a7645680-151b-467b-a9e9-58df41eed579', 'simulation_run_id': None, 'experiment_run_id': None, 'allocation_config_hash': None, 'covariance_snapshot_id': None, 'factor_snapshot_id': None, 'metrics_lineage': Jsonb({'source_run_id': 'a7645680-151b-46 ... (203 chars)), 'state_snapshot_before': Jsonb({'governance_state': 'approved_rese ... (276 chars)), 'state_snapshot_after': Jsonb({'governance_state': 'approved_for_ ... (130 chars)), 'promotion_rule_version': 'gov_audit_approved_research_to_approved_paper', 'governance_policy_version': '1.0.0', 'evaluation_version': '1.0.0', 'shadow_validation_status': None, 'shadow_divergence_metrics': Jsonb(None), 'superseded_by': None, 'evaluation_run_id': None, 'recorded_at': datetime.datetime(2026, 6, 1, 23, 41, 30, 335857, tzinfo=datetime.timezone.utc)}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+    },
+    {
+      "channel": "notify_pipeline_failures",
+      "status": "FIRES_AND_FLAG_RESPECTED",
+      "flag_respected": true,
+      "evidence": {
+        "flag_stored_in_db": true,
+        "failure_hooks_exist": true,
+        "enabled_failure_events": 1,
+        "disabled_failure_events": 0,
+        "failed_runtime_job_records": 2,
+        "note": "RuntimeJobRunner records failed jobs regardless of notification settings. PipelineFailureNotificationService reads notify_pipeline_failures and emits PIPELINE_FAILURE_EVENT only when the flag is enabled."
+      }
+    }
+  ]
+}

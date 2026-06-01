@@ -1,0 +1,38 @@
+{
+  "run_id": "840e6c7c-2876-465c-9fe0-c23a01e60166",
+  "results": [
+    {
+      "channel": "notify_drawdown_alerts",
+      "status": "ERROR",
+      "error": "(psycopg.errors.UndefinedColumn) column signals.strategy_version does not exist\nLINE 1: ...fidence, signals.target_position, signals.params, signals.st...\n                                                             ^\n[SQL: SELECT signals.signal_id, signals.run_id, signals.timestamp, signals.bar_timestamp, signals.strategy_id, signals.symbol, signals.direction, signals.confidence, signals.target_position, signals.params, signals.strategy_version, signals.feature_snapshot_ref, signals.target_exposure \nFROM signals]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+    },
+    {
+      "channel": "kill_switch_events",
+      "status": "FIRES_UNCONDITIONALLY",
+      "flag_respected": null,
+      "evidence": {
+        "audit_log_entries": 12,
+        "canceled_orders": 0,
+        "note": "No notify_kill_switch flag. RuntimeControlService.activate_kill_switch() always writes KILL_SWITCH_ACTIVATED to audit_logs. Mandatory, not configurable."
+      }
+    },
+    {
+      "channel": "notify_strategy_promotion_events",
+      "status": "ERROR",
+      "error": "Strategy does not meet promotion criteria: sharpe None < required 1.5; days_tested None < required 30; trade_count None < required 10; max_drawdown None exceeds limit 0.15"
+    },
+    {
+      "channel": "notify_pipeline_failures",
+      "status": "FIRES_AND_FLAG_RESPECTED",
+      "flag_respected": true,
+      "evidence": {
+        "flag_stored_in_db": true,
+        "failure_hooks_exist": true,
+        "enabled_failure_events": 1,
+        "disabled_failure_events": 0,
+        "failed_runtime_job_records": 2,
+        "note": "RuntimeJobRunner records failed jobs regardless of notification settings. PipelineFailureNotificationService reads notify_pipeline_failures and emits PIPELINE_FAILURE_EVENT only when the flag is enabled."
+      }
+    }
+  ]
+}

@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import BigInteger, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from autonomous_trading_platform.contracts.common.types import UTCDateTime
@@ -30,6 +30,6 @@ class RuntimeJobRunSteps(Base):
     started_at: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
     completed_at: Mapped[UTCDateTime | None] = mapped_column(UTCDateTimeType(), nullable=True)
 
-    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     error_message: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
     error_type: Mapped[str | None] = mapped_column(String(128), nullable=True)

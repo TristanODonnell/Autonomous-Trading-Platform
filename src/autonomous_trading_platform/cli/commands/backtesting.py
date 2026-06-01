@@ -1661,6 +1661,38 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
                 settings_repo.get_or_create_default().notify_strategy_promotion_events
             )
 
+            _verify_source_run_id = str(uuid.uuid4())
+
+            # Temporarily null promotion rule thresholds so ephemeral test
+            # strategies (which have no real metrics) can be promoted.
+            from sqlalchemy import select as _select
+
+            from autonomous_trading_platform.storage.sor.models.promotion_rules import (
+                PromotionRules as _PromotionRulesModel,
+            )
+
+            _promo_rule = session_promo.scalars(
+                _select(_PromotionRulesModel).where(
+                    _PromotionRulesModel.from_status == "approved_research",
+                    _PromotionRulesModel.to_status == "approved_paper",
+                    _PromotionRulesModel.is_active.is_(True),
+                )
+            ).first()
+            _saved_thresholds: dict = {}
+            _threshold_fields = (
+                "min_sharpe",
+                "max_drawdown",
+                "min_days_tested",
+                "min_trade_count",
+                "min_cagr",
+                "min_win_rate",
+            )
+            if _promo_rule is not None:
+                for _f in _threshold_fields:
+                    _saved_thresholds[_f] = getattr(_promo_rule, _f)
+                    setattr(_promo_rule, _f, None)
+                session_promo.flush()
+
             settings_repo.update_current(
                 {"notify_strategy_promotion_events": True},
                 updated_by="verify-notification-events",
@@ -1671,7 +1703,7 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
                     config_hash=f"{true_strategy_id}_hash",
                     current_state="approved_research",
                     experiment_id="verify_notification_events",
-                    source_run_id=None,
+                    source_run_id=_verify_source_run_id,
                     submitted_at=now,
                     updated_at=now,
                     submitted_by="verify-notification-events",
@@ -1684,6 +1716,7 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
                 reason="verify promotion notification enabled",
                 updated_by="verify-notification-events",
                 actor_role="risk_manager",
+                source_run_id=_verify_source_run_id,
             )
 
             settings_repo.update_current(
@@ -1696,7 +1729,7 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
                     config_hash=f"{false_strategy_id}_hash",
                     current_state="approved_research",
                     experiment_id="verify_notification_events",
-                    source_run_id=None,
+                    source_run_id=_verify_source_run_id,
                     submitted_at=now,
                     updated_at=now,
                     submitted_by="verify-notification-events",
@@ -1709,6 +1742,7 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
                 reason="verify promotion notification disabled",
                 updated_by="verify-notification-events",
                 actor_role="risk_manager",
+                source_run_id=_verify_source_run_id,
             )
 
             audit_rows = session_promo.query(AuditLogRow).all()
@@ -1737,6 +1771,11 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
                 {"notify_strategy_promotion_events": (original_notify_promotion_events)},
                 updated_by="verify-notification-events",
             )
+            # Restore promotion rule thresholds.
+            if _promo_rule is not None:
+                for _f, _v in _saved_thresholds.items():
+                    setattr(_promo_rule, _f, _v)
+                session_promo.flush()
         finally:
             session_promo.close()
 

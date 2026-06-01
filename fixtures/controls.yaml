@@ -13,8 +13,8 @@ strategies:
     governance_state: approved_for_live_trading   # shows as "Running" in toggles
     allocation_pct: 0.60
     parameters:
-      fast_period: 10
-      slow_period: 50
+      short_window: 10
+      long_window: 50
 
   - type: momentum
     display_name: "Momentum Factor"
@@ -22,7 +22,7 @@ strategies:
     governance_state: approved_for_paper_trading  # shows as "Paper" in toggles
     allocation_pct: 0.30
     parameters:
-      lookback_period: 20
+      lookback: 20
 
   # ── Governance — Pending Promotion (research governance) ───────────────────
 
@@ -32,5 +32,6 @@ strategies:
     governance_state: approved_research           # shows in Pending Promotion card
     allocation_pct: null
     parameters:
-      lookback_period: 20
-      z_score_threshold: 2.0
+      window: 20
+      buy_below_z: -2.0
+      sell_above_z: 2.0
