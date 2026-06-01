@@ -110,6 +110,19 @@ def register(subparsers) -> None:
     replay_ingestion_parser.add_argument("--output-json", type=Path, default=None)
     replay_ingestion_parser.set_defaults(func=handle_replay_ingestion)
 
+    # ── list-failed-runs (Section 2 runtime-native wrapper) ──────────────────
+    list_failed_parser = runtime_subparsers.add_parser(
+        "list-failed-runs",
+        help="List recent failed run manifests (runtime-native alias of admin inspect-failed-runs)",
+    )
+    list_failed_parser.add_argument(
+        "--limit",
+        type=int,
+        default=25,
+        help="Number of results to return (1–1000)",
+    )
+    list_failed_parser.set_defaults(func=handle_list_failed_runs)
+
 
 def _add_replay_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--symbols", required=True)
@@ -392,3 +405,55 @@ def handle_replay_ingestion(args: argparse.Namespace) -> int:
     print_json(summary)
 
     return 0 if result.ticks_ingestion_ok > 0 else 1
+
+
+_LIST_FAILED_LIMIT_MIN = 1
+_LIST_FAILED_LIMIT_MAX = 1000
+
+
+def handle_list_failed_runs(args: argparse.Namespace) -> int:
+    """Runtime-native alias of `admin inspect-failed-runs`. No broker dependency."""
+    from dotenv import load_dotenv
+
+    from autonomous_trading_platform.db import get_session as _get_session
+    from autonomous_trading_platform.storage.sor.services.unit_of_work import (
+        SorUnitOfWork as _SorUnitOfWork,
+    )
+
+    limit = args.limit
+    if not (_LIST_FAILED_LIMIT_MIN <= limit <= _LIST_FAILED_LIMIT_MAX):
+        print_error(
+            f"--limit must be between {_LIST_FAILED_LIMIT_MIN} and {_LIST_FAILED_LIMIT_MAX}, got {limit}"
+        )
+        return 1
+
+    load_dotenv()
+    session = _get_session()
+    try:
+        with _SorUnitOfWork(session) as uow:
+            failed_runs = uow.run_manifests.list_failed_runs(limit=limit)
+
+        print_header("Failed Runs")
+        print_json(
+            {
+                "count": len(failed_runs),
+                "runs": [
+                    {
+                        "run_id": str(row.run_id),
+                        "run_type": row.run_type.value if row.run_type else None,
+                        "status": row.status,
+                        "bar_timestamp": (
+                            row.bar_timestamp.isoformat() if row.bar_timestamp is not None else None
+                        ),
+                        "current_step": row.current_step,
+                        "last_successful_step": row.last_successful_step,
+                        "error_message": row.error_message,
+                    }
+                    for row in failed_runs
+                ],
+            }
+        )
+        return 0
+
+    finally:
+        session.close()
