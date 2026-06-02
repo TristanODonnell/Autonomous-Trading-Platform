@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, date, datetime
+from hashlib import sha256
 from typing import Any, cast
 
 import pandas as pd
@@ -54,9 +55,9 @@ class FeatureDatasetWriterService:
         contract = FeatureDatasetVersion(
             dataset_version_id=feature_dataset_version_id,
             feature_name=feature_name,
-            dataset_name=f"{feature_name}_features",
+            dataset_name="features",
             created_at=datetime.now(UTC),
-            schema_version="feature_schema_v1",
+            schema_version="1.0",
             source_dataset_version=source_dataset_version_id,
             underlying_price_basis=source_price_basis,
             computation_parameters=computation_parameters,
@@ -70,6 +71,7 @@ class FeatureDatasetWriterService:
             metadata_json={
                 "symbols": symbols,
                 "row_count": len(frame),
+                "price_basis": source_price_basis.value,
             },
             checksum=None,
             source_manifest={
@@ -88,9 +90,21 @@ class FeatureDatasetWriterService:
         *,
         feature_dataset_version: FeatureDatasetVersion,
     ) -> FeatureDatasetVersion:
+        checksum = (
+            feature_dataset_version.checksum
+            or sha256(
+                (
+                    f"{feature_dataset_version.dataset_version_id}:"
+                    f"{feature_dataset_version.feature_name}:"
+                    f"{feature_dataset_version.source_dataset_version}:"
+                    f"{feature_dataset_version.computation_parameters}"
+                ).encode()
+            ).hexdigest()
+        )
         updated = replace(
             feature_dataset_version,
             validation_status="validated",
+            checksum=checksum,
         )
         saved = self._feature_dataset_repository.save(updated)
         return cast(FeatureDatasetVersion, saved)

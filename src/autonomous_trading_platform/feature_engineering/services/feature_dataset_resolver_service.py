@@ -11,7 +11,10 @@ from autonomous_trading_platform.contracts.runtime.dataset_version import Datase
 from autonomous_trading_platform.runtime.services.dataset_registration_service import (
     DatasetRegistrationService,
 )
-from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
+from autonomous_trading_platform.storage.parquet.datasets import (
+    ADJUSTED_BARS_DATASET,
+    RAW_BARS_DATASET,
+)
 
 
 @dataclass(slots=True)
@@ -43,13 +46,14 @@ class FeatureDatasetResolverService:
         *,
         price_basis: PriceBasis,
     ) -> DatasetVersion:
+        dataset_name = "adjusted_bars" if price_basis == PriceBasis.ADJUSTED else "raw_bars"
         dataset = self._dataset_registration_service.get_latest_validated_dataset(
-            dataset_name="market_bars",
+            dataset_name=dataset_name,
             price_basis=price_basis,
         )
         if dataset is None:
             raise ValueError(
-                f"No validated market dataset found for price_basis={price_basis.value}."
+                f"No validated {dataset_name} dataset found for price_basis={price_basis.value}."
             )
         return dataset
 
@@ -88,6 +92,7 @@ class FeatureDatasetResolverService:
 
         frame = self.load_bars_frame(
             dataset_version_id=dataset_version.dataset_version_id,
+            price_basis=price_basis,
             symbols=symbols,
             start_date=start_date,
             end_date=end_date,
@@ -102,6 +107,7 @@ class FeatureDatasetResolverService:
         self,
         *,
         dataset_version_id: str,
+        price_basis: PriceBasis,
         symbols: list[str] | None = None,
         start_date: date | None = None,
         end_date: date | None = None,
@@ -113,10 +119,13 @@ class FeatureDatasetResolverService:
             raise ValueError("start_date and end_date must be provided when loading source bars.")
 
         frames: list[pd.DataFrame] = []
+        parquet_dataset = (
+            ADJUSTED_BARS_DATASET if price_basis == PriceBasis.ADJUSTED else RAW_BARS_DATASET
+        )
 
         for symbol in symbols:
             table = self._parquet_reader.read(
-                dataset=RAW_BARS_DATASET,
+                dataset=parquet_dataset,
                 dataset_version=dataset_version_id,
                 symbol=symbol,
                 start_date=start_date,

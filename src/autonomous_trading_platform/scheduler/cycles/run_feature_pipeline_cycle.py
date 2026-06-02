@@ -10,6 +10,9 @@ from time import perf_counter
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
+from autonomous_trading_platform.contracts.runtime.feature_dataset_version import (
+    FeatureDatasetVersion,
+)
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.contracts.runtime.runtime_job_run import RuntimeJobRun
 from autonomous_trading_platform.db import get_session
@@ -184,7 +187,7 @@ def run_feature_pipeline_cycle(
     include_liquidity: bool = True,
     include_regime: bool = True,
     include_regime_classification: bool = True,
-) -> None:
+) -> dict[str, object]:
     if now_utc is None:
         now_utc = datetime.now(UTC)
     cycle_wall_start = perf_counter()
@@ -262,6 +265,7 @@ def run_feature_pipeline_cycle(
 
     base_metadata: dict[str, object] = {}
     manifest: RunManifest | None = None
+    feature_results: list[dict[str, object]] = []
 
     record_cycle_started(
         logger=logger,
@@ -402,6 +406,22 @@ def run_feature_pipeline_cycle(
                 metadata=base_metadata,
             )
 
+            def record_feature_result(step: str, result: object) -> None:
+                if not isinstance(result, FeatureDatasetVersion):
+                    return
+
+                feature_results.append(
+                    {
+                        "step": step,
+                        "feature_dataset_version_id": result.dataset_version_id,
+                        "feature_name": result.feature_name,
+                        "source_dataset_version": result.source_dataset_version,
+                        "validation_status": result.validation_status,
+                        "storage_path": result.storage_path,
+                        "computation_parameters": result.computation_parameters,
+                    }
+                )
+
             def run_step(step: str, fn: Callable[[], object]) -> object:
                 record_step_started(
                     logger=logger,
@@ -430,6 +450,7 @@ def run_feature_pipeline_cycle(
                         run_id=str(run_id),
                         duration_seconds=step_duration,
                     )
+                    record_feature_result(step, result)
                     return result
                 except Exception as exc:
                     step_duration = perf_counter() - step_start
@@ -533,21 +554,26 @@ def run_feature_pipeline_cycle(
                     ),
                 )
 
+            output_summary: dict[str, object] = {
+                "run_id": str(run_id),
+                "runtime_job_run_id": job_run_id,
+                "dataset_version_id": dataset_version_id,
+                "last_successful_step": "feature_pipeline_completed",
+                "feature_dataset_versions": feature_results,
+                "include_returns": include_returns,
+                "include_volatility": include_volatility,
+                "include_moving_average": include_moving_average,
+                "include_liquidity": include_liquidity,
+                "include_regime": include_regime,
+                "include_regime_classification": include_regime_classification,
+            }
+
             manifest.status = "completed"
             _save_runtime_job_run(
                 status="completed",
                 completed_at=datetime.now(UTC),
                 error_message=None,
-                output_summary_json={
-                    "dataset_version_id": dataset_version_id,
-                    "last_successful_step": "feature_pipeline_completed",
-                    "include_returns": include_returns,
-                    "include_volatility": include_volatility,
-                    "include_moving_average": include_moving_average,
-                    "include_liquidity": include_liquidity,
-                    "include_regime": include_regime,
-                    "include_regime_classification": include_regime_classification,
-                },
+                output_summary_json=output_summary,
             )
 
             manifest.current_step = None
@@ -568,6 +594,8 @@ def run_feature_pipeline_cycle(
                 run_id=str(run_id),
                 duration_seconds=total_duration,
             )
+
+            return output_summary
 
     except Exception as exc:
         total_duration = perf_counter() - cycle_wall_start
