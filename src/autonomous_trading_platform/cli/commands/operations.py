@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -21,7 +22,17 @@ from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.observability.verification.runtime_soak_verification_service import (
     RuntimeSoakVerificationService,
 )
+from autonomous_trading_platform.scheduler.jobs.check_ingestion_readiness_job import (
+    check_ingestion_readiness_job,
+)
 from autonomous_trading_platform.storage.sor.models.operational_alerts import OperationalAlert
+
+
+@dataclass
+class OperationsCliDependencies:
+    session: object
+    settings: object
+
 
 _STALE_MINUTES_MIN = 1
 _STALE_MINUTES_MAX = 1440
@@ -277,6 +288,18 @@ def register(subparsers) -> None:
         help="Runbook file stem to look up (e.g. README).",
     )
     runbook_show_parser.set_defaults(func=handle_runbook_show)
+
+    # --- inspect-ingestion-readiness ---
+    ingestion_readiness_parser = operations_subparsers.add_parser(
+        "inspect-ingestion-readiness",
+        help="Check whether the current cycle is past the ingestion deadline (read-only).",
+    )
+    ingestion_readiness_parser.add_argument(
+        "--timestamp",
+        metavar="ISO8601",
+        help="Override the current time for the readiness check (e.g. 2026-05-26T15:35:00Z).",
+    )
+    ingestion_readiness_parser.set_defaults(func=handle_inspect_ingestion_readiness)
 
     # --- verify-notification-events ---
     verify_notify_parser = operations_subparsers.add_parser(
@@ -611,6 +634,26 @@ def handle_runbook_show(args: argparse.Namespace) -> int:
     print(f"Path: {target}")
     print()
     print(target.read_text(encoding="utf-8"))
+    return 0
+
+
+def handle_inspect_ingestion_readiness(args: argparse.Namespace) -> int:
+    from uuid import uuid4
+
+    timestamp = parse_datetime(args.timestamp) if args.timestamp else None
+    result = check_ingestion_readiness_job(
+        run_id=str(uuid4()),
+        now_utc=timestamp,
+    )
+    print_header("Ingestion Readiness")
+    print_json(
+        {
+            "timestamp": args.timestamp,
+            "ingestion_ready": result.ready,
+            "safe_mode": result.safe_mode,
+            "reason": result.reason,
+        }
+    )
     return 0
 
 

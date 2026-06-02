@@ -29,6 +29,9 @@ from autonomous_trading_platform.scheduler.cycles.run_governance_promotion_cycle
     run_strategy_auto_promotion_cycle,
 )
 from autonomous_trading_platform.scheduler.cycles.run_trading_cycle import run_trading_cycle
+from autonomous_trading_platform.scheduler.cycles.run_trading_evaluation_cycle import (
+    run_trading_evaluation_cycle,
+)
 from autonomous_trading_platform.scheduler.registry.manual_trigger_service import (
     ManualTriggerService,
 )
@@ -109,6 +112,28 @@ def register(subparsers) -> None:
     replay_ingestion_parser.add_argument("--print-summary", action="store_true", default=False)
     replay_ingestion_parser.add_argument("--output-json", type=Path, default=None)
     replay_ingestion_parser.set_defaults(func=handle_replay_ingestion)
+
+    # ── evaluate-cycle ────────────────────────────────────────────────────────
+    evaluate_cycle_parser = runtime_subparsers.add_parser(
+        "evaluate-cycle",
+        help=(
+            "[BROKER/RUNTIME] Run the full trading evaluation cycle for one bar timestamp. "
+            "Reads broker account/positions/trades and writes signals, checkpoints, "
+            "run manifests, and runtime state."
+        ),
+    )
+    evaluate_cycle_parser.add_argument(
+        "--timestamp",
+        required=True,
+        metavar="ISO8601",
+        help="Bar timestamp to evaluate (e.g. 2026-05-26T15:35:00Z)",
+    )
+    evaluate_cycle_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print execution plan without running the cycle or touching broker APIs",
+    )
+    evaluate_cycle_parser.set_defaults(func=handle_evaluate_cycle)
 
     # ── list-failed-runs (Section 2 runtime-native wrapper) ──────────────────
     list_failed_parser = runtime_subparsers.add_parser(
@@ -405,6 +430,38 @@ def handle_replay_ingestion(args: argparse.Namespace) -> int:
     print_json(summary)
 
     return 0 if result.ticks_ingestion_ok > 0 else 1
+
+
+def handle_evaluate_cycle(args: argparse.Namespace) -> int:
+    timestamp = parse_datetime(args.timestamp)
+
+    if args.dry_run:
+        print_header("Evaluate Cycle (dry-run)")
+        print_json(
+            {
+                "dry_run": True,
+                "timestamp": args.timestamp,
+                "warning": (
+                    "Live run would call run_trading_evaluation_cycle(), "
+                    "read broker account/positions/trades, write signals, "
+                    "checkpoints, run manifests, and runtime state."
+                ),
+            }
+        )
+        return 0
+
+    print(
+        "[runtime evaluate-cycle] WARNING: This command calls the full trading "
+        "evaluation cycle. It will read broker account, positions, and latest "
+        "trades, and will write signals, checkpoints, run manifests, and "
+        "runtime state. Use --dry-run to skip execution."
+    )
+
+    run_trading_evaluation_cycle(timestamp=timestamp)
+
+    print_header("Evaluate Cycle")
+    print_json({"timestamp": args.timestamp, "status": "success"})
+    return 0
 
 
 _LIST_FAILED_LIMIT_MIN = 1

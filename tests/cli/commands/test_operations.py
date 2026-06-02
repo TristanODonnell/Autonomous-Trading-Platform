@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -254,3 +255,92 @@ def test_verify_runtime_soak_returns_one_for_failed_report(
     assert exit_code == 1
     assert payload["status"] == RuntimeSoakStatus.FAILED.value
     assert payload["summary"]["failed"] == 1
+
+
+# ---------------------------------------------------------------------------
+# inspect-ingestion-readiness
+# ---------------------------------------------------------------------------
+
+
+class TestInspectIngestionReadiness:
+    def test_registered(self):
+        parser = build_parser()
+        args = parser.parse_args(["operations", "inspect-ingestion-readiness"])
+        assert args.func is operations.handle_inspect_ingestion_readiness
+
+    def test_timestamp_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(
+            ["operations", "inspect-ingestion-readiness", "--timestamp", "2026-05-26T15:35:00Z"]
+        )
+        assert args.timestamp == "2026-05-26T15:35:00Z"
+
+    def test_returns_zero(self, monkeypatch, capsys):
+        from autonomous_trading_platform.scheduler.jobs.check_ingestion_readiness_job import (
+            IngestionReadinessResult,
+        )
+
+        monkeypatch.setattr(
+            operations,
+            "check_ingestion_readiness_job",
+            lambda **_: IngestionReadinessResult(ready=True, safe_mode=False, reason="ok"),
+        )
+        args = argparse.Namespace(
+            timestamp=None, func=operations.handle_inspect_ingestion_readiness
+        )
+        assert operations.handle_inspect_ingestion_readiness(args) == 0
+
+    def test_output_contains_ingestion_ready_key(self, monkeypatch, capsys):
+        from autonomous_trading_platform.scheduler.jobs.check_ingestion_readiness_job import (
+            IngestionReadinessResult,
+        )
+
+        monkeypatch.setattr(
+            operations,
+            "check_ingestion_readiness_job",
+            lambda **_: IngestionReadinessResult(ready=True, safe_mode=False, reason=None),
+        )
+        args = argparse.Namespace(
+            timestamp=None, func=operations.handle_inspect_ingestion_readiness
+        )
+        operations.handle_inspect_ingestion_readiness(args)
+        payload = _extract_json(capsys.readouterr().out)
+        assert "ingestion_ready" in payload
+        assert payload["ingestion_ready"] is True
+
+    def test_output_no_domain_note(self, monkeypatch, capsys):
+        from autonomous_trading_platform.scheduler.jobs.check_ingestion_readiness_job import (
+            IngestionReadinessResult,
+        )
+
+        monkeypatch.setattr(
+            operations,
+            "check_ingestion_readiness_job",
+            lambda **_: IngestionReadinessResult(ready=False, safe_mode=True, reason="late"),
+        )
+        args = argparse.Namespace(
+            timestamp=None, func=operations.handle_inspect_ingestion_readiness
+        )
+        operations.handle_inspect_ingestion_readiness(args)
+        payload = _extract_json(capsys.readouterr().out)
+        assert "domain_note" not in payload
+
+    def test_safe_mode_propagated(self, monkeypatch, capsys):
+        from autonomous_trading_platform.scheduler.jobs.check_ingestion_readiness_job import (
+            IngestionReadinessResult,
+        )
+
+        monkeypatch.setattr(
+            operations,
+            "check_ingestion_readiness_job",
+            lambda **_: IngestionReadinessResult(
+                ready=False, safe_mode=True, reason="deadline passed"
+            ),
+        )
+        args = argparse.Namespace(
+            timestamp=None, func=operations.handle_inspect_ingestion_readiness
+        )
+        operations.handle_inspect_ingestion_readiness(args)
+        payload = _extract_json(capsys.readouterr().out)
+        assert payload["safe_mode"] is True
+        assert payload["ingestion_ready"] is False
