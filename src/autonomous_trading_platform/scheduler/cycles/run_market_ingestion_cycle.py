@@ -85,7 +85,9 @@ def run_market_ingestion_cycle(
     symbols_override: list[str] | None = None,
     *,
     enforce_lateness: bool = True,
-) -> None:
+    trigger_type: str = "scheduler",
+    actor: str | None = None,
+) -> dict[str, object]:
     """
     Entry point for the Airflow DAG.
 
@@ -131,7 +133,7 @@ def run_market_ingestion_cycle(
                 job_name="market_ingestion_cycle",
                 parent_job_run_id=None,
                 status=status,
-                trigger_type="scheduler",
+                trigger_type=trigger_type,
                 started_at=job_started_at,
                 completed_at=completed_at,
                 duration_ms=(
@@ -146,6 +148,8 @@ def run_market_ingestion_cycle(
                     "dataset_name": RAW_BARS_DATASET.dataset_key,
                     "price_basis": PriceBasis.RAW.value,
                     "interval": BarInterval.FIVE_MIN.value,
+                    "trigger_type": trigger_type,
+                    "actor": actor,
                 },
                 output_summary_json=output_summary_json,
             )
@@ -209,6 +213,8 @@ def run_market_ingestion_cycle(
             "cycle_start": cycle_start.isoformat(),
             "cycle_end": cycle_end.isoformat(),
             "expected_symbols": sorted(expected_symbols),
+            "trigger_type": trigger_type,
+            "actor": actor,
         }
 
         dataset_version = daily_dataset_resolver_service.get_or_create_active_daily_dataset(
@@ -385,6 +391,19 @@ def run_market_ingestion_cycle(
                 run_id=str(run_id),
                 duration_seconds=total_duration,
             )
+            return {
+                "run_id": str(run_id),
+                "runtime_job_run_id": job_run_id,
+                "ingestion_run_id": str(ingestion_run_id),
+                "dataset_version_id": str(dataset_version_id),
+                "expected_symbol_count": len(expected_symbols),
+                "cycle_start": cycle_start.isoformat(),
+                "cycle_end": cycle_end.isoformat(),
+                "symbols": sorted(expected_symbols),
+                "trigger_type": trigger_type,
+                "actor": actor,
+                "last_successful_step": "ingest_bars",
+            }
     except Exception as exc:
         if ingestion_run is not None:
             ingestion_run.status = "failed"

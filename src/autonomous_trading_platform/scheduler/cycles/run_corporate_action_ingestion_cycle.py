@@ -73,7 +73,9 @@ CORPORATE_ACTION_INGESTION_STEP_METRICS = StepMetricSet(
 def run_corporate_action_ingestion_cycle(
     *,
     source_raw_bars_dataset_version_id: str | None = None,
-) -> None:
+    trigger_type: str = "scheduler",
+    actor: str | None = None,
+) -> dict[str, object]:
     """
     Entry point for the Airflow DAG.
 
@@ -110,7 +112,7 @@ def run_corporate_action_ingestion_cycle(
                 job_name="corporate_action_ingestion_cycle",
                 parent_job_run_id=None,
                 status=status,
-                trigger_type="scheduler",
+                trigger_type=trigger_type,
                 started_at=job_started_at,
                 completed_at=completed_at,
                 duration_ms=(
@@ -125,6 +127,8 @@ def run_corporate_action_ingestion_cycle(
                     "dataset_name": CORPORATE_ACTIONS_DATASET.dataset_key,
                     "price_basis": PriceBasis.RAW.value,
                     "interval": BarInterval.ONE_DAY.value,
+                    "trigger_type": trigger_type,
+                    "actor": actor,
                 },
                 output_summary_json=output_summary_json,
             )
@@ -189,6 +193,8 @@ def run_corporate_action_ingestion_cycle(
             "cycle_end": cycle_end.isoformat(),
             "pipeline": "corporate_actions_ingestion",
             "manifest_run_type": manifest.run_type.value,
+            "trigger_type": trigger_type,
+            "actor": actor,
         }
 
         if source_raw_bars_dataset_version_id is not None:
@@ -362,6 +368,20 @@ def run_corporate_action_ingestion_cycle(
                 run_id=str(run_id),
                 duration_seconds=total_duration,
             )
+            return {
+                "run_id": str(run_id),
+                "runtime_job_run_id": job_run_id,
+                "ingestion_run_id": str(ingestion_run_id),
+                "dataset_version_id": str(corporate_actions_dataset_version_id),
+                "corporate_actions_dataset_version_id": str(corporate_actions_dataset_version_id),
+                "adjusted_bars_dataset_version_id": str(adjusted_bars_dataset_version_id),
+                "source_raw_bars_dataset_version_id": str(source_raw_bars_dataset_version_id),
+                "cycle_start": cycle_start.isoformat(),
+                "cycle_end": cycle_end.isoformat(),
+                "trigger_type": trigger_type,
+                "actor": actor,
+                "last_successful_step": "ingest_corporate_actions",
+            }
 
     except Exception as exc:
         _save_runtime_job_run(
