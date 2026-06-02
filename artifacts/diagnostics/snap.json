@@ -1,0 +1,18 @@
+{
+  "snapshot_timestamp": "2026-06-02T00:52:58.229741Z",
+  "operator_controls": null,
+  "operator_settings": null,
+  "strategy_controls": [],
+  "strategy_allocations": [],
+  "aggregate_allocation": null,
+  "datasets": [],
+  "recent_activity": [],
+  "experiments": [],
+  "portfolio": {
+    "summary": null,
+    "holdings": [],
+    "allocation_by_strategy": [],
+    "performance": null,
+    "risk": null
+  }
+}

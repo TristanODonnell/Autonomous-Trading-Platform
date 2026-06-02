@@ -61,25 +61,34 @@ from autonomous_trading_platform.storage.sor.repositories.core.operator_settings
 )
 
 _KNOWN_DATASETS = ["raw_bars", "adjusted_bars", "features"]
+_ALL_SECTIONS = frozenset(
+    {"controls", "settings", "portfolio", "allocations", "datasets", "experiments", "activity"}
+)
 
 
 class RuntimeSnapshotService:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, *, local_only: bool = False) -> None:
         self._session = session
+        self._local_only = local_only
 
-    def capture(self) -> RuntimeSnapshot:
-        controls, strategy_controls = self._capture_controls_and_strategies()
+    def capture(self, *, sections: frozenset[str] | None = None) -> RuntimeSnapshot:
+        active = sections if sections is not None else _ALL_SECTIONS
+        controls, strategy_controls = (
+            self._capture_controls_and_strategies() if "controls" in active else (None, [])
+        )
         return RuntimeSnapshot(
             snapshot_timestamp=datetime.now(UTC),
             operator_controls=controls,
-            operator_settings=self._capture_settings(),
+            operator_settings=self._capture_settings() if "settings" in active else None,
             strategy_controls=strategy_controls,
-            strategy_allocations=self._capture_allocations(),
-            aggregate_allocation=self._capture_aggregate_allocation(),
-            datasets=self._capture_datasets(),
-            recent_activity=self._capture_recent_activity(),
-            experiments=self._capture_experiments(),
-            portfolio=self._capture_portfolio(),
+            strategy_allocations=self._capture_allocations() if "allocations" in active else [],
+            aggregate_allocation=(
+                self._capture_aggregate_allocation() if "allocations" in active else None
+            ),
+            datasets=self._capture_datasets() if "datasets" in active else [],
+            recent_activity=self._capture_recent_activity() if "activity" in active else [],
+            experiments=self._capture_experiments() if "experiments" in active else [],
+            portfolio=self._capture_portfolio() if "portfolio" in active else None,
         )
 
     def _capture_controls_and_strategies(
@@ -220,6 +229,8 @@ class RuntimeSnapshotService:
             return []
 
     def _alpaca_portfolio_service(self) -> AlpacaPortfolioService | None:
+        if self._local_only:
+            return None
         try:
             from autonomous_trading_platform.config.settings import Settings
             from autonomous_trading_platform.execution.clients.alpaca_broker_client import (
