@@ -1,0 +1,114 @@
+{
+  "source": "local_db",
+  "external_broker": false,
+  "portfolio_summary": {
+    "current_portfolio_value": "100000.000000",
+    "todays_pnl_amount": "0.000000",
+    "todays_pnl_percent": "0",
+    "total_pnl_amount": "0.000000",
+    "total_pnl_percent": "0",
+    "cash_balance": "100000.000000"
+  },
+  "holdings": {
+    "holdings": []
+  },
+  "allocation": {
+    "by_strategy": [
+      {
+        "name": "MA Crossover (10/50)",
+        "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+        "allocated_capital": "60000.0000000",
+        "percent_of_portfolio": "60.0",
+        "is_overridden": true
+      },
+      {
+        "name": "Momentum Factor",
+        "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+        "allocated_capital": "30000.0000000",
+        "percent_of_portfolio": "30.0",
+        "is_overridden": true
+      }
+    ],
+    "by_asset": [],
+    "metadata": {
+      "source": "active_strategy_config_fallback",
+      "external_broker": false,
+      "fallback_used": true,
+      "fallback_note": "No live holdings found; by_strategy uses configured active strategy allocation percentages."
+    }
+  },
+  "risk": {
+    "metrics": {
+      "portfolio_volatility": "2.045439440833024",
+      "beta": "0",
+      "value_at_risk_1d_95": "21260.34460898541300000000000",
+      "average_pairwise_correlation": "0",
+      "current_drawdown": "0"
+    },
+    "metadata": {
+      "scope": "portfolio_dashboard_risk",
+      "enforcement_domain": "risk"
+    }
+  },
+  "performance": {
+    "total_return": "0",
+    "cagr": "0.0",
+    "sharpe_ratio": "0.5415129818621113",
+    "sortino_ratio": "12.25179282942026",
+    "max_drawdown": "-0.59410365141",
+    "volatility": "2.045439440833024",
+    "win_rate": "0.007692307692307692307692307692"
+  },
+  "equity_curve_1m": {
+    "period": "1m",
+    "points": [
+      {
+        "timestamp": "2026-06-02T20:34:19.284057+00:00",
+        "value": "100000.000000"
+      },
+      {
+        "timestamp": "2026-06-03T21:15:28.248368+00:00",
+        "value": "100000.000000"
+      }
+    ],
+    "drawdown_points": [
+      {
+        "timestamp": "2026-06-02T20:34:19.284057+00:00",
+        "value": "0"
+      },
+      {
+        "timestamp": "2026-06-03T21:15:28.248368+00:00",
+        "value": "0"
+      }
+    ]
+  },
+  "exported_at": "2026-06-04T00:57:38.304725+00:00",
+  "cash_snapshot": {
+    "snapshot_id": "7b53aaca-98dd-44a7-9f41-3262d2e2a9be",
+    "run_id": "00000000-0000-0000-0000-000000000301",
+    "timestamp": "2026-06-03T21:15:28.248368+00:00",
+    "currency": "USD",
+    "cash": "100000.000000",
+    "buying_power": "200000.000000",
+    "reserved_cash": "0.000000",
+    "settled_cash": null,
+    "unsettled_cash": null,
+    "equity": "100000.000000",
+    "source": "broker_reconciled",
+    "capital_bucket": "100000.000000",
+    "freshness": {
+      "age_seconds": 13330.058355,
+      "as_of": "2026-06-03T21:15:28.248368+00:00"
+    }
+  },
+  "position_snapshot": {
+    "snapshot_id": "c77005e7-ff6b-4973-8117-e4a24cb35d19",
+    "run_id": "00000000-0000-0000-0000-000000000301",
+    "timestamp": "2026-06-03T21:15:50.589719+00:00",
+    "source": "broker_reconciled",
+    "items": []
+  },
+  "construction": {
+    "recent_runs": []
+  }
+}

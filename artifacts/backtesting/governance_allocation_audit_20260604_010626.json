@@ -1,0 +1,699 @@
+{
+  "run_id": "039da7a3-448f-44b5-91c4-2b769204247b",
+  "controls_fixture": "fixtures\\controls.yaml",
+  "settings_fixture": "fixtures\\settings.yaml",
+  "total_capital": 100000.0,
+  "source_of_truth": {
+    "automation_controls_source": "settings",
+    "promotion_thresholds_source": "promotion_rules",
+    "allocation_targets_source": "capital_allocation_policies + allocation_overrides"
+  },
+  "settings": {
+    "risk_tolerance": "high",
+    "max_drawdown_limit": 0.2,
+    "max_strategy_drawdown": 0.15,
+    "per_strategy_cap": 0.4,
+    "target_portfolio_volatility": 0.2,
+    "rebalance_frequency": "daily",
+    "auto_promote_enabled": false,
+    "auto_rebalance_enabled": true,
+    "min_sharpe_for_promotion": 1.5,
+    "min_paper_trading_period_days": 30,
+    "auto_demote_on_breach": true,
+    "notify_strategy_promotion_events": true,
+    "updated_by": "verify-governance-allocation",
+    "updated_at": "2026-06-04T01:06:26.949682+00:00"
+  },
+  "settings_field_classification": [
+    {
+      "field": "auto_promote_enabled",
+      "classification": "automation_control",
+      "active_source": "settings"
+    },
+    {
+      "field": "auto_demote_on_breach",
+      "classification": "automation_control",
+      "active_source": "settings"
+    },
+    {
+      "field": "auto_rebalance_enabled",
+      "classification": "automation_control",
+      "active_source": "settings"
+    },
+    {
+      "field": "rebalance_frequency",
+      "classification": "automation_control",
+      "active_source": "settings"
+    },
+    {
+      "field": "min_sharpe_for_promotion",
+      "classification": "deprecated/persisted-only",
+      "active_source": "promotion_rules.min_sharpe"
+    },
+    {
+      "field": "min_paper_trading_period_days",
+      "classification": "deprecated/persisted-only",
+      "active_source": "promotion_rules.min_days_tested"
+    },
+    {
+      "field": "per_strategy_cap",
+      "classification": "allocation_control",
+      "active_source": "capital_allocation_policies + allocation_overrides"
+    },
+    {
+      "field": "max_strategy_drawdown",
+      "classification": "allocation_control",
+      "active_source": "capital_allocation_policies.max_drawdown_allowed"
+    },
+    {
+      "field": "max_drawdown_limit",
+      "classification": "automation_control",
+      "active_source": "runtime_risk_controls"
+    },
+    {
+      "field": "risk_tolerance",
+      "classification": "automation_control",
+      "active_source": "runtime_risk_controls"
+    },
+    {
+      "field": "target_portfolio_volatility",
+      "classification": "allocation_control",
+      "active_source": "runtime_risk_controls"
+    },
+    {
+      "field": "notify_drawdown_alerts",
+      "classification": "automation_control",
+      "active_source": "settings"
+    },
+    {
+      "field": "notify_strategy_promotion_events",
+      "classification": "automation_control",
+      "active_source": "settings"
+    },
+    {
+      "field": "notify_pipeline_failures",
+      "classification": "automation_control",
+      "active_source": "settings"
+    },
+    {
+      "field": "slippage_model",
+      "classification": "unknown",
+      "active_source": "simulation_settings"
+    },
+    {
+      "field": "transaction_cost_model",
+      "classification": "unknown",
+      "active_source": "simulation_settings"
+    }
+  ],
+  "deprecated_or_ignored_settings": [
+    {
+      "setting": "min_sharpe_for_promotion",
+      "value": 1.5,
+      "classification": "deprecated/persisted-only",
+      "active_source": "promotion_rules.min_sharpe",
+      "ignored_for": "manual_promotion_eligibility"
+    },
+    {
+      "setting": "min_paper_trading_period_days",
+      "value": 30,
+      "classification": "deprecated/persisted-only",
+      "active_source": "promotion_rules.min_days_tested",
+      "ignored_for": "manual_promotion_eligibility"
+    }
+  ],
+  "setting_wiring": [
+    {
+      "setting": "auto_promote_enabled",
+      "status": "FLAG_NOT_WIRED",
+      "classification": "automation_control",
+      "active_source": "settings",
+      "runtime_source": "none_found",
+      "note": "Persisted in operator_settings; it permits future automation but no automatic promotion runner consumes it yet."
+    },
+    {
+      "setting": "auto_rebalance_enabled",
+      "status": "WIRED",
+      "classification": "automation_control",
+      "active_source": "settings",
+      "runtime_source": "strategy_allocation_rebalance_cycle",
+      "note": "Consumed by the scheduled allocation rebalance cycle before running quality-based strategy reallocation."
+    },
+    {
+      "setting": "min_sharpe_for_promotion",
+      "status": "DEPRECATED_PERSISTED_ONLY",
+      "classification": "deprecated/persisted-only",
+      "active_source": "promotion_rules.min_sharpe",
+      "runtime_source": "ignored_for_manual_promotion",
+      "note": "Manual promotion reads PromotionRules, not the operator setting."
+    },
+    {
+      "setting": "min_paper_trading_period_days",
+      "status": "DEPRECATED_PERSISTED_ONLY",
+      "classification": "deprecated/persisted-only",
+      "active_source": "promotion_rules.min_days_tested",
+      "runtime_source": "ignored_for_manual_promotion",
+      "note": "Manual promotion reads PromotionRules, not the operator setting."
+    },
+    {
+      "setting": "auto_demote_on_breach",
+      "status": "FLAG_NOT_WIRED",
+      "classification": "automation_control",
+      "active_source": "settings",
+      "runtime_source": "none_found",
+      "note": "Persisted in operator_settings; it permits future automation but no automatic demotion service consumes it yet."
+    },
+    {
+      "setting": "max_strategy_drawdown",
+      "status": "RISK_BLOCKING_ONLY",
+      "classification": "allocation_control",
+      "active_source": "settings_for_runtime_risk_and_audit_policy_seed",
+      "runtime_source": "replay_debug_order_blocking",
+      "note": "Replay can block per-strategy orders, but governance state is not demoted."
+    },
+    {
+      "setting": "rebalance_frequency",
+      "status": "PERSISTED_WITH_SCHEDULED_JOB",
+      "classification": "automation_control",
+      "active_source": "settings",
+      "runtime_source": "scheduler_registry.strategy_allocation_rebalance_cycle",
+      "note": "Production reallocation runs through the scheduler; cadence mapping remains registry-based."
+    },
+    {
+      "setting": "per_strategy_cap",
+      "status": "WIRED",
+      "classification": "allocation_control",
+      "active_source": "operator_settings.per_strategy_cap",
+      "runtime_source": "QualityBasedReallocationService",
+      "note": "Quality reallocation clamps each proposed allocation by per_strategy_cap and policy cap."
+    }
+  ],
+  "seeded_strategies": [
+    {
+      "strategy_id": "mean_reversion__844916e1ccbfd614636cb5ffc9d1fa8e41591ce8d77560a410e11c49e33b4c80",
+      "display_name": "Mean Reversion (Z-Score)",
+      "ui_governance_state": "approved_research",
+      "portfolio_policy_state": "approved_research",
+      "performance_tier_used_for_audit": "audit_verify",
+      "config_hash": "374f78bda97151423c7bc7793e332f284ba160bfa5bb05d06332d794804eee89"
+    },
+    {
+      "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+      "display_name": "Momentum Factor",
+      "ui_governance_state": "approved_for_paper_trading",
+      "portfolio_policy_state": "approved_paper",
+      "performance_tier_used_for_audit": "audit_verify",
+      "config_hash": "6684efdcf99e288e855fec43dd03814652a62cb4f144a95c5e4ea471b282f49b"
+    },
+    {
+      "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+      "display_name": "MA Crossover (10/50)",
+      "ui_governance_state": "approved_for_live_trading",
+      "portfolio_policy_state": "approved_live",
+      "performance_tier_used_for_audit": "audit_verify",
+      "config_hash": "fcfba36623bd801486b8b09f6a3aa805d9b195e07c6af899254b35faf21e2fd4"
+    }
+  ],
+  "seeded_or_existing_audit_policies": [
+    {
+      "policy_id": "gov_audit_approved_research_audit_verify",
+      "approval_status": "approved_research",
+      "performance_tier": "audit_verify",
+      "max_pct_of_capital": 0.05,
+      "max_position_size_usd": null,
+      "max_drawdown_allowed": 0.15,
+      "is_active": true,
+      "notes": "updated by verify-governance-allocation",
+      "seed_status": "UPDATED_EXISTING_AUDIT_POLICY"
+    },
+    {
+      "policy_id": "gov_audit_approved_paper_audit_verify",
+      "approval_status": "approved_paper",
+      "performance_tier": "audit_verify",
+      "max_pct_of_capital": 0.2,
+      "max_position_size_usd": null,
+      "max_drawdown_allowed": 0.15,
+      "is_active": true,
+      "notes": "updated by verify-governance-allocation",
+      "seed_status": "UPDATED_EXISTING_AUDIT_POLICY"
+    },
+    {
+      "policy_id": "gov_audit_approved_live_audit_verify",
+      "approval_status": "approved_live",
+      "performance_tier": "audit_verify",
+      "max_pct_of_capital": 0.4,
+      "max_position_size_usd": null,
+      "max_drawdown_allowed": 0.15,
+      "is_active": true,
+      "notes": "updated by verify-governance-allocation",
+      "seed_status": "UPDATED_EXISTING_AUDIT_POLICY"
+    }
+  ],
+  "seeded_or_existing_promotion_rules": [
+    {
+      "rule_id": "gov_audit_approved_research_to_approved_paper",
+      "from_status": "approved_research",
+      "to_status": "approved_paper",
+      "min_sharpe": null,
+      "max_drawdown": null,
+      "min_days_tested": null,
+      "min_trade_count": null,
+      "min_cagr": null,
+      "min_win_rate": null,
+      "is_active": true,
+      "notes": "seeded by verify-governance-allocation",
+      "seed_status": "EXISTING_ACTIVE_RULE_USED",
+      "threshold_source": "promotion_rules"
+    },
+    {
+      "rule_id": "gov_audit_approved_paper_to_approved_live",
+      "from_status": "approved_paper",
+      "to_status": "approved_live",
+      "min_sharpe": 1.5,
+      "max_drawdown": 0.15,
+      "min_days_tested": 30,
+      "min_trade_count": 10,
+      "min_cagr": null,
+      "min_win_rate": null,
+      "is_active": true,
+      "notes": "seeded by verify-governance-allocation",
+      "seed_status": "EXISTING_ACTIVE_RULE_USED",
+      "threshold_source": "promotion_rules"
+    }
+  ],
+  "cash_snapshot": {
+    "snapshot_id": "e77d63cf-1b06-4353-ae70-07b3b34fd8f2",
+    "run_id": "c43894ec-19d3-4578-8406-b10bb8129b6c",
+    "timestamp": "2026-06-04T01:06:26.511859+00:00",
+    "equity": 100000.0,
+    "source": "simulation"
+  },
+  "active_policies": [
+    {
+      "policy_id": "gov_audit_approved_live_audit_verify",
+      "approval_status": "approved_live",
+      "performance_tier": "audit_verify",
+      "max_pct_of_capital": 0.4,
+      "max_position_size_usd": null,
+      "max_drawdown_allowed": 0.15,
+      "is_active": true,
+      "notes": "updated by verify-governance-allocation"
+    },
+    {
+      "policy_id": "gov_audit_approved_paper_audit_verify",
+      "approval_status": "approved_paper",
+      "performance_tier": "audit_verify",
+      "max_pct_of_capital": 0.2,
+      "max_position_size_usd": null,
+      "max_drawdown_allowed": 0.15,
+      "is_active": true,
+      "notes": "updated by verify-governance-allocation"
+    },
+    {
+      "policy_id": "gov_audit_approved_research_audit_verify",
+      "approval_status": "approved_research",
+      "performance_tier": "audit_verify",
+      "max_pct_of_capital": 0.05,
+      "max_position_size_usd": null,
+      "max_drawdown_allowed": 0.15,
+      "is_active": true,
+      "notes": "updated by verify-governance-allocation"
+    }
+  ],
+  "active_promotion_rules": [
+    {
+      "rule_id": "gov_audit_approved_paper_to_approved_live",
+      "from_status": "approved_paper",
+      "to_status": "approved_live",
+      "min_sharpe": 1.5,
+      "max_drawdown": 0.15,
+      "min_days_tested": 30,
+      "min_trade_count": 10,
+      "min_cagr": null,
+      "min_win_rate": null,
+      "is_active": true,
+      "notes": "seeded by verify-governance-allocation"
+    },
+    {
+      "rule_id": "gov_audit_approved_research_to_approved_paper",
+      "from_status": "approved_research",
+      "to_status": "approved_paper",
+      "min_sharpe": null,
+      "max_drawdown": null,
+      "min_days_tested": null,
+      "min_trade_count": null,
+      "min_cagr": null,
+      "min_win_rate": null,
+      "is_active": true,
+      "notes": "seeded by verify-governance-allocation"
+    }
+  ],
+  "allocation_service_rows": [
+    {
+      "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+      "display_name": "MA Crossover (10/50)",
+      "allocation_pct": 60.0,
+      "allocated_capital": 60000.0,
+      "total_portfolio_capital": 100000.0,
+      "is_overridden": true,
+      "overridden_by": "fixture-seed",
+      "reason": "verify seed",
+      "updated_at": "2026-06-04T01:06:26.173965+00:00"
+    },
+    {
+      "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+      "display_name": "Momentum Factor",
+      "allocation_pct": 30.0,
+      "allocated_capital": 30000.0,
+      "total_portfolio_capital": 100000.0,
+      "is_overridden": true,
+      "overridden_by": "fixture-seed",
+      "reason": "verify seed",
+      "updated_at": "2026-06-04T01:06:26.173965+00:00"
+    }
+  ],
+  "portfolio_engine_allocations": [
+    {
+      "strategy_id": "mean_reversion__844916e1ccbfd614636cb5ffc9d1fa8e41591ce8d77560a410e11c49e33b4c80",
+      "status": "ALLOCATED",
+      "approval_status": "approved_research",
+      "max_pct_of_capital": 0.05,
+      "max_position_size_usd": null,
+      "max_drawdown_allowed": 0.15,
+      "allocated_capital_usd": 5000.0,
+      "override_applied": false,
+      "override_id": null,
+      "policy_id": "gov_audit_approved_research_audit_verify"
+    },
+    {
+      "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+      "status": "ALLOCATED",
+      "approval_status": "approved_paper",
+      "max_pct_of_capital": 0.3,
+      "max_position_size_usd": null,
+      "max_drawdown_allowed": 0.15,
+      "allocated_capital_usd": 30000.0,
+      "override_applied": true,
+      "override_id": "2a1febf6-5b48-4781-b548-e3f2714dd718",
+      "policy_id": "gov_audit_approved_paper_audit_verify"
+    },
+    {
+      "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+      "status": "ALLOCATED",
+      "approval_status": "approved_live",
+      "max_pct_of_capital": 0.6,
+      "max_position_size_usd": null,
+      "max_drawdown_allowed": 0.15,
+      "allocated_capital_usd": 60000.0,
+      "override_applied": true,
+      "override_id": "aeb0d0be-bbe3-413b-b554-c490b593b98e",
+      "policy_id": "gov_audit_approved_live_audit_verify"
+    }
+  ],
+  "quality_reallocation_disabled_path": {
+    "run_id": null,
+    "rebalance_id": "59d0982a-3c59-49dd-a1d0-473168546b01",
+    "auto_rebalance_enabled": false,
+    "before_allocation": {},
+    "after_allocation": {},
+    "proposals": [],
+    "quality_metrics": {},
+    "active_capital_policies": [
+      {
+        "policy_id": "gov_audit_approved_live_audit_verify",
+        "approval_status": "approved_live",
+        "performance_tier": "audit_verify",
+        "max_pct_of_capital": 0.4,
+        "max_position_size_usd": null,
+        "max_drawdown_allowed": 0.15,
+        "is_active": true
+      },
+      {
+        "policy_id": "gov_audit_approved_paper_audit_verify",
+        "approval_status": "approved_paper",
+        "performance_tier": "audit_verify",
+        "max_pct_of_capital": 0.2,
+        "max_position_size_usd": null,
+        "max_drawdown_allowed": 0.15,
+        "is_active": true
+      },
+      {
+        "policy_id": "gov_audit_approved_research_audit_verify",
+        "approval_status": "approved_research",
+        "performance_tier": "audit_verify",
+        "max_pct_of_capital": 0.05,
+        "max_position_size_usd": null,
+        "max_drawdown_allowed": 0.15,
+        "is_active": true
+      }
+    ],
+    "allocation_overrides": [
+      {
+        "override_id": "2a1febf6-5b48-4781-b548-e3f2714dd718",
+        "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+        "overridden_by": "fixture-seed",
+        "override_reason": "verify seed",
+        "max_pct_of_capital": 0.3,
+        "max_position_size_usd": null,
+        "max_drawdown_allowed": null,
+        "is_active": true
+      },
+      {
+        "override_id": "aeb0d0be-bbe3-413b-b554-c490b593b98e",
+        "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+        "overridden_by": "fixture-seed",
+        "override_reason": "verify seed",
+        "max_pct_of_capital": 0.6,
+        "max_position_size_usd": null,
+        "max_drawdown_allowed": null,
+        "is_active": true
+      }
+    ],
+    "skipped_reason": "auto_rebalance_disabled",
+    "audit_event_emitted": "STRATEGY_ALLOCATION_REBALANCE_SKIPPED",
+    "turnover_metrics": {},
+    "allocation_changes_count": 0,
+    "noop": false,
+    "lock_acquired": false,
+    "blended_score_breakdown": {}
+  },
+  "quality_reallocation_enabled_path": {
+    "run_id": null,
+    "rebalance_id": "d5ea0bbe-eddd-48eb-a342-ba4329101189",
+    "auto_rebalance_enabled": true,
+    "before_allocation": {},
+    "after_allocation": {},
+    "proposals": [],
+    "quality_metrics": {},
+    "active_capital_policies": [
+      {
+        "policy_id": "gov_audit_approved_live_audit_verify",
+        "approval_status": "approved_live",
+        "performance_tier": "audit_verify",
+        "max_pct_of_capital": 0.4,
+        "max_position_size_usd": null,
+        "max_drawdown_allowed": 0.15,
+        "is_active": true
+      },
+      {
+        "policy_id": "gov_audit_approved_paper_audit_verify",
+        "approval_status": "approved_paper",
+        "performance_tier": "audit_verify",
+        "max_pct_of_capital": 0.2,
+        "max_position_size_usd": null,
+        "max_drawdown_allowed": 0.15,
+        "is_active": true
+      },
+      {
+        "policy_id": "gov_audit_approved_research_audit_verify",
+        "approval_status": "approved_research",
+        "performance_tier": "audit_verify",
+        "max_pct_of_capital": 0.05,
+        "max_position_size_usd": null,
+        "max_drawdown_allowed": 0.15,
+        "is_active": true
+      }
+    ],
+    "allocation_overrides": [
+      {
+        "override_id": "2a1febf6-5b48-4781-b548-e3f2714dd718",
+        "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+        "overridden_by": "fixture-seed",
+        "override_reason": "verify seed",
+        "max_pct_of_capital": 0.3,
+        "max_position_size_usd": null,
+        "max_drawdown_allowed": null,
+        "is_active": true
+      },
+      {
+        "override_id": "aeb0d0be-bbe3-413b-b554-c490b593b98e",
+        "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+        "overridden_by": "fixture-seed",
+        "override_reason": "verify seed",
+        "max_pct_of_capital": 0.6,
+        "max_position_size_usd": null,
+        "max_drawdown_allowed": null,
+        "is_active": true
+      }
+    ],
+    "skipped_reason": "all_changes_below_threshold",
+    "audit_event_emitted": "STRATEGY_ALLOCATION_REBALANCE_NOOP",
+    "turnover_metrics": {
+      "total_allocation_delta_pct": 0.0,
+      "strategies_changed": 0,
+      "strategies_evaluated": 0,
+      "churn_pct": 0.0,
+      "duration_seconds": 0.014274299959652126
+    },
+    "allocation_changes_count": 0,
+    "noop": true,
+    "lock_acquired": true,
+    "blended_score_breakdown": {}
+  },
+  "transition_probes": {
+    "overall_status": "MANUAL_PROMOTION_PROBE_FAILED",
+    "threshold_source": "promotion_rules",
+    "rule_used": {
+      "rule_id": "gov_audit_approved_research_to_approved_paper",
+      "from_status": "approved_research",
+      "to_status": "approved_paper",
+      "min_sharpe": null,
+      "max_drawdown": null,
+      "min_days_tested": null,
+      "min_trade_count": null,
+      "min_cagr": null,
+      "min_win_rate": null,
+      "is_active": true,
+      "notes": "seeded by verify-governance-allocation"
+    },
+    "passing_probe": {
+      "strategy_id": "gov_audit_pass_89cf6d9e",
+      "input_metrics": {
+        "sharpe": 1.25,
+        "max_drawdown": 0.075,
+        "days_tested": 35.0,
+        "trade_count": 15.0,
+        "winning_trade_count": 9.0,
+        "losing_trade_count": 6.0,
+        "cagr": 0.1,
+        "win_rate": 0.6
+      },
+      "status": "PASSED",
+      "from_state": "approved_research",
+      "to_state": "approved_for_paper_trading"
+    },
+    "failing_probe": {
+      "strategy_id": "gov_audit_fail_89cf6d9e",
+      "input_metrics": {
+        "sharpe": 0.5,
+        "max_drawdown": 0.25,
+        "days_tested": 25.0,
+        "trade_count": 5.0,
+        "winning_trade_count": 2.0,
+        "losing_trade_count": 3.0,
+        "cagr": 0.0,
+        "win_rate": 0.3
+      },
+      "status": "PASSED_UNEXPECTEDLY"
+    }
+  },
+  "results": [
+    {
+      "area": "auto_promotion",
+      "status": "FLAG_NOT_WIRED",
+      "evidence": {
+        "auto_promote_enabled": false,
+        "manual_transition_pass_probe": "PASSED",
+        "automatic_runner_found": false,
+        "automation_controls_source": "settings",
+        "promotion_thresholds_source": "promotion_rules"
+      }
+    },
+    {
+      "area": "manual_promotion_governance",
+      "status": "MANUAL_PROMOTION_PROBE_FAILED",
+      "evidence": {
+        "overall_status": "MANUAL_PROMOTION_PROBE_FAILED",
+        "threshold_source": "promotion_rules",
+        "rule_used": {
+          "rule_id": "gov_audit_approved_research_to_approved_paper",
+          "from_status": "approved_research",
+          "to_status": "approved_paper",
+          "min_sharpe": null,
+          "max_drawdown": null,
+          "min_days_tested": null,
+          "min_trade_count": null,
+          "min_cagr": null,
+          "min_win_rate": null,
+          "is_active": true,
+          "notes": "seeded by verify-governance-allocation"
+        },
+        "passing_probe": {
+          "strategy_id": "gov_audit_pass_89cf6d9e",
+          "input_metrics": {
+            "sharpe": 1.25,
+            "max_drawdown": 0.075,
+            "days_tested": 35.0,
+            "trade_count": 15.0,
+            "winning_trade_count": 9.0,
+            "losing_trade_count": 6.0,
+            "cagr": 0.1,
+            "win_rate": 0.6
+          },
+          "status": "PASSED",
+          "from_state": "approved_research",
+          "to_state": "approved_for_paper_trading"
+        },
+        "failing_probe": {
+          "strategy_id": "gov_audit_fail_89cf6d9e",
+          "input_metrics": {
+            "sharpe": 0.5,
+            "max_drawdown": 0.25,
+            "days_tested": 25.0,
+            "trade_count": 5.0,
+            "winning_trade_count": 2.0,
+            "losing_trade_count": 3.0,
+            "cagr": 0.0,
+            "win_rate": 0.3
+          },
+          "status": "PASSED_UNEXPECTEDLY"
+        }
+      }
+    },
+    {
+      "area": "allocation_resolution",
+      "status": "POLICIES_AND_OVERRIDES_WIRED",
+      "evidence": {
+        "strategy_allocation_service_rows": 2,
+        "portfolio_engine_rows": 3,
+        "audit_policy_tier": "audit_verify",
+        "allocation_targets_source": "capital_allocation_policies + allocation_overrides"
+      }
+    },
+    {
+      "area": "quality_based_reallocation",
+      "status": "AUTO_REBALANCE_WIRED",
+      "evidence": {
+        "automatic_reallocation_runner_found": true,
+        "scheduled_job_name": "strategy_allocation_rebalance_cycle",
+        "disabled_path_skipped_reason": "auto_rebalance_disabled",
+        "disabled_path_changed": false,
+        "enabled_path_changed": false,
+        "proposal_count": 0,
+        "automation_controls_source": "settings"
+      }
+    },
+    {
+      "area": "auto_demotion",
+      "status": "FLAG_NOT_WIRED",
+      "evidence": {
+        "auto_demote_on_breach": true,
+        "max_strategy_drawdown": 0.15,
+        "automatic_demotion_runner_found": false,
+        "governance_state_changed_by_drawdown": false,
+        "automation_controls_source": "settings",
+        "promotion_thresholds_source": "promotion_rules"
+      }
+    }
+  ]
+}

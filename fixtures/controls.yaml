@@ -1,7 +1,6 @@
 controls:
   trading_enabled: true
   trading_paused: false
-  kill_switch_enabled: false
   trading_mode: simulation   # "simulation" maps to "Backtesting" in the frontend
 
 strategies:

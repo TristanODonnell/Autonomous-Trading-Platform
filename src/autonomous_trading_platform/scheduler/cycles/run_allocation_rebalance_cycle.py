@@ -295,6 +295,7 @@ def _evaluate_portfolio_governance_for_rebalance(*, session, settings, logger) -
             "portfolio_governance.rebalance_check_error_fail_open",
             extra={"error": str(exc)},
         )
+        session.rollback()
         return None
 
 

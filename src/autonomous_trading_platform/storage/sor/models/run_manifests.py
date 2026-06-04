@@ -19,11 +19,18 @@ from .base import Base
 from .helpers.sa_types import UUID_PK, MoneyType, UTCDateTimeType
 
 
+def _enum_values(enum_cls):
+    return [member.value if member is RunType.GOVERNANCE else member.name for member in enum_cls]
+
+
 class RunManifestRow(Base):
     __tablename__ = "run_manifests"
 
     run_id: Mapped[UUID] = mapped_column(UUID_PK, primary_key=True)
-    run_type: Mapped[RunType] = mapped_column(SAEnum(RunType, name="run_type_enum"), nullable=False)
+    run_type: Mapped[RunType] = mapped_column(
+        SAEnum(RunType, name="run_type_enum", values_callable=_enum_values),
+        nullable=False,
+    )
     created_at: Mapped[UTCDateTime] = mapped_column(
         UTCDateTimeType(), nullable=False, default=lambda: datetime.now(UTC)
     )

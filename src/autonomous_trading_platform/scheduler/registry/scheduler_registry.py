@@ -83,4 +83,32 @@ SCHEDULER_REGISTRY = {
         manual_trigger_enabled=True,
         lock_key="scheduler:experiment_pipeline_cycle",
     ),
+    "correlation_monitoring_cycle": SchedulerJobDefinition(
+        job_name="correlation_monitoring_cycle",
+        cron="45 21 * * 1-5",
+        interval_seconds=None,
+        manual_trigger_enabled=True,
+        lock_key="scheduler:correlation_monitoring_cycle",
+    ),
+    "risk_budgeting_cycle": SchedulerJobDefinition(
+        job_name="risk_budgeting_cycle",
+        cron="50 21 * * 1-5",
+        interval_seconds=None,
+        manual_trigger_enabled=True,
+        lock_key="scheduler:risk_budgeting_cycle",
+    ),
+    "drawdown_governance_ladder_cycle": SchedulerJobDefinition(
+        job_name="drawdown_governance_ladder_cycle",
+        cron="55 21 * * 1-5",
+        interval_seconds=None,
+        manual_trigger_enabled=True,
+        lock_key="scheduler:drawdown_governance_ladder_cycle",
+    ),
+    "strategy_health_lifecycle_cycle": SchedulerJobDefinition(
+        job_name="strategy_health_lifecycle_cycle",
+        cron="0 22 * * 1-5",
+        interval_seconds=None,
+        manual_trigger_enabled=True,
+        lock_key="scheduler:strategy_health_lifecycle_cycle",
+    ),
 }

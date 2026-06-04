@@ -316,6 +316,7 @@ def snapshot_allocation_config(
     if strategy_ids:
         for sid in strategy_ids:
             override = overrides_repo.get_active_override(strategy_id=sid, now=now)
+            captured = False
             for status_val in _ALLOCATABLE_STATUSES:
                 policy = policies_repo.get_active_policy(approval_status=status_val)
                 if policy is None:
@@ -344,7 +345,30 @@ def snapshot_allocation_config(
                     override_applied=override is not None,
                     override_id=override.override_id if override is not None else None,
                 )
+                captured = True
                 break
+            if not captured:
+                strategy_entries[sid] = StrategyAllocationEntry(
+                    strategy_id=sid,
+                    max_pct_of_capital=(
+                        override.max_pct_of_capital
+                        if override is not None and override.max_pct_of_capital is not None
+                        else default_max_pct
+                    ),
+                    max_position_size_usd=(
+                        override.max_position_size_usd
+                        if override is not None and override.max_position_size_usd is not None
+                        else None
+                    ),
+                    max_drawdown_allowed=(
+                        override.max_drawdown_allowed
+                        if override is not None and override.max_drawdown_allowed is not None
+                        else default_max_drawdown
+                    ),
+                    policy_id=default_policy_id,
+                    override_applied=override is not None,
+                    override_id=override.override_id if override is not None else None,
+                )
 
     logger.info(
         "simulation_allocation_provider.snapshot_captured",

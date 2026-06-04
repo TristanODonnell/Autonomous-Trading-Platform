@@ -1,0 +1,1739 @@
+{
+  "run_id": "a867d349-e471-4d28-8835-491891e9948a",
+  "settings_fixture": "fixtures\\settings.yaml",
+  "seed": {
+    "prefix": "auto_demotion_audit_ee2b3321",
+    "breach_strategy_id": "auto_demotion_audit_ee2b3321_breach",
+    "safe_strategy_id": "auto_demotion_audit_ee2b3321_safe",
+    "strategy_ids": [
+      "auto_demotion_audit_ee2b3321_breach",
+      "auto_demotion_audit_ee2b3321_safe"
+    ]
+  },
+  "max_strategy_drawdown": 0.12,
+  "disabled_path": {
+    "run_id": null,
+    "auto_demote_on_breach": false,
+    "max_strategy_drawdown": 0.12,
+    "dry_run": false,
+    "candidate_strategies": [
+      {
+        "strategy_id": "auto_demotion_audit_ee2b3321_breach",
+        "source_id": "auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach",
+        "source_type": "metrics_summary",
+        "observed_drawdown": 0.25,
+        "observed_sharpe": -0.5,
+        "observed_win_rate": 0.4,
+        "trade_count": 20,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": true,
+        "breached_metric": "drawdown",
+        "breached_value": 0.25,
+        "threshold": 0.12,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": null,
+        "old_governance_state": "approved_for_live_trading",
+        "new_governance_state": "approved_for_paper_trading",
+        "should_disable": true,
+        "should_zero_allocation": true,
+        "should_freeze": true,
+        "breach_key": "auto_demotion_audit_ee2b3321_breach:metrics_summary:auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach:drawdown:0.12",
+        "status": "breach",
+        "reasons": [
+          "observed drawdown 0.25 exceeds max_strategy_drawdown 0.12",
+          "recommended governance state: approved_for_paper_trading"
+        ]
+      },
+      {
+        "strategy_id": "auto_demotion_audit_ee2b3321_safe",
+        "source_id": "auto_demotion_audit_ee2b3321_metrics_it_ee2b3321_safe",
+        "source_type": "metrics_summary",
+        "observed_drawdown": 0.03,
+        "observed_sharpe": 1.1,
+        "observed_win_rate": 0.4,
+        "trade_count": 20,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "no_breach",
+        "reasons": [
+          "maintenance metrics are within configured thresholds"
+        ]
+      },
+      {
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible",
+        "source_id": "auto_promotion_audit_2fe4b2ec_metrics_fe4b2ec_eligible",
+        "source_type": "metrics_summary",
+        "observed_drawdown": 0.05,
+        "observed_sharpe": 2.0,
+        "observed_win_rate": 0.65,
+        "trade_count": 20,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "no_breach",
+        "reasons": [
+          "maintenance metrics are within configured thresholds"
+        ]
+      },
+      {
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_missing_rule",
+        "source_id": "auto_promotion_audit_2fe4b2ec_metrics_2ec_missing_rule",
+        "source_type": "metrics_summary",
+        "observed_drawdown": 0.03,
+        "observed_sharpe": 3.0,
+        "observed_win_rate": 0.73,
+        "trade_count": 30,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "no_breach",
+        "reasons": [
+          "maintenance metrics are within configured thresholds"
+        ]
+      },
+      {
+        "strategy_id": "gov_audit_fail_89cf6d9e",
+        "source_id": null,
+        "source_type": "none",
+        "observed_drawdown": null,
+        "observed_sharpe": null,
+        "observed_win_rate": null,
+        "trade_count": null,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "skipped_insufficient_sample",
+        "reasons": [
+          "no recent performance observation available"
+        ]
+      },
+      {
+        "strategy_id": "gov_audit_pass_89cf6d9e",
+        "source_id": null,
+        "source_type": "none",
+        "observed_drawdown": null,
+        "observed_sharpe": null,
+        "observed_win_rate": null,
+        "trade_count": null,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "skipped_insufficient_sample",
+        "reasons": [
+          "no recent performance observation available"
+        ]
+      },
+      {
+        "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+        "source_id": null,
+        "source_type": "none",
+        "observed_drawdown": null,
+        "observed_sharpe": null,
+        "observed_win_rate": null,
+        "trade_count": null,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "skipped_insufficient_sample",
+        "reasons": [
+          "no recent performance observation available"
+        ]
+      },
+      {
+        "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+        "source_id": null,
+        "source_type": "none",
+        "observed_drawdown": null,
+        "observed_sharpe": null,
+        "observed_win_rate": null,
+        "trade_count": null,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": null,
+        "old_governance_state": "approved_for_live_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "skipped_insufficient_sample",
+        "reasons": [
+          "no recent performance observation available"
+        ]
+      }
+    ],
+    "demotions_executed": [],
+    "skipped_reason": "auto_demote_disabled",
+    "audit_event_emitted": "STRATEGY_AUTO_DEMOTION_SKIPPED"
+  },
+  "enabled_path": {
+    "run_id": null,
+    "auto_demote_on_breach": true,
+    "max_strategy_drawdown": 0.12,
+    "dry_run": false,
+    "candidate_strategies": [
+      {
+        "strategy_id": "auto_demotion_audit_ee2b3321_breach",
+        "source_id": "auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach",
+        "source_type": "metrics_summary",
+        "observed_drawdown": 0.25,
+        "observed_sharpe": -0.5,
+        "observed_win_rate": 0.4,
+        "trade_count": 20,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": true,
+        "breached_metric": "drawdown",
+        "breached_value": 0.25,
+        "threshold": 0.12,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": null,
+        "old_governance_state": "approved_for_live_trading",
+        "new_governance_state": "approved_for_paper_trading",
+        "should_disable": true,
+        "should_zero_allocation": true,
+        "should_freeze": true,
+        "breach_key": "auto_demotion_audit_ee2b3321_breach:metrics_summary:auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach:drawdown:0.12",
+        "status": "breach",
+        "reasons": [
+          "observed drawdown 0.25 exceeds max_strategy_drawdown 0.12",
+          "recommended governance state: approved_for_paper_trading"
+        ]
+      },
+      {
+        "strategy_id": "auto_demotion_audit_ee2b3321_safe",
+        "source_id": "auto_demotion_audit_ee2b3321_metrics_it_ee2b3321_safe",
+        "source_type": "metrics_summary",
+        "observed_drawdown": 0.03,
+        "observed_sharpe": 1.1,
+        "observed_win_rate": 0.4,
+        "trade_count": 20,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "no_breach",
+        "reasons": [
+          "maintenance metrics are within configured thresholds"
+        ]
+      },
+      {
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible",
+        "source_id": "auto_promotion_audit_2fe4b2ec_metrics_fe4b2ec_eligible",
+        "source_type": "metrics_summary",
+        "observed_drawdown": 0.05,
+        "observed_sharpe": 2.0,
+        "observed_win_rate": 0.65,
+        "trade_count": 20,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "no_breach",
+        "reasons": [
+          "maintenance metrics are within configured thresholds"
+        ]
+      },
+      {
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_missing_rule",
+        "source_id": "auto_promotion_audit_2fe4b2ec_metrics_2ec_missing_rule",
+        "source_type": "metrics_summary",
+        "observed_drawdown": 0.03,
+        "observed_sharpe": 3.0,
+        "observed_win_rate": 0.73,
+        "trade_count": 30,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "no_breach",
+        "reasons": [
+          "maintenance metrics are within configured thresholds"
+        ]
+      },
+      {
+        "strategy_id": "gov_audit_fail_89cf6d9e",
+        "source_id": null,
+        "source_type": "none",
+        "observed_drawdown": null,
+        "observed_sharpe": null,
+        "observed_win_rate": null,
+        "trade_count": null,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "skipped_insufficient_sample",
+        "reasons": [
+          "no recent performance observation available"
+        ]
+      },
+      {
+        "strategy_id": "gov_audit_pass_89cf6d9e",
+        "source_id": null,
+        "source_type": "none",
+        "observed_drawdown": null,
+        "observed_sharpe": null,
+        "observed_win_rate": null,
+        "trade_count": null,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "skipped_insufficient_sample",
+        "reasons": [
+          "no recent performance observation available"
+        ]
+      },
+      {
+        "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+        "source_id": null,
+        "source_type": "none",
+        "observed_drawdown": null,
+        "observed_sharpe": null,
+        "observed_win_rate": null,
+        "trade_count": null,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "skipped_insufficient_sample",
+        "reasons": [
+          "no recent performance observation available"
+        ]
+      },
+      {
+        "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+        "source_id": null,
+        "source_type": "none",
+        "observed_drawdown": null,
+        "observed_sharpe": null,
+        "observed_win_rate": null,
+        "trade_count": null,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": null,
+        "old_governance_state": "approved_for_live_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "skipped_insufficient_sample",
+        "reasons": [
+          "no recent performance observation available"
+        ]
+      }
+    ],
+    "demotions_executed": [
+      {
+        "strategy_id": "auto_demotion_audit_ee2b3321_breach",
+        "old_governance_state": "approved_for_live_trading",
+        "new_governance_state": "approved_for_paper_trading",
+        "observed_drawdown": 0.25,
+        "max_strategy_drawdown": 0.12,
+        "breached_metric": "drawdown",
+        "breached_value": 0.25,
+        "threshold": 0.12,
+        "breach_key": "auto_demotion_audit_ee2b3321_breach:metrics_summary:auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach:drawdown:0.12",
+        "strategy_disabled": true,
+        "allocation_after": 0.0,
+        "status": "demoted"
+      }
+    ],
+    "skipped_reason": null,
+    "audit_event_emitted": "STRATEGY_AUTO_DEMOTION_COMPLETED"
+  },
+  "duplicate_path": {
+    "run_id": null,
+    "auto_demote_on_breach": true,
+    "max_strategy_drawdown": 0.12,
+    "dry_run": false,
+    "candidate_strategies": [
+      {
+        "strategy_id": "auto_demotion_audit_ee2b3321_breach",
+        "source_id": "auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach",
+        "source_type": "metrics_summary",
+        "observed_drawdown": 0.25,
+        "observed_sharpe": -0.5,
+        "observed_win_rate": 0.4,
+        "trade_count": 20,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": true,
+        "breached_metric": "drawdown",
+        "breached_value": 0.25,
+        "threshold": 0.12,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": "auto_demotion_audit_ee2b3321_breach:metrics_summary:auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach:drawdown:0.12",
+        "status": "already_demoted",
+        "reasons": [
+          "breach key auto_demotion_audit_ee2b3321_breach:metrics_summary:auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach:drawdown:0.12 has already produced a demotion"
+        ]
+      },
+      {
+        "strategy_id": "auto_demotion_audit_ee2b3321_safe",
+        "source_id": "auto_demotion_audit_ee2b3321_metrics_it_ee2b3321_safe",
+        "source_type": "metrics_summary",
+        "observed_drawdown": 0.03,
+        "observed_sharpe": 1.1,
+        "observed_win_rate": 0.4,
+        "trade_count": 20,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "no_breach",
+        "reasons": [
+          "maintenance metrics are within configured thresholds"
+        ]
+      },
+      {
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible",
+        "source_id": "auto_promotion_audit_2fe4b2ec_metrics_fe4b2ec_eligible",
+        "source_type": "metrics_summary",
+        "observed_drawdown": 0.05,
+        "observed_sharpe": 2.0,
+        "observed_win_rate": 0.65,
+        "trade_count": 20,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "no_breach",
+        "reasons": [
+          "maintenance metrics are within configured thresholds"
+        ]
+      },
+      {
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_missing_rule",
+        "source_id": "auto_promotion_audit_2fe4b2ec_metrics_2ec_missing_rule",
+        "source_type": "metrics_summary",
+        "observed_drawdown": 0.03,
+        "observed_sharpe": 3.0,
+        "observed_win_rate": 0.73,
+        "trade_count": 30,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "no_breach",
+        "reasons": [
+          "maintenance metrics are within configured thresholds"
+        ]
+      },
+      {
+        "strategy_id": "gov_audit_fail_89cf6d9e",
+        "source_id": null,
+        "source_type": "none",
+        "observed_drawdown": null,
+        "observed_sharpe": null,
+        "observed_win_rate": null,
+        "trade_count": null,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "skipped_insufficient_sample",
+        "reasons": [
+          "no recent performance observation available"
+        ]
+      },
+      {
+        "strategy_id": "gov_audit_pass_89cf6d9e",
+        "source_id": null,
+        "source_type": "none",
+        "observed_drawdown": null,
+        "observed_sharpe": null,
+        "observed_win_rate": null,
+        "trade_count": null,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "skipped_insufficient_sample",
+        "reasons": [
+          "no recent performance observation available"
+        ]
+      },
+      {
+        "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+        "source_id": null,
+        "source_type": "none",
+        "observed_drawdown": null,
+        "observed_sharpe": null,
+        "observed_win_rate": null,
+        "trade_count": null,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "old_governance_state": "approved_for_paper_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "skipped_insufficient_sample",
+        "reasons": [
+          "no recent performance observation available"
+        ]
+      },
+      {
+        "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+        "source_id": null,
+        "source_type": "none",
+        "observed_drawdown": null,
+        "observed_sharpe": null,
+        "observed_win_rate": null,
+        "trade_count": null,
+        "max_strategy_drawdown": 0.12,
+        "breach_status": false,
+        "breached_metric": null,
+        "breached_value": null,
+        "threshold": null,
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "rule_id": null,
+        "old_governance_state": "approved_for_live_trading",
+        "new_governance_state": null,
+        "should_disable": false,
+        "should_zero_allocation": false,
+        "should_freeze": false,
+        "breach_key": null,
+        "status": "skipped_insufficient_sample",
+        "reasons": [
+          "no recent performance observation available"
+        ]
+      }
+    ],
+    "demotions_executed": [],
+    "skipped_reason": null,
+    "audit_event_emitted": "STRATEGY_AUTO_DEMOTION_COMPLETED"
+  },
+  "strategy_controls": [
+    {
+      "strategy_id": "auto_demotion_audit_ee2b3321_breach",
+      "enabled": false,
+      "reason": "observed drawdown 0.25 exceeds max_strategy_drawdown 0.12; recommended governance state: approved_for_paper_trading"
+    }
+  ],
+  "audit_events": [
+    {
+      "event_type": "STRATEGY_AUTO_DEMOTION_COMPLETED",
+      "component": "governance",
+      "message": "STRATEGY_AUTO_DEMOTION_COMPLETED by governance-cli: dry_run",
+      "metadata": {
+        "actor": "governance-cli",
+        "reason": "dry_run",
+        "run_id": "d24e558d-22b8-4ff5-b7a1-6a071e7b8509",
+        "dry_run": true,
+        "skipped_reason": "dry_run",
+        "demotions_executed": [],
+        "audit_event_emitted": "STRATEGY_AUTO_DEMOTION_COMPLETED",
+        "candidate_strategies": [
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": "gov_audit_approved_research_to_approved_paper",
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.01,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": "gov_audit_approved_paper_to_approved_live",
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_live_trading",
+            "max_strategy_drawdown": 0.01,
+            "should_zero_allocation": false
+          }
+        ],
+        "auto_demote_on_breach": true,
+        "max_strategy_drawdown": 0.01
+      }
+    },
+    {
+      "event_type": "STRATEGY_AUTO_DEMOTION_COMPLETED",
+      "component": "governance",
+      "message": "STRATEGY_AUTO_DEMOTION_COMPLETED by governance-cli: automatic demotion scan completed",
+      "metadata": {
+        "actor": "governance-cli",
+        "reason": "automatic demotion scan completed",
+        "run_id": "8a0b97aa-cfc6-48c0-85f0-e339f80bf632",
+        "dry_run": false,
+        "skipped_reason": null,
+        "demotions_executed": [],
+        "audit_event_emitted": "STRATEGY_AUTO_DEMOTION_COMPLETED",
+        "candidate_strategies": [
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": "gov_audit_approved_research_to_approved_paper",
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.01,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": "gov_audit_approved_paper_to_approved_live",
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_live_trading",
+            "max_strategy_drawdown": 0.01,
+            "should_zero_allocation": false
+          }
+        ],
+        "auto_demote_on_breach": true,
+        "max_strategy_drawdown": 0.01
+      }
+    },
+    {
+      "event_type": "STRATEGY_AUTO_DEMOTION_SKIPPED",
+      "component": "governance",
+      "message": "STRATEGY_AUTO_DEMOTION_SKIPPED by verify-auto-demotion: auto_demote_disabled",
+      "metadata": {
+        "actor": "verify-auto-demotion",
+        "reason": "auto_demote_disabled",
+        "run_id": null,
+        "dry_run": false,
+        "skipped_reason": "auto_demote_disabled",
+        "demotions_executed": [],
+        "audit_event_emitted": "STRATEGY_AUTO_DEMOTION_SKIPPED",
+        "candidate_strategies": [
+          {
+            "status": "breach",
+            "reasons": [
+              "observed drawdown 0.25 exceeds max_strategy_drawdown 0.12",
+              "recommended governance state: approved_for_paper_trading"
+            ],
+            "rule_id": null,
+            "source_id": "auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach",
+            "threshold": 0.12,
+            "breach_key": "auto_demotion_audit_ee2b3321_breach:metrics_summary:auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach:drawdown:0.12",
+            "source_type": "metrics_summary",
+            "strategy_id": "auto_demotion_audit_ee2b3321_breach",
+            "trade_count": 20,
+            "breach_status": true,
+            "should_freeze": true,
+            "breached_value": 0.25,
+            "should_disable": true,
+            "breached_metric": "drawdown",
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": -0.5,
+            "observed_drawdown": 0.25,
+            "observed_win_rate": 0.4,
+            "new_governance_state": "approved_for_paper_trading",
+            "old_governance_state": "approved_for_live_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": true
+          },
+          {
+            "status": "no_breach",
+            "reasons": [
+              "maintenance metrics are within configured thresholds"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": "auto_demotion_audit_ee2b3321_metrics_it_ee2b3321_safe",
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "metrics_summary",
+            "strategy_id": "auto_demotion_audit_ee2b3321_safe",
+            "trade_count": 20,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": 1.1,
+            "observed_drawdown": 0.03,
+            "observed_win_rate": 0.4,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "no_breach",
+            "reasons": [
+              "maintenance metrics are within configured thresholds"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": "auto_promotion_audit_2fe4b2ec_metrics_fe4b2ec_eligible",
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "metrics_summary",
+            "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible",
+            "trade_count": 20,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": 2.0,
+            "observed_drawdown": 0.05,
+            "observed_win_rate": 0.65,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "no_breach",
+            "reasons": [
+              "maintenance metrics are within configured thresholds"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": "auto_promotion_audit_2fe4b2ec_metrics_2ec_missing_rule",
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "metrics_summary",
+            "strategy_id": "auto_promotion_audit_2fe4b2ec_missing_rule",
+            "trade_count": 30,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": 3.0,
+            "observed_drawdown": 0.03,
+            "observed_win_rate": 0.73,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "gov_audit_fail_89cf6d9e",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "gov_audit_pass_89cf6d9e",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": null,
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_live_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          }
+        ],
+        "auto_demote_on_breach": false,
+        "max_strategy_drawdown": 0.12
+      }
+    },
+    {
+      "event_type": "STRATEGY_AUTO_DEMOTED",
+      "component": "governance",
+      "message": "STRATEGY_AUTO_DEMOTED by verify-auto-demotion: observed drawdown 0.25 exceeds max_strategy_drawdown 0.12; recommended governance state: approved_for_paper_trading",
+      "metadata": {
+        "actor": "verify-auto-demotion",
+        "reason": "observed drawdown 0.25 exceeds max_strategy_drawdown 0.12; recommended governance state: approved_for_paper_trading",
+        "to_state": "approved_for_paper_trading",
+        "new_state": "approved_for_paper_trading",
+        "source_id": "auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach",
+        "threshold": 0.12,
+        "actor_role": "system_risk",
+        "breach_key": "auto_demotion_audit_ee2b3321_breach:metrics_summary:auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach:drawdown:0.12",
+        "from_state": "approved_for_live_trading",
+        "source_type": "metrics_summary",
+        "strategy_id": "auto_demotion_audit_ee2b3321_breach",
+        "evaluated_at": "2026-06-04T01:15:21.608468+00:00",
+        "breached_value": 0.25,
+        "previous_state": "approved_for_live_trading",
+        "breached_metric": "drawdown",
+        "lookback_window": {
+          "bars": null,
+          "trades": null
+        },
+        "allocation_after": 0.0,
+        "strategy_disabled": true
+      }
+    },
+    {
+      "event_type": "STRATEGY_AUTO_DEMOTION_COMPLETED",
+      "component": "governance",
+      "message": "STRATEGY_AUTO_DEMOTION_COMPLETED by verify-auto-demotion: automatic demotion scan completed",
+      "metadata": {
+        "actor": "verify-auto-demotion",
+        "reason": "automatic demotion scan completed",
+        "run_id": null,
+        "dry_run": false,
+        "skipped_reason": null,
+        "demotions_executed": [
+          {
+            "status": "demoted",
+            "threshold": 0.12,
+            "breach_key": "auto_demotion_audit_ee2b3321_breach:metrics_summary:auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach:drawdown:0.12",
+            "strategy_id": "auto_demotion_audit_ee2b3321_breach",
+            "breached_value": 0.25,
+            "breached_metric": "drawdown",
+            "allocation_after": 0.0,
+            "observed_drawdown": 0.25,
+            "strategy_disabled": true,
+            "new_governance_state": "approved_for_paper_trading",
+            "old_governance_state": "approved_for_live_trading",
+            "max_strategy_drawdown": 0.12
+          }
+        ],
+        "audit_event_emitted": "STRATEGY_AUTO_DEMOTION_COMPLETED",
+        "candidate_strategies": [
+          {
+            "status": "breach",
+            "reasons": [
+              "observed drawdown 0.25 exceeds max_strategy_drawdown 0.12",
+              "recommended governance state: approved_for_paper_trading"
+            ],
+            "rule_id": null,
+            "source_id": "auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach",
+            "threshold": 0.12,
+            "breach_key": "auto_demotion_audit_ee2b3321_breach:metrics_summary:auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach:drawdown:0.12",
+            "source_type": "metrics_summary",
+            "strategy_id": "auto_demotion_audit_ee2b3321_breach",
+            "trade_count": 20,
+            "breach_status": true,
+            "should_freeze": true,
+            "breached_value": 0.25,
+            "should_disable": true,
+            "breached_metric": "drawdown",
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": -0.5,
+            "observed_drawdown": 0.25,
+            "observed_win_rate": 0.4,
+            "new_governance_state": "approved_for_paper_trading",
+            "old_governance_state": "approved_for_live_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": true
+          },
+          {
+            "status": "no_breach",
+            "reasons": [
+              "maintenance metrics are within configured thresholds"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": "auto_demotion_audit_ee2b3321_metrics_it_ee2b3321_safe",
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "metrics_summary",
+            "strategy_id": "auto_demotion_audit_ee2b3321_safe",
+            "trade_count": 20,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": 1.1,
+            "observed_drawdown": 0.03,
+            "observed_win_rate": 0.4,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "no_breach",
+            "reasons": [
+              "maintenance metrics are within configured thresholds"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": "auto_promotion_audit_2fe4b2ec_metrics_fe4b2ec_eligible",
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "metrics_summary",
+            "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible",
+            "trade_count": 20,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": 2.0,
+            "observed_drawdown": 0.05,
+            "observed_win_rate": 0.65,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "no_breach",
+            "reasons": [
+              "maintenance metrics are within configured thresholds"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": "auto_promotion_audit_2fe4b2ec_metrics_2ec_missing_rule",
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "metrics_summary",
+            "strategy_id": "auto_promotion_audit_2fe4b2ec_missing_rule",
+            "trade_count": 30,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": 3.0,
+            "observed_drawdown": 0.03,
+            "observed_win_rate": 0.73,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "gov_audit_fail_89cf6d9e",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "gov_audit_pass_89cf6d9e",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": null,
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_live_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          }
+        ],
+        "auto_demote_on_breach": true,
+        "max_strategy_drawdown": 0.12
+      }
+    },
+    {
+      "event_type": "STRATEGY_AUTO_DEMOTION_COMPLETED",
+      "component": "governance",
+      "message": "STRATEGY_AUTO_DEMOTION_COMPLETED by verify-auto-demotion: automatic demotion scan completed",
+      "metadata": {
+        "actor": "verify-auto-demotion",
+        "reason": "automatic demotion scan completed",
+        "run_id": null,
+        "dry_run": false,
+        "skipped_reason": null,
+        "demotions_executed": [],
+        "audit_event_emitted": "STRATEGY_AUTO_DEMOTION_COMPLETED",
+        "candidate_strategies": [
+          {
+            "status": "already_demoted",
+            "reasons": [
+              "breach key auto_demotion_audit_ee2b3321_breach:metrics_summary:auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach:drawdown:0.12 has already produced a demotion"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": "auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach",
+            "threshold": 0.12,
+            "breach_key": "auto_demotion_audit_ee2b3321_breach:metrics_summary:auto_demotion_audit_ee2b3321_metrics__ee2b3321_breach:drawdown:0.12",
+            "source_type": "metrics_summary",
+            "strategy_id": "auto_demotion_audit_ee2b3321_breach",
+            "trade_count": 20,
+            "breach_status": true,
+            "should_freeze": false,
+            "breached_value": 0.25,
+            "should_disable": false,
+            "breached_metric": "drawdown",
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": -0.5,
+            "observed_drawdown": 0.25,
+            "observed_win_rate": 0.4,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "no_breach",
+            "reasons": [
+              "maintenance metrics are within configured thresholds"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": "auto_demotion_audit_ee2b3321_metrics_it_ee2b3321_safe",
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "metrics_summary",
+            "strategy_id": "auto_demotion_audit_ee2b3321_safe",
+            "trade_count": 20,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": 1.1,
+            "observed_drawdown": 0.03,
+            "observed_win_rate": 0.4,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "no_breach",
+            "reasons": [
+              "maintenance metrics are within configured thresholds"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": "auto_promotion_audit_2fe4b2ec_metrics_fe4b2ec_eligible",
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "metrics_summary",
+            "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible",
+            "trade_count": 20,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": 2.0,
+            "observed_drawdown": 0.05,
+            "observed_win_rate": 0.65,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "no_breach",
+            "reasons": [
+              "maintenance metrics are within configured thresholds"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": "auto_promotion_audit_2fe4b2ec_metrics_2ec_missing_rule",
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "metrics_summary",
+            "strategy_id": "auto_promotion_audit_2fe4b2ec_missing_rule",
+            "trade_count": 30,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": 3.0,
+            "observed_drawdown": 0.03,
+            "observed_win_rate": 0.73,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "gov_audit_fail_89cf6d9e",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "gov_audit_pass_89cf6d9e",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_paper_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          },
+          {
+            "status": "skipped_insufficient_sample",
+            "reasons": [
+              "no recent performance observation available"
+            ],
+            "rule_id": null,
+            "source_id": null,
+            "threshold": null,
+            "breach_key": null,
+            "source_type": "none",
+            "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+            "trade_count": null,
+            "breach_status": false,
+            "should_freeze": false,
+            "breached_value": null,
+            "should_disable": false,
+            "breached_metric": null,
+            "lookback_window": {
+              "bars": null,
+              "trades": null
+            },
+            "observed_sharpe": null,
+            "observed_drawdown": null,
+            "observed_win_rate": null,
+            "new_governance_state": null,
+            "old_governance_state": "approved_for_live_trading",
+            "max_strategy_drawdown": 0.12,
+            "should_zero_allocation": false
+          }
+        ],
+        "auto_demote_on_breach": true,
+        "max_strategy_drawdown": 0.12
+      }
+    }
+  ],
+  "notification_status": "audit_event_emitted",
+  "results": [
+    {
+      "area": "disabled_flag",
+      "status": "PASSED"
+    },
+    {
+      "area": "breach_candidate",
+      "status": "PASSED"
+    },
+    {
+      "area": "no_breach_candidate",
+      "status": "PASSED"
+    },
+    {
+      "area": "duplicate_breach",
+      "status": "PASSED"
+    },
+    {
+      "area": "audit_event",
+      "status": "PASSED"
+    }
+  ]
+}

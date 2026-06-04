@@ -486,6 +486,20 @@ class TestSnapshotAllocationConfig:
         assert cfg.default_max_pct_of_capital == pytest.approx(0.10)
         assert cfg.default_policy_id == "simulation_default"
 
+    def test_captures_default_entry_when_strategy_ids_provided_without_policy(self) -> None:
+        cfg = snapshot_allocation_config(
+            policies_repo=_FakePoliciesRepo(),
+            overrides_repo=_FakeOverridesRepo(),
+            total_capital=50_000.0,
+            strategy_ids=["momentum_v2"],
+        )
+
+        entry = cfg.strategy_entries["momentum_v2"]
+        assert entry.max_pct_of_capital == pytest.approx(0.10)
+        assert entry.max_drawdown_allowed == pytest.approx(0.20)
+        assert entry.policy_id == "simulation_default"
+        assert entry.override_applied is False
+
     def test_captures_per_strategy_entry_when_strategy_ids_provided(self) -> None:
         policies_repo = _FakePoliciesRepo(
             policies=[
@@ -546,6 +560,34 @@ class TestSnapshotAllocationConfig:
         assert entry.max_pct_of_capital == pytest.approx(0.30)
         assert entry.max_position_size_usd == pytest.approx(8000.0)
         assert entry.max_drawdown_allowed == pytest.approx(0.20)  # from policy (override is None)
+        assert entry.override_applied is True
+        assert entry.override_id == "ov_123"
+
+    def test_override_values_are_captured_when_policy_is_missing(self) -> None:
+        overrides_repo = _FakeOverridesRepo(
+            overrides=[
+                _FakeOverride(
+                    override_id="ov_123",
+                    strategy_id="momentum_v2",
+                    max_pct_of_capital=0.30,
+                    max_position_size_usd=8000.0,
+                    max_drawdown_allowed=None,
+                )
+            ]
+        )
+
+        cfg = snapshot_allocation_config(
+            policies_repo=_FakePoliciesRepo(),
+            overrides_repo=overrides_repo,
+            total_capital=100_000.0,
+            strategy_ids=["momentum_v2"],
+        )
+
+        entry = cfg.strategy_entries["momentum_v2"]
+        assert entry.max_pct_of_capital == pytest.approx(0.30)
+        assert entry.max_position_size_usd == pytest.approx(8000.0)
+        assert entry.max_drawdown_allowed == pytest.approx(0.20)
+        assert entry.policy_id == "simulation_default"
         assert entry.override_applied is True
         assert entry.override_id == "ov_123"
 

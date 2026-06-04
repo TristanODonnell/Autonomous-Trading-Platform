@@ -113,6 +113,28 @@ def test_pause_and_resume_trading_update_state_and_audit(db_session: Session) ->
     ]
 
 
+def test_set_trading_enabled_updates_state_and_audits(db_session: Session) -> None:
+    service = RuntimeControlService(session=db_session)
+
+    result = service.set_trading_enabled(
+        enabled=False,
+        updated_by="operator-user",
+        rationale="disable runtime",
+    )
+
+    control_state = db_session.get(RuntimeControlState, "global")
+    audit_log = db_session.query(AuditLogRow).one()
+
+    assert result.status == "disabled"
+    assert control_state is not None
+    assert control_state.trading_enabled is False
+    assert control_state.reason == "disable runtime"
+    assert audit_log.event_type == "TRADING_DISABLED"
+    assert audit_log.event_metadata is not None
+    assert audit_log.event_metadata["actor"] == "operator-user"
+    assert audit_log.event_metadata["reason"] == "disable runtime"
+
+
 def test_update_trading_mode_validates_transition_and_audits(
     db_session: Session,
 ) -> None:

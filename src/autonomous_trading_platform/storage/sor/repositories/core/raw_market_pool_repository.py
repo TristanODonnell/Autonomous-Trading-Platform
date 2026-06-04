@@ -47,6 +47,14 @@ class RawMarketPoolRepository(BaseRepository):
             self.session.execute(stmt).scalar_one_or_none(),
         )
 
+    def get_recent_snapshots(self, limit: int = 20) -> list[RawMarketPoolSnapshot]:
+        stmt = (
+            select(RawMarketPoolSnapshot)
+            .order_by(RawMarketPoolSnapshot.captured_at.desc())
+            .limit(limit)
+        )
+        return list(self.session.execute(stmt).scalars().all())
+
     def get_memberships(self, snapshot_id: str) -> list[RawMarketPoolMembership]:
         stmt = (
             select(RawMarketPoolMembership)

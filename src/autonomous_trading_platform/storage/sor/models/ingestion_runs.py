@@ -11,13 +11,20 @@ from .base import Base
 from .helpers.sa_types import UTCDateTimeType
 
 
+def _enum_values(enum_cls):
+    return [member.value if member is RunType.GOVERNANCE else member.name for member in enum_cls]
+
+
 class IngestionRuns(Base):
     __tablename__ = "ingestion_runs"
 
     ingestion_run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     created_at: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
     run_timestamp: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
-    run_type: Mapped[RunType] = mapped_column(SAEnum(RunType, name="run_type_enum"), nullable=False)
+    run_type: Mapped[RunType] = mapped_column(
+        SAEnum(RunType, name="run_type_enum", values_callable=_enum_values),
+        nullable=False,
+    )
     source: Mapped[str] = mapped_column(String(64), nullable=False)
     dataset_version: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)

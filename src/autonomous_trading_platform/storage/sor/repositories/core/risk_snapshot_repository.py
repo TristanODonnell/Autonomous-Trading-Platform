@@ -67,6 +67,15 @@ class RiskSnapshotRepository(BaseRepository):
         result: RiskSnapshotRow | None = self.session.execute(stmt).scalar_one_or_none()
         return result
 
+    def get_latest(self) -> RiskSnapshotRow | None:
+        stmt = select(RiskSnapshotRow).order_by(RiskSnapshotRow.timestamp.desc()).limit(1)
+        result: RiskSnapshotRow | None = self.session.execute(stmt).scalar_one_or_none()
+        return result
+
+    def list_recent(self, *, limit: int = 20) -> list[RiskSnapshotRow]:
+        stmt = select(RiskSnapshotRow).order_by(RiskSnapshotRow.timestamp.desc()).limit(limit)
+        return list(self.session.scalars(stmt).all())
+
     def insert(self, row: RiskSnapshotContract) -> None:
         orm_row = self._to_row(row)
         self.session.add(orm_row)

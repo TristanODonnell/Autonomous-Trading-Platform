@@ -25,17 +25,28 @@ import json
 from collections import Counter, defaultdict
 from dataclasses import asdict
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import yaml
+from sqlalchemy import select
 
+from autonomous_trading_platform.application.services.strategy_catalog_service import (
+    ExperimentCatalogService,
+)
 from autonomous_trading_platform.cli.formatters import print_header, print_json
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.research.black_litterman.black_litterman_research_service import (
     BlackLittermanInput,
     BlackLittermanResearchService,
+)
+from autonomous_trading_platform.research.cache.simulation_result_cache import (
+    SimulationResultCache,
+)
+from autonomous_trading_platform.research.cache.strategy_generation_cache import (
+    StrategyGenerationCache,
 )
 from autonomous_trading_platform.research.checkpoints.research_checkpoint import (
     ResearchCheckpointIdentity,
@@ -52,6 +63,13 @@ from autonomous_trading_platform.research.pipeline.pipeline_runner import Staged
 from autonomous_trading_platform.research.pipeline.stages.stage_registry import StageRegistry
 from autonomous_trading_platform.research.simulation.contexts.build_simulation_context import (
     build_simulation_context,
+)
+from autonomous_trading_platform.research.simulation.services.feature_dependency_resolver_service import (
+    FeatureDependencyError,
+    FeatureDependencyResolverService,
+)
+from autonomous_trading_platform.research.simulation.services.simulation_cost_model_service import (
+    SimulationCostModelConfig,
 )
 from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunRequest,
@@ -74,6 +92,11 @@ from autonomous_trading_platform.research.strategy_generation.generators.random_
 )
 from autonomous_trading_platform.research.strategy_generation.strategy_generation_engine import (
     StrategyGenerationEngine,
+)
+from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
+from autonomous_trading_platform.storage.sor.models.simulation_runs import SimulationRuns
+from autonomous_trading_platform.storage.sor.repositories.core.feature_dataset_versions_repository import (
+    FeatureDatasetVersionsRepository,
 )
 from autonomous_trading_platform.strategy.catalog import list_strategy_types
 from autonomous_trading_platform.strategy.components import ComponentType, get_component_registry
@@ -112,6 +135,43 @@ def _parse_csv(raw: str | None) -> tuple[str, ...]:
     if not raw:
         return ()
     return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
+def _positive_int(raw: str) -> int:
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("value must be an integer") from exc
+    if value <= 0:
+        raise argparse.ArgumentTypeError("value must be greater than zero")
+    return value
+
+
+def _positive_float(raw: str) -> float:
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("value must be numeric") from exc
+    if value <= 0:
+        raise argparse.ArgumentTypeError("value must be greater than zero")
+    return value
+
+
+def _pct(raw: str) -> float:
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("value must be numeric") from exc
+    if value < 0 or value > 1:
+        raise argparse.ArgumentTypeError("value must be between 0 and 1")
+    return value
+
+
+def _bounded_limit(raw: str) -> int:
+    value = _positive_int(raw)
+    if value > 1000:
+        raise argparse.ArgumentTypeError("value must be <= 1000")
+    return value
 
 
 def _enum_value(value: Any) -> Any:
@@ -344,6 +404,35 @@ def _load_artifact(path: str) -> dict[str, Any]:
     return loaded
 
 
+def _emit_artifact_if_requested(
+    *,
+    payload: dict[str, Any],
+    output: str | None,
+    output_format: str = "json",
+) -> None:
+    if output:
+        _write_artifact(output, payload, output_format)
+
+
+def _cache_path(cache_name: str, raw_path: str | None) -> Path:
+    if raw_path:
+        return Path(raw_path)
+    suffix = {
+        "strategy-generation": "strategy_generation_cache.json",
+        "simulation-results": "simulation_result_cache.json",
+    }[cache_name]
+    return Path("artifacts/research/cache") / suffix
+
+
+def _cache_for_name(cache_name: str, raw_path: str | None):
+    path = _cache_path(cache_name, raw_path)
+    if cache_name == "strategy-generation":
+        return StrategyGenerationCache(path), path
+    if cache_name == "simulation-results":
+        return SimulationResultCache(path), path
+    raise ValueError(f"Unsupported cache: {cache_name}")
+
+
 def _load_black_litterman_config(path: str) -> BlackLittermanInput:
     raw = Path(path).read_text(encoding="utf-8")
     loaded = yaml.safe_load(raw) if path.endswith((".yaml", ".yml")) else json.loads(raw)
@@ -393,6 +482,10 @@ def register(subparsers) -> None:
 
     _register_run_simulation(research_subparsers)
     _register_run_experiment(research_subparsers)
+    _register_experiment_catalog(research_subparsers)
+    _register_validate_config(research_subparsers)
+    _register_plan_experiment(research_subparsers)
+    _register_run_inspection(research_subparsers)
     _register_list_strategy_types(research_subparsers)
     _register_inspect_strategy(research_subparsers)
     _register_list_components(research_subparsers)
@@ -403,6 +496,803 @@ def register(subparsers) -> None:
     _register_plan_restart(research_subparsers)
     _register_resume_experiment(research_subparsers)
     _register_black_litterman(research_subparsers)
+    _register_feature_dependencies(research_subparsers)
+    _register_cache_commands(research_subparsers)
+    _register_research_validation(research_subparsers)
+    _register_regime_analysis(research_subparsers)
+    _register_intelligence_commands(research_subparsers)
+    _register_calibration(research_subparsers)
+    _register_cost_model(research_subparsers)
+
+
+# ---------------------------------------------------------------------------
+# experiment catalog / planning
+# ---------------------------------------------------------------------------
+
+
+def _register_experiment_catalog(subparsers) -> None:
+    list_parser = subparsers.add_parser(
+        "list-experiments",
+        help="List research experiment records",
+    )
+    list_parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    list_parser.set_defaults(func=handle_list_experiments)
+
+    inspect_parser = subparsers.add_parser(
+        "inspect-experiment",
+        help="Inspect one research experiment",
+    )
+    inspect_parser.add_argument("--experiment-id", required=True)
+    inspect_parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    inspect_parser.set_defaults(func=handle_inspect_experiment)
+
+    cancel_parser = subparsers.add_parser(
+        "cancel-experiment",
+        help="Cancel a pending, queued, or running research experiment",
+    )
+    cancel_parser.add_argument("--experiment-id", required=True)
+    cancel_parser.add_argument("--reason", required=True)
+    cancel_parser.add_argument("--actor", default=None)
+    cancel_parser.add_argument("--dry-run", action="store_true")
+    cancel_parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    cancel_parser.set_defaults(func=handle_cancel_experiment)
+
+    strategies_parser = subparsers.add_parser(
+        "list-experiment-strategies",
+        help="List strategy outcomes for an experiment",
+    )
+    strategies_parser.add_argument("--experiment-id", required=True)
+    strategies_parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    strategies_parser.set_defaults(func=handle_list_experiment_strategies)
+
+
+def _register_validate_config(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "validate-config",
+        help="Validate an experiment YAML/JSON config without running it",
+    )
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    parser.set_defaults(func=handle_validate_config)
+
+
+def _register_plan_experiment(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "plan-experiment",
+        help="Expand an experiment config or inline experiment args without execution",
+    )
+    parser.add_argument("--config", default=None)
+    parser.add_argument("--experiment-id", default=None)
+    parser.add_argument("--dataset-version-id", default=None)
+    parser.add_argument("--price-basis", choices=["raw", "adjusted"], default=None)
+    parser.add_argument("--symbols", default=None)
+    parser.add_argument("--start-date", default=None)
+    parser.add_argument("--end-date", default=None)
+    parser.add_argument("--strategy-type", choices=STRATEGY_TYPE_CHOICES, default=None)
+    parser.add_argument("--strategy-parameters", default="{}")
+    parser.add_argument("--parameter-space", default=None)
+    parser.add_argument("--experiment-type", default="sweep")
+    parser.add_argument("--universe-version", default="v1")
+    parser.add_argument("--initial-cash", type=_positive_float, default=100_000.0)
+    parser.add_argument("--random-seed", type=int, default=None)
+    parser.add_argument("--execution-mode", choices=["serial", "parallel"], default="serial")
+    parser.add_argument("--max-workers", type=_positive_int, default=1)
+    parser.add_argument("--base-seed", type=int, default=None)
+    parser.add_argument("--fail-fast", action="store_true")
+    parser.add_argument("--output", default=None)
+    parser.add_argument("--format", choices=["json", "yaml"], default="json")
+    parser.set_defaults(func=handle_plan_experiment)
+
+
+def _register_run_inspection(subparsers) -> None:
+    list_parser = subparsers.add_parser(
+        "list-runs",
+        help="List simulation runs, optionally scoped to an experiment",
+    )
+    list_parser.add_argument("--experiment-id", default=None)
+    list_parser.add_argument("--limit", type=_bounded_limit, default=50)
+    list_parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    list_parser.set_defaults(func=handle_list_runs)
+
+    inspect_parser = subparsers.add_parser(
+        "inspect-run",
+        help="Inspect metrics, lineage, and config for one simulation run",
+    )
+    inspect_parser.add_argument("--run-id", required=True)
+    inspect_parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    inspect_parser.set_defaults(func=handle_inspect_run)
+
+
+def handle_list_experiments(args: argparse.Namespace) -> int:
+    session = get_session()
+    try:
+        svc = ExperimentCatalogService(session=session)
+        rows = svc.list_experiments()
+        _print_payload(
+            "Research Experiments", {"count": len(rows), "experiments": rows}, args.format
+        )
+        return 0
+    finally:
+        session.close()
+
+
+def handle_inspect_experiment(args: argparse.Namespace) -> int:
+    session = get_session()
+    try:
+        svc = ExperimentCatalogService(session=session)
+        try:
+            payload = svc.get_experiment_detail(experiment_id=args.experiment_id)
+        except LookupError as exc:
+            _print_payload(
+                "Research Experiment",
+                {"found": False, "experiment_id": args.experiment_id, "error": str(exc)},
+                args.format,
+            )
+            return 1
+        payload["found"] = True
+        _print_payload("Research Experiment", payload, args.format)
+        return 0
+    finally:
+        session.close()
+
+
+def handle_cancel_experiment(args: argparse.Namespace) -> int:
+    session = get_session()
+    try:
+        svc = ExperimentCatalogService(session=session)
+        if args.dry_run:
+            try:
+                detail = svc.get_experiment_detail(experiment_id=args.experiment_id)
+            except LookupError as exc:
+                _print_payload(
+                    "Cancel Research Experiment",
+                    {"dry_run": True, "would_cancel": False, "error": str(exc)},
+                    args.format,
+                )
+                return 1
+            _print_payload(
+                "Cancel Research Experiment",
+                {
+                    "dry_run": True,
+                    "would_cancel": detail["status"] in ("pending", "queued", "running"),
+                    "experiment_id": args.experiment_id,
+                    "current_status": detail["status"],
+                    "reason": args.reason,
+                    "actor": args.actor,
+                },
+                args.format,
+            )
+            return 0
+        try:
+            svc.cancel_experiment(experiment_id=args.experiment_id)
+        except (LookupError, ValueError) as exc:
+            session.rollback()
+            _print_payload(
+                "Cancel Research Experiment",
+                {"dry_run": False, "status": "error", "error": str(exc)},
+                args.format,
+            )
+            return 1
+        session.commit()
+        _print_payload(
+            "Cancel Research Experiment",
+            {
+                "dry_run": False,
+                "status": "cancelled",
+                "experiment_id": args.experiment_id,
+                "reason": args.reason,
+                "actor": args.actor,
+            },
+            args.format,
+        )
+        return 0
+    finally:
+        session.close()
+
+
+def handle_list_experiment_strategies(args: argparse.Namespace) -> int:
+    session = get_session()
+    try:
+        svc = ExperimentCatalogService(session=session)
+        try:
+            strategies = svc.get_experiment_strategies(experiment_id=args.experiment_id)
+        except LookupError as exc:
+            _print_payload(
+                "Experiment Strategies",
+                {"found": False, "experiment_id": args.experiment_id, "error": str(exc)},
+                args.format,
+            )
+            return 1
+        _print_payload(
+            "Experiment Strategies",
+            {
+                "found": True,
+                "experiment_id": args.experiment_id,
+                "count": len(strategies),
+                "strategies": strategies,
+            },
+            args.format,
+        )
+        return 0
+    finally:
+        session.close()
+
+
+def handle_validate_config(args: argparse.Namespace) -> int:
+    session = get_session()
+    try:
+        try:
+            context = build_simulation_context(session=session)
+            plan = _load_experiment_from_yaml(args.config, context, args=None)
+            payload = {"valid": True, "plan": _experiment_plan_payload(plan)}
+            rc = 0
+        except Exception as exc:
+            payload = {"valid": False, "config": args.config, "error": str(exc)}
+            rc = 1
+        _print_payload("Validate Research Config", payload, args.format)
+        return rc
+    finally:
+        session.close()
+
+
+def handle_plan_experiment(args: argparse.Namespace) -> int:
+    session = get_session()
+    try:
+        context = build_simulation_context(session=session)
+        plan = _plan_from_args(args, context)
+        payload = {
+            "dry_run": True,
+            "plan": _experiment_plan_payload(plan),
+            "work_units": _experiment_work_units(plan),
+        }
+        _emit_artifact_if_requested(payload=payload, output=args.output, output_format=args.format)
+        _print_payload("Research Experiment Plan", payload, args.format)
+        return 0
+    finally:
+        session.close()
+
+
+def handle_list_runs(args: argparse.Namespace) -> int:
+    session = get_session()
+    try:
+        stmt = select(SimulationRuns).order_by(SimulationRuns.start_time.desc()).limit(args.limit)
+        if args.experiment_id:
+            stmt = stmt.where(SimulationRuns.experiment_id == args.experiment_id)
+        runs = list(session.scalars(stmt).all())
+        payload = {
+            "experiment_id": args.experiment_id,
+            "count": len(runs),
+            "runs": [_simulation_run_payload(run, include_config=False) for run in runs],
+        }
+        _print_payload("Research Simulation Runs", payload, args.format)
+        return 0
+    finally:
+        session.close()
+
+
+def handle_inspect_run(args: argparse.Namespace) -> int:
+    session = get_session()
+    try:
+        run = session.get(SimulationRuns, args.run_id)
+        if run is None:
+            _print_payload(
+                "Research Simulation Run",
+                {"found": False, "run_id": args.run_id},
+                args.format,
+            )
+            return 1
+        metrics = session.scalars(
+            select(MetricsSummary).where(MetricsSummary.run_id == args.run_id).limit(1)
+        ).one_or_none()
+        payload = _simulation_run_payload(run, include_config=True)
+        payload["found"] = True
+        payload["metrics"] = _metrics_payload(metrics)
+        _print_payload("Research Simulation Run", payload, args.format)
+        return 0
+    finally:
+        session.close()
+
+
+def _register_feature_dependencies(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "resolve-feature-dependencies",
+        help="Resolve persisted feature dependencies required by a strategy",
+    )
+    parser.add_argument("--strategy-type", required=True, choices=STRATEGY_TYPE_CHOICES)
+    parser.add_argument("--strategy-parameters", default="{}")
+    parser.add_argument("--symbols", required=True)
+    parser.add_argument("--dataset-version-id", required=True)
+    parser.add_argument("--price-basis", required=True, choices=["raw", "adjusted"])
+    parser.add_argument("--start-date", required=True)
+    parser.add_argument("--end-date", required=True)
+    parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    parser.set_defaults(func=handle_resolve_feature_dependencies)
+
+
+def _register_cache_commands(subparsers) -> None:
+    inspect_parser = subparsers.add_parser("inspect-cache", help="Inspect a research cache")
+    inspect_parser.add_argument(
+        "--cache",
+        required=True,
+        choices=["strategy-generation", "simulation-results"],
+    )
+    inspect_parser.add_argument("--cache-store", default=None)
+    inspect_parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    inspect_parser.set_defaults(func=handle_inspect_cache)
+
+    validate_parser = subparsers.add_parser("validate-cache", help="Validate research cache shape")
+    validate_parser.add_argument(
+        "--cache",
+        required=True,
+        choices=["strategy-generation", "simulation-results"],
+    )
+    validate_parser.add_argument("--cache-store", default=None)
+    validate_parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    validate_parser.set_defaults(func=handle_validate_cache)
+
+    clear_parser = subparsers.add_parser("clear-cache", help="Clear a research cache")
+    clear_parser.add_argument(
+        "--cache",
+        required=True,
+        choices=["strategy-generation", "simulation-results"],
+    )
+    clear_parser.add_argument("--cache-store", default=None)
+    clear_parser.add_argument("--dry-run", action="store_true", default=True)
+    clear_parser.add_argument("--execute", action="store_true")
+    clear_parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    clear_parser.set_defaults(func=handle_clear_cache)
+
+
+def _register_research_validation(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "run-validation",
+        help="Validate a research validation config and emit a plan artifact",
+    )
+    parser.add_argument("--type", required=True)
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--output", default=None)
+    parser.add_argument("--format", choices=["json", "yaml"], default="json")
+    parser.set_defaults(func=handle_run_validation)
+
+
+def _register_regime_analysis(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "analyze-regimes",
+        help="Create a regime-analysis request artifact for an experiment",
+    )
+    parser.add_argument("--experiment-id", required=True)
+    parser.add_argument("--output", default=None)
+    parser.add_argument("--format", choices=["json", "yaml"], default="json")
+    parser.set_defaults(func=handle_analyze_regimes)
+
+
+def _register_intelligence_commands(subparsers) -> None:
+    parser = subparsers.add_parser("intelligence", help="Research intelligence operations")
+    intelligence_subparsers = parser.add_subparsers(
+        dest="research_intelligence_command",
+        required=True,
+    )
+
+    rank_parser = intelligence_subparsers.add_parser(
+        "rank-candidates",
+        help="Rank candidate strategies for an experiment",
+    )
+    rank_parser.add_argument("--experiment-id", required=True)
+    rank_parser.add_argument("--output", default=None)
+    rank_parser.add_argument("--format", choices=["json", "yaml"], default="json")
+    rank_parser.set_defaults(func=handle_intelligence_rank_candidates)
+
+    cluster_parser = intelligence_subparsers.add_parser(
+        "cluster-strategies",
+        help="Export candidate strategy clustering input for an experiment",
+    )
+    cluster_parser.add_argument("--experiment-id", required=True)
+    cluster_parser.add_argument("--output", default=None)
+    cluster_parser.add_argument("--format", choices=["json", "yaml"], default="json")
+    cluster_parser.set_defaults(func=handle_intelligence_cluster_strategies)
+
+    robustness_parser = intelligence_subparsers.add_parser(
+        "predict-robustness",
+        help="Estimate robustness inputs for candidate strategies",
+    )
+    robustness_parser.add_argument("--experiment-id", required=True)
+    robustness_parser.add_argument("--output", default=None)
+    robustness_parser.add_argument("--format", choices=["json", "yaml"], default="json")
+    robustness_parser.set_defaults(func=handle_intelligence_predict_robustness)
+
+
+def _register_calibration(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "calibrate-slippage",
+        help="Validate fills-source input and write a slippage calibration request artifact",
+    )
+    parser.add_argument("--fills-source", required=True)
+    parser.add_argument("--output", required=True)
+    parser.add_argument("--format", choices=["json", "yaml"], default="json")
+    parser.set_defaults(func=handle_calibrate_slippage)
+
+
+def _register_cost_model(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "inspect-cost-model",
+        help="Preview simulated cost model assumptions",
+    )
+    parser.add_argument("--config", default=None)
+    parser.add_argument("--format", choices=["json", "yaml", "table"], default="json")
+    parser.set_defaults(func=handle_inspect_cost_model)
+
+
+def handle_resolve_feature_dependencies(args: argparse.Namespace) -> int:
+    session = get_session()
+    try:
+        strategy_parameters = json.loads(args.strategy_parameters)
+        if not isinstance(strategy_parameters, dict):
+            raise ValueError("--strategy-parameters must be a JSON object")
+        resolver = FeatureDependencyResolverService(
+            FeatureDatasetVersionsRepository(session),
+            registry=get_registry(),
+        )
+        try:
+            result = resolver.resolve(
+                strategy_type=args.strategy_type,
+                strategy_parameters=strategy_parameters,
+                simulation_dataset_version=args.dataset_version_id,
+                price_basis=PriceBasis(args.price_basis),
+                symbols=_parse_symbols(args.symbols),
+                start_date=_parse_date(args.start_date),
+                end_date=_parse_date(args.end_date),
+            )
+            payload = {
+                "ok": True,
+                "strategy_type": args.strategy_type,
+                "warmup_bars": result.warmup_bars,
+                "resolved_feature_dataset_ids": result.resolved_feature_dataset_ids,
+                "feature_requests": [
+                    {
+                        "feature_name": req.feature_name,
+                        "dataset_version": req.dataset_version,
+                    }
+                    for req in result.feature_requests
+                ],
+            }
+            rc = 0
+        except FeatureDependencyError as exc:
+            payload = {"ok": False, "strategy_type": args.strategy_type, "error": str(exc)}
+            rc = 1
+        _print_payload("Feature Dependencies", payload, args.format)
+        return rc
+    finally:
+        session.close()
+
+
+def handle_inspect_cache(args: argparse.Namespace) -> int:
+    cache, path = _cache_for_name(args.cache, args.cache_store)
+    entries = cache.entries()
+    payload = {
+        "cache": args.cache,
+        "cache_store": str(path),
+        "stats": cache.stats(),
+        "entry_count": len(entries),
+        "entries_preview": entries[:25],
+    }
+    _print_payload("Research Cache", payload, args.format)
+    return 0
+
+
+def handle_validate_cache(args: argparse.Namespace) -> int:
+    cache, path = _cache_for_name(args.cache, args.cache_store)
+    entries = cache.entries()
+    problems = _cache_entry_problems(args.cache, entries)
+    payload = {
+        "cache": args.cache,
+        "cache_store": str(path),
+        "ok": not problems,
+        "entry_count": len(entries),
+        "problems": problems,
+    }
+    _print_payload("Research Cache Validation", payload, args.format)
+    return 0 if not problems else 1
+
+
+def handle_clear_cache(args: argparse.Namespace) -> int:
+    cache, path = _cache_for_name(args.cache, args.cache_store)
+    entries = cache.entries()
+    execute = bool(args.execute)
+    if execute:
+        cache.clear()
+    payload = {
+        "cache": args.cache,
+        "cache_store": str(path),
+        "dry_run": not execute,
+        "removed_count": len(entries) if execute else 0,
+        "would_remove_count": len(entries),
+    }
+    _print_payload("Research Cache Clear", payload, args.format)
+    return 0
+
+
+def handle_run_validation(args: argparse.Namespace) -> int:
+    config = _load_artifact(args.config)
+    payload = {
+        "artifact_type": "research_validation_plan",
+        "validation_type": args.type,
+        "config": config,
+        "status": "planned",
+        "message": "Validation config parsed; execution is intentionally explicit.",
+    }
+    _emit_artifact_if_requested(payload=payload, output=args.output, output_format=args.format)
+    _print_payload("Research Validation Plan", payload, args.format)
+    return 0
+
+
+def handle_analyze_regimes(args: argparse.Namespace) -> int:
+    payload = _experiment_scoped_artifact(
+        experiment_id=args.experiment_id,
+        artifact_type="regime_analysis_request",
+    )
+    _emit_artifact_if_requested(payload=payload, output=args.output, output_format=args.format)
+    _print_payload("Regime Analysis Request", payload, args.format)
+    return 0
+
+
+def handle_intelligence_rank_candidates(args: argparse.Namespace) -> int:
+    payload = _experiment_intelligence_payload(
+        experiment_id=args.experiment_id,
+        operation="rank_candidates",
+    )
+    _emit_artifact_if_requested(payload=payload, output=args.output, output_format=args.format)
+    _print_payload("Research Intelligence Ranking", payload, args.format)
+    return 0
+
+
+def handle_intelligence_cluster_strategies(args: argparse.Namespace) -> int:
+    payload = _experiment_intelligence_payload(
+        experiment_id=args.experiment_id,
+        operation="cluster_strategies",
+    )
+    _emit_artifact_if_requested(payload=payload, output=args.output, output_format=args.format)
+    _print_payload("Research Intelligence Clustering", payload, args.format)
+    return 0
+
+
+def handle_intelligence_predict_robustness(args: argparse.Namespace) -> int:
+    payload = _experiment_intelligence_payload(
+        experiment_id=args.experiment_id,
+        operation="predict_robustness",
+    )
+    _emit_artifact_if_requested(payload=payload, output=args.output, output_format=args.format)
+    _print_payload("Research Intelligence Robustness", payload, args.format)
+    return 0
+
+
+def handle_calibrate_slippage(args: argparse.Namespace) -> int:
+    source = Path(args.fills_source)
+    if not source.exists():
+        raise ValueError(f"--fills-source does not exist: {source}")
+    payload = {
+        "artifact_type": "slippage_calibration_request",
+        "fills_source": str(source),
+        "source_exists": True,
+        "status": "planned",
+        "message": "Calibration source validated; use calibration service for execution.",
+    }
+    _write_artifact(args.output, payload, args.format)
+    _print_payload("Slippage Calibration Request", payload, args.format)
+    return 0
+
+
+def handle_inspect_cost_model(args: argparse.Namespace) -> int:
+    raw = _load_artifact(args.config) if args.config else {}
+    config_raw = raw.get("cost_model", raw)
+    commission_per_share = str(config_raw.get("commission_per_share", "0.0000"))
+    min_commission = str(config_raw.get("min_commission", "0.00"))
+    config = SimulationCostModelConfig(
+        commission_per_share=Decimal(commission_per_share),
+        min_commission=Decimal(min_commission),
+    )
+    payload = {
+        "commission_per_share": str(config.commission_per_share),
+        "min_commission": str(config.min_commission),
+        "slippage_model": config_raw.get("slippage_model", "fixed_bps"),
+        "slippage_config": config_raw.get("slippage_config", {}),
+    }
+    _print_payload("Simulation Cost Model", payload, args.format)
+    return 0
+
+
+def _plan_from_args(args: argparse.Namespace, simulation_context) -> ExperimentDefinition:
+    if args.config:
+        return _load_experiment_from_yaml(args.config, simulation_context, args=args)
+
+    missing = [
+        flag
+        for flag, value in [
+            ("--experiment-id", args.experiment_id),
+            ("--dataset-version-id", args.dataset_version_id),
+            ("--price-basis", args.price_basis),
+            ("--symbols", args.symbols),
+            ("--start-date", args.start_date),
+            ("--end-date", args.end_date),
+            ("--strategy-type", args.strategy_type),
+            ("--random-seed or --base-seed", args.random_seed or args.base_seed),
+        ]
+        if value is None
+    ]
+    if missing:
+        raise SystemExit(
+            "error: the following arguments are required when --config is not supplied: "
+            + ", ".join(missing)
+        )
+
+    strategy_parameters = json.loads(args.strategy_parameters)
+    if not isinstance(strategy_parameters, dict):
+        raise ValueError("--strategy-parameters must be a JSON object")
+    parameter_space = json.loads(args.parameter_space) if args.parameter_space else None
+    if parameter_space is not None and not isinstance(parameter_space, dict):
+        raise ValueError("--parameter-space must be a JSON object")
+
+    return ExperimentDefinition(
+        experiment_id=args.experiment_id,
+        experiment_type=ExperimentType(args.experiment_type),
+        description=None,
+        strategy_set=[
+            {
+                "strategy_id": f"{args.strategy_type}__base",
+                "type": args.strategy_type,
+                "parameters": strategy_parameters,
+            }
+        ],
+        parameter_grid=[],
+        parameter_space=parameter_space,
+        dataset_version=args.dataset_version_id,
+        universe_version=args.universe_version,
+        price_basis=PriceBasis(args.price_basis),
+        symbols=_parse_symbols(args.symbols),
+        start_date=_parse_date(args.start_date),
+        end_date=_parse_date(args.end_date),
+        random_seed=args.base_seed if args.base_seed is not None else args.random_seed,
+        initial_cash=args.initial_cash,
+    )
+
+
+def _experiment_plan_payload(plan: ExperimentDefinition) -> dict[str, Any]:
+    return {
+        "experiment_id": plan.experiment_id,
+        "experiment_type": plan.experiment_type.value,
+        "description": plan.description,
+        "dataset_version": plan.dataset_version,
+        "universe_version": plan.universe_version,
+        "price_basis": plan.price_basis.value,
+        "symbols": plan.symbols,
+        "symbol_count": len(plan.symbols),
+        "start_date": plan.start_date.isoformat(),
+        "end_date": plan.end_date.isoformat(),
+        "random_seed": plan.random_seed,
+        "initial_cash": plan.initial_cash,
+        "strategy_count": len(plan.strategy_set),
+        "parameter_grid_count": len(plan.parameter_grid),
+        "parameter_space_keys": sorted((plan.parameter_space or {}).keys()),
+        "has_staged_pipeline": plan.staged_pipeline_config is not None,
+        "stage_count": len(plan.staged_pipeline_config.stages)
+        if plan.staged_pipeline_config is not None
+        else 0,
+    }
+
+
+def _experiment_work_units(plan: ExperimentDefinition) -> list[dict[str, Any]]:
+    if plan.staged_pipeline_config is not None:
+        return [
+            {
+                "unit_type": "stage",
+                "stage_index": index,
+                "stage_name": getattr(stage, "stage_name", stage.__class__.__name__),
+            }
+            for index, stage in enumerate(plan.staged_pipeline_config.stages, start=1)
+        ]
+
+    parameter_space = plan.parameter_space or {}
+    run_count = 1
+    for values in parameter_space.values():
+        if isinstance(values, list):
+            run_count *= max(len(values), 1)
+    run_count = max(run_count, len(plan.strategy_set), 1)
+    return [
+        {
+            "unit_type": "simulation",
+            "ordinal": index,
+            "experiment_id": plan.experiment_id,
+        }
+        for index in range(1, run_count + 1)
+    ]
+
+
+def _simulation_run_payload(run: SimulationRuns, *, include_config: bool) -> dict[str, Any]:
+    payload = {
+        "run_id": run.run_id,
+        "experiment_id": run.experiment_id,
+        "strategy_id": run.strategy_id,
+        "dataset_version": run.dataset_version,
+        "universe_version": run.universe_version,
+        "price_basis": run.price_basis,
+        "symbols": run.symbols,
+        "symbol_count": len(run.symbols),
+        "start_date": run.start_date.isoformat(),
+        "end_date": run.end_date.isoformat(),
+        "window_role": run.window_role,
+        "start_time": run.start_time.isoformat() if run.start_time else None,
+        "end_time": run.end_time.isoformat() if run.end_time else None,
+        "status": run.status,
+        "metrics_snapshot_id": run.metrics_snapshot_id,
+    }
+    if include_config:
+        payload["execution_config"] = run.execution_config
+    return payload
+
+
+def _metrics_payload(metrics: MetricsSummary | None) -> dict[str, Any] | None:
+    if metrics is None:
+        return None
+    return {
+        "metrics_snapshot_id": metrics.metrics_snapshot_id,
+        "created_at": metrics.created_at.isoformat() if metrics.created_at else None,
+        "total_return": metrics.total_return,
+        "sharpe_ratio": metrics.sharpe_ratio,
+        "max_drawdown": metrics.max_drawdown,
+        "trade_count": metrics.trade_count,
+        "winning_trade_count": metrics.winning_trade_count,
+        "losing_trade_count": metrics.losing_trade_count,
+        "volatility": metrics.volatility,
+        "metrics_json": metrics.metrics_json,
+        "metric_lineage_type": metrics.metric_lineage_type,
+        "environment": metrics.environment,
+        "calculation_version": metrics.calculation_version,
+    }
+
+
+def _cache_entry_problems(cache_name: str, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    required = (
+        {"config_hash", "strategy_type", "first_seen_at"}
+        if cache_name == "strategy-generation"
+        else {"key", "key_id", "run_id", "cached_at"}
+    )
+    problems: list[dict[str, Any]] = []
+    for index, entry in enumerate(entries):
+        missing = sorted(required - set(entry))
+        if missing:
+            problems.append({"index": index, "missing": missing})
+    return problems
+
+
+def _experiment_scoped_artifact(*, experiment_id: str, artifact_type: str) -> dict[str, Any]:
+    session = get_session()
+    try:
+        svc = ExperimentCatalogService(session=session)
+        try:
+            experiment = svc.get_experiment_detail(experiment_id=experiment_id)
+        except LookupError:
+            experiment = {"experiment_id": experiment_id, "found": False}
+        return {
+            "artifact_type": artifact_type,
+            "experiment_id": experiment_id,
+            "experiment": experiment,
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+    finally:
+        session.close()
+
+
+def _experiment_intelligence_payload(*, experiment_id: str, operation: str) -> dict[str, Any]:
+    artifact = _experiment_scoped_artifact(
+        experiment_id=experiment_id,
+        artifact_type=f"research_intelligence_{operation}",
+    )
+    strategies = artifact.get("experiment", {}).get("strategies", [])
+    if isinstance(strategies, list):
+        artifact["candidate_count"] = len(strategies)
+        artifact["candidates_preview"] = strategies[:25]
+    artifact["operation"] = operation
+    artifact["status"] = "planned"
+    return artifact
 
 
 # ---------------------------------------------------------------------------
@@ -463,7 +1353,7 @@ def _register_run_simulation(subparsers) -> None:
         help="Shuffle timestamps to break temporal structure (diagnostic test only)",
     )
     parser.add_argument("--strategy-id", required=True)
-    parser.add_argument("--initial-cash", type=float, default=100_000.0)
+    parser.add_argument("--initial-cash", type=_positive_float, default=100_000.0)
     parser.add_argument(
         "--experiment-id",
         default=None,
@@ -479,6 +1369,9 @@ def _register_run_simulation(subparsers) -> None:
         action="store_true",
         help="Fail if any requested symbol has no bars in the requested window",
     )
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--output", default=None)
+    parser.add_argument("--format", choices=["json", "yaml"], default="json")
     parser.set_defaults(func=handle_run_simulation)
 
 
@@ -556,6 +1449,11 @@ def _register_resume_experiment(subparsers) -> None:
     parser.add_argument("--checkpoint-store", required=True)
     parser.add_argument("--units-file", required=True)
     parser.add_argument("--dry-run", action="store_true", default=True)
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Rejected by this deprecated alias; use pipeline execution paths instead",
+    )
     parser.add_argument("--resume-failed-only", action="store_true")
     parser.add_argument("--resume-missing-only", action="store_true")
     parser.add_argument("--force-rerun", action="store_true")
@@ -602,6 +1500,11 @@ def handle_plan_restart(args: argparse.Namespace) -> int:
 def handle_resume_experiment(args: argparse.Namespace) -> int:
     # This CLI command intentionally plans only. Execution happens inside
     # research pipeline stages so live/paper runtime orchestration is untouched.
+    if getattr(args, "execute", False):
+        raise SystemExit(
+            "error: research resume-experiment is a deprecated planning alias; "
+            "use plan-restart or pipeline execution paths for guarded execution"
+        )
     return handle_plan_restart(args)
 
 
@@ -615,15 +1518,45 @@ def handle_run_simulation(args: argparse.Namespace) -> int:
       - Without --experiment-id: calls SimulationRunner directly. Nothing is
         persisted. Fastest path for iterating on a strategy or data issue.
     """
+    strategy_parameters = json.loads(args.strategy_parameters)
+
+    if not isinstance(strategy_parameters, dict):
+        raise ValueError("--strategy-parameters must be a JSON object")
+
+    if getattr(args, "dry_run", False):
+        payload = {
+            "dry_run": True,
+            "execution_path": "experiment_orchestration"
+            if args.experiment_id
+            else "direct_simulation",
+            "experiment_id": args.experiment_id,
+            "strategy_id": args.strategy_id,
+            "strategy_type": args.strategy_type,
+            "strategy_parameters": strategy_parameters,
+            "dataset_version": args.dataset_version_id,
+            "price_basis": args.price_basis,
+            "symbols": _parse_symbols(args.symbols),
+            "start_date": args.start_date,
+            "end_date": args.end_date,
+            "random_seed": args.random_seed,
+            "initial_cash": args.initial_cash,
+            "strict_data_loading": args.strict_data_loading,
+            "shuffle_timestamps": args.shuffle_timestamps,
+            "will_persist_experiment_state": bool(args.experiment_id),
+        }
+        _emit_artifact_if_requested(
+            payload=payload,
+            output=getattr(args, "output", None),
+            output_format=getattr(args, "format", "json"),
+        )
+        print_header("Run Simulation Plan")
+        print_json(payload)
+        return 0
+
     session = get_session()
 
     try:
         simulation_context = build_simulation_context(session=session)
-
-        strategy_parameters = json.loads(args.strategy_parameters)
-
-        if not isinstance(strategy_parameters, dict):
-            raise ValueError("--strategy-parameters must be a JSON object")
 
         if args.experiment_id:
             # Orchestrated path — persists to DB via ExperimentOrchestrationService.
@@ -678,25 +1611,29 @@ def handle_run_simulation(args: argparse.Namespace) -> int:
             result = simulation_context.simulation_runner.run(request)
 
         print_header("Run Simulation")
-        print_json(
-            {
-                "status": result.status,
-                "run_id": str(result.run_id),
-                "experiment_id": result.experiment_id,
-                "strategy_id": result.strategy_id,
-                "random_seed": args.random_seed,
-                "strategy_type": args.strategy_type,
-                "strategy_parameters": strategy_parameters,
-                "dataset_version": result.dataset_version,
-                "symbols": result.symbols,
-                "symbol_count": len(result.symbols),
-                "start_date": result.start_date.isoformat(),
-                "end_date": result.end_date.isoformat(),
-                "trade_count": result.trade_count,
-                "equity_points": result.equity_points,
-                "per_bar_metric_points": result.per_bar_metric_points,
-            }
+        payload = {
+            "status": result.status,
+            "run_id": str(result.run_id),
+            "experiment_id": result.experiment_id,
+            "strategy_id": result.strategy_id,
+            "random_seed": args.random_seed,
+            "strategy_type": args.strategy_type,
+            "strategy_parameters": strategy_parameters,
+            "dataset_version": result.dataset_version,
+            "symbols": result.symbols,
+            "symbol_count": len(result.symbols),
+            "start_date": result.start_date.isoformat(),
+            "end_date": result.end_date.isoformat(),
+            "trade_count": result.trade_count,
+            "equity_points": result.equity_points,
+            "per_bar_metric_points": result.per_bar_metric_points,
+        }
+        _emit_artifact_if_requested(
+            payload=payload,
+            output=getattr(args, "output", None),
+            output_format=getattr(args, "format", "json"),
         )
+        print_json(payload)
 
         return 0
 
@@ -771,14 +1708,14 @@ def _register_run_experiment(subparsers) -> None:
         help="Experiment type controlling how windows and strategies are expanded",
     )
     parser.add_argument("--universe-version", default="v1")
-    parser.add_argument("--initial-cash", type=float, default=100_000.0)
+    parser.add_argument("--initial-cash", type=_positive_float, default=100_000.0)
     parser.add_argument(
         "--execution-mode",
         choices=["serial", "parallel"],
         default="serial",
         help="Research pipeline execution mode for independent staged units.",
     )
-    parser.add_argument("--max-workers", type=int, default=1)
+    parser.add_argument("--max-workers", type=_positive_int, default=1)
     parser.add_argument(
         "--base-seed",
         type=int,
@@ -786,6 +1723,9 @@ def _register_run_experiment(subparsers) -> None:
         help="Override experiment random_seed for deterministic per-unit seed derivation.",
     )
     parser.add_argument("--fail-fast", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--output", default=None)
+    parser.add_argument("--format", choices=["json", "yaml"], default="json")
     parser.set_defaults(func=handle_run_experiment)
 
 
@@ -844,69 +1784,92 @@ def handle_run_experiment(args: argparse.Namespace) -> int:
                 initial_cash=args.initial_cash,
             )
 
+        if getattr(args, "dry_run", False):
+            payload = {
+                "dry_run": True,
+                "plan": _experiment_plan_payload(plan),
+                "work_units": _experiment_work_units(plan),
+            }
+            _emit_artifact_if_requested(
+                payload=payload,
+                output=getattr(args, "output", None),
+                output_format=getattr(args, "format", "json"),
+            )
+            print_header("Research Experiment Plan")
+            print_json(payload)
+            return 0
+
         if plan.staged_pipeline_config is not None:
             pipeline_result = (
                 simulation_context.experiment_orchestration_service.run_staged_experiment(plan)
             )
 
             print_header(f"Experiment — {plan.experiment_id} (staged pipeline)")
-            print_json(
-                {
-                    "experiment_id": plan.experiment_id,
-                    "total_stages": len(pipeline_result.stage_results),
-                    "final_survivors": len(pipeline_result.final_survivors),
-                    "stages": [
-                        {
-                            "stage": sr.stage_name,
-                            "entered": sr.n_entered,
-                            "passed": sr.n_passed,
-                            "failed": sr.n_failed,
-                            "filter_results": [
-                                {
-                                    "strategy_id": o.strategy_id,
-                                    "passed": o.filter_result.passed,
-                                    "score": round(o.score.score, 4) if o.score else None,
-                                    "failures": o.filter_result.failures,
-                                }
-                                for o in sr.filter_outputs
-                            ],
-                        }
-                        for sr in pipeline_result.stage_results
-                    ],
-                }
+            payload = {
+                "experiment_id": plan.experiment_id,
+                "total_stages": len(pipeline_result.stage_results),
+                "final_survivors": len(pipeline_result.final_survivors),
+                "stages": [
+                    {
+                        "stage": sr.stage_name,
+                        "entered": sr.n_entered,
+                        "passed": sr.n_passed,
+                        "failed": sr.n_failed,
+                        "filter_results": [
+                            {
+                                "strategy_id": o.strategy_id,
+                                "passed": o.filter_result.passed,
+                                "score": round(o.score.score, 4) if o.score else None,
+                                "failures": o.filter_result.failures,
+                            }
+                            for o in sr.filter_outputs
+                        ],
+                    }
+                    for sr in pipeline_result.stage_results
+                ],
+            }
+            _emit_artifact_if_requested(
+                payload=payload,
+                output=getattr(args, "output", None),
+                output_format=getattr(args, "format", "json"),
             )
+            print_json(payload)
         else:
             results, filter_outputs = (
                 simulation_context.experiment_orchestration_service.run_experiment(plan)
             )
             print_header(f"Experiment — {plan.experiment_id}")
-            print_json(
-                {
-                    "experiment_id": plan.experiment_id,
-                    "total_runs": len(results),
-                    "total_passed": len([o for o in filter_outputs if o.filter_result.passed]),
-                    "total_failed": len([o for o in filter_outputs if not o.filter_result.passed]),
-                    "runs": [
-                        {
-                            "status": r.status,
-                            "run_id": str(r.run_id),
-                            "strategy_id": r.strategy_id,
-                            "trade_count": r.trade_count,
-                            "equity_points": r.equity_points,
-                        }
-                        for r in results
-                    ],
-                    "filter_results": [
-                        {
-                            "strategy_id": o.strategy_id,
-                            "passed": o.filter_result.passed,
-                            "score": round(o.score.score, 4) if o.score is not None else None,
-                            "failures": o.filter_result.failures,
-                        }
-                        for o in filter_outputs
-                    ],
-                }
+            payload = {
+                "experiment_id": plan.experiment_id,
+                "total_runs": len(results),
+                "total_passed": len([o for o in filter_outputs if o.filter_result.passed]),
+                "total_failed": len([o for o in filter_outputs if not o.filter_result.passed]),
+                "runs": [
+                    {
+                        "status": r.status,
+                        "run_id": str(r.run_id),
+                        "strategy_id": r.strategy_id,
+                        "trade_count": r.trade_count,
+                        "equity_points": r.equity_points,
+                    }
+                    for r in results
+                ],
+                "filter_results": [
+                    {
+                        "strategy_id": o.strategy_id,
+                        "passed": o.filter_result.passed,
+                        "score": round(o.score.score, 4) if o.score is not None else None,
+                        "failures": o.filter_result.failures,
+                    }
+                    for o in filter_outputs
+                ],
+            }
+            _emit_artifact_if_requested(
+                payload=payload,
+                output=getattr(args, "output", None),
+                output_format=getattr(args, "format", "json"),
             )
+            print_json(payload)
 
         return 0
 
@@ -965,8 +1928,24 @@ def _load_experiment_from_yaml(
         "universe_version": raw.get("universe_version", "v1"),
         "price_basis": raw.get("price_basis"),
         "symbols": raw.get("symbols"),
-        "start_date": raw.get("start_date"),
-        "end_date": raw.get("end_date"),
+        "start_date": raw.get("start_date")
+        or (
+            min(
+                (s["start_date"] for s in pipeline_raw["stages"] if s.get("start_date")),
+                default=None,
+            )
+            if pipeline_raw
+            else None
+        ),
+        "end_date": raw.get("end_date")
+        or (
+            max(
+                (s["end_date"] for s in pipeline_raw["stages"] if s.get("end_date")),
+                default=None,
+            )
+            if pipeline_raw
+            else None
+        ),
         "random_seed": args.base_seed
         if args and args.base_seed is not None
         else raw.get("random_seed", 42),
@@ -1218,7 +2197,7 @@ def _register_generate_strategies(subparsers) -> None:
     )
     parser.add_argument(
         "--n-samples",
-        type=int,
+        type=_positive_int,
         default=50,
         help="Number of configs to sample (random generator only, ignored for grid)",
     )
@@ -1235,9 +2214,9 @@ def _register_generate_strategies(subparsers) -> None:
         action="store_true",
         help="Print each config in full before the summary (omit for large spaces)",
     )
-    parser.add_argument("--population-size", type=int, default=20)
-    parser.add_argument("--generations", type=int, default=3)
-    parser.add_argument("--mutation-rate", type=float, default=0.25)
+    parser.add_argument("--population-size", type=_positive_int, default=20)
+    parser.add_argument("--generations", type=_positive_int, default=3)
+    parser.add_argument("--mutation-rate", type=_pct, default=0.25)
     parser.add_argument("--include-debug", action="store_true")
     parser.add_argument("--include-experimental", action="store_true")
     parser.add_argument("--allowed-families", default=None, help="Comma-separated family allowlist")

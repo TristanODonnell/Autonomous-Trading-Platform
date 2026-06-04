@@ -90,6 +90,42 @@ def test_allocation_rebalance_cycle_runs_when_flag_true(
     assert telemetry_events == ["started", "completed"]
 
 
+def test_portfolio_governance_fail_open_rolls_back_session(monkeypatch) -> None:
+    class FakeCashSnapshotRepository:
+        def __init__(self, session) -> None:
+            self.session = session
+
+        def get_latest(self):
+            raise RuntimeError("database transaction failed")
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.rollback_calls = 0
+
+        def rollback(self) -> None:
+            self.rollback_calls += 1
+
+    class FakeLogger:
+        def warning(self, *args, **kwargs) -> None:
+            pass
+
+    monkeypatch.setattr(
+        cycle_module,
+        "CashSnapshotRepository",
+        FakeCashSnapshotRepository,
+    )
+    session = FakeSession()
+
+    result = cycle_module._evaluate_portfolio_governance_for_rebalance(
+        session=session,
+        settings=object(),
+        logger=FakeLogger(),
+    )
+
+    assert result is None
+    assert session.rollback_calls == 1
+
+
 def _patch_cycle_session(monkeypatch, session: Session) -> None:
     monkeypatch.setattr(cycle_module, "get_session", lambda: session)
     monkeypatch.setattr(session, "close", lambda: None)
