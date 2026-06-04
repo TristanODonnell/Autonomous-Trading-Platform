@@ -155,7 +155,8 @@
       "PowerShell(Get-Process *)",
       "PowerShell(docker exec ratp_postgres *)",
       "PowerShell(Test-Path *)",
-      "PowerShell($tcp = New-Object System.Net.Sockets.TcpClient; try { $tcp.Connect\\(\"127.0.0.1\", 5433\\); Write-Host \"Connected OK\"; $stream = $tcp.GetStream\\(\\); Start-Sleep -Milliseconds 500; Write-Host \"Bytes available: $\\($stream.DataAvailable\\)\"; $tcp.Close\\(\\) } catch { Write-Host \"Error: $_\" })"
+      "PowerShell($tcp = New-Object System.Net.Sockets.TcpClient; try { $tcp.Connect\\(\"127.0.0.1\", 5433\\); Write-Host \"Connected OK\"; $stream = $tcp.GetStream\\(\\); Start-Sleep -Milliseconds 500; Write-Host \"Bytes available: $\\($stream.DataAvailable\\)\"; $tcp.Close\\(\\) } catch { Write-Host \"Error: $_\" })",
+      "PowerShell(& \"D:\\\\PythonVenvs\\\\autonomous-trading-platform\\\\.venv\\\\Scripts\\\\python.exe\" -m ruff check src/autonomous_trading_platform/contracts/runtime/platform_replay.py src/autonomous_trading_platform/application/services/platform_replay/ src/autonomous_trading_platform/application/services/platform_backtest_service.py 2>&1 | Select-Object -First 40)"
     ]
   }
 }
