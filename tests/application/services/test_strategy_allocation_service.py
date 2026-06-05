@@ -122,6 +122,47 @@ def test_override_exactly_at_budget_succeeds(db_session: Session) -> None:
     assert result.allocation_pct == Decimal("100")
 
 
+def test_preview_allocation_override_reports_projected_budget(db_session: Session) -> None:
+    _seed_strategy(db_session, "strategy-preview-a")
+    _seed_strategy(db_session, "strategy-preview-b")
+    _seed_override(db_session, "strategy-preview-b", 0.40)
+
+    result = _make_service(db_session).preview_allocation_override(
+        strategy_id="strategy-preview-a",
+        allocation_pct=Decimal("50"),
+    )
+
+    assert result.strategy_id == "strategy-preview-a"
+    assert result.allocation_pct == Decimal("50")
+    assert result.current_aggregate_pct == pytest.approx(0.40)
+    assert result.projected_aggregate_pct == pytest.approx(0.90)
+    assert result.max_total_strategy_allocation_pct == pytest.approx(1.0)
+    assert result.would_exceed_budget is False
+
+
+def test_clear_allocation_override_deactivates_and_audits(db_session: Session) -> None:
+    _seed_strategy(db_session, "strategy-clear")
+    _seed_override(db_session, "strategy-clear", 0.25)
+
+    result = _make_service(db_session).clear_allocation_override(
+        strategy_id="strategy-clear",
+        reason="remove manual override",
+        updated_by="risk-manager",
+    )
+
+    assert result.cleared is True
+    assert (
+        db_session.query(AllocationOverrides)
+        .filter_by(strategy_id="strategy-clear", is_active=True)
+        .count()
+        == 0
+    )
+    audit_log = db_session.query(AuditLogRow).one()
+    assert audit_log.event_type == "STRATEGY_ALLOCATION_OVERRIDE_CLEARED"
+    assert audit_log.event_metadata["actor"] == "risk-manager"
+    assert audit_log.event_metadata["reason"] == "remove manual override"
+
+
 def test_override_exceeds_budget_raises_error(db_session: Session) -> None:
     _seed_strategy(db_session, "strategy-x")
     _seed_strategy(db_session, "strategy-y")

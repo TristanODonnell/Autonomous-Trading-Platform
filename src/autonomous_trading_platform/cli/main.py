@@ -3,14 +3,20 @@ import argparse
 from autonomous_trading_platform.cli.commands import (
     admin,
     backtesting,
+    controls,
     diagnostics,
     execution,
     features,
+    governance,
     ingestion,
     operations,
+    platform,
+    portfolio,
     research,
+    risk,
     runtime,
     safety,
+    settings,
     strategy,
     universe,
 )
@@ -27,12 +33,18 @@ def build_parser():
     strategy.register(subparsers)
     execution.register(subparsers)
     runtime.register(subparsers)
+    controls.register(subparsers)
     backtesting.register(subparsers)
     admin.register(subparsers)
     operations.register(subparsers)
+    portfolio.register(subparsers)
     universe.register(subparsers)
     features.register(subparsers)
     research.register(subparsers)
+    settings.register(subparsers)
+    risk.register(subparsers)
+    governance.register(subparsers)
+    platform.register(subparsers)
     return parser
 
 

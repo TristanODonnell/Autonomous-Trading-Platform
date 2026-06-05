@@ -29,6 +29,7 @@ def run_candidate_generation(
     name: str | None = None,
     source: str = UniverseSource.CUSTOM,
     rebalance_reason: str | None = None,
+    dry_run: bool = False,
 ) -> CandidateBuildResult:
     """
     Generate and persist a candidate universe version.
@@ -40,32 +41,62 @@ def run_candidate_generation(
     """
     session: Session = get_session()
 
-    now_utc = as_of or datetime.now(UTC)
-    if now_utc.tzinfo is None:
-        now_utc = now_utc.replace(tzinfo=UTC)
+    try:
+        now_utc = as_of or datetime.now(UTC)
+        if now_utc.tzinfo is None:
+            now_utc = now_utc.replace(tzinfo=UTC)
 
-    if config is None:
-        config = CandidateGenerationConfig(as_of=now_utc)
+        if config is None:
+            config = CandidateGenerationConfig(as_of=now_utc)
 
-    if name is None:
-        name = f"candidate_{config.as_of.date().isoformat()}"
+        if name is None:
+            name = f"candidate_{config.as_of.date().isoformat()}"
 
-    raw_pool_repo = RawMarketPoolRepository(session)
-    raw_pool_query_service = RawMarketPoolQueryService(raw_pool_repo)
-    builder = UniverseCandidateBuilder(session, raw_pool_query_service)
-    version_repository = UniverseVersionRepository(session)
+        raw_pool_repo = RawMarketPoolRepository(session)
+        raw_pool_query_service = RawMarketPoolQueryService(raw_pool_repo)
+        builder = UniverseCandidateBuilder(session, raw_pool_query_service)
+        version_repository = UniverseVersionRepository(session)
 
-    result = builder.build_candidate(
-        config=config,
-        name=name,
-        source=source,
-        rebalance_reason=rebalance_reason,
+        result = builder.build_candidate(
+            config=config,
+            name=name,
+            source=source,
+            rebalance_reason=rebalance_reason,
+        )
+
+        if dry_run:
+            session.rollback()
+            return result
+
+        version_repository.insert_version(result.version)
+        all_members = result.included_members + result.excluded_members
+        if all_members:
+            version_repository.insert_members(all_members)
+
+        session.commit()
+        _materialize_result(result)
+        session.expunge_all()
+        return result
+    finally:
+        session.close()
+
+
+def _materialize_result(result: CandidateBuildResult) -> None:
+    version = result.version
+    _ = (
+        version.universe_version_id,
+        version.name,
+        version.config_hash,
+        version.status,
+        version.generation_metadata_json,
     )
-
-    version_repository.insert_version(result.version)
-    all_members = result.included_members + result.excluded_members
-    if all_members:
-        version_repository.insert_members(all_members)
-
-    session.commit()
-    return result
+    for member in result.included_members + result.excluded_members:
+        _ = (
+            member.symbol,
+            member.rank,
+            member.score,
+            member.included_reason,
+            member.excluded_reason,
+            member.liquidity_metrics_json,
+            member.quality_metrics_json,
+        )

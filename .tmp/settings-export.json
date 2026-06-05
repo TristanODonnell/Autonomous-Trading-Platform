@@ -1,0 +1,113 @@
+{
+  "settings": {
+    "risk_tolerance": "high",
+    "max_drawdown_limit": "0.0010",
+    "max_strategy_drawdown": "0.9900",
+    "rebalance_frequency": "daily",
+    "auto_promote_enabled": false,
+    "auto_rebalance_enabled": false,
+    "min_sharpe_for_promotion": "1.500",
+    "min_paper_trading_period_days": 30,
+    "auto_demote_on_breach": true,
+    "notify_drawdown_alerts": false,
+    "notify_strategy_promotion_events": true,
+    "notify_strategy_demotion_events": true,
+    "notify_allocation_rebalance_events": true,
+    "notify_pipeline_failures": true,
+    "per_strategy_cap": "0.4000",
+    "target_portfolio_volatility": "0.2000",
+    "slippage_model": "spread",
+    "transaction_cost_model": "per_share",
+    "max_total_strategy_allocation_pct": "1.0000",
+    "max_portfolio_symbol_exposure_usd": null,
+    "max_portfolio_symbol_pct": null,
+    "min_rebalance_interval_hours": "24.00",
+    "min_allocation_change_pct": "0.0100",
+    "turnover_penalty_weight": null,
+    "portfolio_max_drawdown_pct": "0.1500",
+    "portfolio_drawdown_action": "pause_new_trading",
+    "portfolio_drawdown_recovery_mode": "manual_resume_required",
+    "updated_by": "verify-notification-events",
+    "settings_id": "default",
+    "created_at": "2026-05-12T05:24:06.127076+00:00",
+    "updated_at": "2026-06-01T23:43:35.245113+00:00"
+  },
+  "metadata": {
+    "source_of_truth": {
+      "automation_controls_source": "settings",
+      "promotion_thresholds_source": "promotion_rules",
+      "allocation_targets_source": "capital_allocation_policies + allocation_overrides"
+    },
+    "automation_controls": {
+      "auto_promote_enabled": {
+        "value": false,
+        "label": "Auto Promote",
+        "description": "Allows eligible strategies to be promoted automatically based on active Promotion Rules.",
+        "source": "settings"
+      },
+      "auto_demote_on_breach": {
+        "value": true,
+        "label": "Auto Demote",
+        "description": "Allows strategies to be demoted automatically when active rules are breached.",
+        "source": "settings"
+      },
+      "auto_rebalance_enabled": {
+        "value": false,
+        "label": "Auto Rebalance",
+        "description": "Allows allocation changes based on strategy quality and risk signals.",
+        "source": "settings"
+      },
+      "rebalance_frequency": {
+        "value": "daily",
+        "label": "Rebalance Frequency",
+        "description": "How often the automated allocation review should run.",
+        "source": "settings"
+      }
+    },
+    "promotion_rules": {
+      "label": "Promotion Rules",
+      "source": "promotion_rules",
+      "description": "Active PromotionRules rows are the source of truth for manual and automated promotion eligibility thresholds.",
+      "controls": {
+        "min_sharpe": "promotion_rules.min_sharpe",
+        "max_drawdown": "promotion_rules.max_drawdown",
+        "min_days_tested": "promotion_rules.min_days_tested",
+        "min_trade_count": "promotion_rules.min_trade_count",
+        "min_cagr": "promotion_rules.min_cagr",
+        "min_win_rate": "promotion_rules.min_win_rate"
+      }
+    },
+    "allocation_policies": {
+      "label": "Allocation Policies",
+      "source": "capital_allocation_policies + allocation_overrides",
+      "description": "CapitalAllocationPolicies define allocation caps by approval status and tier; active AllocationOverrides supply strategy-level overrides.",
+      "controls": {
+        "policy_cap": "capital_allocation_policies.max_pct_of_capital",
+        "position_cap": "capital_allocation_policies.max_position_size_usd",
+        "drawdown_cap": "capital_allocation_policies.max_drawdown_allowed",
+        "strategy_override": "allocation_overrides"
+      }
+    },
+    "deprecated_or_ignored_settings": {
+      "min_sharpe_for_promotion": {
+        "value": "1.500",
+        "status": "deprecated_persisted_only",
+        "ignored_for": "manual_promotion_eligibility",
+        "active_source": "promotion_rules.min_sharpe"
+      },
+      "min_paper_trading_period_days": {
+        "value": 30,
+        "status": "deprecated_persisted_only",
+        "ignored_for": "manual_promotion_eligibility",
+        "active_source": "promotion_rules.min_days_tested"
+      },
+      "per_strategy_cap": {
+        "value": "0.4000",
+        "status": "deprecated_persisted_only",
+        "ignored_for": "allocation_targets",
+        "active_source": "capital_allocation_policies.max_pct_of_capital"
+      }
+    }
+  },
+  "exported_at": "2026-06-04T00:27:09.141257+00:00"
+}

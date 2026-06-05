@@ -1,0 +1,126 @@
+# scenario:
+#   name: governance_and_allocation
+#   purpose: >
+#     Cross-domain: governance promotion followed by allocation override for
+#     the newly promoted strategy. Tests that allocation and governance state
+#     changes interact correctly over a 2-month window.
+#     Test questions:
+#       - Does mean_reversion_v1 governance state change on 2024-01-15?
+#       - Does the allocation override on 2024-01-22 apply to the now-promoted strategy?
+#       - Does disabling momentum_v1 on 2024-02-05 interact correctly with allocation?
+#       - Does clearing the override on 2024-02-19 restore policy-driven allocation?
+#   expected_behavior: >
+#     Governance shows 1 promotion. Controls shows 1 strategy disabled + 1 override active,
+#     then cleared. Final state: mean_reversion_v1 promoted, momentum_v1 re-enabled.
+#   recommended_use: integration
+#
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/interactions/governance_and_allocation.yaml \
+#     --output artifacts/platform/backtests/governance_and_allocation.json
+
+platform_replay:
+  name: governance_and_allocation
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL]
+  start: 2024-01-02
+  end: 2024-02-29
+  starting_cash: 100000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: false
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1]
+  governance:
+    - strategy_id: mean_reversion_v1
+      state: pending_review
+    - strategy_id: momentum_v1
+      state: paper_trading_active
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "1.00"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  universe:
+    cadence: monthly      # ~2 rotations over 2 months
+    enabled: true
+  research:
+    cadence: monthly      # ~2 experiment runs over 2 months
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+
+timeline_events:
+  # Operator promotes mean_reversion_v1 after 2-week paper review
+  - at: 2024-01-15
+    type: governance_manual_transition
+    strategy_id: mean_reversion_v1
+    to_state: approved_for_paper_trading
+    reason: 2-week paper review passed; promoting mean_reversion_v1
+
+  # Operator sets manual allocation tilt toward newly promoted strategy
+  - at: 2024-01-22
+    type: allocation_override_set
+    strategy_id: mean_reversion_v1
+    allocation_pct: "0.60"
+    reason: tilt allocation toward newly promoted mean_reversion_v1 for live evaluation
+
+  # Operator disables momentum_v1 temporarily (underperformance vs mean_reversion)
+  - at: 2024-02-05
+    type: strategy_disabled
+    strategy_id: momentum_v1
+    reason: momentum_v1 underperforming; temporary disable for 2-week review
+
+  # Operator re-enables momentum_v1 after review
+  - at: 2024-02-19
+    type: strategy_enabled
+    strategy_id: momentum_v1
+    reason: review complete; momentum_v1 re-enabled with tighter stops
+
+  # Clear manual allocation override — restore policy-driven splits
+  - at: 2024-02-19
+    type: allocation_override_cleared
+    strategy_id: mean_reversion_v1
+    reason: both strategies now active; restoring policy-driven allocation
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: true
+  write_failure_report: false
+  write_dashboard_snapshot: true

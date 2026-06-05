@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "allocation_config_hash": "1a8ce0ef4ab8340b",
+  "snapshot_effective_at": "2026-06-04T00:55:54.498296+00:00",
+  "captured_by": "portfolio_cli",
+  "total_capital": 100000.0,
+  "default_max_pct_of_capital": 0.1,
+  "default_max_drawdown_allowed": 0.2,
+  "default_policy_id": "simulation_default",
+  "strategy_count": 2,
+  "strategy_entries": {
+    "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea": {
+      "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+      "max_pct_of_capital": 0.3,
+      "max_position_size_usd": null,
+      "max_drawdown_allowed": 0.2,
+      "policy_id": "simulation_default",
+      "override_applied": true,
+      "override_id": "75355393-c1d9-47ba-828a-6bd4f4e48847"
+    },
+    "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f": {
+      "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f",
+      "max_pct_of_capital": 0.6,
+      "max_position_size_usd": null,
+      "max_drawdown_allowed": 0.2,
+      "policy_id": "simulation_default",
+      "override_applied": true,
+      "override_id": "dc26a15d-31cd-4088-a816-de07dd5f40f3"
+    }
+  }
+}

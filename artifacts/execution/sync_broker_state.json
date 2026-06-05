@@ -1,0 +1,13 @@
+{
+  "status": "ok",
+  "audit_event_id": "9c180fa2-3b44-4ecd-9709-e175f392bcb3",
+  "sync": {
+    "account_snapshot_id": "345fa729-7ccf-4f3a-beb5-907655f0527c",
+    "cash_snapshot_id": "7b53aaca-98dd-44a7-9f41-3262d2e2a9be",
+    "broker_account_id": "435cf9f0-3bd0-43a3-b291-8b87408c8aaa",
+    "observed_at": "2026-06-03T21:15:28.248368+00:00",
+    "position_snapshot_id": null,
+    "synced_broker_order_ids": [],
+    "synced_fill_ids": []
+  }
+}

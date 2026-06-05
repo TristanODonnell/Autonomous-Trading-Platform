@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import UniverseStatus
@@ -224,14 +224,19 @@ class UniverseValidationService:
                 .all()
             )
         except Exception:
-            rows = (
-                self.session.execute(
-                    "SELECT DISTINCT symbol FROM market_bars WHERE symbol = ANY(:symbols)",
-                    {"symbols": symbols},
+            try:
+                rows = (
+                    self.session.execute(
+                        text(
+                            "SELECT DISTINCT symbol FROM market_bars WHERE symbol = ANY(:symbols)"
+                        ),
+                        {"symbols": symbols},
+                    )
+                    .scalars()
+                    .all()
                 )
-                .scalars()
-                .all()
-            )
+            except Exception:
+                return []
         found = set(rows)
         return [symbol for symbol in symbols if symbol not in found]
 

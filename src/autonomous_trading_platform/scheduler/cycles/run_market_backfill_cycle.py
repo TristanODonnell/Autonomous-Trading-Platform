@@ -75,7 +75,10 @@ def run_market_backfill_cycle(
     symbols: list[str] | None = None,
     start: datetime | None = None,
     end: datetime | None = None,
-) -> None:
+    *,
+    trigger_type: str = "scheduler",
+    actor: str | None = None,
+) -> dict[str, object]:
     """
     Entry point for the Airflow historical market-data backfill DAG.
     """
@@ -112,7 +115,7 @@ def run_market_backfill_cycle(
                 job_name="market_backfill_cycle",
                 parent_job_run_id=None,
                 status=status,
-                trigger_type="scheduler",
+                trigger_type=trigger_type,
                 started_at=job_started_at,
                 completed_at=completed_at,
                 duration_ms=(
@@ -130,6 +133,8 @@ def run_market_backfill_cycle(
                     "symbols": symbols,
                     "start": start.isoformat() if start else None,
                     "end": end.isoformat() if end else None,
+                    "trigger_type": trigger_type,
+                    "actor": actor,
                 },
                 output_summary_json=output_summary_json,
             )
@@ -199,6 +204,8 @@ def run_market_backfill_cycle(
             "backfill_end": end.isoformat(),
             "manifest_run_type": manifest.run_type.value,
             "manifest_interval": manifest.interval.value,
+            "trigger_type": trigger_type,
+            "actor": actor,
         }
 
         with start_span("market_backfill_cycle.run", timespan=SpanTimespan.CYCLE) as cycle_span:
@@ -356,6 +363,19 @@ def run_market_backfill_cycle(
                 run_id=str(run_id),
                 duration_seconds=total_duration,
             )
+            return {
+                "run_id": str(run_id),
+                "runtime_job_run_id": job_run_id,
+                "ingestion_run_id": str(ingestion_run_id),
+                "dataset_version_id": str(dataset_version_id),
+                "expected_symbol_count": len(symbols),
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "symbols": symbols,
+                "trigger_type": trigger_type,
+                "actor": actor,
+                "last_successful_step": "backfill_market_bars",
+            }
 
     except Exception as exc:
         _save_runtime_job_run(

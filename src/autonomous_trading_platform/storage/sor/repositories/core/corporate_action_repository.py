@@ -50,6 +50,16 @@ class CorporateActionRepository(BaseRepository):
         rows = self.session.execute(stmt).scalars().all()
         return cast(list[CorporateAction], rows)
 
+    def list_by_symbol(self, *, symbol: str, limit: int = 50) -> list[CorporateAction]:
+        stmt = (
+            select(CorporateAction)
+            .where(CorporateAction.symbol == symbol)
+            .order_by(CorporateAction.effective_date.desc(), CorporateAction.ingested_at.desc())
+            .limit(limit)
+        )
+        rows = self.session.execute(stmt).scalars().all()
+        return cast(list[CorporateAction], rows)
+
     # -----------------------------
     # Inserts
     # -----------------------------

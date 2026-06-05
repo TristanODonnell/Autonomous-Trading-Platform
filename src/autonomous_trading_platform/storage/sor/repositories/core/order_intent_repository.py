@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy import select
 
 from autonomous_trading_platform.storage.sor.models.order_intents import OrderIntents
@@ -15,8 +17,10 @@ class OrderIntentRepository(BaseRepository):
     # Basic lookup
     # -----------------------------
 
-    def get_by_intent_id(self, id_value: str) -> OrderIntents | None:
+    def get_by_intent_id(self, id_value: str | UUID) -> OrderIntents | None:
         """Fetch a single row by deterministic ID."""
+        if isinstance(id_value, str):
+            id_value = UUID(id_value)
         stmt = select(OrderIntents).where(OrderIntents.intent_id == id_value)
         result: OrderIntents | None = self.session.execute(stmt).scalar_one_or_none()
         return result

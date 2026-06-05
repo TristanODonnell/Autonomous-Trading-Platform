@@ -113,6 +113,14 @@ class RuntimeControlStateWriter(Protocol):
         updated_by: str,
     ): ...
 
+    def set_trading_enabled(
+        self,
+        *,
+        enabled: bool,
+        reason: str,
+        updated_by: str,
+    ): ...
+
 
 class BrokerOrderWriter(Protocol):
     def mark_open_orders_cancelled_by_kill_switch(
@@ -335,6 +343,41 @@ class RuntimeControlService:
             mode=state.trading_mode,
             previous_mode=previous_mode,
             reason=reason,
+            updated_by=updated_by,
+            updated_at=state.updated_at,
+        )
+
+    def set_trading_enabled(
+        self,
+        *,
+        enabled: bool,
+        updated_by: str,
+        rationale: str,
+    ) -> ControlActionResult:
+        updated_at = datetime.now(UTC)
+        state = self.runtime_control_repo.set_trading_enabled(
+            enabled=enabled,
+            reason=rationale,
+            updated_by=updated_by,
+        )
+
+        self.audit_log_repo.record_operator_action(
+            action="TRADING_ENABLED" if enabled else "TRADING_DISABLED",
+            actor=updated_by,
+            reason=rationale,
+            occurred_at=updated_at,
+            metadata={
+                "source": "cli_or_api",
+                "trading_enabled": enabled,
+            },
+        )
+
+        self.session.commit()
+
+        return ControlActionResult(
+            status="enabled" if enabled else "disabled",
+            trading_paused=state.trading_paused,
+            reason=rationale,
             updated_by=updated_by,
             updated_at=state.updated_at,
         )

@@ -1,0 +1,257 @@
+{
+  "replay_id": "replay-7546537775cd",
+  "run_id": "5485d00e-dc9f-4aa3-a616-f3fbf2a69ccd",
+  "actor": "platform-backtest",
+  "dry_run": false,
+  "symbols": [
+    "SPY"
+  ],
+  "start_date": "2024-01-02",
+  "end_date": "2024-01-04",
+  "started_at": "2026-06-04T22:22:35.417070+00:00",
+  "completed_at": "2026-06-04T22:22:39.106429+00:00",
+  "fixture_name": "smoke_minimal",
+  "inject_failures": false,
+  "admin": {
+    "db_ok": true,
+    "config_ok": true,
+    "alembic_version": "kk11ll22mm33"
+  },
+  "settings": {
+    "settings_id": "",
+    "sha256": "655118cff607808d3cdd8164943800b70e766d24d1f4321d6bac5c71b0fcecdb",
+    "risk_tolerance": "high",
+    "max_drawdown_limit": "0.2",
+    "auto_promote_enabled": false,
+    "rebalance_frequency": "daily"
+  },
+  "controls": {
+    "trading_paused": false,
+    "kill_switch_active": false,
+    "trading_mode": "simulation",
+    "strategy_count": 4,
+    "disabled_strategies": [
+      "mean_reversion__844916e1ccbfd614636cb5ffc9d1fa8e41591ce8d77560a410e11c49e33b4c80",
+      "auto_demotion_audit_ee2b3321_breach"
+    ],
+    "active_overrides": 3
+  },
+  "safety": {
+    "kill_switch_enabled": true,
+    "live_gate_armed": false,
+    "trading_environment": "paper",
+    "recent_safety_events": []
+  },
+  "universe": {
+    "active_version_id": null,
+    "symbol_count": 0,
+    "effective_from": null,
+    "rotation_count": 0,
+    "last_churn_pct": null
+  },
+  "ingestion": {
+    "latest_raw_dataset_version_id": "raw_bars_20260602T190045Z_bf209612",
+    "symbols_covered": 2,
+    "missing_bar_incident_count": 0,
+    "corporate_actions_ingested": 0,
+    "date_range": [
+      "2026-05-01",
+      "2026-05-01"
+    ]
+  },
+  "features": {
+    "feature_versions": {
+      "returns/raw": "returns_20260602T195413Z_7898aa32",
+      "volatility/raw": "volatility_20260602T195413Z_e3e6746a",
+      "moving_average/raw": "moving_average_20260602T195413Z_3f414f4b",
+      "liquidity/raw": "liquidity_20260602T195413Z_13d5fb6e",
+      "regime/raw": "regime_20260602T195413Z_28c84890",
+      "regime_classification/raw": "regime_classification_20260602T195413Z_aeb2b67f"
+    },
+    "lineage_ok": true,
+    "mixed_lineage_warnings": []
+  },
+  "runtime": {
+    "ticks_attempted": 3,
+    "ticks_ok": 3,
+    "ticks_failed": 0,
+    "total_orders": 0,
+    "total_fills": 0,
+    "run_ids": [
+      "5485d00e-dc9f-4aa3-a616-f3fbf2a69ccd"
+    ]
+  },
+  "risk": {
+    "gross_exposure": "8901.828232",
+    "net_exposure": "8901.828232",
+    "drawdown_pct": -0.00981801,
+    "is_blocked": false,
+    "block_reasons": [],
+    "drawdown_ladder_states": {},
+    "budget_mode": null
+  },
+  "governance": {
+    "strategies_evaluated": 10,
+    "promotions_executed": 0,
+    "demotions_executed": 0,
+    "health_transitions": 0,
+    "strategies_in_breach": []
+  },
+  "portfolio": {
+    "portfolio_value": "100000.000000",
+    "cash_balance": "100000.000000",
+    "invested_capital": "",
+    "open_positions": 0,
+    "total_pnl_pct": "0",
+    "equity_curve_points_count": 3
+  },
+  "operations": {
+    "system_health_status": "degraded",
+    "active_alerts_count": 0,
+    "critical_alerts_count": 0,
+    "jobs_failed_last_cycle": 4
+  },
+  "execution": {
+    "open_order_count": 0,
+    "fills_this_cycle": 0,
+    "adverse_fills": 0,
+    "reconciliation_status": null,
+    "policy_mode": null
+  },
+  "research": {
+    "experiment_id": "exp_mc_smoke_test",
+    "total_runs": 120,
+    "passed_filters": 72,
+    "run_timestamp": "2026-05-12 05:07:23.539410+00:00"
+  },
+  "diagnostics": {
+    "snapshot_timestamp": "2024-01-04T00:00:00+00:00",
+    "sections_captured": [
+      "portfolio",
+      "controls"
+    ],
+    "portfolio_value": "100000.000000",
+    "active_strategies": 8,
+    "kill_switch_active": false
+  },
+  "strategy_catalog": {
+    "total_active": 7,
+    "paper_count": 6,
+    "live_count": 1,
+    "strategy_types": [
+      "auto_demotion_audit",
+      "auto_promotion_audit",
+      "governance_audit",
+      "momentum",
+      "moving_average_crossover"
+    ]
+  },
+  "tick_results": [
+    {
+      "tick_date": "2024-01-02",
+      "tick_timestamp": "2024-01-02T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260514T022505Z_16b91d9c",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-02T21:00:00+00:00",
+        "run_id": "5afb3cc4-f10f-4969-8349-44b88ff3d57a",
+        "runtime_job_run_id": "5afb3cc4-f10f-4969-8349-44b88ff3d57a",
+        "ingestion_run_id": "a7ed9c7a-3310-4a44-9baf-ba9c0a69f57c",
+        "expected_symbol_count": 1,
+        "cycle_start": "2024-01-02T20:55:00+00:00",
+        "cycle_end": "2024-01-02T21:00:00+00:00",
+        "symbols": [
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": null,
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": null,
+      "governance": null,
+      "portfolio": null,
+      "research": null,
+      "operations": null,
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-03",
+      "tick_timestamp": "2024-01-03T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222045Z_1c532a34",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-03T21:00:00+00:00",
+        "run_id": "871d301b-0d47-4db5-9cfc-f7a4eb3ab340",
+        "runtime_job_run_id": "871d301b-0d47-4db5-9cfc-f7a4eb3ab340",
+        "ingestion_run_id": "f02a3cbd-5feb-431e-9e69-740004611570",
+        "expected_symbol_count": 1,
+        "cycle_start": "2024-01-03T20:55:00+00:00",
+        "cycle_end": "2024-01-03T21:00:00+00:00",
+        "symbols": [
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": null,
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": null,
+      "governance": null,
+      "portfolio": null,
+      "research": null,
+      "operations": null,
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-04",
+      "tick_timestamp": "2024-01-04T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222047Z_884af983",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-04T21:00:00+00:00",
+        "run_id": "b1bf71a3-d57d-4828-9c75-39e9b65b7a9c",
+        "runtime_job_run_id": "b1bf71a3-d57d-4828-9c75-39e9b65b7a9c",
+        "ingestion_run_id": "40e55ac6-57e0-4b80-b848-2c8f3df91f7c",
+        "expected_symbol_count": 1,
+        "cycle_start": "2024-01-04T20:55:00+00:00",
+        "cycle_end": "2024-01-04T21:00:00+00:00",
+        "symbols": [
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": null,
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": null,
+      "governance": null,
+      "portfolio": null,
+      "research": null,
+      "operations": null,
+      "timeline_events": [],
+      "errors": []
+    }
+  ],
+  "timeline_events_applied": [],
+  "warnings": [
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped"
+  ],
+  "errors": []
+}

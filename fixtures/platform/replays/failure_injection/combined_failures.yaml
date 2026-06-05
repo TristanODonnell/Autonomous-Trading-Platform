@@ -1,0 +1,138 @@
+# scenario:
+#   name: combined_failures
+#   purpose: >
+#     Multi-domain failure injection spread across the replay window. Tests
+#     that the platform runner handles concurrent failure conditions across
+#     ingestion, risk, governance, and execution without aborting, and that
+#     the artifact failure_report contains entries from all affected domains.
+#     Test questions:
+#       - Are failures from all 4 domains visible in artifact warnings?
+#       - Does the runner complete all ticks despite multi-domain failures?
+#       - Is the failure_report coherent across domains?
+#       - Do SOR tables contain injection markers from all domains?
+#   expected_behavior: >
+#     5 injections across 4 domains. Artifact warnings contain [INJECTED] from
+#     each domain. ticks_ok + ticks_failed = total ticks. No silent failures.
+#   recommended_use: integration
+#
+# IMPORTANT: Requires --inject-failures flag at runtime.
+#
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/failure_injection/combined_failures.yaml \
+#     --inject-failures \
+#     --output artifacts/platform/backtests/combined_failures.json
+#
+#   Check: cat artifacts/platform/backtests/combined_failures.json | \
+#     jq '.warnings | group_by(.) | map({warn: .[0], count: length})'
+
+platform_replay:
+  name: combined_failures
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL]
+  start: 2024-01-02
+  end: 2024-02-29
+  starting_cash: 100000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: true
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1]
+  governance:
+    - strategy_id: momentum_v1
+      state: paper_trading_active
+    - strategy_id: mean_reversion_v1
+      state: paper_trading_active
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.50"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.50"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  universe:
+    cadence: monthly      # ~2 rotations over 2 months
+    enabled: true
+  research:
+    cadence: monthly      # ~2 experiment runs over 2 months
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+
+timeline_events:
+  # Week 2: ingestion failure — missing bars
+  - at: 2024-01-10
+    type: failure_injected
+    target: ingestion
+    failure: missing_bars
+    reason: simulated missing bar data on 2024-01-10 (combined scenario)
+
+  # Week 2: execution failure — order rejected on same day
+  - at: 2024-01-10
+    type: failure_injected
+    target: execution
+    failure: order_rejected
+    reason: simulated order rejection coinciding with missing bar data
+
+  # Week 3: risk breach following ingestion gap
+  - at: 2024-01-18
+    type: failure_injected
+    target: risk
+    failure: risk_limit_breach
+    reason: simulated exposure breach following ingestion gap period
+
+  # Week 4: governance demotion trigger (bad metrics accumulated)
+  - at: 2024-01-25
+    type: failure_injected
+    target: governance
+    failure: governance_demotion_trigger
+    reason: simulated failing metrics accumulated over prior 2-week failure period
+
+  # Week 6: runtime job failure mid-recovery
+  - at: 2024-02-12
+    type: failure_injected
+    target: runtime
+    failure: runtime_job_failure
+    reason: simulated runtime job failure during recovery window
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: true
+  write_failure_report: true
+  write_dashboard_snapshot: false

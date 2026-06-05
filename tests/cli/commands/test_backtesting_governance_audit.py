@@ -6,6 +6,9 @@ from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.cli.commands import backtesting
 from autonomous_trading_platform.cli.main import build_parser
+from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
+from autonomous_trading_platform.storage.sor.models.simulation_runs import SimulationRuns
 
 
 def test_verify_governance_allocation_command_is_registered() -> None:
@@ -137,3 +140,43 @@ def test_governance_audit_seeds_promotion_rules_from_audit_defaults_not_settings
     assert research_rule.min_days_tested == 30
     assert result["summary"][0]["threshold_source"] == "promotion_rules"
     assert result["summary"][0]["seed_threshold_source"] == "audit_defaults"
+
+
+def test_auto_promotion_verification_uses_constraint_safe_legacy_settings() -> None:
+    source_values = backtesting.handle_verify_auto_promotion.__code__.co_consts
+
+    assert 99.0 not in source_values
+    assert 999 not in source_values
+
+
+def test_auto_demotion_seed_creates_metric_parent_runs_for_postgres() -> None:
+    class _Dialect:
+        name = "postgresql"
+
+    class _Bind:
+        dialect = _Dialect()
+
+    class _FakeSession:
+        bind = _Bind()
+
+        def __init__(self) -> None:
+            self.rows: list[object] = []
+
+        def add(self, row) -> None:
+            self.rows.append(row)
+
+        def flush(self) -> None:
+            pass
+
+        def commit(self) -> None:
+            pass
+
+    session = _FakeSession()
+
+    backtesting._auto_demotion_audit_seed(session=session)
+
+    assert any(isinstance(row, DatasetVersions) for row in session.rows)
+    simulation_run_ids = {row.run_id for row in session.rows if isinstance(row, SimulationRuns)}
+    metric_run_ids = {row.run_id for row in session.rows if isinstance(row, MetricsSummary)}
+    assert metric_run_ids
+    assert metric_run_ids <= simulation_run_ids

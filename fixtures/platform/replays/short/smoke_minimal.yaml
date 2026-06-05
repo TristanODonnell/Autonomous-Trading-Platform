@@ -1,0 +1,79 @@
+# scenario:
+#   name: smoke_minimal
+#   purpose: >
+#     3-day, SPY-only, bare-minimum job set. Fastest possible end-to-end
+#     validation. Confirms the runner starts, ticks at 21:00 UTC, and exits.
+#   expected_behavior: >
+#     3 ticks. Ingestion → features → trading_cycle per day. No universe,
+#     no research, no governance, no risk, no corporate actions.
+#   recommended_use: smoke
+#
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/short/smoke_minimal.yaml \
+#     --output artifacts/platform/backtests/smoke_minimal.json
+
+platform_replay:
+  name: smoke_minimal
+  mode: historical_backtest
+  symbols: [SPY]
+  start: 2024-01-02
+  end: 2024-01-04
+  starting_cash: 50000
+  random_seed: 1
+
+initial_state:
+  settings: {}
+  controls: {}
+  strategies: [momentum_v1]
+  governance: []
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "1.00"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: false
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: false
+  governance:
+    cadence: daily
+    enabled: false
+  portfolio_snapshot:
+    cadence: daily
+    enabled: false
+  operations_health:
+    cadence: daily
+    enabled: false
+  universe:
+    cadence: monthly
+    enabled: false
+  research:
+    cadence: monthly
+    enabled: false
+  dashboard_snapshot:
+    cadence: daily
+    enabled: false
+
+timeline_events: []
+
+outputs:
+  write_event_log: true
+  write_equity_curve: false
+  write_portfolio_snapshots: false
+  write_governance_audit: false
+  write_failure_report: false
+  write_dashboard_snapshot: false

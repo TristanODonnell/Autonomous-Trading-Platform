@@ -8,6 +8,17 @@ from autonomous_trading_platform.storage.sor.repositories.base import BaseReposi
 
 
 class IngestionRunsRepository(BaseRepository):
+    def list_recent(
+        self,
+        limit: int = 20,
+        status: str | None = None,
+    ) -> list[IngestionRuns]:
+        stmt = select(IngestionRuns)
+        if status is not None:
+            stmt = stmt.where(IngestionRuns.status == status)
+        stmt = stmt.order_by(IngestionRuns.created_at.desc()).limit(limit)
+        return list(self.session.scalars(stmt).all())
+
     def get_by_ingestion_run_id(self, ingestion_run_id: str) -> IngestionRuns | None:
         stmt = select(IngestionRuns).where(IngestionRuns.ingestion_run_id == ingestion_run_id)
         return cast(IngestionRuns | None, self.session.scalars(stmt).one_or_none())

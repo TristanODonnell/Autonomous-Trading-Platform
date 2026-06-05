@@ -37,6 +37,21 @@ class SymbolDateCoverageRepository(BaseRepository):
         if obj is not None:
             self.session.delete(obj)
 
+    def list_by_dataset_version_and_symbol(
+        self,
+        dataset_version: str,
+        symbol: str,
+    ) -> list[SymbolDateCoverage]:
+        stmt = (
+            select(SymbolDateCoverage)
+            .where(
+                SymbolDateCoverage.dataset_version == dataset_version,
+                SymbolDateCoverage.symbol == symbol,
+            )
+            .order_by(SymbolDateCoverage.date.asc())
+        )
+        return list(self.session.scalars(stmt).all())
+
     def list_dataset_versions_covering_symbol_date_range(
         self,
         *,

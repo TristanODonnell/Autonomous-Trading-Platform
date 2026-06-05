@@ -1,0 +1,109 @@
+# scenario:
+#   name: allocation_override
+#   purpose: >
+#     Validate allocation_override_set and allocation_override_cleared events.
+#     Tests that manual allocation overrides are applied and cleared and that
+#     the portfolio construction layer reflects them in subsequent ticks.
+#     Test questions:
+#       - Is the override visible in controls summary after 2024-01-09?
+#       - Does portfolio show the shifted allocation during override period?
+#       - Is active_overrides=0 after 2024-01-23?
+#   expected_behavior: >
+#     allocation_override_set at 2024-01-09 sets momentum_v1 to 75%.
+#     allocation_override_cleared at 2024-01-23 restores normal allocation policy.
+#     Controls summary: active_overrides=1 during, active_overrides=0 after.
+#   recommended_use: event_validation
+#
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/timeline_events/allocation_override.yaml \
+#     --output artifacts/platform/backtests/allocation_override.json
+
+platform_replay:
+  name: allocation_override
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL]
+  start: 2024-01-02
+  end: 2024-01-31
+  starting_cash: 100000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: true
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1]
+  governance: []
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.50"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.50"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  # Daily after-close pipeline
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  # Market-hours trading
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  # EOD evaluation
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  # Slower cadence
+  universe:
+    cadence: monthly      # fires once at start of Jan — 1 rotation
+    enabled: true
+  research:
+    cadence: monthly      # fires once at start of Jan — 1 experiment run
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+
+timeline_events:
+  # Override: tilt heavily toward momentum_v1 during Q1 momentum environment
+  - at: 2024-01-09
+    type: allocation_override_set
+    strategy_id: momentum_v1
+    allocation_pct: "0.75"
+    reason: operator manual tilt to momentum during favorable macro environment
+
+  # Clear override: restore normal policy-driven allocation
+  - at: 2024-01-23
+    type: allocation_override_cleared
+    strategy_id: momentum_v1
+    reason: macro environment normalized; restoring policy-driven allocation
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: false
+  write_failure_report: false
+  write_dashboard_snapshot: true

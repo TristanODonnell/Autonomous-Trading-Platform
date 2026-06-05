@@ -9,6 +9,19 @@ from autonomous_trading_platform.storage.sor.repositories.base import BaseReposi
 
 
 class MissingBarIncidentsRepository(BaseRepository):
+    def list_by_dataset_version(
+        self,
+        dataset_version: str,
+        symbol: str | None = None,
+    ) -> list[MissingBarIncidents]:
+        stmt = select(MissingBarIncidents).where(
+            MissingBarIncidents.dataset_version == dataset_version
+        )
+        if symbol is not None:
+            stmt = stmt.where(MissingBarIncidents.symbol == symbol)
+        stmt = stmt.order_by(MissingBarIncidents.bar_timestamp.asc())
+        return list(self.session.scalars(stmt).all())
+
     def get_by_incident_id(self, incident_id: str) -> MissingBarIncidents | None:
         stmt = select(MissingBarIncidents).where(MissingBarIncidents.incident_id == incident_id)
         return cast(MissingBarIncidents | None, self.session.scalars(stmt).one_or_none())

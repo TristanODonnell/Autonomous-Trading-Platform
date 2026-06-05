@@ -14,6 +14,10 @@ EXPECTED_JOB_NAMES = {
     "factor_exposure_monitoring_cycle",
     "factor_neutralization_verification_cycle",
     "experiment_pipeline_cycle",
+    "correlation_monitoring_cycle",
+    "risk_budgeting_cycle",
+    "drawdown_governance_ladder_cycle",
+    "strategy_health_lifecycle_cycle",
 }
 
 
@@ -60,6 +64,10 @@ def test_scheduler_registry_has_expected_schedules():
     assert SCHEDULER_REGISTRY["factor_exposure_monitoring_cycle"].cron == "15 22 * * 1-5"
     assert SCHEDULER_REGISTRY["factor_neutralization_verification_cycle"].cron == "30 22 * * 1-5"
     assert SCHEDULER_REGISTRY["experiment_pipeline_cycle"].cron == "0 23 * * 1-5"
+    assert SCHEDULER_REGISTRY["correlation_monitoring_cycle"].cron == "45 21 * * 1-5"
+    assert SCHEDULER_REGISTRY["risk_budgeting_cycle"].cron == "50 21 * * 1-5"
+    assert SCHEDULER_REGISTRY["drawdown_governance_ladder_cycle"].cron == "55 21 * * 1-5"
+    assert SCHEDULER_REGISTRY["strategy_health_lifecycle_cycle"].cron == "0 22 * * 1-5"
 
 
 def test_scheduler_registry_has_short_interval_smoke_test_candidate():

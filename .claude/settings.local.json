@@ -149,7 +149,14 @@
       "Bash(xargs grep -l \"class.*Allocation.*Result\")",
       "Bash(xargs grep -l \"6.6\\\\|DrawdownGovernance\\\\|drawdown.*ladder\")",
       "Bash(awk '{print $NF}')",
-      "Bash(.venv/Scripts/mypy.exe src/autonomous_trading_platform/application/services/drawdown_governance_service.py src/autonomous_trading_platform/contracts/governance/drawdown_governance.py tests/application/services/test_drawdown_governance_service.py --ignore-missing-imports)"
+      "Bash(.venv/Scripts/mypy.exe src/autonomous_trading_platform/application/services/drawdown_governance_service.py src/autonomous_trading_platform/contracts/governance/drawdown_governance.py tests/application/services/test_drawdown_governance_service.py --ignore-missing-imports)",
+      "Bash(docker exec ratp_postgres *)",
+      "Bash(netstat -ano)",
+      "PowerShell(Get-Process *)",
+      "PowerShell(docker exec ratp_postgres *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell($tcp = New-Object System.Net.Sockets.TcpClient; try { $tcp.Connect\\(\"127.0.0.1\", 5433\\); Write-Host \"Connected OK\"; $stream = $tcp.GetStream\\(\\); Start-Sleep -Milliseconds 500; Write-Host \"Bytes available: $\\($stream.DataAvailable\\)\"; $tcp.Close\\(\\) } catch { Write-Host \"Error: $_\" })",
+      "PowerShell(& \"D:\\\\PythonVenvs\\\\autonomous-trading-platform\\\\.venv\\\\Scripts\\\\python.exe\" -m ruff check src/autonomous_trading_platform/contracts/runtime/platform_replay.py src/autonomous_trading_platform/application/services/platform_replay/ src/autonomous_trading_platform/application/services/platform_backtest_service.py 2>&1 | Select-Object -First 40)"
     ]
   }
 }

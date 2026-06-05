@@ -1,0 +1,146 @@
+# scenario:
+#   name: six_month_regression
+#   purpose: >
+#     6-month regression replay covering a full Q1+Q2 2024 window. Tests platform
+#     stability over ~130 trading days: multiple universe rotations, ~26 weekly
+#     research cycles, repeated governance evaluations, and a realistic operator
+#     timeline with settings adjustments and one safety event. Use for regression
+#     testing after major platform changes.
+#   expected_behavior: >
+#     ~130 ticks. 6 universe rotations (monthly). ~26 research cycles (weekly).
+#     Multiple governance auto-evaluations. Equity curve with 130 points.
+#     6 timeline events applied. No unexpected errors. Full artifact bundle.
+#   recommended_use: regression
+#
+# NOTE: This config takes several minutes depending on domain hook performance.
+#   Use smoke configs for rapid iteration; run this for pre-merge regression testing.
+#
+# Command:
+#   atp platform backtest plan \
+#     --fixture fixtures/platform/replays/long/six_month_regression.yaml
+#
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/long/six_month_regression.yaml \
+#     --output artifacts/platform/backtests/six_month_regression.json
+
+platform_replay:
+  name: six_month_regression
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL, MSFT, GLD]
+  start: 2024-01-02
+  end: 2024-06-28
+  starting_cash: 500000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: true
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1, macd_crossover_v1]
+  governance:
+    - strategy_id: momentum_v1
+      state: paper_trading_active
+    - strategy_id: mean_reversion_v1
+      state: paper_trading_active
+    - strategy_id: macd_crossover_v1
+      state: approved_for_paper_trading
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.40"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.40"
+    - strategy_id: macd_crossover_v1
+      allocation_pct: "0.20"
+  universe:
+    selection_mode: fixed
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  universe:
+    cadence: monthly      # 6 rotations over 6 months
+    enabled: true
+  research:
+    cadence: monthly      # 6 full experiment pipeline runs over 6 months
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+
+timeline_events:
+  # Q1 Week 3: tighten drawdown limit after initial live deployment
+  - at: 2024-01-22
+    type: settings_changed
+    patch:
+      max_drawdown_limit: "0.12"
+    reason: tightening drawdown limit after observing higher-than-expected initial volatility
+
+  # Q1 end of March: promote macd_crossover_v1 after Q1 paper performance
+  - at: 2024-03-25
+    type: governance_manual_transition
+    strategy_id: macd_crossover_v1
+    to_state: paper_trading_active
+    reason: Q1 paper performance strong; promoting macd_crossover_v1 to active paper trading
+
+  # Q2 early April: safety halt during earnings season volatility
+  - at: 2024-04-10
+    type: safety_emergency_halt
+    reason: earnings season volatility spike; operator triggered precautionary halt
+
+  - at: 2024-04-15
+    type: safety_release_halt
+    reason: earnings volatility settled; resuming normal operations
+
+  # Q2 May: rebalance allocation post-Q1 evaluation
+  - at: 2024-05-06
+    type: settings_changed
+    patch:
+      risk_tolerance: medium
+      max_drawdown_limit: "0.15"
+      auto_promote_enabled: true
+    reason: Q1 complete; restoring baseline settings for Q2 deployment
+
+  # Q2 June: pause for mid-year review
+  - at: 2024-06-17
+    type: controls_paused
+    reason: mid-year review pause; operator reviewing Q1/Q2 performance
+
+  - at: 2024-06-20
+    type: controls_resumed
+    reason: mid-year review complete; resuming for H2 deployment
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: true
+  write_failure_report: false
+  write_dashboard_snapshot: true

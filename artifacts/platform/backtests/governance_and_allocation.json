@@ -1,0 +1,3485 @@
+{
+  "replay_id": "replay-c3882be8f102",
+  "run_id": "577ffd66-7820-49e7-95df-7d28eda8b7b8",
+  "actor": "platform-backtest",
+  "dry_run": false,
+  "symbols": [
+    "SPY",
+    "QQQ",
+    "AAPL"
+  ],
+  "start_date": "2024-01-02",
+  "end_date": "2024-02-29",
+  "started_at": "2026-06-04T23:06:08.349025+00:00",
+  "completed_at": "2026-06-04T23:16:47.640427+00:00",
+  "fixture_name": "governance_and_allocation",
+  "inject_failures": false,
+  "admin": {
+    "db_ok": true,
+    "config_ok": true,
+    "alembic_version": "kk11ll22mm33"
+  },
+  "settings": {
+    "settings_id": "",
+    "sha256": "655118cff607808d3cdd8164943800b70e766d24d1f4321d6bac5c71b0fcecdb",
+    "risk_tolerance": "high",
+    "max_drawdown_limit": "0.2",
+    "auto_promote_enabled": false,
+    "rebalance_frequency": "daily"
+  },
+  "controls": {
+    "trading_paused": false,
+    "kill_switch_active": false,
+    "trading_mode": "simulation",
+    "strategy_count": 4,
+    "disabled_strategies": [
+      "mean_reversion__844916e1ccbfd614636cb5ffc9d1fa8e41591ce8d77560a410e11c49e33b4c80",
+      "auto_demotion_audit_ee2b3321_breach"
+    ],
+    "active_overrides": 3
+  },
+  "safety": {
+    "kill_switch_enabled": false,
+    "live_gate_armed": false,
+    "trading_environment": "paper",
+    "recent_safety_events": []
+  },
+  "universe": {
+    "active_version_id": null,
+    "symbol_count": 0,
+    "effective_from": null,
+    "rotation_count": 0,
+    "last_churn_pct": null
+  },
+  "ingestion": {
+    "latest_raw_dataset_version_id": "raw_bars_20260602T190045Z_bf209612",
+    "symbols_covered": 2,
+    "missing_bar_incident_count": 0,
+    "corporate_actions_ingested": 0,
+    "date_range": [
+      "2026-05-01",
+      "2026-05-01"
+    ]
+  },
+  "features": {
+    "feature_versions": {
+      "returns/raw": "returns_20260602T195413Z_7898aa32",
+      "volatility/raw": "volatility_20260602T195413Z_e3e6746a",
+      "moving_average/raw": "moving_average_20260602T195413Z_3f414f4b",
+      "liquidity/raw": "liquidity_20260602T195413Z_13d5fb6e",
+      "regime/raw": "regime_20260602T195413Z_28c84890",
+      "regime_classification/raw": "regime_classification_20260602T195413Z_aeb2b67f"
+    },
+    "lineage_ok": true,
+    "mixed_lineage_warnings": []
+  },
+  "runtime": {
+    "ticks_attempted": 43,
+    "ticks_ok": 43,
+    "ticks_failed": 0,
+    "total_orders": 0,
+    "total_fills": 0,
+    "run_ids": [
+      "577ffd66-7820-49e7-95df-7d28eda8b7b8"
+    ]
+  },
+  "risk": {
+    "gross_exposure": "8901.828232",
+    "net_exposure": "8901.828232",
+    "drawdown_pct": -0.00981801,
+    "is_blocked": false,
+    "block_reasons": [],
+    "drawdown_ladder_states": {},
+    "budget_mode": null
+  },
+  "governance": {
+    "strategies_evaluated": 10,
+    "promotions_executed": 0,
+    "demotions_executed": 0,
+    "health_transitions": 0,
+    "strategies_in_breach": []
+  },
+  "portfolio": {
+    "portfolio_value": "100000.000000",
+    "cash_balance": "100000.000000",
+    "invested_capital": "",
+    "open_positions": 0,
+    "total_pnl_pct": "0",
+    "equity_curve_points_count": 3
+  },
+  "operations": {
+    "system_health_status": "degraded",
+    "active_alerts_count": 0,
+    "critical_alerts_count": 0,
+    "jobs_failed_last_cycle": 4
+  },
+  "execution": {
+    "open_order_count": 0,
+    "fills_this_cycle": 0,
+    "adverse_fills": 0,
+    "reconciliation_status": null,
+    "policy_mode": null
+  },
+  "research": {
+    "experiment_id": "exp_mc_smoke_test",
+    "total_runs": 120,
+    "passed_filters": 72,
+    "run_timestamp": "2026-05-12 05:07:23.539410+00:00"
+  },
+  "diagnostics": {
+    "snapshot_timestamp": "2024-02-29T00:00:00+00:00",
+    "sections_captured": [
+      "portfolio",
+      "controls"
+    ],
+    "portfolio_value": "100000.000000",
+    "active_strategies": 8,
+    "kill_switch_active": false
+  },
+  "strategy_catalog": {
+    "total_active": 7,
+    "paper_count": 6,
+    "live_count": 1,
+    "strategy_types": [
+      "auto_demotion_audit",
+      "auto_promotion_audit",
+      "governance_audit",
+      "momentum",
+      "moving_average_crossover"
+    ]
+  },
+  "tick_results": [
+    {
+      "tick_date": "2024-01-02",
+      "tick_timestamp": "2024-01-02T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260514T022505Z_16b91d9c",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-02T21:00:00+00:00",
+        "run_id": "c2714cf5-0db5-4476-b0bb-98580d0a8dec",
+        "runtime_job_run_id": "c2714cf5-0db5-4476-b0bb-98580d0a8dec",
+        "ingestion_run_id": "3f06d002-0c8f-4deb-8c98-c021aa9d80f9",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-02T20:55:00+00:00",
+        "cycle_end": "2024-01-02T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T230609Z_e5507fd5",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T230609Z_6446a364",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260514T022505Z_16b91d9c",
+        "timestamp": "2024-01-02T21:00:00+00:00",
+        "run_id": "ea9420e8-22c5-4689-9229-514513d48593",
+        "runtime_job_run_id": "ea9420e8-22c5-4689-9229-514513d48593",
+        "ingestion_run_id": "761efe50-4509-4afb-a8cb-0e7328ce7ef2",
+        "cycle_start": "2026-06-03T23:06:09.118804+00:00",
+        "cycle_end": "2026-06-04T23:06:09.118804+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": {},
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "e896f3e6-56b2-4350-8b60-5e05ed2444b0",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-02T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-02T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-02T21:00:00+00:00"
+      },
+      "research": {
+        "experiment_id": "exp_mc_smoke_test",
+        "total_runs": 120,
+        "passed_filters": 72,
+        "timestamp": "2024-01-02T21:00:00+00:00"
+      },
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-02T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-03",
+      "tick_timestamp": "2024-01-03T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222045Z_1c532a34",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-03T21:00:00+00:00",
+        "run_id": "62c7605e-55e8-4c35-b5f7-c0936dce35b0",
+        "runtime_job_run_id": "62c7605e-55e8-4c35-b5f7-c0936dce35b0",
+        "ingestion_run_id": "62caedbf-7e7c-4494-b9eb-8d71702f29d7",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-03T20:55:00+00:00",
+        "cycle_end": "2024-01-03T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231443Z_79da2af1",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231443Z_1c6d5847",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222045Z_1c532a34",
+        "timestamp": "2024-01-03T21:00:00+00:00",
+        "run_id": "b9114aa5-6079-43a6-b79d-318b407240d6",
+        "runtime_job_run_id": "b9114aa5-6079-43a6-b79d-318b407240d6",
+        "ingestion_run_id": "afbb47e6-141d-43cc-ae8f-0d64c26611b6",
+        "cycle_start": "2026-06-03T23:14:43.471429+00:00",
+        "cycle_end": "2026-06-04T23:14:43.471429+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "749e792b-0c55-4e0a-9ec0-359edfce0793",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-03T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-03T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-03T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-03T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-04",
+      "tick_timestamp": "2024-01-04T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222047Z_884af983",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-04T21:00:00+00:00",
+        "run_id": "35ae38a3-d3e3-4653-a122-2ea810346d65",
+        "runtime_job_run_id": "35ae38a3-d3e3-4653-a122-2ea810346d65",
+        "ingestion_run_id": "06e270ca-8093-454a-a018-af1368df6d40",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-04T20:55:00+00:00",
+        "cycle_end": "2024-01-04T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231446Z_129a9525",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231446Z_30f0407c",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222047Z_884af983",
+        "timestamp": "2024-01-04T21:00:00+00:00",
+        "run_id": "4da5d282-cfdc-4991-9a3d-4daf277531da",
+        "runtime_job_run_id": "4da5d282-cfdc-4991-9a3d-4daf277531da",
+        "ingestion_run_id": "f4ab7e5d-a137-4379-9ba2-62dfd0c15e52",
+        "cycle_start": "2026-06-03T23:14:46.343710+00:00",
+        "cycle_end": "2026-06-04T23:14:46.343710+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "8c9c79be-6b94-454f-8434-80d2a75557a3",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-04T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-04T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-04T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-04T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-05",
+      "tick_timestamp": "2024-01-05T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222259Z_e7d041fd",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-05T21:00:00+00:00",
+        "run_id": "f10e1f97-61b7-46e7-8d62-e768e6c40fe6",
+        "runtime_job_run_id": "f10e1f97-61b7-46e7-8d62-e768e6c40fe6",
+        "ingestion_run_id": "7e563a09-19e2-4af0-b691-78482a3fc243",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-05T20:55:00+00:00",
+        "cycle_end": "2024-01-05T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231449Z_a708c310",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231449Z_efcde9ac",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222259Z_e7d041fd",
+        "timestamp": "2024-01-05T21:00:00+00:00",
+        "run_id": "59da7616-3d89-408f-b82f-2de35638d394",
+        "runtime_job_run_id": "59da7616-3d89-408f-b82f-2de35638d394",
+        "ingestion_run_id": "50af54d0-0b22-4201-bea0-dd3f4c57d10e",
+        "cycle_start": "2026-06-03T23:14:49.167355+00:00",
+        "cycle_end": "2026-06-04T23:14:49.167355+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "fe712681-b1d4-4f95-88df-4a666be08c93",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-05T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-05T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-05T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-05T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-08",
+      "tick_timestamp": "2024-01-08T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222302Z_20c2d69a",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-08T21:00:00+00:00",
+        "run_id": "3e9c61c3-329f-436b-b60c-29eb6008cdd5",
+        "runtime_job_run_id": "3e9c61c3-329f-436b-b60c-29eb6008cdd5",
+        "ingestion_run_id": "030b1588-afb7-494d-8807-ef933423d0e4",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-08T20:55:00+00:00",
+        "cycle_end": "2024-01-08T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231452Z_5936eb48",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231452Z_4d8a018a",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222302Z_20c2d69a",
+        "timestamp": "2024-01-08T21:00:00+00:00",
+        "run_id": "794570e3-5cc6-4f82-b0cd-f21600579252",
+        "runtime_job_run_id": "794570e3-5cc6-4f82-b0cd-f21600579252",
+        "ingestion_run_id": "033bbb11-1aae-4e22-80bf-a64efb868d90",
+        "cycle_start": "2026-06-03T23:14:52.011228+00:00",
+        "cycle_end": "2026-06-04T23:14:52.011228+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "c2f5cc8a-88fb-4f89-95ea-a96ce412fc51",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-08T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-08T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-08T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-08T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-09",
+      "tick_timestamp": "2024-01-09T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222710Z_5a623301",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-09T21:00:00+00:00",
+        "run_id": "89524b7d-9cd5-4b48-842f-e4d0cc3c33a3",
+        "runtime_job_run_id": "89524b7d-9cd5-4b48-842f-e4d0cc3c33a3",
+        "ingestion_run_id": "38f0692a-9888-4953-8ad2-2fb6757c28d8",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-09T20:55:00+00:00",
+        "cycle_end": "2024-01-09T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231454Z_ef56f79e",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231454Z_41b18ca8",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222710Z_5a623301",
+        "timestamp": "2024-01-09T21:00:00+00:00",
+        "run_id": "4b51f376-e02a-460d-946e-8e94a3054d8b",
+        "runtime_job_run_id": "4b51f376-e02a-460d-946e-8e94a3054d8b",
+        "ingestion_run_id": "06266464-ba3d-4154-9b8c-2b8d1971d8be",
+        "cycle_start": "2026-06-03T23:14:54.880225+00:00",
+        "cycle_end": "2026-06-04T23:14:54.880225+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "f4e68a12-2b72-4d1b-8817-5eb4851326e4",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-09T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-09T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-09T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-09T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-10",
+      "tick_timestamp": "2024-01-10T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222713Z_62a94a88",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-10T21:00:00+00:00",
+        "run_id": "5981a067-7893-43a8-9a27-a38e5a74e71a",
+        "runtime_job_run_id": "5981a067-7893-43a8-9a27-a38e5a74e71a",
+        "ingestion_run_id": "d9f3eac7-6b8f-436e-bf3c-5e04aba24962",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-10T20:55:00+00:00",
+        "cycle_end": "2024-01-10T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231457Z_471dd963",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231457Z_f01dde83",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222713Z_62a94a88",
+        "timestamp": "2024-01-10T21:00:00+00:00",
+        "run_id": "47b631cb-fe11-4f70-a6e5-7e21eb622aea",
+        "runtime_job_run_id": "47b631cb-fe11-4f70-a6e5-7e21eb622aea",
+        "ingestion_run_id": "6a995086-9a51-46ce-9839-2afb587eb52d",
+        "cycle_start": "2026-06-03T23:14:57.731320+00:00",
+        "cycle_end": "2026-06-04T23:14:57.731320+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "84b592bd-90a4-470d-ae17-5baf673bc876",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-10T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-10T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-10T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-10T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-11",
+      "tick_timestamp": "2024-01-11T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222717Z_366c3df8",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-11T21:00:00+00:00",
+        "run_id": "9db40355-4357-4cb3-b737-fba28ef4826a",
+        "runtime_job_run_id": "9db40355-4357-4cb3-b737-fba28ef4826a",
+        "ingestion_run_id": "f6beb771-29cb-424c-9e89-0f80b2c8c259",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-11T20:55:00+00:00",
+        "cycle_end": "2024-01-11T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231500Z_88822eb6",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231500Z_225fd29c",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222717Z_366c3df8",
+        "timestamp": "2024-01-11T21:00:00+00:00",
+        "run_id": "7fee3d33-257e-4eba-9c87-34131e77d75b",
+        "runtime_job_run_id": "7fee3d33-257e-4eba-9c87-34131e77d75b",
+        "ingestion_run_id": "f66f1eea-a644-466e-adbd-6d7e51c5ace3",
+        "cycle_start": "2026-06-03T23:15:00.637992+00:00",
+        "cycle_end": "2026-06-04T23:15:00.637992+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "80e5aea3-5c37-4839-8e60-771d10cb09fe",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-11T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-11T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-11T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-11T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-12",
+      "tick_timestamp": "2024-01-12T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222720Z_5990584e",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-12T21:00:00+00:00",
+        "run_id": "0c671f6b-9eca-4710-bacf-89139d3efa07",
+        "runtime_job_run_id": "0c671f6b-9eca-4710-bacf-89139d3efa07",
+        "ingestion_run_id": "8b97564d-cfdd-4bfe-9419-019c448ccd11",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-12T20:55:00+00:00",
+        "cycle_end": "2024-01-12T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231503Z_8ce98c6b",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231503Z_945ebff2",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222720Z_5990584e",
+        "timestamp": "2024-01-12T21:00:00+00:00",
+        "run_id": "aa24620d-d260-4c68-9a2b-df6a20a038d5",
+        "runtime_job_run_id": "aa24620d-d260-4c68-9a2b-df6a20a038d5",
+        "ingestion_run_id": "c91cd223-9a04-46dc-b915-a27ac2162f33",
+        "cycle_start": "2026-06-03T23:15:03.513761+00:00",
+        "cycle_end": "2026-06-04T23:15:03.513761+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "ead5de0e-6f93-4cba-963b-5b437cd7c1b1",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-12T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-12T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-12T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-12T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-15",
+      "tick_timestamp": "2024-01-15T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222723Z_be174afd",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-15T21:00:00+00:00",
+        "run_id": "a38330b5-cdd7-499c-ad3f-563aea5cd828",
+        "runtime_job_run_id": "a38330b5-cdd7-499c-ad3f-563aea5cd828",
+        "ingestion_run_id": "be38fc0f-1f72-40a4-b78e-81c979c3702b",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-15T20:55:00+00:00",
+        "cycle_end": "2024-01-15T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231506Z_955174e5",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231506Z_d5291c16",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222723Z_be174afd",
+        "timestamp": "2024-01-15T21:00:00+00:00",
+        "run_id": "ecbe3d13-00ff-4722-a285-5c9c63678b97",
+        "runtime_job_run_id": "ecbe3d13-00ff-4722-a285-5c9c63678b97",
+        "ingestion_run_id": "d3149995-d8df-4f2d-a650-ef2ad9e697ac",
+        "cycle_start": "2026-06-03T23:15:06.450935+00:00",
+        "cycle_end": "2026-06-04T23:15:06.450935+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "d411e72a-bfd9-4cf9-b991-962e4056ce72",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-15T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-15T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-15T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-15T21:00:00+00:00"
+      },
+      "timeline_events": [
+        {
+          "event_type": "governance_manual_transition",
+          "status": "skipped"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-16",
+      "tick_timestamp": "2024-01-16T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222817Z_51aa1d2d",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-16T21:00:00+00:00",
+        "run_id": "4ca59b4c-b9c3-46bf-8abd-82aedfc794cd",
+        "runtime_job_run_id": "4ca59b4c-b9c3-46bf-8abd-82aedfc794cd",
+        "ingestion_run_id": "0287608b-f95a-4888-a626-c7541105fc7a",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-16T20:55:00+00:00",
+        "cycle_end": "2024-01-16T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231509Z_65d1ddac",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231509Z_d6729ef6",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222817Z_51aa1d2d",
+        "timestamp": "2024-01-16T21:00:00+00:00",
+        "run_id": "0ea5a6aa-ec31-4db1-a67a-a4eb83f988c2",
+        "runtime_job_run_id": "0ea5a6aa-ec31-4db1-a67a-a4eb83f988c2",
+        "ingestion_run_id": "a83541cf-52d8-482a-9af3-5d69a3a12865",
+        "cycle_start": "2026-06-03T23:15:09.428007+00:00",
+        "cycle_end": "2026-06-04T23:15:09.428007+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "dbe41d3c-ce13-4fc0-ba4c-9761547d4d78",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-16T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-16T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-16T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-16T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-17",
+      "tick_timestamp": "2024-01-17T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222820Z_f0a74bfd",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-17T21:00:00+00:00",
+        "run_id": "a7d7bad2-14ec-41c8-8086-fa6610ddd0ca",
+        "runtime_job_run_id": "a7d7bad2-14ec-41c8-8086-fa6610ddd0ca",
+        "ingestion_run_id": "3023fdb7-7948-4c89-a880-d4f31315d65d",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-17T20:55:00+00:00",
+        "cycle_end": "2024-01-17T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231512Z_1d472908",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231512Z_0ea31fd5",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222820Z_f0a74bfd",
+        "timestamp": "2024-01-17T21:00:00+00:00",
+        "run_id": "f758a001-87e6-45bb-bc5e-4d11c3751310",
+        "runtime_job_run_id": "f758a001-87e6-45bb-bc5e-4d11c3751310",
+        "ingestion_run_id": "b0293aa8-7731-4967-b973-45980da5785f",
+        "cycle_start": "2026-06-03T23:15:12.278912+00:00",
+        "cycle_end": "2026-06-04T23:15:12.278912+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "cb92fb8e-68cd-4095-b76d-a3028cbef9f9",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-17T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-17T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-17T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-17T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-18",
+      "tick_timestamp": "2024-01-18T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222824Z_57ac6e28",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-18T21:00:00+00:00",
+        "run_id": "e8fcdb89-ba0b-4e1a-8dd5-818e639cc623",
+        "runtime_job_run_id": "e8fcdb89-ba0b-4e1a-8dd5-818e639cc623",
+        "ingestion_run_id": "34adc8f2-6ee4-4dcd-8e12-0cd4dfbd07a6",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-18T20:55:00+00:00",
+        "cycle_end": "2024-01-18T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231515Z_3b138491",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231515Z_252e2244",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222824Z_57ac6e28",
+        "timestamp": "2024-01-18T21:00:00+00:00",
+        "run_id": "e505bf60-ec1d-4f69-8f98-8dbdb982802d",
+        "runtime_job_run_id": "e505bf60-ec1d-4f69-8f98-8dbdb982802d",
+        "ingestion_run_id": "19b7dcbc-2a0c-44be-a182-996e17dee027",
+        "cycle_start": "2026-06-03T23:15:15.190770+00:00",
+        "cycle_end": "2026-06-04T23:15:15.190770+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "c96dbfa4-fab3-4079-85f4-fd5f6062992f",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-18T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-18T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-18T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-18T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-19",
+      "tick_timestamp": "2024-01-19T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222827Z_948213a5",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-19T21:00:00+00:00",
+        "run_id": "b5b1e03f-16fb-4782-8dd7-5b9f78f7f359",
+        "runtime_job_run_id": "b5b1e03f-16fb-4782-8dd7-5b9f78f7f359",
+        "ingestion_run_id": "8fbaff87-3bf2-4bff-b9b1-8dcbe2c41522",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-19T20:55:00+00:00",
+        "cycle_end": "2024-01-19T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231518Z_1026d47b",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231518Z_c69271d6",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222827Z_948213a5",
+        "timestamp": "2024-01-19T21:00:00+00:00",
+        "run_id": "69366d20-e2be-4c0c-b1b5-961efe2950ba",
+        "runtime_job_run_id": "69366d20-e2be-4c0c-b1b5-961efe2950ba",
+        "ingestion_run_id": "4f10fde1-2e9e-4404-9586-83be43b20512",
+        "cycle_start": "2026-06-03T23:15:18.087843+00:00",
+        "cycle_end": "2026-06-04T23:15:18.087843+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "5c890fb1-af22-43bb-bf3d-82359c33b2d9",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-19T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-19T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-19T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-19T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-22",
+      "tick_timestamp": "2024-01-22T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222830Z_a942be55",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-22T21:00:00+00:00",
+        "run_id": "bc01cca5-4648-4629-9ab5-ed13527b3ed1",
+        "runtime_job_run_id": "bc01cca5-4648-4629-9ab5-ed13527b3ed1",
+        "ingestion_run_id": "f9758195-3327-441f-8ad6-73795656c765",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-22T20:55:00+00:00",
+        "cycle_end": "2024-01-22T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231521Z_51545e37",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231521Z_9df17e46",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222830Z_a942be55",
+        "timestamp": "2024-01-22T21:00:00+00:00",
+        "run_id": "f433244c-7871-476a-a4b2-cb6a0de8b839",
+        "runtime_job_run_id": "f433244c-7871-476a-a4b2-cb6a0de8b839",
+        "ingestion_run_id": "a28a489f-2812-4657-93fc-3e373ac36652",
+        "cycle_start": "2026-06-03T23:15:20.972160+00:00",
+        "cycle_end": "2026-06-04T23:15:20.972160+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "0f3aa131-d6c4-474d-ac9e-13a5929314d3",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-22T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-22T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-22T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-22T21:00:00+00:00"
+      },
+      "timeline_events": [
+        {
+          "event_type": "allocation_override_set",
+          "status": "skipped"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-23",
+      "tick_timestamp": "2024-01-23T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222833Z_d93705aa",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-23T21:00:00+00:00",
+        "run_id": "8604c410-c293-440b-ab98-b545d7a34918",
+        "runtime_job_run_id": "8604c410-c293-440b-ab98-b545d7a34918",
+        "ingestion_run_id": "18336b41-cba7-4903-a2de-2762e7c6b546",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-23T20:55:00+00:00",
+        "cycle_end": "2024-01-23T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231524Z_b1994f40",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231524Z_3db2b76a",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222833Z_d93705aa",
+        "timestamp": "2024-01-23T21:00:00+00:00",
+        "run_id": "4e78d346-df18-4e5d-8184-e14b16808ba3",
+        "runtime_job_run_id": "4e78d346-df18-4e5d-8184-e14b16808ba3",
+        "ingestion_run_id": "5d6dc8a6-ef0f-424d-a9f0-0af9546ebdfb",
+        "cycle_start": "2026-06-03T23:15:23.997855+00:00",
+        "cycle_end": "2026-06-04T23:15:23.997855+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "ebf4c704-d34a-4bc8-bef9-ce89b4afb4cf",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-23T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-23T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-23T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-23T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-24",
+      "tick_timestamp": "2024-01-24T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222837Z_e77c9076",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-24T21:00:00+00:00",
+        "run_id": "fbb9181e-3889-4319-90da-1d66605001e7",
+        "runtime_job_run_id": "fbb9181e-3889-4319-90da-1d66605001e7",
+        "ingestion_run_id": "da75f83c-cc32-404d-bab9-3e80670aeb06",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-24T20:55:00+00:00",
+        "cycle_end": "2024-01-24T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231526Z_7467bfce",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231526Z_7da9b5b2",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222837Z_e77c9076",
+        "timestamp": "2024-01-24T21:00:00+00:00",
+        "run_id": "29e7306b-a531-4f66-8a7a-a16713d3bdee",
+        "runtime_job_run_id": "29e7306b-a531-4f66-8a7a-a16713d3bdee",
+        "ingestion_run_id": "b1c1f3f1-66f0-4f51-b887-50948564676e",
+        "cycle_start": "2026-06-03T23:15:26.857602+00:00",
+        "cycle_end": "2026-06-04T23:15:26.857602+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "ab367b92-f1b8-4067-88e7-b2200bf93ee7",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-24T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-24T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-24T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-24T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-25",
+      "tick_timestamp": "2024-01-25T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222840Z_658212d7",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-25T21:00:00+00:00",
+        "run_id": "b40b1689-e9d5-4e5c-b245-9db5b4a03aaa",
+        "runtime_job_run_id": "b40b1689-e9d5-4e5c-b245-9db5b4a03aaa",
+        "ingestion_run_id": "0b1ae7ed-244b-4c5f-8f9a-a2ce01b7674d",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-25T20:55:00+00:00",
+        "cycle_end": "2024-01-25T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231529Z_bc1d3e5f",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231529Z_d31d7a18",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222840Z_658212d7",
+        "timestamp": "2024-01-25T21:00:00+00:00",
+        "run_id": "7e2f9cff-221b-4a29-b7c0-14dbf3b25763",
+        "runtime_job_run_id": "7e2f9cff-221b-4a29-b7c0-14dbf3b25763",
+        "ingestion_run_id": "e999997e-f014-4ada-8522-269018978cab",
+        "cycle_start": "2026-06-03T23:15:29.734517+00:00",
+        "cycle_end": "2026-06-04T23:15:29.734517+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "1d3f9597-a2ec-4a73-b756-f4c91d7411b3",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-25T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-25T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-25T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-25T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-26",
+      "tick_timestamp": "2024-01-26T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222843Z_e80d68fd",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-26T21:00:00+00:00",
+        "run_id": "a68f095d-c45f-4adb-9cd8-810a36ef5c6f",
+        "runtime_job_run_id": "a68f095d-c45f-4adb-9cd8-810a36ef5c6f",
+        "ingestion_run_id": "dc52ecb8-ead0-4c04-b738-2b355ec59457",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-26T20:55:00+00:00",
+        "cycle_end": "2024-01-26T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231532Z_08f49efa",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231532Z_478f418b",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222843Z_e80d68fd",
+        "timestamp": "2024-01-26T21:00:00+00:00",
+        "run_id": "0289248c-414e-46d7-ba79-19fde49d2244",
+        "runtime_job_run_id": "0289248c-414e-46d7-ba79-19fde49d2244",
+        "ingestion_run_id": "e24d8e0f-3c98-433a-9abf-1897e5bf7c27",
+        "cycle_start": "2026-06-03T23:15:32.533196+00:00",
+        "cycle_end": "2026-06-04T23:15:32.533196+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "bdc4b85a-7313-401e-a59c-86feae357998",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-26T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-26T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-26T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-26T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-29",
+      "tick_timestamp": "2024-01-29T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222847Z_c9c2caeb",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-29T21:00:00+00:00",
+        "run_id": "31c031ed-32fc-4563-bf12-9d9ef744975c",
+        "runtime_job_run_id": "31c031ed-32fc-4563-bf12-9d9ef744975c",
+        "ingestion_run_id": "56410d41-0c35-4ffd-84c9-fdd4c3f874f8",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-29T20:55:00+00:00",
+        "cycle_end": "2024-01-29T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231535Z_11285a94",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231535Z_966a5c99",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222847Z_c9c2caeb",
+        "timestamp": "2024-01-29T21:00:00+00:00",
+        "run_id": "f2695f6a-722f-4e65-934f-0587c8bfdb1a",
+        "runtime_job_run_id": "f2695f6a-722f-4e65-934f-0587c8bfdb1a",
+        "ingestion_run_id": "ddb8191c-b6f9-4e23-a067-e365ea64e608",
+        "cycle_start": "2026-06-03T23:15:35.372046+00:00",
+        "cycle_end": "2026-06-04T23:15:35.372046+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "5d971b3b-1fd5-4776-8668-0d7c5733e56e",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-29T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-29T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-29T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-29T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-30",
+      "tick_timestamp": "2024-01-30T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222850Z_35c58f9d",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-30T21:00:00+00:00",
+        "run_id": "cc6849b1-aafb-4913-a350-18228f281e84",
+        "runtime_job_run_id": "cc6849b1-aafb-4913-a350-18228f281e84",
+        "ingestion_run_id": "4bb9aff0-fe72-421a-94ef-ca187f676e60",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-30T20:55:00+00:00",
+        "cycle_end": "2024-01-30T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231538Z_bcd54004",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231538Z_c04154e5",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222850Z_35c58f9d",
+        "timestamp": "2024-01-30T21:00:00+00:00",
+        "run_id": "b04e5e5a-6552-4b49-bc01-7681ac7d8bca",
+        "runtime_job_run_id": "b04e5e5a-6552-4b49-bc01-7681ac7d8bca",
+        "ingestion_run_id": "9f6b0692-71fe-4efb-bd30-f2507afb6800",
+        "cycle_start": "2026-06-03T23:15:38.236531+00:00",
+        "cycle_end": "2026-06-04T23:15:38.236531+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "492012b9-8b63-498a-a0b7-d5d246ed4f31",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-30T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-30T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-30T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-30T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-01-31",
+      "tick_timestamp": "2024-01-31T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T222854Z_f8ae763d",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-01-31T21:00:00+00:00",
+        "run_id": "74137bb6-a698-4f17-bc64-8a354bb94b2c",
+        "runtime_job_run_id": "74137bb6-a698-4f17-bc64-8a354bb94b2c",
+        "ingestion_run_id": "e86d8cde-1bf3-4c30-b9f0-d1f268bc59dc",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-01-31T20:55:00+00:00",
+        "cycle_end": "2024-01-31T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231541Z_2a0af3b2",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231541Z_48291f6a",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T222854Z_f8ae763d",
+        "timestamp": "2024-01-31T21:00:00+00:00",
+        "run_id": "6c875f9d-2db1-470d-81b8-2d8692ba7f39",
+        "runtime_job_run_id": "6c875f9d-2db1-470d-81b8-2d8692ba7f39",
+        "ingestion_run_id": "6cdb8f74-3387-4b1d-a15f-80bc7d20b9c4",
+        "cycle_start": "2026-06-03T23:15:41.222094+00:00",
+        "cycle_end": "2026-06-04T23:15:41.222094+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "640274cd-ccdf-4222-9fad-f1ac7aeba31e",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-01-31T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-01-31T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-01-31T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-01-31T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-01",
+      "tick_timestamp": "2024-02-01T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225000Z_8cfbd216",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-01T21:00:00+00:00",
+        "run_id": "5adb2e77-e8ff-482a-9a3f-f0003cc15ec9",
+        "runtime_job_run_id": "5adb2e77-e8ff-482a-9a3f-f0003cc15ec9",
+        "ingestion_run_id": "d4007234-04f7-4ce7-8388-8d6598f9b5ee",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-01T20:55:00+00:00",
+        "cycle_end": "2024-02-01T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231544Z_ac85f4b6",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231544Z_639f18e8",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225000Z_8cfbd216",
+        "timestamp": "2024-02-01T21:00:00+00:00",
+        "run_id": "79222adc-4d63-47c5-928a-bfddbb8c47c4",
+        "runtime_job_run_id": "79222adc-4d63-47c5-928a-bfddbb8c47c4",
+        "ingestion_run_id": "e416cf2a-2dbd-48be-93d3-41e56460322b",
+        "cycle_start": "2026-06-03T23:15:43.973692+00:00",
+        "cycle_end": "2026-06-04T23:15:43.973692+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": {},
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "836534a2-76d9-4036-aa74-2c18cdc0f1bc",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-01T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-01T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-01T21:00:00+00:00"
+      },
+      "research": {
+        "experiment_id": "exp_mc_smoke_test",
+        "total_runs": 120,
+        "passed_filters": 72,
+        "timestamp": "2024-02-01T21:00:00+00:00"
+      },
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-01T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-02",
+      "tick_timestamp": "2024-02-02T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225005Z_bfe902bb",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-02T21:00:00+00:00",
+        "run_id": "01d9426e-8ff4-4118-ab9c-a27fa0079eee",
+        "runtime_job_run_id": "01d9426e-8ff4-4118-ab9c-a27fa0079eee",
+        "ingestion_run_id": "c7d3481f-3298-488a-9bba-2caca8aed0fb",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-02T20:55:00+00:00",
+        "cycle_end": "2024-02-02T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231547Z_74521b96",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231547Z_1d644303",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225005Z_bfe902bb",
+        "timestamp": "2024-02-02T21:00:00+00:00",
+        "run_id": "a6cc08ac-3304-4085-a36a-dabf22a6a19b",
+        "runtime_job_run_id": "a6cc08ac-3304-4085-a36a-dabf22a6a19b",
+        "ingestion_run_id": "94f64dd9-6558-4fc8-9298-c3e521fab394",
+        "cycle_start": "2026-06-03T23:15:47.912231+00:00",
+        "cycle_end": "2026-06-04T23:15:47.912231+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "4bd9a6a4-d32e-4333-a5d2-86d49619e18f",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-02T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-02T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-02T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-02T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-05",
+      "tick_timestamp": "2024-02-05T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225008Z_b0c16a1d",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-05T21:00:00+00:00",
+        "run_id": "384c40e7-2882-4bd5-bc49-e5ae92aa1cca",
+        "runtime_job_run_id": "384c40e7-2882-4bd5-bc49-e5ae92aa1cca",
+        "ingestion_run_id": "a84b2ec3-b46f-4fb0-810f-ea728b38a0de",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-05T20:55:00+00:00",
+        "cycle_end": "2024-02-05T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231550Z_1516a178",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231550Z_41543cfd",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225008Z_b0c16a1d",
+        "timestamp": "2024-02-05T21:00:00+00:00",
+        "run_id": "d7d94270-0fb7-4d40-b58b-27b2315b0f66",
+        "runtime_job_run_id": "d7d94270-0fb7-4d40-b58b-27b2315b0f66",
+        "ingestion_run_id": "bbf59342-a3c8-4a16-9098-6a1470880b98",
+        "cycle_start": "2026-06-03T23:15:50.870378+00:00",
+        "cycle_end": "2026-06-04T23:15:50.870378+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "80b4014d-f519-497d-9fb8-6d3e81887440",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-05T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-05T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-05T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-05T21:00:00+00:00"
+      },
+      "timeline_events": [
+        {
+          "event_type": "strategy_disabled",
+          "status": "skipped"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-06",
+      "tick_timestamp": "2024-02-06T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225012Z_c42ece4f",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-06T21:00:00+00:00",
+        "run_id": "5da4e0dc-d100-43ea-b854-dd2ab389ea83",
+        "runtime_job_run_id": "5da4e0dc-d100-43ea-b854-dd2ab389ea83",
+        "ingestion_run_id": "4d2d74a3-3e49-4f94-842d-6d000c96e8dc",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-06T20:55:00+00:00",
+        "cycle_end": "2024-02-06T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231553Z_9e12dabe",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231553Z_3a3578f7",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225012Z_c42ece4f",
+        "timestamp": "2024-02-06T21:00:00+00:00",
+        "run_id": "1a1afb8d-9de1-4980-b7ef-23ec0914648a",
+        "runtime_job_run_id": "1a1afb8d-9de1-4980-b7ef-23ec0914648a",
+        "ingestion_run_id": "a9bbfb54-b849-4b22-b471-5de34d7fcb47",
+        "cycle_start": "2026-06-03T23:15:53.735445+00:00",
+        "cycle_end": "2026-06-04T23:15:53.735445+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "d063ac85-1569-4ef1-86fe-4d2ea5d86b04",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-06T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-06T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-06T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-06T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-07",
+      "tick_timestamp": "2024-02-07T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225015Z_0f3d2db6",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-07T21:00:00+00:00",
+        "run_id": "b23b92f0-b74c-44b0-ae3c-2c0cd3a5aee9",
+        "runtime_job_run_id": "b23b92f0-b74c-44b0-ae3c-2c0cd3a5aee9",
+        "ingestion_run_id": "0eb3440b-0eaa-43b8-80b7-41ed2b9d3c3b",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-07T20:55:00+00:00",
+        "cycle_end": "2024-02-07T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231556Z_e71b0717",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231556Z_bc6305db",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225015Z_0f3d2db6",
+        "timestamp": "2024-02-07T21:00:00+00:00",
+        "run_id": "411aa98a-b1f1-4191-8d51-e0c24452baee",
+        "runtime_job_run_id": "411aa98a-b1f1-4191-8d51-e0c24452baee",
+        "ingestion_run_id": "ffa6b596-9823-47c7-91ca-d27fa0782df5",
+        "cycle_start": "2026-06-03T23:15:56.562886+00:00",
+        "cycle_end": "2026-06-04T23:15:56.562886+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "f532f32f-4f4d-4eb7-af56-5a93e2e44c06",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-07T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-07T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-07T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-07T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-08",
+      "tick_timestamp": "2024-02-08T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225018Z_730164dd",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-08T21:00:00+00:00",
+        "run_id": "41f17dac-9fcf-4147-bed0-12a7bcd87c78",
+        "runtime_job_run_id": "41f17dac-9fcf-4147-bed0-12a7bcd87c78",
+        "ingestion_run_id": "e524128e-10d9-4b2f-afbc-fb97e231ac8b",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-08T20:55:00+00:00",
+        "cycle_end": "2024-02-08T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231559Z_7ca515b3",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231559Z_5d9fb734",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225018Z_730164dd",
+        "timestamp": "2024-02-08T21:00:00+00:00",
+        "run_id": "b4b23aa5-9025-46cf-b861-0a54fb753da0",
+        "runtime_job_run_id": "b4b23aa5-9025-46cf-b861-0a54fb753da0",
+        "ingestion_run_id": "ee93574f-c02f-4f89-9045-8eeb11aa0148",
+        "cycle_start": "2026-06-03T23:15:59.476412+00:00",
+        "cycle_end": "2026-06-04T23:15:59.476412+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "dc253ee6-541b-482f-a143-55c9a1738a4d",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-08T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-08T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-08T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-08T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-09",
+      "tick_timestamp": "2024-02-09T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225022Z_9db79a79",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-09T21:00:00+00:00",
+        "run_id": "b9614bfa-afb7-454b-b0db-d563e9fb2eaa",
+        "runtime_job_run_id": "b9614bfa-afb7-454b-b0db-d563e9fb2eaa",
+        "ingestion_run_id": "f527e4b7-10d6-44a3-901e-02e1225715cf",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-09T20:55:00+00:00",
+        "cycle_end": "2024-02-09T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231602Z_51169b17",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231602Z_d62e66af",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225022Z_9db79a79",
+        "timestamp": "2024-02-09T21:00:00+00:00",
+        "run_id": "9ae79f4e-18df-4475-99ee-188eace6aa37",
+        "runtime_job_run_id": "9ae79f4e-18df-4475-99ee-188eace6aa37",
+        "ingestion_run_id": "d060ade6-462a-48cf-b5ed-562c9acdce76",
+        "cycle_start": "2026-06-03T23:16:02.575851+00:00",
+        "cycle_end": "2026-06-04T23:16:02.575851+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "0cf494c3-fbd1-4bbd-98b8-e718922f9034",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-09T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-09T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-09T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-09T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-12",
+      "tick_timestamp": "2024-02-12T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225025Z_c0d84350",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-12T21:00:00+00:00",
+        "run_id": "5f92edd1-5f43-4b07-97c3-90b5f7514dd7",
+        "runtime_job_run_id": "5f92edd1-5f43-4b07-97c3-90b5f7514dd7",
+        "ingestion_run_id": "71a0cc25-cff6-464d-b98c-27aded08448f",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-12T20:55:00+00:00",
+        "cycle_end": "2024-02-12T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231605Z_e964628e",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231605Z_e33bcd05",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225025Z_c0d84350",
+        "timestamp": "2024-02-12T21:00:00+00:00",
+        "run_id": "662b72a8-7dfb-4c5f-85b8-86b690285234",
+        "runtime_job_run_id": "662b72a8-7dfb-4c5f-85b8-86b690285234",
+        "ingestion_run_id": "3abbd8fe-0a01-4f10-86e8-4dfd5832cc17",
+        "cycle_start": "2026-06-03T23:16:05.569644+00:00",
+        "cycle_end": "2026-06-04T23:16:05.569644+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "1ab54365-599d-498d-9b5b-c42af422e630",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-12T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-12T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-12T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-12T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-13",
+      "tick_timestamp": "2024-02-13T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225029Z_3d07a303",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-13T21:00:00+00:00",
+        "run_id": "b86ba833-0754-4241-9c82-5d647e689e37",
+        "runtime_job_run_id": "b86ba833-0754-4241-9c82-5d647e689e37",
+        "ingestion_run_id": "6862cc5c-519b-4213-904c-87c2d9f49205",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-13T20:55:00+00:00",
+        "cycle_end": "2024-02-13T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231608Z_cf0b2bec",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231608Z_480303cb",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225029Z_3d07a303",
+        "timestamp": "2024-02-13T21:00:00+00:00",
+        "run_id": "87e6cb7f-d80a-47b5-97b5-303673ea4e13",
+        "runtime_job_run_id": "87e6cb7f-d80a-47b5-97b5-303673ea4e13",
+        "ingestion_run_id": "cbd402c7-234b-4e40-9d37-bc8bc0f826f0",
+        "cycle_start": "2026-06-03T23:16:08.687493+00:00",
+        "cycle_end": "2026-06-04T23:16:08.687493+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "f796c0d8-2c89-47fe-8c0c-c174ff567536",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-13T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-13T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-13T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-13T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-14",
+      "tick_timestamp": "2024-02-14T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225032Z_c9d36766",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-14T21:00:00+00:00",
+        "run_id": "ad3bbd35-7428-4368-8bc6-008b4aa7cf33",
+        "runtime_job_run_id": "ad3bbd35-7428-4368-8bc6-008b4aa7cf33",
+        "ingestion_run_id": "c42ee4c8-247f-47eb-9d27-79cfb99b3b9a",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-14T20:55:00+00:00",
+        "cycle_end": "2024-02-14T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231611Z_643b607d",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231611Z_942a012c",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225032Z_c9d36766",
+        "timestamp": "2024-02-14T21:00:00+00:00",
+        "run_id": "412247f8-bbe2-4253-85c9-01f609b091f5",
+        "runtime_job_run_id": "412247f8-bbe2-4253-85c9-01f609b091f5",
+        "ingestion_run_id": "14a81b46-9c0c-4c78-ac6c-c1ba7da9850e",
+        "cycle_start": "2026-06-03T23:16:11.701824+00:00",
+        "cycle_end": "2026-06-04T23:16:11.701824+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "d8468230-1f1f-45ea-b218-3bf6acca8d4f",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-14T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-14T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-14T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-14T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-15",
+      "tick_timestamp": "2024-02-15T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225035Z_85076aef",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-15T21:00:00+00:00",
+        "run_id": "0f05804f-3a32-41d3-940b-16b890768292",
+        "runtime_job_run_id": "0f05804f-3a32-41d3-940b-16b890768292",
+        "ingestion_run_id": "f0936015-2a98-4612-afc1-1e5a2def9cc9",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-15T20:55:00+00:00",
+        "cycle_end": "2024-02-15T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231614Z_d7962533",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231614Z_eda5ff4f",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225035Z_85076aef",
+        "timestamp": "2024-02-15T21:00:00+00:00",
+        "run_id": "5ae19e66-602c-4ca7-b64b-aa326c56c56e",
+        "runtime_job_run_id": "5ae19e66-602c-4ca7-b64b-aa326c56c56e",
+        "ingestion_run_id": "1d475235-95a9-4050-acd1-cdfb549dd326",
+        "cycle_start": "2026-06-03T23:16:14.646180+00:00",
+        "cycle_end": "2026-06-04T23:16:14.646180+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "2786c1e2-f7ca-41fa-a7e4-a9c33c54bce8",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-15T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-15T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-15T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-15T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-16",
+      "tick_timestamp": "2024-02-16T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225039Z_11f585bf",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-16T21:00:00+00:00",
+        "run_id": "dc2f89e8-847f-4e8b-963f-07ace25a1f64",
+        "runtime_job_run_id": "dc2f89e8-847f-4e8b-963f-07ace25a1f64",
+        "ingestion_run_id": "79035efc-95d4-45f8-ba48-371fe74635ac",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-16T20:55:00+00:00",
+        "cycle_end": "2024-02-16T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231617Z_9957cb64",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231617Z_9e0d788d",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225039Z_11f585bf",
+        "timestamp": "2024-02-16T21:00:00+00:00",
+        "run_id": "93daa3e4-af59-429b-883b-bbe46b043ab5",
+        "runtime_job_run_id": "93daa3e4-af59-429b-883b-bbe46b043ab5",
+        "ingestion_run_id": "8034aa89-969f-4121-8397-7c2c3fb8c3a5",
+        "cycle_start": "2026-06-03T23:16:17.565555+00:00",
+        "cycle_end": "2026-06-04T23:16:17.565555+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "88bf569b-3951-4128-bbb5-ba56478ff5dc",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-16T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-16T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-16T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-16T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-19",
+      "tick_timestamp": "2024-02-19T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225042Z_e14b3a13",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-19T21:00:00+00:00",
+        "run_id": "fbf8650e-911c-4763-aeeb-3d678bd77db8",
+        "runtime_job_run_id": "fbf8650e-911c-4763-aeeb-3d678bd77db8",
+        "ingestion_run_id": "8156e9b7-c5d4-49ea-9b9d-bc872d80e189",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-19T20:55:00+00:00",
+        "cycle_end": "2024-02-19T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231620Z_ce6b0c9c",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231620Z_e7281fe1",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225042Z_e14b3a13",
+        "timestamp": "2024-02-19T21:00:00+00:00",
+        "run_id": "540ddac0-8df4-4292-98cc-bedfd164219f",
+        "runtime_job_run_id": "540ddac0-8df4-4292-98cc-bedfd164219f",
+        "ingestion_run_id": "45051a11-c1b1-41fb-9e18-a62daf018be3",
+        "cycle_start": "2026-06-03T23:16:20.723798+00:00",
+        "cycle_end": "2026-06-04T23:16:20.723798+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "f17db690-e32e-433a-8504-434c029e42d4",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-19T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-19T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-19T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-19T21:00:00+00:00"
+      },
+      "timeline_events": [
+        {
+          "event_type": "strategy_enabled",
+          "status": "skipped"
+        },
+        {
+          "event_type": "allocation_override_cleared",
+          "status": "skipped"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-20",
+      "tick_timestamp": "2024-02-20T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225046Z_bbf6c18d",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-20T21:00:00+00:00",
+        "run_id": "f9f584ee-af73-41c6-80c0-c8bf36f7cfe7",
+        "runtime_job_run_id": "f9f584ee-af73-41c6-80c0-c8bf36f7cfe7",
+        "ingestion_run_id": "a7166dbd-04bf-43c2-9e6f-2710835962c6",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-20T20:55:00+00:00",
+        "cycle_end": "2024-02-20T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231623Z_8de4b7ab",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231623Z_d9f79cbe",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225046Z_bbf6c18d",
+        "timestamp": "2024-02-20T21:00:00+00:00",
+        "run_id": "df9c1628-ccee-4098-9e11-72ec929c723d",
+        "runtime_job_run_id": "df9c1628-ccee-4098-9e11-72ec929c723d",
+        "ingestion_run_id": "f5f32d55-f08a-461b-a854-54aa727ca9aa",
+        "cycle_start": "2026-06-03T23:16:23.597615+00:00",
+        "cycle_end": "2026-06-04T23:16:23.597615+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "83c9ff81-9fc2-4ae6-bd98-32cb02d431d3",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-20T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-20T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-20T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-20T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-21",
+      "tick_timestamp": "2024-02-21T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225050Z_67127a7d",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-21T21:00:00+00:00",
+        "run_id": "7e02d613-2c7e-46f1-9db0-5155d0e1f448",
+        "runtime_job_run_id": "7e02d613-2c7e-46f1-9db0-5155d0e1f448",
+        "ingestion_run_id": "06f029ff-33c6-4fc2-9963-af089857bb7a",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-21T20:55:00+00:00",
+        "cycle_end": "2024-02-21T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231626Z_f366bf18",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231626Z_589653d9",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225050Z_67127a7d",
+        "timestamp": "2024-02-21T21:00:00+00:00",
+        "run_id": "9ebe4ba3-3b56-4124-9325-d56360c1af13",
+        "runtime_job_run_id": "9ebe4ba3-3b56-4124-9325-d56360c1af13",
+        "ingestion_run_id": "1121f4ce-a292-4193-b97b-4d5dbc8382a5",
+        "cycle_start": "2026-06-03T23:16:26.451710+00:00",
+        "cycle_end": "2026-06-04T23:16:26.451710+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "1978e00c-40bb-4d07-a876-14e200f00c72",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-21T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-21T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-21T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-21T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-22",
+      "tick_timestamp": "2024-02-22T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225053Z_51024ebe",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-22T21:00:00+00:00",
+        "run_id": "7497a76e-69e0-467e-994b-7852a9686e6f",
+        "runtime_job_run_id": "7497a76e-69e0-467e-994b-7852a9686e6f",
+        "ingestion_run_id": "52fb2d54-5df9-412c-8567-6fe0b52f99da",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-22T20:55:00+00:00",
+        "cycle_end": "2024-02-22T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231629Z_ddbc6243",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231629Z_caede4d8",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225053Z_51024ebe",
+        "timestamp": "2024-02-22T21:00:00+00:00",
+        "run_id": "cf5058ab-9f14-4e16-bee3-340a199d79ec",
+        "runtime_job_run_id": "cf5058ab-9f14-4e16-bee3-340a199d79ec",
+        "ingestion_run_id": "bb28e8d7-1566-48d4-bce7-aab088ffce59",
+        "cycle_start": "2026-06-03T23:16:29.427070+00:00",
+        "cycle_end": "2026-06-04T23:16:29.427070+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "e1af5003-707c-4703-9a96-de3ed62d90d1",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-22T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-22T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-22T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-22T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-23",
+      "tick_timestamp": "2024-02-23T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225057Z_cfb750ea",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-23T21:00:00+00:00",
+        "run_id": "ed107b82-3f09-43ab-93e1-d3712c99eeb0",
+        "runtime_job_run_id": "ed107b82-3f09-43ab-93e1-d3712c99eeb0",
+        "ingestion_run_id": "d45a51cc-e000-478a-a63b-b90354678ab4",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-23T20:55:00+00:00",
+        "cycle_end": "2024-02-23T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231632Z_c4f5e0a3",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231632Z_2b30dd7c",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225057Z_cfb750ea",
+        "timestamp": "2024-02-23T21:00:00+00:00",
+        "run_id": "a86930af-498d-40e8-8a34-363d9612c3bb",
+        "runtime_job_run_id": "a86930af-498d-40e8-8a34-363d9612c3bb",
+        "ingestion_run_id": "8225ba88-6832-426a-a035-fc139df8a1ba",
+        "cycle_start": "2026-06-03T23:16:32.317145+00:00",
+        "cycle_end": "2026-06-04T23:16:32.317145+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "0b9c4bd6-94da-4507-b582-bb5517533d6e",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-23T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-23T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-23T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-23T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-26",
+      "tick_timestamp": "2024-02-26T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225100Z_11bd4acf",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-26T21:00:00+00:00",
+        "run_id": "e4735ca9-5d14-4498-aa29-ecb79d98095e",
+        "runtime_job_run_id": "e4735ca9-5d14-4498-aa29-ecb79d98095e",
+        "ingestion_run_id": "2e10f946-cba1-43ff-a26a-5ab51884b68d",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-26T20:55:00+00:00",
+        "cycle_end": "2024-02-26T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231635Z_76a2164e",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231635Z_361a7de1",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225100Z_11bd4acf",
+        "timestamp": "2024-02-26T21:00:00+00:00",
+        "run_id": "7749ed00-8c84-4170-96bd-9e50319a534a",
+        "runtime_job_run_id": "7749ed00-8c84-4170-96bd-9e50319a534a",
+        "ingestion_run_id": "94dd5c74-427a-4513-a27c-06a034ba498c",
+        "cycle_start": "2026-06-03T23:16:35.425832+00:00",
+        "cycle_end": "2026-06-04T23:16:35.425832+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "bc184dbf-5ed8-411e-9d11-52be178a52d0",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-26T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-26T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-26T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-26T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-27",
+      "tick_timestamp": "2024-02-27T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225104Z_f069cc3d",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-27T21:00:00+00:00",
+        "run_id": "e26b6d35-c9ce-4936-a0c4-3fa88e819bc8",
+        "runtime_job_run_id": "e26b6d35-c9ce-4936-a0c4-3fa88e819bc8",
+        "ingestion_run_id": "9572cdc2-17eb-4e50-9e5a-bcc2f20079ed",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-27T20:55:00+00:00",
+        "cycle_end": "2024-02-27T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231638Z_63ac23fe",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231638Z_c718f325",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225104Z_f069cc3d",
+        "timestamp": "2024-02-27T21:00:00+00:00",
+        "run_id": "f91c8f04-4c0c-4f5b-aef8-185f1d23aaf0",
+        "runtime_job_run_id": "f91c8f04-4c0c-4f5b-aef8-185f1d23aaf0",
+        "ingestion_run_id": "500f95d2-3807-47fe-b8e6-302a59e3d396",
+        "cycle_start": "2026-06-03T23:16:38.481359+00:00",
+        "cycle_end": "2026-06-04T23:16:38.481359+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "aca59937-63e5-4a5e-9982-137d3f5119a8",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-27T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-27T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-27T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-27T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-28",
+      "tick_timestamp": "2024-02-28T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225107Z_d81e427d",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-28T21:00:00+00:00",
+        "run_id": "15814d3a-8141-47b6-8f2a-512aacc45133",
+        "runtime_job_run_id": "15814d3a-8141-47b6-8f2a-512aacc45133",
+        "ingestion_run_id": "3ce2e643-aad0-4530-a424-f2bdbcc27981",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-28T20:55:00+00:00",
+        "cycle_end": "2024-02-28T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231641Z_b0fd84c3",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231641Z_108bc2d2",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225107Z_d81e427d",
+        "timestamp": "2024-02-28T21:00:00+00:00",
+        "run_id": "75b472b9-b38f-4c6f-8db6-5bd76696b3c8",
+        "runtime_job_run_id": "75b472b9-b38f-4c6f-8db6-5bd76696b3c8",
+        "ingestion_run_id": "48da07fc-a8f4-4b38-a99b-e50212ede644",
+        "cycle_start": "2026-06-03T23:16:41.288518+00:00",
+        "cycle_end": "2026-06-04T23:16:41.288518+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "c1265bca-d496-4803-b1e7-dca7f03089cc",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-28T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-28T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-28T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-28T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    },
+    {
+      "tick_date": "2024-02-29",
+      "tick_timestamp": "2024-02-29T21:00:00+00:00",
+      "ingestion": {
+        "dataset_version_id": "raw_bars_20260604T225110Z_bea82413",
+        "rows_written": 0,
+        "missing_bar_incident_count": 0,
+        "timestamp": "2024-02-29T21:00:00+00:00",
+        "run_id": "d08b817d-27c2-4f6a-a223-c21dadc403c5",
+        "runtime_job_run_id": "d08b817d-27c2-4f6a-a223-c21dadc403c5",
+        "ingestion_run_id": "8dcf892a-14dd-4964-8cce-be0c9978e30c",
+        "expected_symbol_count": 3,
+        "cycle_start": "2024-02-29T20:55:00+00:00",
+        "cycle_end": "2024-02-29T21:00:00+00:00",
+        "symbols": [
+          "AAPL",
+          "QQQ",
+          "SPY"
+        ],
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_bars"
+      },
+      "corporate_actions": {
+        "corporate_actions_dataset_version_id": "corporate_actions_20260604T231644Z_4c22c51c",
+        "adjusted_bars_dataset_version_id": "adjusted_bars_20260604T231644Z_aae4f0d6",
+        "source_raw_bars_dataset_version_id": "raw_bars_20260604T225110Z_bea82413",
+        "timestamp": "2024-02-29T21:00:00+00:00",
+        "run_id": "1ca56f83-cecf-4ebe-a560-6d43c45067b7",
+        "runtime_job_run_id": "1ca56f83-cecf-4ebe-a560-6d43c45067b7",
+        "ingestion_run_id": "97fb2da0-06f8-49ff-9c15-7cbb597bdfd9",
+        "cycle_start": "2026-06-03T23:16:44.135426+00:00",
+        "cycle_end": "2026-06-04T23:16:44.135426+00:00",
+        "trigger_type": "platform_replay",
+        "actor": "platform-backtest",
+        "last_successful_step": "ingest_corporate_actions"
+      },
+      "features": {},
+      "universe": null,
+      "trading": {},
+      "risk": {
+        "risk_snapshot_id": "75e91544-a65b-4c93-a863-28653924efe5",
+        "is_blocked": false,
+        "block_reasons": [],
+        "drawdown_pct": null,
+        "drawdown_ladder_state_count": 0,
+        "timestamp": "2024-02-29T21:00:00+00:00"
+      },
+      "governance": {
+        "strategies_evaluated": 8,
+        "promotions_executed": 0,
+        "demotions_executed": 0,
+        "health_transitions": 0,
+        "strategies_in_breach": [
+          "auto_demotion_audit_ee2b3321_breach"
+        ],
+        "timestamp": "2024-02-29T21:00:00+00:00"
+      },
+      "portfolio": {
+        "portfolio_value": "100000.000000",
+        "cash_balance": "100000.000000",
+        "open_positions": 0,
+        "equity_curve_points": 3,
+        "timestamp": "2024-02-29T21:00:00+00:00"
+      },
+      "research": null,
+      "operations": {
+        "system_health_status": "degraded",
+        "active_alerts_count": 0,
+        "critical_alerts_count": 0,
+        "timestamp": "2024-02-29T21:00:00+00:00"
+      },
+      "timeline_events": [],
+      "errors": []
+    }
+  ],
+  "timeline_events_applied": [
+    {
+      "date": "2024-01-15",
+      "event_type": "governance_manual_transition",
+      "status": "skipped"
+    },
+    {
+      "date": "2024-01-22",
+      "event_type": "allocation_override_set",
+      "status": "skipped"
+    },
+    {
+      "date": "2024-02-05",
+      "event_type": "strategy_disabled",
+      "status": "skipped"
+    },
+    {
+      "date": "2024-02-19",
+      "event_type": "strategy_enabled",
+      "status": "skipped"
+    },
+    {
+      "date": "2024-02-19",
+      "event_type": "allocation_override_cleared",
+      "status": "skipped"
+    }
+  ],
+  "warnings": [
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped",
+    "No validated dataset version found \u2014 feature pipeline skipped"
+  ],
+  "errors": []
+}

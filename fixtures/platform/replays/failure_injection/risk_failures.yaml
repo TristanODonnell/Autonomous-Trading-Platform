@@ -1,0 +1,115 @@
+# scenario:
+#   name: risk_failures
+#   purpose: >
+#     Inject risk_limit_breach and drawdown_breach to test that the risk hook
+#     surfaces these in the artifact and that the platform runner continues.
+#     Test questions:
+#       - Is RiskSnapshot with is_blocked=true written to SOR on 2024-01-10?
+#       - Does the artifact risk section show is_blocked=true after injection?
+#       - Does DrawdownGovernanceLadderState get updated on 2024-01-22?
+#       - Does the runner warn and continue rather than abort?
+#   expected_behavior: >
+#     2 failure injections applied. risk.is_blocked=true visible in artifact.
+#     Artifact warnings contain [INJECTED] markers. Runner completes all ticks.
+#   recommended_use: event_validation
+#
+# IMPORTANT: Requires --inject-failures flag at runtime.
+#
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/failure_injection/risk_failures.yaml \
+#     --inject-failures \
+#     --output artifacts/platform/backtests/risk_failures.json
+#
+#   Check: cat artifacts/platform/backtests/risk_failures.json | \
+#     jq '.risk.is_blocked, .risk.drawdown_pct, .warnings'
+
+platform_replay:
+  name: risk_failures
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL]
+  start: 2024-01-02
+  end: 2024-01-31
+  starting_cash: 100000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: true
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1]
+  governance: []
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.50"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.50"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  # Daily after-close pipeline
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  # Market-hours trading
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  # EOD evaluation
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  # Slower cadence
+  universe:
+    cadence: monthly      # fires once at start of Jan — 1 rotation
+    enabled: true
+  research:
+    cadence: monthly      # fires once at start of Jan — 1 experiment run
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+
+timeline_events:
+  # Inject gross exposure breach on day 7 — writes blocked RiskSnapshot to SOR
+  - at: 2024-01-10
+    type: failure_injected
+    target: risk
+    failure: risk_limit_breach
+    reason: simulated gross_exposure_exceeded breach for risk gate testing
+
+  # Inject drawdown breach on day 15 — updates DrawdownGovernanceLadderState
+  - at: 2024-01-22
+    type: failure_injected
+    target: risk
+    failure: drawdown_breach
+    reason: simulated 25% realized drawdown breach on first strategy
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: false
+  write_governance_audit: false
+  write_failure_report: true
+  write_dashboard_snapshot: false

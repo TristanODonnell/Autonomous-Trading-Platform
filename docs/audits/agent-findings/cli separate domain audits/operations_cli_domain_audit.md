@@ -44,6 +44,7 @@ Related placement notes:
 | `operations latest-soak-report --environment <env>` | Show latest persisted soak report. | Completes the verify/readback loop. | read-only | `RuntimeSoakReportRepository.get_latest_for_environment` or equivalent | P1 |
 | `operations runbook list` | List available operations runbooks. | Operations owns runbooks. | read-only | `docs/operations/runbooks/README.md` plus directory scan | P2 |
 | `operations runbook show --name <name>` | Print a specific runbook path/summary. | Makes runbooks discoverable from the CLI. | read-only | docs lookup | P3 |
+| `operations verify-notification-events --controls fixtures/controls.yaml --settings fixtures/settings.yaml` | Verify that `notify_drawdown_alerts`, `notify_strategy_promotion_events`, and `notify_pipeline_failures` flags gate their respective events, and confirm kill switch events fire unconditionally. | This is operational notification/alert verification — not backtesting. Currently lives as `backtesting verify-notification-events`; migration target is here. Emits artifact to `artifacts/operations/` instead of `artifacts/backtesting/`. | local-mutating verification | Wrap `handle_verify_notification_events` logic: `RuntimeControlService`, `AutoPromotionService`, `RuntimeJobRunner`, `PipelineFailureNotificationService`, `AuditLogRepository` | P0 |
 
 ## 4. Testing Plan
 

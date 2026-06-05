@@ -1,0 +1,115 @@
+# scenario:
+#   name: execution_failures
+#   purpose: >
+#     Inject broker_reconciliation_mismatch and order_rejected to test that
+#     execution anomalies are audited and surface in the artifact.
+#     Test questions:
+#       - Are AuditLogEvent rows written with BROKER_RECONCILIATION_MISMATCH type?
+#       - Are AuditLogEvent rows written with ORDER_REJECTED type?
+#       - Do both appear in the artifact warnings with [INJECTED] markers?
+#       - Does the execution summary capture reconciliation_status?
+#   expected_behavior: >
+#     2 execution injections. AuditLog entries written for both events.
+#     Artifact warnings contain [INJECTED] markers. Runner continues.
+#   recommended_use: event_validation
+#
+# IMPORTANT: Requires --inject-failures flag at runtime.
+#
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/failure_injection/execution_failures.yaml \
+#     --inject-failures \
+#     --output artifacts/platform/backtests/execution_failures.json
+#
+#   Check: cat artifacts/platform/backtests/execution_failures.json | \
+#     jq '.execution, .warnings'
+
+platform_replay:
+  name: execution_failures
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL]
+  start: 2024-01-02
+  end: 2024-01-31
+  starting_cash: 100000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: true
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1]
+  governance: []
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.50"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.50"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  # Daily after-close pipeline
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  # Market-hours trading
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  # EOD evaluation
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  # Slower cadence
+  universe:
+    cadence: monthly      # fires once at start of Jan — 1 rotation
+    enabled: true
+  research:
+    cadence: monthly      # fires once at start of Jan — 1 experiment run
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+
+timeline_events:
+  # Inject broker reconciliation mismatch — audits a $500 position delta for SPY
+  - at: 2024-01-11
+    type: failure_injected
+    target: execution
+    failure: broker_reconciliation_mismatch
+    reason: simulated $500 reconciliation delta for SPY between broker and SOR
+
+  # Inject order rejection — audits insufficient buying power for SPY
+  - at: 2024-01-23
+    type: failure_injected
+    target: execution
+    failure: order_rejected
+    reason: simulated order rejection due to insufficient buying power for SPY
+
+outputs:
+  write_event_log: true
+  write_equity_curve: false
+  write_portfolio_snapshots: false
+  write_governance_audit: false
+  write_failure_report: true
+  write_dashboard_snapshot: false

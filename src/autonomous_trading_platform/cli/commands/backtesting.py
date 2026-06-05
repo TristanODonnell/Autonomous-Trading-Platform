@@ -11,15 +11,24 @@ from typing import Any
 
 import yaml
 
+from autonomous_trading_platform.application.services.operator_settings_service import (
+    OperatorSettingsService,
+)
 from autonomous_trading_platform.cli.formatters import print_error, print_header, print_json
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
+from autonomous_trading_platform.interfaces.rest.schemas.settings_schema import (
+    OperatorSettingsUpdateRequest,
+)
 from autonomous_trading_platform.research.strategy_generation.generators.utils import make_config
 from autonomous_trading_platform.storage.sor.models.allocation_overrides import AllocationOverrides
 from autonomous_trading_platform.storage.sor.models.strategy_configs import StrategyConfigs
 from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
 from autonomous_trading_platform.storage.sor.repositories.core.allocation_overrides_repository import (
     AllocationOverridesRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_repository import (
+    AuditLogRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
     OperatorSettingsRepository,
@@ -69,127 +78,84 @@ _VALID_CONTROL_KEYS = {
 def register(subparsers) -> None:
     backtesting_parser = subparsers.add_parser(
         "backtesting",
-        help="Backtesting operations",
+        help="[DEPRECATED] Backtesting operations. Commands have moved to their canonical domains.",
     )
     backtesting_subparsers = backtesting_parser.add_subparsers(
         dest="backtesting_command",
         required=True,
     )
 
-    run_parser = backtesting_subparsers.add_parser("run", help="Run one backtest")
+    run_parser = backtesting_subparsers.add_parser(
+        "run", help="[DEPRECATED] Use: atp platform backtest run"
+    )
     run_parser.add_argument("--timestamp")
     run_parser.set_defaults(func=handle_run)
 
     inspect_results_parser = backtesting_subparsers.add_parser(
-        "inspect-results", help="Inspect backtesting results"
+        "inspect-results", help="[DEPRECATED] Use: atp platform backtest inspect"
     )
     inspect_results_parser.add_argument("--run-id", required=True)
     inspect_results_parser.set_defaults(func=handle_inspect_results)
 
     seed_parser = backtesting_subparsers.add_parser(
         "seed-fixture",
-        help=(
-            "Seed the DB with strategies, allocations, and optional settings/controls "
-            "from a YAML fixture file before running replay-debug."
-        ),
+        help="[DEPRECATED] Use: atp platform fixture seed",
     )
-    seed_parser.add_argument(
-        "--fixture",
-        required=True,
-        type=Path,
-        help="Path to the YAML fixture file (e.g. fixtures/ma_crossover_debug.yaml)",
-    )
-    seed_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print what would be seeded without writing to the DB",
-    )
+    seed_parser.add_argument("--fixture", required=True, type=Path)
+    seed_parser.add_argument("--dry-run", action="store_true")
     seed_parser.set_defaults(func=handle_seed_fixture)
 
     seed_settings_parser = backtesting_subparsers.add_parser(
         "seed-settings",
-        help="Write operator settings to the DB from a YAML config file.",
+        help="[DEPRECATED] Use: atp settings seed",
     )
-    seed_settings_parser.add_argument(
-        "--config",
-        required=True,
-        type=Path,
-        help="Path to the settings YAML file (e.g. fixtures/settings.yaml)",
-    )
+    seed_settings_parser.add_argument("--config", required=True, type=Path)
+    seed_settings_parser.add_argument("--updated-by", default=_FIXTURE_ACTOR)
+    seed_settings_parser.add_argument("--reason", default="backtesting seed-settings")
     seed_settings_parser.set_defaults(func=handle_seed_settings)
 
     read_settings_parser = backtesting_subparsers.add_parser(
         "read-settings",
-        help="Print the current operator settings from the DB.",
+        help="[DEPRECATED] Use: atp settings show",
     )
     read_settings_parser.set_defaults(func=handle_read_settings)
 
     seed_controls_parser = backtesting_subparsers.add_parser(
         "seed-controls",
-        help="Seed strategies, allocations, and runtime controls from a YAML config file.",
+        help="[DEPRECATED] Use: atp controls seed",
     )
-    seed_controls_parser.add_argument(
-        "--config",
-        required=True,
-        type=Path,
-        help="Path to the controls YAML file (e.g. fixtures/controls.yaml)",
-    )
-    seed_controls_parser.add_argument(
-        "--clean",
-        action="store_true",
-        help="Wipe all existing strategy governance/control/allocation rows before seeding.",
-    )
+    seed_controls_parser.add_argument("--config", required=True, type=Path)
+    seed_controls_parser.add_argument("--clean", action="store_true")
     seed_controls_parser.set_defaults(func=handle_seed_controls)
 
     read_controls_parser = backtesting_subparsers.add_parser(
         "read-controls",
-        help="Print the current controls state from the DB, grouped by frontend section.",
+        help="[DEPRECATED] Use: atp controls show",
     )
     read_controls_parser.set_defaults(func=handle_read_controls)
 
     read_portfolio_parser = backtesting_subparsers.add_parser(
         "read-portfolio",
-        help="Print current portfolio state exactly as the API serves it to the frontend.",
+        help="[DEPRECATED] Use: atp portfolio snapshot",
     )
     read_portfolio_parser.set_defaults(func=handle_read_portfolio)
 
     read_dashboard_parser = backtesting_subparsers.add_parser(
         "read-dashboard",
-        help="Print current dashboard state exactly as the API serves it to the frontend.",
+        help="[DEPRECATED] Use: atp platform dashboard-snapshot",
     )
     read_dashboard_parser.set_defaults(func=handle_read_dashboard)
 
     verify_risk_parser = backtesting_subparsers.add_parser(
         "verify-risk-parameter-effects",
-        help=(
-            "Run deterministic baseline vs mutated replays to verify risk parameters "
-            "are wired to the replay runtime (not just persisted)."
-        ),
+        help="[DEPRECATED] Use: atp risk verify-parameter-effects",
     )
-    verify_risk_parser.add_argument(
-        "--controls",
-        required=True,
-        type=Path,
-        help="Path to controls YAML fixture (e.g. fixtures/controls.yaml)",
-    )
-    verify_risk_parser.add_argument(
-        "--settings",
-        required=True,
-        type=Path,
-        help="Path to settings YAML fixture (e.g. fixtures/settings.yaml)",
-    )
-    verify_risk_parser.add_argument(
-        "--symbols",
-        required=True,
-        help="Comma-separated symbols, e.g. SPY,QQQ",
-    )
+    verify_risk_parser.add_argument("--controls", required=True, type=Path)
+    verify_risk_parser.add_argument("--settings", required=True, type=Path)
+    verify_risk_parser.add_argument("--symbols", required=True)
     verify_risk_parser.add_argument("--start", required=True)
     verify_risk_parser.add_argument("--end", required=True)
-    verify_risk_parser.add_argument(
-        "--starting-cash",
-        type=Decimal,
-        default=Decimal("100000"),
-    )
+    verify_risk_parser.add_argument("--starting-cash", type=Decimal, default=Decimal("100000"))
     verify_risk_parser.add_argument("--random-seed", type=int, default=42)
     verify_risk_parser.add_argument("--reset-sim-state", action="store_true")
     verify_risk_parser.add_argument("--print-summary", action="store_true")
@@ -204,64 +170,33 @@ def register(subparsers) -> None:
             "max_capital_per_strategy",
             "target_portfolio_volatility",
         ],
-        help="Verify a specific parameter (repeatable; default: all five)",
     )
     verify_risk_parser.set_defaults(func=handle_verify_risk_parameter_effects)
 
     verify_notify_parser = backtesting_subparsers.add_parser(
         "verify-notification-events",
-        help=(
-            "Trigger each notification channel and report whether the notify_* flags "
-            "actually gate anything, or if events fire unconditionally / not at all."
-        ),
+        help="[DEPRECATED] Use: atp operations verify-notification-events",
     )
-    verify_notify_parser.add_argument(
-        "--controls",
-        required=True,
-        type=Path,
-        help="Path to controls YAML fixture (e.g. fixtures/controls.yaml)",
-    )
-    verify_notify_parser.add_argument(
-        "--settings",
-        required=True,
-        type=Path,
-        help="Path to settings YAML fixture (e.g. fixtures/settings.yaml)",
-    )
+    verify_notify_parser.add_argument("--controls", required=True, type=Path)
+    verify_notify_parser.add_argument("--settings", required=True, type=Path)
     verify_notify_parser.set_defaults(func=handle_verify_notification_events)
 
     verify_governance_parser = backtesting_subparsers.add_parser(
         "verify-governance-allocation",
-        help=(
-            "Seed/manipulate governance, allocation, promotion rules, and metrics, "
-            "then report which controls are actually wired to runtime behavior."
-        ),
+        help="[DEPRECATED] Use: atp governance verify-allocation",
     )
-    verify_governance_parser.add_argument(
-        "--controls",
-        required=True,
-        type=Path,
-        help="Path to controls YAML fixture (e.g. fixtures/controls.yaml)",
-    )
-    verify_governance_parser.add_argument(
-        "--settings",
-        required=True,
-        type=Path,
-        help="Path to settings YAML fixture (e.g. fixtures/settings.yaml)",
-    )
+    verify_governance_parser.add_argument("--controls", required=True, type=Path)
+    verify_governance_parser.add_argument("--settings", required=True, type=Path)
     verify_governance_parser.add_argument(
         "--total-capital",
         type=Decimal,
         default=Decimal("100000"),
-        help="Total capital to use when resolving PortfolioEngine allocations.",
     )
     verify_governance_parser.set_defaults(func=handle_verify_governance_allocation)
 
     verify_auto_promotion_parser = backtesting_subparsers.add_parser(
         "verify-auto-promotion",
-        help=(
-            "Run deterministic automatic promotion probes and report whether "
-            "auto_promote_enabled gates PromotionRules-based promotion."
-        ),
+        help="[DEPRECATED] Use: atp governance verify-auto-promotion",
     )
     verify_auto_promotion_parser.add_argument(
         "--settings",
@@ -273,10 +208,7 @@ def register(subparsers) -> None:
 
     verify_auto_demotion_parser = backtesting_subparsers.add_parser(
         "verify-auto-demotion",
-        help=(
-            "Run deterministic demotion probes and report whether drawdown breaches "
-            "change governance state, controls, allocation, and audit records."
-        ),
+        help="[DEPRECATED] Use: atp governance verify-auto-demotion",
     )
     verify_auto_demotion_parser.add_argument(
         "--settings",
@@ -288,12 +220,16 @@ def register(subparsers) -> None:
 
 
 def handle_run(args: argparse.Namespace) -> int:
+    print("[DEPRECATED] backtesting run is deprecated. Use: atp platform backtest run")
     print_header("Backtesting Run")
     print_json({"timestamp": args.timestamp, "status": "not_implemented"})
     return 0
 
 
 def handle_inspect_results(args: argparse.Namespace) -> int:
+    print(
+        "[DEPRECATED] backtesting inspect-results is deprecated. Use: atp platform backtest inspect"
+    )
     print_header("Backtesting Results")
     print_json({"run_id": args.run_id, "status": "not_implemented"})
     return 0
@@ -475,6 +411,7 @@ def handle_seed_fixture(args: argparse.Namespace) -> int:
 
 
 def handle_seed_settings(args: argparse.Namespace) -> int:
+    print("[DEPRECATED] backtesting seed-settings is deprecated. Use: atp settings seed")
     config_path: Path = args.config
     if not config_path.exists():
         print_error(f"Config file not found: {config_path}")
@@ -490,24 +427,39 @@ def handle_seed_settings(args: argparse.Namespace) -> int:
         "settings", raw
     )  # accept bare dict or wrapped under 'settings:'
 
-    unknown = set(patch) - _VALID_SETTINGS_KEYS
+    valid_settings_keys = set(OperatorSettingsUpdateRequest.model_fields) - {"reason"}
+    unknown = set(patch) - valid_settings_keys
     if unknown:
         for key in sorted(unknown):
-            print_error(
-                f"Unknown settings key: '{key}'. Valid keys: {sorted(_VALID_SETTINGS_KEYS)}"
-            )
+            print_error(f"Unknown settings key: '{key}'. Valid keys: {sorted(valid_settings_keys)}")
         return 1
 
     if not patch:
         print_error("No settings fields found in config file.")
         return 1
 
+    try:
+        validated = OperatorSettingsUpdateRequest.model_validate(patch).model_dump(
+            exclude_none=True,
+            exclude={"reason"},
+        )
+    except Exception as exc:
+        print_error(f"Invalid settings config: {exc}")
+        return 1
+
     print_header("Seed Settings")
-    print_json({"writing": patch})
+    print_json({"writing": validated, "updated_by": args.updated_by, "reason": args.reason})
 
     session = get_session()
     try:
-        OperatorSettingsRepository(session).update_current(values=patch, updated_by=_FIXTURE_ACTOR)
+        OperatorSettingsService(
+            settings_repo=OperatorSettingsRepository(session),
+            audit_log_repo=AuditLogRepository(session),
+        ).update_settings(
+            validated,
+            actor_user_id=args.updated_by,
+            reason=args.reason,
+        )
         session.commit()
     except Exception as exc:
         session.rollback()
@@ -521,6 +473,7 @@ def handle_seed_settings(args: argparse.Namespace) -> int:
 
 
 def handle_read_settings(args: argparse.Namespace) -> int:
+    print("[DEPRECATED] backtesting read-settings is deprecated. Use: atp settings show")
     print_header("Current Operator Settings (DB)")
     session = get_session()
     try:
@@ -558,6 +511,7 @@ def handle_read_settings(args: argparse.Namespace) -> int:
 
 
 def handle_seed_controls(args: argparse.Namespace) -> int:
+    print("[DEPRECATED] backtesting seed-controls is deprecated. Use: atp controls seed")
     clean: bool = args.clean
     config_path: Path = args.config
     if not config_path.exists():
@@ -805,49 +759,10 @@ def handle_read_controls(args: argparse.Namespace) -> int:
 
 
 def handle_read_portfolio(args: argparse.Namespace) -> int:
-    from autonomous_trading_platform.application.services.portfolio_analytics_service import (
-        PortfolioAnalyticsService,
-    )
-    from autonomous_trading_platform.application.services.portfolio_equity_curve_service import (
-        PortfolioEquityCurveService,
-    )
-    from autonomous_trading_platform.application.services.portfolio_summary_service import (
-        PortfolioSummaryService,
-    )
+    print("[DEPRECATED] backtesting read-portfolio is deprecated. Use: atp portfolio snapshot")
+    from autonomous_trading_platform.cli.commands.portfolio import handle_snapshot
 
-    print_header("Portfolio State (DB / same as API)")
-    session = get_session()
-    try:
-        summary = PortfolioSummaryService(session=session).get_summary()
-        holdings = PortfolioAnalyticsService(session=session).get_holdings()
-        alloc = PortfolioAnalyticsService(session=session).get_allocation()
-        risk = PortfolioAnalyticsService(session=session).get_risk()
-        perf = PortfolioAnalyticsService(session=session).get_performance()
-        curve_1m = PortfolioEquityCurveService(session=session).get_equity_curve("1m")
-    finally:
-        session.close()
-
-    print_json(
-        {
-            "portfolio_summary": {k: _to_json(v) for k, v in summary.items()},
-            "holdings": [
-                {k: _to_json(v) for k, v in h.items()} for h in holdings.get("holdings", [])
-            ],
-            "allocation": {
-                "by_strategy": [
-                    {k: _to_json(v) for k, v in row.items()} for row in alloc.get("by_strategy", [])
-                ],
-                "by_asset": [
-                    {k: _to_json(v) for k, v in row.items()} for row in alloc.get("by_asset", [])
-                ],
-            },
-            "risk": {k: _to_json(v) for k, v in risk.items()},
-            "performance": {k: _to_json(v) for k, v in perf.items()},
-            "equity_curve_1m_points": len(curve_1m.get("points", [])),
-            "equity_curve_1m_range": _curve_range(curve_1m.get("points", [])),
-        }
-    )
-    return 0
+    return handle_snapshot(args)
 
 
 def handle_read_dashboard(args: argparse.Namespace) -> int:
@@ -1661,6 +1576,38 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
                 settings_repo.get_or_create_default().notify_strategy_promotion_events
             )
 
+            _verify_source_run_id = str(uuid.uuid4())
+
+            # Temporarily null promotion rule thresholds so ephemeral test
+            # strategies (which have no real metrics) can be promoted.
+            from sqlalchemy import select as _select
+
+            from autonomous_trading_platform.storage.sor.models.promotion_rules import (
+                PromotionRules as _PromotionRulesModel,
+            )
+
+            _promo_rule = session_promo.scalars(
+                _select(_PromotionRulesModel).where(
+                    _PromotionRulesModel.from_status == "approved_research",
+                    _PromotionRulesModel.to_status == "approved_paper",
+                    _PromotionRulesModel.is_active.is_(True),
+                )
+            ).first()
+            _saved_thresholds: dict = {}
+            _threshold_fields = (
+                "min_sharpe",
+                "max_drawdown",
+                "min_days_tested",
+                "min_trade_count",
+                "min_cagr",
+                "min_win_rate",
+            )
+            if _promo_rule is not None:
+                for _f in _threshold_fields:
+                    _saved_thresholds[_f] = getattr(_promo_rule, _f)
+                    setattr(_promo_rule, _f, None)
+                session_promo.flush()
+
             settings_repo.update_current(
                 {"notify_strategy_promotion_events": True},
                 updated_by="verify-notification-events",
@@ -1671,7 +1618,7 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
                     config_hash=f"{true_strategy_id}_hash",
                     current_state="approved_research",
                     experiment_id="verify_notification_events",
-                    source_run_id=None,
+                    source_run_id=_verify_source_run_id,
                     submitted_at=now,
                     updated_at=now,
                     submitted_by="verify-notification-events",
@@ -1684,6 +1631,7 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
                 reason="verify promotion notification enabled",
                 updated_by="verify-notification-events",
                 actor_role="risk_manager",
+                source_run_id=_verify_source_run_id,
             )
 
             settings_repo.update_current(
@@ -1696,7 +1644,7 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
                     config_hash=f"{false_strategy_id}_hash",
                     current_state="approved_research",
                     experiment_id="verify_notification_events",
-                    source_run_id=None,
+                    source_run_id=_verify_source_run_id,
                     submitted_at=now,
                     updated_at=now,
                     submitted_by="verify-notification-events",
@@ -1709,6 +1657,7 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
                 reason="verify promotion notification disabled",
                 updated_by="verify-notification-events",
                 actor_role="risk_manager",
+                source_run_id=_verify_source_run_id,
             )
 
             audit_rows = session_promo.query(AuditLogRow).all()
@@ -1737,6 +1686,11 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
                 {"notify_strategy_promotion_events": (original_notify_promotion_events)},
                 updated_by="verify-notification-events",
             )
+            # Restore promotion rule thresholds.
+            if _promo_rule is not None:
+                for _f, _v in _saved_thresholds.items():
+                    setattr(_promo_rule, _f, _v)
+                session_promo.flush()
         finally:
             session_promo.close()
 
@@ -2317,8 +2271,8 @@ def handle_verify_auto_promotion(args: argparse.Namespace) -> int:
             values={
                 "auto_promote_enabled": False,
                 "notify_strategy_promotion_events": True,
-                "min_sharpe_for_promotion": 99.0,
-                "min_paper_trading_period_days": 999,
+                "min_sharpe_for_promotion": 9.9,
+                "min_paper_trading_period_days": 365,
             },
             updated_by="verify-auto-promotion",
         )
@@ -2713,7 +2667,7 @@ def _auto_promotion_audit_seed(*, session: Any) -> dict[str, Any]:
     )
     session.add(rule)
 
-    use_simulation_runs = session.bind is not None and session.bind.dialect.name != "sqlite"
+    use_simulation_runs = _governance_audit_should_seed_simulation_runs(session)
     dataset_version_id = f"{prefix}_dataset"
     if use_simulation_runs:
         session.add(
@@ -2794,6 +2748,7 @@ def _auto_promotion_audit_seed(*, session: Any) -> dict[str, Any]:
                 metadata_json={"display_name": strategy_id},
             )
         )
+        session.flush()
         source_run_id = run_uuid if use_simulation_runs else None
         if use_simulation_runs:
             start_date = date(2026, 1, 1)
@@ -2817,6 +2772,7 @@ def _auto_promotion_audit_seed(*, session: Any) -> dict[str, Any]:
                     metrics_snapshot_id=f"{prefix}_metrics_{strategy_id[-16:]}",
                 )
             )
+            session.flush()
         session.add(
             StrategyGovernance(
                 strategy_id=strategy_id,
@@ -2866,19 +2822,47 @@ def _auto_promotion_audit_seed(*, session: Any) -> dict[str, Any]:
 
 
 def _auto_demotion_audit_seed(*, session: Any) -> dict[str, Any]:
+    from datetime import date, timedelta
+
+    from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
+    from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
     from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
+    from autonomous_trading_platform.storage.sor.models.simulation_runs import SimulationRuns
 
     now = datetime.now(UTC)
     suffix = uuid.uuid4().hex[:8]
     prefix = f"auto_demotion_audit_{suffix}"
     breach_strategy_id = f"{prefix}_breach"
     safe_strategy_id = f"{prefix}_safe"
+    use_simulation_runs = _governance_audit_should_seed_simulation_runs(session)
+    dataset_version_id = f"{prefix}_dataset"
+    if use_simulation_runs:
+        session.add(
+            DatasetVersions(
+                dataset_version_id=dataset_version_id,
+                dataset_name="auto_demotion_audit",
+                created_at=now,
+                source="cli",
+                price_basis=PriceBasis.ADJUSTED,
+                interval=BarInterval.ONE_DAY,
+                schema_version="1",
+                symbol_coverage=1,
+                date_coverage_start=date(2026, 1, 1),
+                date_coverage_end=date(2026, 1, 31),
+                validation_status="validated",
+                checksum=None,
+                source_dataset_version=None,
+                source_manifest=None,
+                metadata_json={"created_by": "verify-auto-demotion"},
+            )
+        )
 
     for strategy_id, state, drawdown in [
         (breach_strategy_id, "approved_for_live_trading", 0.25),
         (safe_strategy_id, "approved_for_paper_trading", 0.03),
     ]:
         config_hash = f"{strategy_id}_hash"[:64]
+        run_id = str(uuid.uuid4())
         session.add(
             StrategyConfigs(
                 strategy_id=strategy_id,
@@ -2889,6 +2873,7 @@ def _auto_demotion_audit_seed(*, session: Any) -> dict[str, Any]:
                 metadata_json={"display_name": strategy_id},
             )
         )
+        session.flush()
         session.add(
             StrategyGovernance(
                 strategy_id=strategy_id,
@@ -2901,10 +2886,32 @@ def _auto_demotion_audit_seed(*, session: Any) -> dict[str, Any]:
                 submitted_by="verify-auto-demotion",
             )
         )
+        if use_simulation_runs:
+            start_date = date(2026, 1, 1)
+            session.add(
+                SimulationRuns(
+                    run_id=run_id,
+                    experiment_id=None,
+                    strategy_id=strategy_id,
+                    dataset_version=dataset_version_id,
+                    universe_version="auto_demotion_audit",
+                    price_basis="adjusted",
+                    symbols=["SPY"],
+                    start_date=start_date,
+                    end_date=start_date + timedelta(days=30),
+                    window_role="audit",
+                    start_time=now,
+                    end_time=now,
+                    execution_config={"created_by": "verify-auto-demotion"},
+                    status="completed",
+                    metrics_snapshot_id=f"{prefix}_metrics_{strategy_id[-16:]}",
+                )
+            )
+            session.flush()
         session.add(
             MetricsSummary(
                 metrics_snapshot_id=f"{prefix}_metrics_{strategy_id[-16:]}",
-                run_id=str(uuid.uuid4()),
+                run_id=run_id,
                 created_at=now,
                 total_return=-0.10 if drawdown > 0.12 else 0.05,
                 sharpe_ratio=-0.5 if drawdown > 0.12 else 1.1,
@@ -2933,6 +2940,11 @@ def _governance_audit_source_of_truth_payload() -> dict[str, str]:
         "promotion_thresholds_source": "promotion_rules",
         "allocation_targets_source": ("capital_allocation_policies + allocation_overrides"),
     }
+
+
+def _governance_audit_should_seed_simulation_runs(session: Any) -> bool:
+    bind = session.get_bind() if hasattr(session, "get_bind") else getattr(session, "bind", None)
+    return bind is None or bind.dialect.name != "sqlite"
 
 
 def _governance_audit_deprecated_or_ignored_settings(

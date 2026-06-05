@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 from sqlalchemy import select
 
 from autonomous_trading_platform.contracts.runtime.runtime_soak_verification import (
@@ -27,6 +29,15 @@ class RuntimeSoakReportRepository(BaseRepository):
         self.session.add(row)
         self.session.flush()
         return row
+
+    def get_latest_for_environment(self, *, environment: str) -> RuntimeSoakReportRow | None:
+        stmt = (
+            select(RuntimeSoakReportRow)
+            .where(RuntimeSoakReportRow.environment == environment)
+            .order_by(RuntimeSoakReportRow.checked_at.desc())
+            .limit(1)
+        )
+        return cast(RuntimeSoakReportRow | None, self.session.scalars(stmt).first())
 
     def list_by_window(
         self,

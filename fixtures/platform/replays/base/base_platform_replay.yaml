@@ -1,0 +1,91 @@
+# scenario:
+#   name: base_platform_replay
+#   purpose: >
+#     Canonical healthy baseline — realistic production cadences, 10 trading days.
+#     All systems active. Compare every other scenario against this.
+#   expected_behavior: >
+#     Ingestion + corporate_actions + features + trading_cycle + risk + governance
+#     + portfolio_snapshot fire every tick (10x each).
+#     Universe fires once (monthly — first tick of Jan).
+#     Research disabled (window too short for meaningful experiment).
+#     Timestamps at 21:00 UTC (4 PM ET market close) each day.
+#   recommended_use: baseline
+#
+# initial_state is documentation only. Run `atp platform fixture seed` to apply.
+
+platform_replay:
+  name: base_platform_replay
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL]
+  start: 2024-01-02
+  end: 2024-01-15
+  starting_cash: 100000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: true
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1]
+  governance: []
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.50"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.50"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  # ── After-close pipeline (runs every trading day) ──
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  # ── Market-hours pipeline ──
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  # ── EOD evaluation ──
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+  # ── Slower cadence jobs ──
+  universe:
+    cadence: monthly     # rotates once at start of each calendar month
+    enabled: true
+  research:
+    cadence: monthly     # full experiment pipeline once per month
+    enabled: false       # disabled: 10-day window too short for meaningful research
+
+timeline_events: []
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: true
+  write_failure_report: false
+  write_dashboard_snapshot: true

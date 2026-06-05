@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from dataclasses import replace as dc_replace
 from datetime import UTC, datetime
 from typing import Protocol
@@ -15,6 +16,19 @@ from autonomous_trading_platform.storage.sor.models.raw_market_pool import (
     RawMarketSymbol as RawMarketSymbolOrm,
 )
 from autonomous_trading_platform.universe.types import RawSymbolProvider, RawSymbolRecord
+
+
+@dataclass(frozen=True)
+class RawMarketPoolRefreshPreview:
+    captured_at: datetime
+    source: str
+    cadence: str
+    symbol_count: int
+    previous_snapshot_id: str | None
+    previous_symbol_count: int
+    new_symbols: list[str]
+    delisted_symbols: list[str]
+    symbols_preview: list[str]
 
 
 class RawMarketPoolWriter(Protocol):
@@ -130,6 +144,43 @@ class RawMarketPoolRefreshService:
         snapshot.is_complete = True
 
         return snapshot, new_symbols, delisted_symbols
+
+    def preview(
+        self,
+        cadence: str,
+        captured_at: datetime | None = None,
+    ) -> RawMarketPoolRefreshPreview:
+        """
+        Fetch and diff a raw symbol pool without writing snapshot, membership,
+        or symbol rows.
+        """
+        now = _ensure_utc(captured_at or datetime.now(UTC))
+
+        raw_records = self.provider.fetch_symbols()
+        normalized = self._normalize_and_deduplicate(raw_records)
+
+        previous_snapshot = self.repository.get_latest_complete_snapshot()
+        prev_symbols: set[str] = set()
+        if previous_snapshot is not None:
+            prev_symbols = set(
+                self.repository.get_symbols_for_snapshot(previous_snapshot.snapshot_id)
+            )
+
+        current_symbols = {r.symbol for r in normalized}
+        new_symbols = sorted(current_symbols - prev_symbols)
+        delisted_symbols = sorted(prev_symbols - current_symbols)
+
+        return RawMarketPoolRefreshPreview(
+            captured_at=now,
+            source=self.provider.source_name,
+            cadence=cadence,
+            symbol_count=len(normalized),
+            previous_snapshot_id=previous_snapshot.snapshot_id if previous_snapshot else None,
+            previous_symbol_count=len(prev_symbols),
+            new_symbols=new_symbols,
+            delisted_symbols=delisted_symbols,
+            symbols_preview=[record.symbol for record in normalized[:25]],
+        )
 
     def detect_new_symbols(
         self,

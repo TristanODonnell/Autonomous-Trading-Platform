@@ -1,0 +1,100 @@
+# scenario:
+#   name: two_month_healthy
+#   purpose: >
+#     2-month healthy platform replay with no failures and no operator interventions.
+#     Tests scheduled cadence behavior across a longer window: weekly research,
+#     monthly universe rotation, daily risk/governance cycles. Validates that
+#     artifact output (equity curve, portfolio snapshots, governance audit) is
+#     coherent across ~44 trading days.
+#   expected_behavior: >
+#     ~44 ticks. All scheduled jobs fire on cadence. Universe rotates once (monthly).
+#     Research fires ~8 times (weekly). No errors. Equity curve has 44 points.
+#     Governance summary shows auto-evaluation running daily. Clean artifact.
+#   recommended_use: integration
+#
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/medium/two_month_healthy.yaml \
+#     --output artifacts/platform/backtests/two_month_healthy.json
+
+platform_replay:
+  name: two_month_healthy
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL, MSFT]
+  start: 2024-01-02
+  end: 2024-02-29
+  starting_cash: 250000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: true
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1, macd_crossover_v1]
+  governance:
+    - strategy_id: momentum_v1
+      state: paper_trading_active
+    - strategy_id: mean_reversion_v1
+      state: paper_trading_active
+    - strategy_id: macd_crossover_v1
+      state: approved_for_paper_trading
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.40"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.40"
+    - strategy_id: macd_crossover_v1
+      allocation_pct: "0.20"
+  universe:
+    selection_mode: fixed
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  universe:
+    cadence: monthly      # ~2 rotations over 2 months
+    enabled: true
+  research:
+    cadence: monthly      # ~2 experiment runs over 2 months
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+
+timeline_events: []
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: true
+  write_failure_report: false
+  write_dashboard_snapshot: true

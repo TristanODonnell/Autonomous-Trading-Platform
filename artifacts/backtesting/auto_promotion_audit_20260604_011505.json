@@ -1,0 +1,2127 @@
+{
+  "run_id": "f6e9d31c-a47b-48f4-be9f-e75847a832db",
+  "settings_fixture": "fixtures\\settings.yaml",
+  "settings": {
+    "auto_promote_enabled": true,
+    "notify_strategy_promotion_events": true,
+    "deprecated_fields_ignored": {
+      "min_sharpe_for_promotion": 9.9,
+      "min_paper_trading_period_days": 365
+    }
+  },
+  "seed": {
+    "prefix": "auto_promotion_audit_2fe4b2ec",
+    "eligible_strategy_id": "auto_promotion_audit_2fe4b2ec_eligible",
+    "ineligible_strategy_id": "auto_promotion_audit_2fe4b2ec_ineligible",
+    "missing_rule_strategy_id": "auto_promotion_audit_2fe4b2ec_missing_rule",
+    "seeded_rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+    "deprecated_operator_settings_deliberately_ignored": [
+      "min_sharpe_for_promotion",
+      "min_paper_trading_period_days"
+    ]
+  },
+  "active_promotion_rules": [
+    {
+      "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+      "from_status": "approved_research",
+      "to_status": "approved_paper",
+      "min_sharpe": 1.5,
+      "max_drawdown": 0.15,
+      "min_days_tested": 30,
+      "min_trade_count": 10,
+      "min_cagr": 0.05,
+      "min_win_rate": 0.5,
+      "is_active": true,
+      "notes": "seeded by verify-auto-promotion"
+    }
+  ],
+  "quality_metrics_used": [
+    {
+      "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible",
+      "metrics_snapshot_id": "auto_promotion_audit_2fe4b2ec_metrics_fe4b2ec_eligible",
+      "sharpe_ratio": 2.0,
+      "max_drawdown": 0.05,
+      "trade_count": 20,
+      "metrics_json": {
+        "cagr": 0.12,
+        "win_rate": 0.65,
+        "days_tested": 45,
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible"
+      }
+    },
+    {
+      "strategy_id": "auto_promotion_audit_2fe4b2ec_ineligible",
+      "metrics_snapshot_id": "auto_promotion_audit_2fe4b2ec_metrics_4b2ec_ineligible",
+      "sharpe_ratio": 0.5,
+      "max_drawdown": 0.3,
+      "trade_count": 3,
+      "metrics_json": {
+        "cagr": -0.02,
+        "win_rate": 0.33,
+        "days_tested": 12,
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_ineligible"
+      }
+    },
+    {
+      "strategy_id": "auto_promotion_audit_2fe4b2ec_missing_rule",
+      "metrics_snapshot_id": "auto_promotion_audit_2fe4b2ec_metrics_2ec_missing_rule",
+      "sharpe_ratio": 3.0,
+      "max_drawdown": 0.03,
+      "trade_count": 30,
+      "metrics_json": {
+        "cagr": 0.18,
+        "win_rate": 0.73,
+        "days_tested": 60,
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_missing_rule"
+      }
+    }
+  ],
+  "disabled_path": {
+    "run_id": null,
+    "auto_promote_enabled": false,
+    "promotion_rules_used": [
+      {
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "from_status": "approved_research",
+        "to_status": "approved_paper",
+        "min_sharpe": 1.5,
+        "max_drawdown": 0.15,
+        "min_days_tested": 30,
+        "min_trade_count": 10,
+        "min_cagr": 0.05,
+        "min_win_rate": 0.5,
+        "is_active": true,
+        "is_valid": true,
+        "missing_required_criteria": [],
+        "required_criteria": []
+      }
+    ],
+    "candidate_strategies": [
+      {
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible",
+        "from_state": "approved_research",
+        "to_state": "paper",
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "eligible": true,
+        "status": "eligible",
+        "source_run_id": "9f15a46c-128d-4e02-a2ab-b1b7d3202be9",
+        "metrics_source_type": "explicit_source_run",
+        "fallback_allowed": false,
+        "metrics": {
+          "sharpe": 2.0,
+          "max_drawdown": 0.05,
+          "days_tested": 45,
+          "trade_count": 20,
+          "cagr": 0.12,
+          "win_rate": 0.65
+        },
+        "live_metrics": {
+          "rolling_sharpe": null,
+          "realized_return": null,
+          "realized_drawdown": null,
+          "live_win_rate": null,
+          "trade_count": 0,
+          "days_live": null
+        },
+        "criteria": [
+          {
+            "name": "min_sharpe",
+            "passed": true,
+            "required": 1.5,
+            "actual": 2.0,
+            "reason": "min_sharpe 2.0 >= required 1.5"
+          },
+          {
+            "name": "max_drawdown",
+            "passed": true,
+            "required": 0.15,
+            "actual": 0.05,
+            "reason": "max_drawdown 0.05 within limit 0.15"
+          },
+          {
+            "name": "min_days_tested",
+            "passed": true,
+            "required": 30,
+            "actual": 45,
+            "reason": "min_days_tested 45 >= required 30"
+          },
+          {
+            "name": "min_trade_count",
+            "passed": true,
+            "required": 10,
+            "actual": 20,
+            "reason": "min_trade_count 20 >= required 10"
+          },
+          {
+            "name": "min_cagr",
+            "passed": true,
+            "required": 0.05,
+            "actual": 0.12,
+            "reason": "min_cagr 0.12 >= required 0.05"
+          },
+          {
+            "name": "min_win_rate",
+            "passed": true,
+            "required": 0.5,
+            "actual": 0.65,
+            "reason": "min_win_rate 0.65 >= required 0.5"
+          }
+        ],
+        "reasons": [
+          "eligible"
+        ]
+      },
+      {
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_ineligible",
+        "from_state": "approved_research",
+        "to_state": "paper",
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "eligible": false,
+        "status": "ineligible",
+        "source_run_id": "54c31e98-7677-45c0-a159-78e8a84acf0e",
+        "metrics_source_type": "explicit_source_run",
+        "fallback_allowed": false,
+        "metrics": {
+          "sharpe": 0.5,
+          "max_drawdown": 0.3,
+          "days_tested": 12,
+          "trade_count": 3,
+          "cagr": -0.02,
+          "win_rate": 0.33
+        },
+        "live_metrics": {
+          "rolling_sharpe": null,
+          "realized_return": null,
+          "realized_drawdown": null,
+          "live_win_rate": null,
+          "trade_count": 0,
+          "days_live": null
+        },
+        "criteria": [
+          {
+            "name": "min_sharpe",
+            "passed": false,
+            "required": 1.5,
+            "actual": 0.5,
+            "reason": "min_sharpe 0.5 < required 1.5"
+          },
+          {
+            "name": "max_drawdown",
+            "passed": false,
+            "required": 0.15,
+            "actual": 0.3,
+            "reason": "max_drawdown 0.3 exceeds limit 0.15"
+          },
+          {
+            "name": "min_days_tested",
+            "passed": false,
+            "required": 30,
+            "actual": 12,
+            "reason": "min_days_tested 12 < required 30"
+          },
+          {
+            "name": "min_trade_count",
+            "passed": false,
+            "required": 10,
+            "actual": 3,
+            "reason": "min_trade_count 3 < required 10"
+          },
+          {
+            "name": "min_cagr",
+            "passed": false,
+            "required": 0.05,
+            "actual": -0.02,
+            "reason": "min_cagr -0.02 < required 0.05"
+          },
+          {
+            "name": "min_win_rate",
+            "passed": false,
+            "required": 0.5,
+            "actual": 0.33,
+            "reason": "min_win_rate 0.33 < required 0.5"
+          }
+        ],
+        "reasons": [
+          "min_sharpe 0.5 < required 1.5",
+          "max_drawdown 0.3 exceeds limit 0.15",
+          "min_days_tested 12 < required 30",
+          "min_trade_count 3 < required 10",
+          "min_cagr -0.02 < required 0.05",
+          "min_win_rate 0.33 < required 0.5"
+        ]
+      },
+      {
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_missing_rule",
+        "from_state": "approved_for_paper_trading",
+        "to_state": "live",
+        "rule_id": null,
+        "eligible": false,
+        "status": "missing_rule",
+        "source_run_id": "c6e35d4f-5539-4740-ad45-f255d690047c",
+        "metrics_source_type": null,
+        "fallback_allowed": false,
+        "metrics": {
+          "sharpe": 3.0,
+          "max_drawdown": 0.03,
+          "days_tested": 60,
+          "trade_count": 30,
+          "cagr": 0.18,
+          "win_rate": 0.73
+        },
+        "live_metrics": {
+          "rolling_sharpe": null,
+          "realized_return": null,
+          "realized_drawdown": null,
+          "live_win_rate": null,
+          "trade_count": 0,
+          "days_live": null
+        },
+        "criteria": [],
+        "reasons": [
+          "No active PromotionRules row for approved_paper -> approved_live."
+        ]
+      },
+      {
+        "strategy_id": "gov_audit_fail_89cf6d9e",
+        "from_state": "approved_for_paper_trading",
+        "to_state": "live",
+        "rule_id": null,
+        "eligible": false,
+        "status": "missing_rule",
+        "source_run_id": "0853fa8d-04a2-44cc-ab79-dbb43de1b790",
+        "metrics_source_type": null,
+        "fallback_allowed": false,
+        "metrics": {
+          "sharpe": 0.5,
+          "max_drawdown": 0.25,
+          "days_tested": 25.0,
+          "trade_count": 5,
+          "cagr": 0.0,
+          "win_rate": 0.3
+        },
+        "live_metrics": {
+          "rolling_sharpe": null,
+          "realized_return": null,
+          "realized_drawdown": null,
+          "live_win_rate": null,
+          "trade_count": 0,
+          "days_live": null
+        },
+        "criteria": [],
+        "reasons": [
+          "No active PromotionRules row for approved_paper -> approved_live."
+        ]
+      },
+      {
+        "strategy_id": "gov_audit_pass_89cf6d9e",
+        "from_state": "approved_for_paper_trading",
+        "to_state": "live",
+        "rule_id": null,
+        "eligible": false,
+        "status": "missing_rule",
+        "source_run_id": "bf8132c5-894c-4695-aaae-e3b6d721dccb",
+        "metrics_source_type": null,
+        "fallback_allowed": false,
+        "metrics": {
+          "sharpe": 1.25,
+          "max_drawdown": 0.075,
+          "days_tested": 35.0,
+          "trade_count": 15,
+          "cagr": 0.1,
+          "win_rate": 0.6
+        },
+        "live_metrics": {
+          "rolling_sharpe": null,
+          "realized_return": null,
+          "realized_drawdown": null,
+          "live_win_rate": null,
+          "trade_count": 0,
+          "days_live": null
+        },
+        "criteria": [],
+        "reasons": [
+          "No active PromotionRules row for approved_paper -> approved_live."
+        ]
+      },
+      {
+        "strategy_id": "mean_reversion__844916e1ccbfd614636cb5ffc9d1fa8e41591ce8d77560a410e11c49e33b4c80",
+        "from_state": "approved_research",
+        "to_state": "paper",
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "eligible": false,
+        "status": "missing_source_run",
+        "source_run_id": null,
+        "metrics_source_type": null,
+        "fallback_allowed": false,
+        "metrics": {
+          "sharpe": null,
+          "max_drawdown": null,
+          "days_tested": null,
+          "trade_count": null,
+          "cagr": null,
+          "win_rate": null
+        },
+        "live_metrics": {
+          "rolling_sharpe": null,
+          "realized_return": null,
+          "realized_drawdown": null,
+          "live_win_rate": null,
+          "trade_count": 0,
+          "days_live": null
+        },
+        "criteria": [],
+        "reasons": [
+          "Capital-bearing promotion to 'approved_paper' requires explicit source_run_id. Set source_run_id on the governance record to enable auto-promotion."
+        ]
+      },
+      {
+        "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+        "from_state": "approved_for_paper_trading",
+        "to_state": "live",
+        "rule_id": null,
+        "eligible": false,
+        "status": "missing_source_run",
+        "source_run_id": null,
+        "metrics_source_type": null,
+        "fallback_allowed": false,
+        "metrics": {
+          "sharpe": null,
+          "max_drawdown": null,
+          "days_tested": null,
+          "trade_count": null,
+          "cagr": null,
+          "win_rate": null
+        },
+        "live_metrics": {
+          "rolling_sharpe": null,
+          "realized_return": 0.0,
+          "realized_drawdown": null,
+          "live_win_rate": null,
+          "trade_count": 0,
+          "days_live": 153
+        },
+        "criteria": [],
+        "reasons": [
+          "Capital-bearing promotion to 'approved_live' requires explicit source_run_id. Set source_run_id on the governance record to enable auto-promotion."
+        ]
+      }
+    ],
+    "promotions_executed": [],
+    "skipped_reason": "auto_promote_disabled",
+    "audit_event_emitted": "STRATEGY_AUTO_PROMOTION_SKIPPED",
+    "threshold_source": "promotion_rules",
+    "deprecated_operator_settings_ignored": [
+      "min_sharpe_for_promotion",
+      "min_paper_trading_period_days"
+    ]
+  },
+  "enabled_path": {
+    "run_id": null,
+    "auto_promote_enabled": true,
+    "promotion_rules_used": [
+      {
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "from_status": "approved_research",
+        "to_status": "approved_paper",
+        "min_sharpe": 1.5,
+        "max_drawdown": 0.15,
+        "min_days_tested": 30,
+        "min_trade_count": 10,
+        "min_cagr": 0.05,
+        "min_win_rate": 0.5,
+        "is_active": true,
+        "is_valid": true,
+        "missing_required_criteria": [],
+        "required_criteria": []
+      }
+    ],
+    "candidate_strategies": [
+      {
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible",
+        "from_state": "approved_research",
+        "to_state": "paper",
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "eligible": true,
+        "status": "eligible",
+        "source_run_id": "9f15a46c-128d-4e02-a2ab-b1b7d3202be9",
+        "metrics_source_type": "explicit_source_run",
+        "fallback_allowed": false,
+        "metrics": {
+          "sharpe": 2.0,
+          "max_drawdown": 0.05,
+          "days_tested": 45,
+          "trade_count": 20,
+          "cagr": 0.12,
+          "win_rate": 0.65
+        },
+        "live_metrics": {
+          "rolling_sharpe": null,
+          "realized_return": null,
+          "realized_drawdown": null,
+          "live_win_rate": null,
+          "trade_count": 0,
+          "days_live": null
+        },
+        "criteria": [
+          {
+            "name": "min_sharpe",
+            "passed": true,
+            "required": 1.5,
+            "actual": 2.0,
+            "reason": "min_sharpe 2.0 >= required 1.5"
+          },
+          {
+            "name": "max_drawdown",
+            "passed": true,
+            "required": 0.15,
+            "actual": 0.05,
+            "reason": "max_drawdown 0.05 within limit 0.15"
+          },
+          {
+            "name": "min_days_tested",
+            "passed": true,
+            "required": 30,
+            "actual": 45,
+            "reason": "min_days_tested 45 >= required 30"
+          },
+          {
+            "name": "min_trade_count",
+            "passed": true,
+            "required": 10,
+            "actual": 20,
+            "reason": "min_trade_count 20 >= required 10"
+          },
+          {
+            "name": "min_cagr",
+            "passed": true,
+            "required": 0.05,
+            "actual": 0.12,
+            "reason": "min_cagr 0.12 >= required 0.05"
+          },
+          {
+            "name": "min_win_rate",
+            "passed": true,
+            "required": 0.5,
+            "actual": 0.65,
+            "reason": "min_win_rate 0.65 >= required 0.5"
+          }
+        ],
+        "reasons": [
+          "eligible"
+        ]
+      },
+      {
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_ineligible",
+        "from_state": "approved_research",
+        "to_state": "paper",
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "eligible": false,
+        "status": "ineligible",
+        "source_run_id": "54c31e98-7677-45c0-a159-78e8a84acf0e",
+        "metrics_source_type": "explicit_source_run",
+        "fallback_allowed": false,
+        "metrics": {
+          "sharpe": 0.5,
+          "max_drawdown": 0.3,
+          "days_tested": 12,
+          "trade_count": 3,
+          "cagr": -0.02,
+          "win_rate": 0.33
+        },
+        "live_metrics": {
+          "rolling_sharpe": null,
+          "realized_return": null,
+          "realized_drawdown": null,
+          "live_win_rate": null,
+          "trade_count": 0,
+          "days_live": null
+        },
+        "criteria": [
+          {
+            "name": "min_sharpe",
+            "passed": false,
+            "required": 1.5,
+            "actual": 0.5,
+            "reason": "min_sharpe 0.5 < required 1.5"
+          },
+          {
+            "name": "max_drawdown",
+            "passed": false,
+            "required": 0.15,
+            "actual": 0.3,
+            "reason": "max_drawdown 0.3 exceeds limit 0.15"
+          },
+          {
+            "name": "min_days_tested",
+            "passed": false,
+            "required": 30,
+            "actual": 12,
+            "reason": "min_days_tested 12 < required 30"
+          },
+          {
+            "name": "min_trade_count",
+            "passed": false,
+            "required": 10,
+            "actual": 3,
+            "reason": "min_trade_count 3 < required 10"
+          },
+          {
+            "name": "min_cagr",
+            "passed": false,
+            "required": 0.05,
+            "actual": -0.02,
+            "reason": "min_cagr -0.02 < required 0.05"
+          },
+          {
+            "name": "min_win_rate",
+            "passed": false,
+            "required": 0.5,
+            "actual": 0.33,
+            "reason": "min_win_rate 0.33 < required 0.5"
+          }
+        ],
+        "reasons": [
+          "min_sharpe 0.5 < required 1.5",
+          "max_drawdown 0.3 exceeds limit 0.15",
+          "min_days_tested 12 < required 30",
+          "min_trade_count 3 < required 10",
+          "min_cagr -0.02 < required 0.05",
+          "min_win_rate 0.33 < required 0.5"
+        ]
+      },
+      {
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_missing_rule",
+        "from_state": "approved_for_paper_trading",
+        "to_state": "live",
+        "rule_id": null,
+        "eligible": false,
+        "status": "missing_rule",
+        "source_run_id": "c6e35d4f-5539-4740-ad45-f255d690047c",
+        "metrics_source_type": null,
+        "fallback_allowed": false,
+        "metrics": {
+          "sharpe": 3.0,
+          "max_drawdown": 0.03,
+          "days_tested": 60,
+          "trade_count": 30,
+          "cagr": 0.18,
+          "win_rate": 0.73
+        },
+        "live_metrics": {
+          "rolling_sharpe": null,
+          "realized_return": null,
+          "realized_drawdown": null,
+          "live_win_rate": null,
+          "trade_count": 0,
+          "days_live": null
+        },
+        "criteria": [],
+        "reasons": [
+          "No active PromotionRules row for approved_paper -> approved_live."
+        ]
+      },
+      {
+        "strategy_id": "gov_audit_fail_89cf6d9e",
+        "from_state": "approved_for_paper_trading",
+        "to_state": "live",
+        "rule_id": null,
+        "eligible": false,
+        "status": "missing_rule",
+        "source_run_id": "0853fa8d-04a2-44cc-ab79-dbb43de1b790",
+        "metrics_source_type": null,
+        "fallback_allowed": false,
+        "metrics": {
+          "sharpe": 0.5,
+          "max_drawdown": 0.25,
+          "days_tested": 25.0,
+          "trade_count": 5,
+          "cagr": 0.0,
+          "win_rate": 0.3
+        },
+        "live_metrics": {
+          "rolling_sharpe": null,
+          "realized_return": null,
+          "realized_drawdown": null,
+          "live_win_rate": null,
+          "trade_count": 0,
+          "days_live": null
+        },
+        "criteria": [],
+        "reasons": [
+          "No active PromotionRules row for approved_paper -> approved_live."
+        ]
+      },
+      {
+        "strategy_id": "gov_audit_pass_89cf6d9e",
+        "from_state": "approved_for_paper_trading",
+        "to_state": "live",
+        "rule_id": null,
+        "eligible": false,
+        "status": "missing_rule",
+        "source_run_id": "bf8132c5-894c-4695-aaae-e3b6d721dccb",
+        "metrics_source_type": null,
+        "fallback_allowed": false,
+        "metrics": {
+          "sharpe": 1.25,
+          "max_drawdown": 0.075,
+          "days_tested": 35.0,
+          "trade_count": 15,
+          "cagr": 0.1,
+          "win_rate": 0.6
+        },
+        "live_metrics": {
+          "rolling_sharpe": null,
+          "realized_return": null,
+          "realized_drawdown": null,
+          "live_win_rate": null,
+          "trade_count": 0,
+          "days_live": null
+        },
+        "criteria": [],
+        "reasons": [
+          "No active PromotionRules row for approved_paper -> approved_live."
+        ]
+      },
+      {
+        "strategy_id": "mean_reversion__844916e1ccbfd614636cb5ffc9d1fa8e41591ce8d77560a410e11c49e33b4c80",
+        "from_state": "approved_research",
+        "to_state": "paper",
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "eligible": false,
+        "status": "missing_source_run",
+        "source_run_id": null,
+        "metrics_source_type": null,
+        "fallback_allowed": false,
+        "metrics": {
+          "sharpe": null,
+          "max_drawdown": null,
+          "days_tested": null,
+          "trade_count": null,
+          "cagr": null,
+          "win_rate": null
+        },
+        "live_metrics": {
+          "rolling_sharpe": null,
+          "realized_return": null,
+          "realized_drawdown": null,
+          "live_win_rate": null,
+          "trade_count": 0,
+          "days_live": null
+        },
+        "criteria": [],
+        "reasons": [
+          "Capital-bearing promotion to 'approved_paper' requires explicit source_run_id. Set source_run_id on the governance record to enable auto-promotion."
+        ]
+      },
+      {
+        "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+        "from_state": "approved_for_paper_trading",
+        "to_state": "live",
+        "rule_id": null,
+        "eligible": false,
+        "status": "missing_source_run",
+        "source_run_id": null,
+        "metrics_source_type": null,
+        "fallback_allowed": false,
+        "metrics": {
+          "sharpe": null,
+          "max_drawdown": null,
+          "days_tested": null,
+          "trade_count": null,
+          "cagr": null,
+          "win_rate": null
+        },
+        "live_metrics": {
+          "rolling_sharpe": null,
+          "realized_return": 0.0,
+          "realized_drawdown": null,
+          "live_win_rate": null,
+          "trade_count": 0,
+          "days_live": 153
+        },
+        "criteria": [],
+        "reasons": [
+          "Capital-bearing promotion to 'approved_live' requires explicit source_run_id. Set source_run_id on the governance record to enable auto-promotion."
+        ]
+      }
+    ],
+    "promotions_executed": [
+      {
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible",
+        "from_state": "approved_research",
+        "to_state": "approved_for_paper_trading",
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "status": "promoted"
+      }
+    ],
+    "skipped_reason": null,
+    "audit_event_emitted": "STRATEGY_AUTO_PROMOTION_COMPLETED",
+    "threshold_source": "promotion_rules",
+    "deprecated_operator_settings_ignored": [
+      "min_sharpe_for_promotion",
+      "min_paper_trading_period_days"
+    ]
+  },
+  "audit_events": [
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by local-dev-operator: testing",
+      "metadata": {
+        "actor": "local-dev-operator",
+        "reason": "testing",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "moving_average_crossover__7100229de334bcdc4cba56799ec76c2212a7b92c6bac363a7d7367e7e1796c95"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by local-dev-operator: testing",
+      "metadata": {
+        "actor": "local-dev-operator",
+        "reason": "testing",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "moving_average_crossover__9097a54b465b7a7bbdc4d9076a9e2c451847258ba68b44471b83ac7b897c1217"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by local-dev-operator: testing",
+      "metadata": {
+        "actor": "local-dev-operator",
+        "reason": "testing",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "moving_average_crossover__5381e2ce923861bdb5606e3c723639aac7c3bc6f7b7d379298d53f1a6075622b"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by local-dev-operator: test",
+      "metadata": {
+        "actor": "local-dev-operator",
+        "reason": "test",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "moving_average_crossover__cbbf20e6b02359911a226c9fc26e41c3b4413defa6c15f85eb72780220cbcc2f"
+      }
+    },
+    {
+      "event_type": "STRATEGY_PROMOTION_EVENT",
+      "component": "notifications",
+      "message": "STRATEGY_PROMOTION_EVENT by verify-notification-events: verify promotion notification enabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification enabled",
+        "channel": "notify_strategy_promotion_events",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_true_8845f52a"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-notification-events: verify promotion notification enabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification enabled",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_true_8845f52a"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-notification-events: verify promotion notification disabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification disabled",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_false_013fde13"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-notification-events: verify promotion notification enabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification enabled",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_true_a4d245a8"
+      }
+    },
+    {
+      "event_type": "STRATEGY_PROMOTION_EVENT",
+      "component": "notifications",
+      "message": "STRATEGY_PROMOTION_EVENT by verify-notification-events: verify promotion notification enabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification enabled",
+        "channel": "notify_strategy_promotion_events",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_true_a4d245a8"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-notification-events: verify promotion notification disabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification disabled",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_false_87710a43"
+      }
+    },
+    {
+      "event_type": "STRATEGY_PROMOTION_EVENT",
+      "component": "notifications",
+      "message": "STRATEGY_PROMOTION_EVENT by verify-notification-events: verify promotion notification enabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification enabled",
+        "channel": "notify_strategy_promotion_events",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_true_4dbd16fa"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-notification-events: verify promotion notification enabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification enabled",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_true_4dbd16fa"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-notification-events: verify promotion notification disabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification disabled",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_false_a9942502"
+      }
+    },
+    {
+      "event_type": "STRATEGY_PROMOTION_EVENT",
+      "component": "notifications",
+      "message": "STRATEGY_PROMOTION_EVENT by verify-governance-allocation: verify governance allocation passing probe",
+      "metadata": {
+        "actor": "verify-governance-allocation",
+        "reason": "verify governance allocation passing probe",
+        "channel": "notify_strategy_promotion_events",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "gov_audit_pass_2ff7aabc"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-governance-allocation: verify governance allocation passing probe",
+      "metadata": {
+        "actor": "verify-governance-allocation",
+        "reason": "verify governance allocation passing probe",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "gov_audit_pass_2ff7aabc"
+      }
+    },
+    {
+      "event_type": "STRATEGY_PROMOTION_EVENT",
+      "component": "notifications",
+      "message": "STRATEGY_PROMOTION_EVENT by verify-governance-allocation: verify governance allocation passing probe",
+      "metadata": {
+        "actor": "verify-governance-allocation",
+        "reason": "verify governance allocation passing probe",
+        "channel": "notify_strategy_promotion_events",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "gov_audit_pass_8f0d410c"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-governance-allocation: verify governance allocation passing probe",
+      "metadata": {
+        "actor": "verify-governance-allocation",
+        "reason": "verify governance allocation passing probe",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "gov_audit_pass_8f0d410c"
+      }
+    },
+    {
+      "event_type": "STRATEGY_PROMOTION_EVENT",
+      "component": "notifications",
+      "message": "STRATEGY_PROMOTION_EVENT by verify-governance-allocation: verify governance allocation passing probe",
+      "metadata": {
+        "actor": "verify-governance-allocation",
+        "reason": "verify governance allocation passing probe",
+        "channel": "notify_strategy_promotion_events",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "gov_audit_pass_6be4210c"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-governance-allocation: verify governance allocation passing probe",
+      "metadata": {
+        "actor": "verify-governance-allocation",
+        "reason": "verify governance allocation passing probe",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "gov_audit_pass_6be4210c"
+      }
+    },
+    {
+      "event_type": "STRATEGY_PROMOTION_EVENT",
+      "component": "notifications",
+      "message": "STRATEGY_PROMOTION_EVENT by verify-notification-events: verify promotion notification enabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification enabled",
+        "channel": "notify_strategy_promotion_events",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_true_06ea9483"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-notification-events: verify promotion notification enabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification enabled",
+        "rule_id": "gov_audit_approved_research_to_approved_paper",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_true_06ea9483",
+        "source_run_id": "203074b8-23c4-44da-be62-6b1118491883",
+        "rule_to_status": "approved_paper",
+        "fallback_allowed": false,
+        "rule_from_status": "approved_research",
+        "metrics_source_type": "explicit_source_run",
+        "promotion_criteria_evaluated": [],
+        "promotion_criteria_skipped_optional": [
+          "min_sharpe",
+          "min_days_tested",
+          "min_trade_count",
+          "min_cagr",
+          "min_win_rate",
+          "max_drawdown"
+        ]
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-notification-events: verify promotion notification disabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification disabled",
+        "rule_id": "gov_audit_approved_research_to_approved_paper",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_false_1105eb3b",
+        "source_run_id": "203074b8-23c4-44da-be62-6b1118491883",
+        "rule_to_status": "approved_paper",
+        "fallback_allowed": false,
+        "rule_from_status": "approved_research",
+        "metrics_source_type": "explicit_source_run",
+        "promotion_criteria_evaluated": [],
+        "promotion_criteria_skipped_optional": [
+          "min_sharpe",
+          "min_days_tested",
+          "min_trade_count",
+          "min_cagr",
+          "min_win_rate",
+          "max_drawdown"
+        ]
+      }
+    },
+    {
+      "event_type": "STRATEGY_PROMOTION_EVENT",
+      "component": "notifications",
+      "message": "STRATEGY_PROMOTION_EVENT by verify-notification-events: verify promotion notification enabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification enabled",
+        "channel": "notify_strategy_promotion_events",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_true_84a14216"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-notification-events: verify promotion notification enabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification enabled",
+        "rule_id": "gov_audit_approved_research_to_approved_paper",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_true_84a14216",
+        "source_run_id": "e0dc14b1-e73c-40ba-a295-192485b91da2",
+        "rule_to_status": "approved_paper",
+        "fallback_allowed": false,
+        "rule_from_status": "approved_research",
+        "metrics_source_type": "explicit_source_run",
+        "promotion_criteria_evaluated": [],
+        "promotion_criteria_skipped_optional": [
+          "min_sharpe",
+          "min_days_tested",
+          "min_trade_count",
+          "min_cagr",
+          "min_win_rate",
+          "max_drawdown"
+        ]
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-notification-events: verify promotion notification disabled",
+      "metadata": {
+        "actor": "verify-notification-events",
+        "reason": "verify promotion notification disabled",
+        "rule_id": "gov_audit_approved_research_to_approved_paper",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "verify_promotion_false_158d3785",
+        "source_run_id": "e0dc14b1-e73c-40ba-a295-192485b91da2",
+        "rule_to_status": "approved_paper",
+        "fallback_allowed": false,
+        "rule_from_status": "approved_research",
+        "metrics_source_type": "explicit_source_run",
+        "promotion_criteria_evaluated": [],
+        "promotion_criteria_skipped_optional": [
+          "min_sharpe",
+          "min_days_tested",
+          "min_trade_count",
+          "min_cagr",
+          "min_win_rate",
+          "max_drawdown"
+        ]
+      }
+    },
+    {
+      "event_type": "STRATEGY_AUTO_PROMOTION_SKIPPED",
+      "component": "governance",
+      "message": "STRATEGY_AUTO_PROMOTION_SKIPPED by governance-cli: auto_promote_disabled",
+      "metadata": {
+        "actor": "governance-cli",
+        "reason": "auto_promote_disabled",
+        "run_id": "51d86855-37ed-4329-a8b1-f464b225f17f",
+        "skipped_reason": "auto_promote_disabled",
+        "threshold_source": "promotion_rules",
+        "audit_event_emitted": "STRATEGY_AUTO_PROMOTION_SKIPPED",
+        "promotions_executed": [],
+        "auto_promote_enabled": false,
+        "candidate_strategies": [
+          {
+            "status": "missing_source_run",
+            "metrics": {
+              "cagr": null,
+              "sharpe": null,
+              "win_rate": null,
+              "days_tested": null,
+              "trade_count": null,
+              "max_drawdown": null
+            },
+            "reasons": [
+              "Capital-bearing promotion to 'approved_paper' requires explicit source_run_id. Set source_run_id on the governance record to enable auto-promotion."
+            ],
+            "rule_id": "gov_audit_approved_research_to_approved_paper",
+            "criteria": [],
+            "eligible": false,
+            "to_state": "paper",
+            "from_state": "approved_research",
+            "strategy_id": "mean_reversion__844916e1ccbfd614636cb5ffc9d1fa8e41591ce8d77560a410e11c49e33b4c80",
+            "live_metrics": {
+              "days_live": null,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": null,
+              "realized_drawdown": null
+            },
+            "source_run_id": null,
+            "fallback_allowed": false,
+            "metrics_source_type": null
+          },
+          {
+            "status": "missing_source_run",
+            "metrics": {
+              "cagr": null,
+              "sharpe": null,
+              "win_rate": null,
+              "days_tested": null,
+              "trade_count": null,
+              "max_drawdown": null
+            },
+            "reasons": [
+              "Capital-bearing promotion to 'approved_live' requires explicit source_run_id. Set source_run_id on the governance record to enable auto-promotion."
+            ],
+            "rule_id": "gov_audit_approved_paper_to_approved_live",
+            "criteria": [],
+            "eligible": false,
+            "to_state": "live",
+            "from_state": "approved_for_paper_trading",
+            "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+            "live_metrics": {
+              "days_live": 153,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": 0.0,
+              "realized_drawdown": null
+            },
+            "source_run_id": null,
+            "fallback_allowed": false,
+            "metrics_source_type": null
+          }
+        ],
+        "promotion_rules_used": [
+          {
+            "rule_id": "gov_audit_approved_paper_to_approved_live",
+            "is_valid": true,
+            "min_cagr": null,
+            "is_active": true,
+            "to_status": "approved_live",
+            "min_sharpe": 1.5,
+            "from_status": "approved_paper",
+            "max_drawdown": 0.15,
+            "min_win_rate": null,
+            "min_days_tested": 30,
+            "min_trade_count": 10,
+            "required_criteria": [
+              "min_days_tested",
+              "min_sharpe",
+              "min_trade_count"
+            ],
+            "missing_required_criteria": []
+          },
+          {
+            "rule_id": "gov_audit_approved_research_to_approved_paper",
+            "is_valid": true,
+            "min_cagr": null,
+            "is_active": true,
+            "to_status": "approved_paper",
+            "min_sharpe": null,
+            "from_status": "approved_research",
+            "max_drawdown": null,
+            "min_win_rate": null,
+            "min_days_tested": null,
+            "min_trade_count": null,
+            "required_criteria": [],
+            "missing_required_criteria": []
+          }
+        ],
+        "deprecated_operator_settings_ignored": [
+          "min_sharpe_for_promotion",
+          "min_paper_trading_period_days"
+        ]
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-governance-allocation: verify governance allocation passing probe",
+      "metadata": {
+        "actor": "verify-governance-allocation",
+        "reason": "verify governance allocation passing probe",
+        "rule_id": "gov_audit_approved_research_to_approved_paper",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "gov_audit_pass_89cf6d9e",
+        "source_run_id": "bf8132c5-894c-4695-aaae-e3b6d721dccb",
+        "rule_to_status": "approved_paper",
+        "fallback_allowed": false,
+        "rule_from_status": "approved_research",
+        "metrics_source_type": "explicit_source_run",
+        "promotion_criteria_evaluated": [],
+        "promotion_criteria_skipped_optional": [
+          "min_sharpe",
+          "min_days_tested",
+          "min_trade_count",
+          "min_cagr",
+          "min_win_rate",
+          "max_drawdown"
+        ]
+      }
+    },
+    {
+      "event_type": "STRATEGY_PROMOTION_EVENT",
+      "component": "notifications",
+      "message": "STRATEGY_PROMOTION_EVENT by verify-governance-allocation: verify governance allocation passing probe",
+      "metadata": {
+        "actor": "verify-governance-allocation",
+        "reason": "verify governance allocation passing probe",
+        "channel": "notify_strategy_promotion_events",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "gov_audit_pass_89cf6d9e"
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-governance-allocation: verify governance allocation failing probe",
+      "metadata": {
+        "actor": "verify-governance-allocation",
+        "reason": "verify governance allocation failing probe",
+        "rule_id": "gov_audit_approved_research_to_approved_paper",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "gov_audit_fail_89cf6d9e",
+        "source_run_id": "0853fa8d-04a2-44cc-ab79-dbb43de1b790",
+        "rule_to_status": "approved_paper",
+        "fallback_allowed": false,
+        "rule_from_status": "approved_research",
+        "metrics_source_type": "explicit_source_run",
+        "promotion_criteria_evaluated": [],
+        "promotion_criteria_skipped_optional": [
+          "min_sharpe",
+          "min_days_tested",
+          "min_trade_count",
+          "min_cagr",
+          "min_win_rate",
+          "max_drawdown"
+        ]
+      }
+    },
+    {
+      "event_type": "STRATEGY_PROMOTION_EVENT",
+      "component": "notifications",
+      "message": "STRATEGY_PROMOTION_EVENT by verify-governance-allocation: verify governance allocation failing probe",
+      "metadata": {
+        "actor": "verify-governance-allocation",
+        "reason": "verify governance allocation failing probe",
+        "channel": "notify_strategy_promotion_events",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "gov_audit_fail_89cf6d9e"
+      }
+    },
+    {
+      "event_type": "STRATEGY_AUTO_PROMOTION_SKIPPED",
+      "component": "governance",
+      "message": "STRATEGY_AUTO_PROMOTION_SKIPPED by verify-auto-promotion: auto_promote_disabled",
+      "metadata": {
+        "actor": "verify-auto-promotion",
+        "reason": "auto_promote_disabled",
+        "run_id": null,
+        "skipped_reason": "auto_promote_disabled",
+        "threshold_source": "promotion_rules",
+        "audit_event_emitted": "STRATEGY_AUTO_PROMOTION_SKIPPED",
+        "promotions_executed": [],
+        "auto_promote_enabled": false,
+        "candidate_strategies": [
+          {
+            "status": "eligible",
+            "metrics": {
+              "cagr": 0.12,
+              "sharpe": 2.0,
+              "win_rate": 0.65,
+              "days_tested": 45,
+              "trade_count": 20,
+              "max_drawdown": 0.05
+            },
+            "reasons": [
+              "eligible"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "criteria": [
+              {
+                "name": "min_sharpe",
+                "actual": 2.0,
+                "passed": true,
+                "reason": "min_sharpe 2.0 >= required 1.5",
+                "required": 1.5
+              },
+              {
+                "name": "max_drawdown",
+                "actual": 0.05,
+                "passed": true,
+                "reason": "max_drawdown 0.05 within limit 0.15",
+                "required": 0.15
+              },
+              {
+                "name": "min_days_tested",
+                "actual": 45,
+                "passed": true,
+                "reason": "min_days_tested 45 >= required 30",
+                "required": 30
+              },
+              {
+                "name": "min_trade_count",
+                "actual": 20,
+                "passed": true,
+                "reason": "min_trade_count 20 >= required 10",
+                "required": 10
+              },
+              {
+                "name": "min_cagr",
+                "actual": 0.12,
+                "passed": true,
+                "reason": "min_cagr 0.12 >= required 0.05",
+                "required": 0.05
+              },
+              {
+                "name": "min_win_rate",
+                "actual": 0.65,
+                "passed": true,
+                "reason": "min_win_rate 0.65 >= required 0.5",
+                "required": 0.5
+              }
+            ],
+            "eligible": true,
+            "to_state": "paper",
+            "from_state": "approved_research",
+            "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible",
+            "live_metrics": {
+              "days_live": null,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": null,
+              "realized_drawdown": null
+            },
+            "source_run_id": "9f15a46c-128d-4e02-a2ab-b1b7d3202be9",
+            "fallback_allowed": false,
+            "metrics_source_type": "explicit_source_run"
+          },
+          {
+            "status": "ineligible",
+            "metrics": {
+              "cagr": -0.02,
+              "sharpe": 0.5,
+              "win_rate": 0.33,
+              "days_tested": 12,
+              "trade_count": 3,
+              "max_drawdown": 0.3
+            },
+            "reasons": [
+              "min_sharpe 0.5 < required 1.5",
+              "max_drawdown 0.3 exceeds limit 0.15",
+              "min_days_tested 12 < required 30",
+              "min_trade_count 3 < required 10",
+              "min_cagr -0.02 < required 0.05",
+              "min_win_rate 0.33 < required 0.5"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "criteria": [
+              {
+                "name": "min_sharpe",
+                "actual": 0.5,
+                "passed": false,
+                "reason": "min_sharpe 0.5 < required 1.5",
+                "required": 1.5
+              },
+              {
+                "name": "max_drawdown",
+                "actual": 0.3,
+                "passed": false,
+                "reason": "max_drawdown 0.3 exceeds limit 0.15",
+                "required": 0.15
+              },
+              {
+                "name": "min_days_tested",
+                "actual": 12,
+                "passed": false,
+                "reason": "min_days_tested 12 < required 30",
+                "required": 30
+              },
+              {
+                "name": "min_trade_count",
+                "actual": 3,
+                "passed": false,
+                "reason": "min_trade_count 3 < required 10",
+                "required": 10
+              },
+              {
+                "name": "min_cagr",
+                "actual": -0.02,
+                "passed": false,
+                "reason": "min_cagr -0.02 < required 0.05",
+                "required": 0.05
+              },
+              {
+                "name": "min_win_rate",
+                "actual": 0.33,
+                "passed": false,
+                "reason": "min_win_rate 0.33 < required 0.5",
+                "required": 0.5
+              }
+            ],
+            "eligible": false,
+            "to_state": "paper",
+            "from_state": "approved_research",
+            "strategy_id": "auto_promotion_audit_2fe4b2ec_ineligible",
+            "live_metrics": {
+              "days_live": null,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": null,
+              "realized_drawdown": null
+            },
+            "source_run_id": "54c31e98-7677-45c0-a159-78e8a84acf0e",
+            "fallback_allowed": false,
+            "metrics_source_type": "explicit_source_run"
+          },
+          {
+            "status": "missing_rule",
+            "metrics": {
+              "cagr": 0.18,
+              "sharpe": 3.0,
+              "win_rate": 0.73,
+              "days_tested": 60,
+              "trade_count": 30,
+              "max_drawdown": 0.03
+            },
+            "reasons": [
+              "No active PromotionRules row for approved_paper -> approved_live."
+            ],
+            "rule_id": null,
+            "criteria": [],
+            "eligible": false,
+            "to_state": "live",
+            "from_state": "approved_for_paper_trading",
+            "strategy_id": "auto_promotion_audit_2fe4b2ec_missing_rule",
+            "live_metrics": {
+              "days_live": null,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": null,
+              "realized_drawdown": null
+            },
+            "source_run_id": "c6e35d4f-5539-4740-ad45-f255d690047c",
+            "fallback_allowed": false,
+            "metrics_source_type": null
+          },
+          {
+            "status": "missing_rule",
+            "metrics": {
+              "cagr": 0.0,
+              "sharpe": 0.5,
+              "win_rate": 0.3,
+              "days_tested": 25.0,
+              "trade_count": 5,
+              "max_drawdown": 0.25
+            },
+            "reasons": [
+              "No active PromotionRules row for approved_paper -> approved_live."
+            ],
+            "rule_id": null,
+            "criteria": [],
+            "eligible": false,
+            "to_state": "live",
+            "from_state": "approved_for_paper_trading",
+            "strategy_id": "gov_audit_fail_89cf6d9e",
+            "live_metrics": {
+              "days_live": null,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": null,
+              "realized_drawdown": null
+            },
+            "source_run_id": "0853fa8d-04a2-44cc-ab79-dbb43de1b790",
+            "fallback_allowed": false,
+            "metrics_source_type": null
+          },
+          {
+            "status": "missing_rule",
+            "metrics": {
+              "cagr": 0.1,
+              "sharpe": 1.25,
+              "win_rate": 0.6,
+              "days_tested": 35.0,
+              "trade_count": 15,
+              "max_drawdown": 0.075
+            },
+            "reasons": [
+              "No active PromotionRules row for approved_paper -> approved_live."
+            ],
+            "rule_id": null,
+            "criteria": [],
+            "eligible": false,
+            "to_state": "live",
+            "from_state": "approved_for_paper_trading",
+            "strategy_id": "gov_audit_pass_89cf6d9e",
+            "live_metrics": {
+              "days_live": null,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": null,
+              "realized_drawdown": null
+            },
+            "source_run_id": "bf8132c5-894c-4695-aaae-e3b6d721dccb",
+            "fallback_allowed": false,
+            "metrics_source_type": null
+          },
+          {
+            "status": "missing_source_run",
+            "metrics": {
+              "cagr": null,
+              "sharpe": null,
+              "win_rate": null,
+              "days_tested": null,
+              "trade_count": null,
+              "max_drawdown": null
+            },
+            "reasons": [
+              "Capital-bearing promotion to 'approved_paper' requires explicit source_run_id. Set source_run_id on the governance record to enable auto-promotion."
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "criteria": [],
+            "eligible": false,
+            "to_state": "paper",
+            "from_state": "approved_research",
+            "strategy_id": "mean_reversion__844916e1ccbfd614636cb5ffc9d1fa8e41591ce8d77560a410e11c49e33b4c80",
+            "live_metrics": {
+              "days_live": null,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": null,
+              "realized_drawdown": null
+            },
+            "source_run_id": null,
+            "fallback_allowed": false,
+            "metrics_source_type": null
+          },
+          {
+            "status": "missing_source_run",
+            "metrics": {
+              "cagr": null,
+              "sharpe": null,
+              "win_rate": null,
+              "days_tested": null,
+              "trade_count": null,
+              "max_drawdown": null
+            },
+            "reasons": [
+              "Capital-bearing promotion to 'approved_live' requires explicit source_run_id. Set source_run_id on the governance record to enable auto-promotion."
+            ],
+            "rule_id": null,
+            "criteria": [],
+            "eligible": false,
+            "to_state": "live",
+            "from_state": "approved_for_paper_trading",
+            "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+            "live_metrics": {
+              "days_live": 153,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": 0.0,
+              "realized_drawdown": null
+            },
+            "source_run_id": null,
+            "fallback_allowed": false,
+            "metrics_source_type": null
+          }
+        ],
+        "promotion_rules_used": [
+          {
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "is_valid": true,
+            "min_cagr": 0.05,
+            "is_active": true,
+            "to_status": "approved_paper",
+            "min_sharpe": 1.5,
+            "from_status": "approved_research",
+            "max_drawdown": 0.15,
+            "min_win_rate": 0.5,
+            "min_days_tested": 30,
+            "min_trade_count": 10,
+            "required_criteria": [],
+            "missing_required_criteria": []
+          }
+        ],
+        "deprecated_operator_settings_ignored": [
+          "min_sharpe_for_promotion",
+          "min_paper_trading_period_days"
+        ]
+      }
+    },
+    {
+      "event_type": "STRATEGY_AUTO_PROMOTION_COMPLETED",
+      "component": "governance",
+      "message": "STRATEGY_AUTO_PROMOTION_COMPLETED by verify-auto-promotion: automatic promotion scan completed",
+      "metadata": {
+        "actor": "verify-auto-promotion",
+        "reason": "automatic promotion scan completed",
+        "run_id": null,
+        "skipped_reason": null,
+        "threshold_source": "promotion_rules",
+        "audit_event_emitted": "STRATEGY_AUTO_PROMOTION_COMPLETED",
+        "promotions_executed": [
+          {
+            "status": "promoted",
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "to_state": "approved_for_paper_trading",
+            "from_state": "approved_research",
+            "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible"
+          }
+        ],
+        "auto_promote_enabled": true,
+        "candidate_strategies": [
+          {
+            "status": "eligible",
+            "metrics": {
+              "cagr": 0.12,
+              "sharpe": 2.0,
+              "win_rate": 0.65,
+              "days_tested": 45,
+              "trade_count": 20,
+              "max_drawdown": 0.05
+            },
+            "reasons": [
+              "eligible"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "criteria": [
+              {
+                "name": "min_sharpe",
+                "actual": 2.0,
+                "passed": true,
+                "reason": "min_sharpe 2.0 >= required 1.5",
+                "required": 1.5
+              },
+              {
+                "name": "max_drawdown",
+                "actual": 0.05,
+                "passed": true,
+                "reason": "max_drawdown 0.05 within limit 0.15",
+                "required": 0.15
+              },
+              {
+                "name": "min_days_tested",
+                "actual": 45,
+                "passed": true,
+                "reason": "min_days_tested 45 >= required 30",
+                "required": 30
+              },
+              {
+                "name": "min_trade_count",
+                "actual": 20,
+                "passed": true,
+                "reason": "min_trade_count 20 >= required 10",
+                "required": 10
+              },
+              {
+                "name": "min_cagr",
+                "actual": 0.12,
+                "passed": true,
+                "reason": "min_cagr 0.12 >= required 0.05",
+                "required": 0.05
+              },
+              {
+                "name": "min_win_rate",
+                "actual": 0.65,
+                "passed": true,
+                "reason": "min_win_rate 0.65 >= required 0.5",
+                "required": 0.5
+              }
+            ],
+            "eligible": true,
+            "to_state": "paper",
+            "from_state": "approved_research",
+            "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible",
+            "live_metrics": {
+              "days_live": null,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": null,
+              "realized_drawdown": null
+            },
+            "source_run_id": "9f15a46c-128d-4e02-a2ab-b1b7d3202be9",
+            "fallback_allowed": false,
+            "metrics_source_type": "explicit_source_run"
+          },
+          {
+            "status": "ineligible",
+            "metrics": {
+              "cagr": -0.02,
+              "sharpe": 0.5,
+              "win_rate": 0.33,
+              "days_tested": 12,
+              "trade_count": 3,
+              "max_drawdown": 0.3
+            },
+            "reasons": [
+              "min_sharpe 0.5 < required 1.5",
+              "max_drawdown 0.3 exceeds limit 0.15",
+              "min_days_tested 12 < required 30",
+              "min_trade_count 3 < required 10",
+              "min_cagr -0.02 < required 0.05",
+              "min_win_rate 0.33 < required 0.5"
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "criteria": [
+              {
+                "name": "min_sharpe",
+                "actual": 0.5,
+                "passed": false,
+                "reason": "min_sharpe 0.5 < required 1.5",
+                "required": 1.5
+              },
+              {
+                "name": "max_drawdown",
+                "actual": 0.3,
+                "passed": false,
+                "reason": "max_drawdown 0.3 exceeds limit 0.15",
+                "required": 0.15
+              },
+              {
+                "name": "min_days_tested",
+                "actual": 12,
+                "passed": false,
+                "reason": "min_days_tested 12 < required 30",
+                "required": 30
+              },
+              {
+                "name": "min_trade_count",
+                "actual": 3,
+                "passed": false,
+                "reason": "min_trade_count 3 < required 10",
+                "required": 10
+              },
+              {
+                "name": "min_cagr",
+                "actual": -0.02,
+                "passed": false,
+                "reason": "min_cagr -0.02 < required 0.05",
+                "required": 0.05
+              },
+              {
+                "name": "min_win_rate",
+                "actual": 0.33,
+                "passed": false,
+                "reason": "min_win_rate 0.33 < required 0.5",
+                "required": 0.5
+              }
+            ],
+            "eligible": false,
+            "to_state": "paper",
+            "from_state": "approved_research",
+            "strategy_id": "auto_promotion_audit_2fe4b2ec_ineligible",
+            "live_metrics": {
+              "days_live": null,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": null,
+              "realized_drawdown": null
+            },
+            "source_run_id": "54c31e98-7677-45c0-a159-78e8a84acf0e",
+            "fallback_allowed": false,
+            "metrics_source_type": "explicit_source_run"
+          },
+          {
+            "status": "missing_rule",
+            "metrics": {
+              "cagr": 0.18,
+              "sharpe": 3.0,
+              "win_rate": 0.73,
+              "days_tested": 60,
+              "trade_count": 30,
+              "max_drawdown": 0.03
+            },
+            "reasons": [
+              "No active PromotionRules row for approved_paper -> approved_live."
+            ],
+            "rule_id": null,
+            "criteria": [],
+            "eligible": false,
+            "to_state": "live",
+            "from_state": "approved_for_paper_trading",
+            "strategy_id": "auto_promotion_audit_2fe4b2ec_missing_rule",
+            "live_metrics": {
+              "days_live": null,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": null,
+              "realized_drawdown": null
+            },
+            "source_run_id": "c6e35d4f-5539-4740-ad45-f255d690047c",
+            "fallback_allowed": false,
+            "metrics_source_type": null
+          },
+          {
+            "status": "missing_rule",
+            "metrics": {
+              "cagr": 0.0,
+              "sharpe": 0.5,
+              "win_rate": 0.3,
+              "days_tested": 25.0,
+              "trade_count": 5,
+              "max_drawdown": 0.25
+            },
+            "reasons": [
+              "No active PromotionRules row for approved_paper -> approved_live."
+            ],
+            "rule_id": null,
+            "criteria": [],
+            "eligible": false,
+            "to_state": "live",
+            "from_state": "approved_for_paper_trading",
+            "strategy_id": "gov_audit_fail_89cf6d9e",
+            "live_metrics": {
+              "days_live": null,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": null,
+              "realized_drawdown": null
+            },
+            "source_run_id": "0853fa8d-04a2-44cc-ab79-dbb43de1b790",
+            "fallback_allowed": false,
+            "metrics_source_type": null
+          },
+          {
+            "status": "missing_rule",
+            "metrics": {
+              "cagr": 0.1,
+              "sharpe": 1.25,
+              "win_rate": 0.6,
+              "days_tested": 35.0,
+              "trade_count": 15,
+              "max_drawdown": 0.075
+            },
+            "reasons": [
+              "No active PromotionRules row for approved_paper -> approved_live."
+            ],
+            "rule_id": null,
+            "criteria": [],
+            "eligible": false,
+            "to_state": "live",
+            "from_state": "approved_for_paper_trading",
+            "strategy_id": "gov_audit_pass_89cf6d9e",
+            "live_metrics": {
+              "days_live": null,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": null,
+              "realized_drawdown": null
+            },
+            "source_run_id": "bf8132c5-894c-4695-aaae-e3b6d721dccb",
+            "fallback_allowed": false,
+            "metrics_source_type": null
+          },
+          {
+            "status": "missing_source_run",
+            "metrics": {
+              "cagr": null,
+              "sharpe": null,
+              "win_rate": null,
+              "days_tested": null,
+              "trade_count": null,
+              "max_drawdown": null
+            },
+            "reasons": [
+              "Capital-bearing promotion to 'approved_paper' requires explicit source_run_id. Set source_run_id on the governance record to enable auto-promotion."
+            ],
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "criteria": [],
+            "eligible": false,
+            "to_state": "paper",
+            "from_state": "approved_research",
+            "strategy_id": "mean_reversion__844916e1ccbfd614636cb5ffc9d1fa8e41591ce8d77560a410e11c49e33b4c80",
+            "live_metrics": {
+              "days_live": null,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": null,
+              "realized_drawdown": null
+            },
+            "source_run_id": null,
+            "fallback_allowed": false,
+            "metrics_source_type": null
+          },
+          {
+            "status": "missing_source_run",
+            "metrics": {
+              "cagr": null,
+              "sharpe": null,
+              "win_rate": null,
+              "days_tested": null,
+              "trade_count": null,
+              "max_drawdown": null
+            },
+            "reasons": [
+              "Capital-bearing promotion to 'approved_live' requires explicit source_run_id. Set source_run_id on the governance record to enable auto-promotion."
+            ],
+            "rule_id": null,
+            "criteria": [],
+            "eligible": false,
+            "to_state": "live",
+            "from_state": "approved_for_paper_trading",
+            "strategy_id": "momentum__906ff34796380047251e954b6aa6526a05d7d4523475c695f2e05eda10ba42ea",
+            "live_metrics": {
+              "days_live": 153,
+              "trade_count": 0,
+              "live_win_rate": null,
+              "rolling_sharpe": null,
+              "realized_return": 0.0,
+              "realized_drawdown": null
+            },
+            "source_run_id": null,
+            "fallback_allowed": false,
+            "metrics_source_type": null
+          }
+        ],
+        "promotion_rules_used": [
+          {
+            "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+            "is_valid": true,
+            "min_cagr": 0.05,
+            "is_active": true,
+            "to_status": "approved_paper",
+            "min_sharpe": 1.5,
+            "from_status": "approved_research",
+            "max_drawdown": 0.15,
+            "min_win_rate": 0.5,
+            "min_days_tested": 30,
+            "min_trade_count": 10,
+            "required_criteria": [],
+            "missing_required_criteria": []
+          }
+        ],
+        "deprecated_operator_settings_ignored": [
+          "min_sharpe_for_promotion",
+          "min_paper_trading_period_days"
+        ]
+      }
+    },
+    {
+      "event_type": "STRATEGY_GOVERNANCE_TRANSITIONED",
+      "component": "strategies",
+      "message": "STRATEGY_GOVERNANCE_TRANSITIONED by verify-auto-promotion: automatic promotion via rule auto_promotion_audit_2fe4b2ec_research_to_paper",
+      "metadata": {
+        "actor": "verify-auto-promotion",
+        "reason": "automatic promotion via rule auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "rule_id": "auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible",
+        "source_run_id": "9f15a46c-128d-4e02-a2ab-b1b7d3202be9",
+        "rule_to_status": "approved_paper",
+        "fallback_allowed": false,
+        "rule_from_status": "approved_research",
+        "metrics_source_type": "explicit_source_run",
+        "promotion_criteria_evaluated": [
+          {
+            "actual": 2.0,
+            "passed": true,
+            "required": 1.5,
+            "criterion": "min_sharpe"
+          },
+          {
+            "actual": 45.0,
+            "passed": true,
+            "required": 30,
+            "criterion": "min_days_tested"
+          },
+          {
+            "actual": 20.0,
+            "passed": true,
+            "required": 10,
+            "criterion": "min_trade_count"
+          },
+          {
+            "actual": 0.12,
+            "passed": true,
+            "required": 0.05,
+            "criterion": "min_cagr"
+          },
+          {
+            "actual": 0.65,
+            "passed": true,
+            "required": 0.5,
+            "criterion": "min_win_rate"
+          },
+          {
+            "actual": 0.05,
+            "passed": true,
+            "required": 0.15,
+            "criterion": "max_drawdown"
+          }
+        ],
+        "promotion_criteria_skipped_optional": []
+      }
+    },
+    {
+      "event_type": "STRATEGY_PROMOTION_EVENT",
+      "component": "notifications",
+      "message": "STRATEGY_PROMOTION_EVENT by verify-auto-promotion: automatic promotion via rule auto_promotion_audit_2fe4b2ec_research_to_paper",
+      "metadata": {
+        "actor": "verify-auto-promotion",
+        "reason": "automatic promotion via rule auto_promotion_audit_2fe4b2ec_research_to_paper",
+        "channel": "notify_strategy_promotion_events",
+        "to_state": "approved_for_paper_trading",
+        "from_state": "approved_research",
+        "strategy_id": "auto_promotion_audit_2fe4b2ec_eligible"
+      }
+    }
+  ],
+  "notification_event_status": "emitted",
+  "results": [
+    {
+      "area": "disabled_flag",
+      "status": "PASSED"
+    },
+    {
+      "area": "eligible_candidate",
+      "status": "PASSED"
+    },
+    {
+      "area": "ineligible_candidate",
+      "status": "PASSED"
+    },
+    {
+      "area": "missing_rule_candidate",
+      "status": "PASSED"
+    },
+    {
+      "area": "notification_event",
+      "status": "PASSED"
+    }
+  ]
+}

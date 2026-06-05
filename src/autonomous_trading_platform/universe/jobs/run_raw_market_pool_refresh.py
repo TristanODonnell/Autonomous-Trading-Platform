@@ -14,6 +14,7 @@ from autonomous_trading_platform.universe.services.market_calendar_service impor
     MarketCalendarService,
 )
 from autonomous_trading_platform.universe.services.raw_market_pool_refresh_service import (
+    RawMarketPoolRefreshPreview,
     RawMarketPoolRefreshService,
 )
 from autonomous_trading_platform.universe.types import RawSymbolProvider, RawSymbolRecord
@@ -62,14 +63,15 @@ def run_raw_market_pool_refresh(
     cadence: str | None = None,
     captured_at: datetime | None = None,
     force: bool = False,
-) -> None:
+    dry_run: bool = False,
+) -> RawMarketPoolRefreshPreview | tuple[object, list[str], list[str]] | None:
     settings = Settings()
     effective_cadence = cadence or settings.universe_rebalance_cadence
     now = _ensure_utc(captured_at or datetime.now(UTC))
 
     calendar_service = MarketCalendarService()
     if not force and not calendar_service.should_refresh_today(effective_cadence, now):
-        return
+        return None
 
     api_key = settings.broker_api_key
     secret_key = settings.broker_api_secret
@@ -83,14 +85,35 @@ def run_raw_market_pool_refresh(
     provider: RawSymbolProvider = AlpacaRawSymbolProvider(trading_client)
     session = get_session()
 
-    raw_pool_repo = RawMarketPoolRepository(session)
-    refresh_service = RawMarketPoolRefreshService(raw_pool_repo, provider)
+    try:
+        raw_pool_repo = RawMarketPoolRepository(session)
+        refresh_service = RawMarketPoolRefreshService(raw_pool_repo, provider)
 
-    snapshot, new_symbols, delisted_symbols = refresh_service.refresh(
-        cadence=effective_cadence,
-        captured_at=now,
-    )
-    session.commit()
+        if dry_run:
+            preview = refresh_service.preview(
+                cadence=effective_cadence,
+                captured_at=now,
+            )
+            session.rollback()
+            return preview
+
+        result = refresh_service.refresh(
+            cadence=effective_cadence,
+            captured_at=now,
+        )
+        session.commit()
+        snapshot, new_symbols, delisted_symbols = result
+        _ = (
+            snapshot.snapshot_id,
+            snapshot.symbol_count,
+            snapshot.captured_at,
+            snapshot.source,
+            snapshot.cadence,
+        )
+        session.expunge_all()
+        return snapshot, new_symbols, delisted_symbols
+    finally:
+        session.close()
 
 
 def _ensure_utc(value: datetime) -> datetime:

@@ -1,0 +1,88 @@
+# scenario:
+#   name: smoke_healthy
+#   purpose: >
+#     5-day smoke test. Run after any platform change. Confirms ingestion →
+#     corporate_actions → features → trading_cycle → risk → governance all
+#     fire and produce artifact output. Universe fires once (weekly cadence on Mon).
+#   expected_behavior: >
+#     5 ticks × daily jobs. Universe fires on 2024-01-02 (Mon).
+#     Timestamps at 21:00 UTC each day. No errors expected.
+#   recommended_use: smoke
+#
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/short/smoke_healthy.yaml \
+#     --output artifacts/platform/backtests/smoke_healthy.json
+
+platform_replay:
+  name: smoke_healthy
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL]
+  start: 2024-01-02
+  end: 2024-01-08
+  starting_cash: 100000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: true
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1]
+  governance: []
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.50"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.50"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  universe:
+    cadence: weekly       # fires on 2024-01-02 (Monday) — 1 rotation
+    enabled: true
+  research:
+    cadence: monthly
+    enabled: false        # too short for research
+  dashboard_snapshot:
+    cadence: daily
+    enabled: false
+
+timeline_events: []
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: false
+  write_failure_report: false
+  write_dashboard_snapshot: false
