@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from sqlalchemy.orm import Session
+
 from autonomous_trading_platform.cli.formatters import (
     print_error,
     print_header,
@@ -30,8 +32,15 @@ from autonomous_trading_platform.storage.sor.models.operational_alerts import Op
 
 @dataclass
 class OperationsCliDependencies:
-    session: object
-    settings: object
+    session: Session
+    settings: Settings
+
+
+def build_dependencies() -> OperationsCliDependencies:
+    return OperationsCliDependencies(
+        session=get_session(),
+        settings=Settings(),
+    )
 
 
 _STALE_MINUTES_MIN = 1
@@ -334,8 +343,9 @@ def handle_verify_runtime_soak(args: argparse.Namespace) -> int:
     if args.window_end < args.window_start:
         raise ValueError("--window-end must be greater than or equal to --window-start")
 
-    session = get_session()
-    settings = Settings()
+    deps = build_dependencies()
+    session = deps.session
+    settings = deps.settings
     try:
         service = RuntimeSoakVerificationService(
             session=session,
