@@ -25,35 +25,62 @@ def register(subparsers) -> None:
     )
     backtest_sub = backtest_parser.add_subparsers(dest="backtest_command", required=True)
 
+    # ── plan ──────────────────────────────────────────────────────────
     plan_parser = backtest_sub.add_parser(
         "plan",
         help="Validate and print the intended backtest plan without mutation.",
     )
     plan_parser.add_argument(
-        "--symbols", required=True, help="Comma-separated symbols, e.g. SPY,QQQ"
+        "--fixture",
+        type=Path,
+        help="Path to a platform_replay YAML fixture file.",
     )
-    plan_parser.add_argument("--start", required=True, help="Start date (YYYY-MM-DD)")
-    plan_parser.add_argument("--end", required=True, help="End date (YYYY-MM-DD)")
-    plan_parser.add_argument("--starting-cash", type=Decimal, default=Decimal("100000"))
-    plan_parser.add_argument("--random-seed", type=int, default=42)
     plan_parser.add_argument(
-        "--cadence-minutes",
-        type=int,
-        default=390,
-        help="Tick cadence in minutes (default: 390 = full trading day)",
+        "--symbols",
+        help="Comma-separated symbols, e.g. SPY,QQQ (overrides fixture)",
+    )
+    plan_parser.add_argument(
+        "--start",
+        help="Start date YYYY-MM-DD (overrides fixture)",
+    )
+    plan_parser.add_argument(
+        "--end",
+        help="End date YYYY-MM-DD (overrides fixture)",
+    )
+    plan_parser.add_argument("--starting-cash", type=Decimal, default=None)
+    plan_parser.add_argument("--random-seed", type=int, default=None)
+    plan_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional: validate that this output path will be writable.",
     )
     plan_parser.add_argument("--json", action="store_true")
     plan_parser.set_defaults(func=handle_backtest_plan)
 
+    # ── run ───────────────────────────────────────────────────────────
     run_parser = backtest_sub.add_parser(
         "run",
         help="Run canonical end-to-end historical backtest and emit artifact bundle.",
     )
-    run_parser.add_argument("--symbols", required=True)
-    run_parser.add_argument("--start", required=True)
-    run_parser.add_argument("--end", required=True)
-    run_parser.add_argument("--starting-cash", type=Decimal, default=Decimal("100000"))
-    run_parser.add_argument("--random-seed", type=int, default=42)
+    run_parser.add_argument(
+        "--fixture",
+        type=Path,
+        help="Path to a platform_replay YAML fixture file.",
+    )
+    run_parser.add_argument(
+        "--symbols",
+        help="Comma-separated symbols (overrides fixture)",
+    )
+    run_parser.add_argument(
+        "--start",
+        help="Start date YYYY-MM-DD (overrides fixture)",
+    )
+    run_parser.add_argument(
+        "--end",
+        help="End date YYYY-MM-DD (overrides fixture)",
+    )
+    run_parser.add_argument("--starting-cash", type=Decimal, default=None)
+    run_parser.add_argument("--random-seed", type=int, default=None)
     run_parser.add_argument(
         "--cadence-minutes",
         type=int,
@@ -61,23 +88,47 @@ def register(subparsers) -> None:
         help="Tick cadence in minutes (default: 390 = full trading day)",
     )
     run_parser.add_argument(
-        "--actor", default="platform-backtest", help="Actor identifier recorded in audit trail"
+        "--actor",
+        default="platform-backtest",
+        help="Actor identifier recorded in audit trail",
     )
     run_parser.add_argument(
-        "--dry-run", action="store_true", help="Plan the replay without executing any mutations"
+        "--dry-run",
+        action="store_true",
+        help="Plan the replay without executing any mutations",
     )
-    run_parser.add_argument("--output", type=Path, help="Write artifact bundle JSON to this path")
+    run_parser.add_argument(
+        "--inject-failures",
+        action="store_true",
+        help="Enable failure injections defined in the fixture timeline_events",
+    )
+    run_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Write artifact bundle JSON to this path",
+    )
     run_parser.set_defaults(func=handle_backtest_run)
 
+    # ── inspect ───────────────────────────────────────────────────────
     inspect_parser = backtest_sub.add_parser(
         "inspect",
         help="Inspect a saved platform backtest artifact bundle.",
     )
-    inspect_parser.add_argument(
+    _inspect_group = inspect_parser.add_mutually_exclusive_group(required=True)
+    _inspect_group.add_argument(
         "--artifact",
-        required=True,
         type=Path,
         help="Path to artifact bundle JSON produced by 'platform backtest run'",
+    )
+    _inspect_group.add_argument(
+        "--run-id",
+        help="Replay run_id — searches artifacts/platform/backtests/ for a matching bundle",
+    )
+    inspect_parser.add_argument(
+        "--artifacts-dir",
+        type=Path,
+        default=Path("artifacts/platform/backtests"),
+        help="Directory to search when --run-id is used (default: artifacts/platform/backtests)",
     )
     inspect_parser.add_argument(
         "--section",
@@ -87,6 +138,7 @@ def register(subparsers) -> None:
     inspect_parser.add_argument("--json", action="store_true")
     inspect_parser.set_defaults(func=handle_backtest_inspect)
 
+    # ── report ────────────────────────────────────────────────────────
     report_parser = backtest_sub.add_parser(
         "report",
         help="Summarize completed backtest artifact bundle for humans or CI.",
@@ -152,7 +204,7 @@ def register(subparsers) -> None:
 
 
 # ---------------------------------------------------------------------------
-# backtest handlers
+# Shared helpers
 # ---------------------------------------------------------------------------
 
 
@@ -167,38 +219,70 @@ def _parse_date(raw: str) -> date:
         raise argparse.ArgumentTypeError(f"Invalid date: {raw!r} — use YYYY-MM-DD") from exc
 
 
+def _load_fixture_optional(fixture_path: Path | None):
+    """Load fixture if provided, return None otherwise."""
+    if fixture_path is None:
+        return None
+    from autonomous_trading_platform.platform.replay.platform_replay_config import load_fixture
+
+    return load_fixture(fixture_path)
+
+
+def _merge_params(fixture, args):
+    """Merge fixture + CLI args into MergedReplayParams. Returns (params, error_str)."""
+    from autonomous_trading_platform.platform.replay.platform_replay_config import (
+        merge_fixture_with_cli,
+    )
+
+    raw_symbols = getattr(args, "symbols", None)
+    cli_symbols = _parse_symbols(raw_symbols) if raw_symbols else None
+
+    try:
+        params = merge_fixture_with_cli(
+            fixture=fixture,
+            cli_symbols=cli_symbols,
+            cli_start=getattr(args, "start", None),
+            cli_end=getattr(args, "end", None),
+            cli_starting_cash=getattr(args, "starting_cash", None),
+            cli_random_seed=getattr(args, "random_seed", None),
+        )
+    except ValueError as exc:
+        return None, str(exc)
+    return params, None
+
+
+# ---------------------------------------------------------------------------
+# backtest plan
+# ---------------------------------------------------------------------------
+
+
 def handle_backtest_plan(args: argparse.Namespace) -> int:
-    from autonomous_trading_platform.application.services.platform_backtest_service import (
-        PlatformBacktestInputs,
-        PlatformBacktestRunner,
+    from autonomous_trading_platform.platform.replay.platform_replay_config import (
+        validate_plan,
     )
 
     try:
-        symbols = _parse_symbols(args.symbols)
-        start = _parse_date(args.start)
-        end = _parse_date(args.end)
-    except Exception as exc:
+        fixture = _load_fixture_optional(getattr(args, "fixture", None))
+    except (FileNotFoundError, ValueError) as exc:
         print_error(str(exc))
         return 1
 
-    if start >= end:
-        print_error(f"--start ({start}) must be before --end ({end})")
+    params, err = _merge_params(fixture, args)
+    if err:
+        print_error(err)
         return 1
 
-    inputs = PlatformBacktestInputs(
-        symbols=symbols,
-        start_date=start,
-        end_date=end,
-        starting_cash=getattr(args, "starting_cash", Decimal("100000")),
-        random_seed=getattr(args, "random_seed", 42),
-        cadence_minutes=getattr(args, "cadence_minutes", 390),
-        dry_run=True,
-    )
+    output_path: Path | None = getattr(args, "output", None)
+    plan = validate_plan(params, output_path=output_path)
 
-    plan = PlatformBacktestRunner().plan(inputs)
     print_header("Platform Backtest Plan")
     print_json(plan)
-    return 0
+    return 0 if plan.get("valid", True) else 1
+
+
+# ---------------------------------------------------------------------------
+# backtest run
+# ---------------------------------------------------------------------------
 
 
 def handle_backtest_run(args: argparse.Namespace) -> int:
@@ -206,45 +290,67 @@ def handle_backtest_run(args: argparse.Namespace) -> int:
         PlatformBacktestInputs,
         PlatformBacktestRunner,
     )
+    from autonomous_trading_platform.platform.replay.platform_replay_config import (
+        build_typed_timeline_events,
+    )
 
     try:
-        symbols = _parse_symbols(args.symbols)
-        start = _parse_date(args.start)
-        end = _parse_date(args.end)
-    except Exception as exc:
+        fixture = _load_fixture_optional(getattr(args, "fixture", None))
+    except (FileNotFoundError, ValueError) as exc:
         print_error(str(exc))
         return 1
 
-    if start >= end:
-        print_error(f"--start ({start}) must be before --end ({end})")
+    params, err = _merge_params(fixture, args)
+    if err:
+        print_error(err)
         return 1
 
-    dry_run = getattr(args, "dry_run", False)
-    actor = getattr(args, "actor", "platform-backtest")
+    dry_run: bool = getattr(args, "dry_run", False)
+    actor: str = getattr(args, "actor", "platform-backtest")
+    inject_failures: bool = getattr(args, "inject_failures", False)
     output: Path | None = getattr(args, "output", None)
     artifact_dir = output.parent if output else None
 
+    # Build typed timeline events from fixture
+    typed_timeline = (
+        build_typed_timeline_events(params.timeline_events, actor=actor)
+        if params.timeline_events
+        else []
+    )
+
     inputs = PlatformBacktestInputs(
-        symbols=symbols,
-        start_date=start,
-        end_date=end,
-        starting_cash=getattr(args, "starting_cash", Decimal("100000")),
-        random_seed=getattr(args, "random_seed", 42),
+        symbols=params.symbols,
+        start_date=params.start_date,
+        end_date=params.end_date,
+        starting_cash=params.starting_cash,
+        random_seed=params.random_seed,
         cadence_minutes=getattr(args, "cadence_minutes", 390),
         actor=actor,
         dry_run=dry_run,
         artifact_dir=artifact_dir,
+        timeline=typed_timeline,
+        inject_failures=inject_failures,
+        failure_injection_schedule=params.failure_injections,
+        fixture_name=fixture.platform_replay.name if fixture else None,
+        scheduled_jobs_config={
+            name: {"cadence": cfg.cadence, "enabled": cfg.enabled}
+            for name, cfg in params.scheduled_jobs.items()
+        },
     )
 
     print_header(f"Platform Backtest Run {'(dry-run)' if dry_run else ''}")
 
+    if dry_run:
+        from autonomous_trading_platform.platform.replay.platform_replay_config import (
+            validate_plan,
+        )
+
+        plan = validate_plan(params, output_path=output)
+        print_json(plan)
+        return 0
+
     try:
         runner = PlatformBacktestRunner()
-        if dry_run:
-            plan = runner.plan(inputs)
-            print_json(plan)
-            return 0
-
         artifact = runner.run(inputs)
         bundle = artifact.to_dict()
     except Exception as exc:
@@ -256,15 +362,16 @@ def handle_backtest_run(args: argparse.Namespace) -> int:
         output.write_text(json.dumps(bundle, indent=2, default=str), encoding="utf-8")
         print(f"Artifact bundle saved: {output}")
 
-    # Print a compact summary — not the full bundle
     print_json(
         {
             "status": "ok" if not artifact.errors else "completed_with_errors",
             "replay_id": artifact.replay_id,
             "run_id": artifact.run_id,
+            "fixture_name": artifact.fixture_name,
             "symbols": artifact.symbols,
             "start_date": artifact.start_date,
             "end_date": artifact.end_date,
+            "inject_failures": artifact.inject_failures,
             "ticks_attempted": artifact.runtime.ticks_attempted if artifact.runtime else 0,
             "ticks_ok": artifact.runtime.ticks_ok if artifact.runtime else 0,
             "ticks_failed": artifact.runtime.ticks_failed if artifact.runtime else 0,
@@ -277,9 +384,26 @@ def handle_backtest_run(args: argparse.Namespace) -> int:
     return 0 if not artifact.errors else 1
 
 
+# ---------------------------------------------------------------------------
+# backtest inspect
+# ---------------------------------------------------------------------------
+
+
 def handle_backtest_inspect(args: argparse.Namespace) -> int:
-    artifact_path: Path = args.artifact
-    if not artifact_path.exists():
+    artifact_path: Path | None = getattr(args, "artifact", None)
+    run_id: str | None = getattr(args, "run_id", None)
+
+    if run_id and not artifact_path:
+        artifacts_dir: Path = getattr(args, "artifacts_dir", Path("artifacts/platform/backtests"))
+        artifact_path = _find_artifact_by_run_id(run_id, artifacts_dir)
+        if artifact_path is None:
+            print_error(
+                f"No artifact found for run_id={run_id!r} in {artifacts_dir}. "
+                "Use --artifact to specify the path directly."
+            )
+            return 1
+
+    if not artifact_path or not artifact_path.exists():
         print_error(f"Artifact not found: {artifact_path}")
         return 1
 
@@ -298,12 +422,30 @@ def handle_backtest_inspect(args: argparse.Namespace) -> int:
             return 1
         print_json({section: bundle[section]})
     else:
-        # Print top-level summary without full tick_results
         summary = {k: v for k, v in bundle.items() if k != "tick_results"}
         summary["tick_count"] = len(bundle.get("tick_results", []))
         print_json(summary)
 
     return 0
+
+
+def _find_artifact_by_run_id(run_id: str, artifacts_dir: Path) -> Path | None:
+    """Search artifacts_dir for a bundle JSON whose run_id or replay_id matches."""
+    if not artifacts_dir.exists():
+        return None
+    for p in sorted(artifacts_dir.glob("*.json")):
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            if data.get("run_id") == run_id or data.get("replay_id") == run_id:
+                return p
+        except Exception:
+            continue
+    return None
+
+
+# ---------------------------------------------------------------------------
+# backtest report
+# ---------------------------------------------------------------------------
 
 
 def handle_backtest_report(args: argparse.Namespace) -> int:
@@ -325,12 +467,24 @@ def handle_backtest_report(args: argparse.Namespace) -> int:
     errors = bundle.get("errors") or []
     warnings = bundle.get("warnings") or []
 
+    # Count failure injections from tick_results
+    failure_injections_applied = sum(
+        1
+        for tick in bundle.get("tick_results", [])
+        for ev in tick.get("timeline_events", [])
+        if ev.get("event_type") == "failure_injected"
+    )
+    timeline_events_applied = len(bundle.get("timeline_events_applied", []))
+
     report = {
         "replay_id": bundle.get("replay_id"),
+        "run_id": bundle.get("run_id"),
+        "fixture_name": bundle.get("fixture_name"),
         "symbols": bundle.get("symbols"),
         "start_date": bundle.get("start_date"),
         "end_date": bundle.get("end_date"),
         "dry_run": bundle.get("dry_run"),
+        "inject_failures": bundle.get("inject_failures", False),
         "started_at": bundle.get("started_at"),
         "completed_at": bundle.get("completed_at"),
         "ticks_attempted": runtime.get("ticks_attempted", 0),
@@ -338,12 +492,16 @@ def handle_backtest_report(args: argparse.Namespace) -> int:
         "ticks_failed": runtime.get("ticks_failed", 0),
         "total_orders": runtime.get("total_orders", 0),
         "total_fills": runtime.get("total_fills", 0),
+        "cycles_run": runtime.get("ticks_ok", 0),
+        "timeline_events_applied": timeline_events_applied,
+        "failure_injections_applied": failure_injections_applied,
         "final_portfolio_value": portfolio.get("portfolio_value"),
         "final_cash_balance": portfolio.get("cash_balance"),
         "open_positions": portfolio.get("open_positions"),
         "total_pnl_pct": portfolio.get("total_pnl_pct"),
         "risk_blocked": risk.get("is_blocked", False),
         "risk_block_reasons": risk.get("block_reasons", []),
+        "drawdown_pct": risk.get("drawdown_pct"),
         "governance_strategies_in_breach": governance.get("strategies_in_breach", []),
         "error_count": len(errors),
         "warning_count": len(warnings),

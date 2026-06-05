@@ -107,6 +107,74 @@ def run_ingestion_at_timestamp(
     )
 
 
+def run_corporate_actions_at_timestamp(
+    *,
+    session: Session,
+    timestamp: datetime,
+    replay_context: PlatformReplayContext,
+    source_dataset_version_id: str | None = None,
+) -> IngestionReplayResult:
+    """Run corporate action ingestion cycle at timestamp.
+
+    Should be called after market ingestion so the source raw bars dataset
+    version is available. Uses its own internal session via
+    run_corporate_action_ingestion_cycle.
+    """
+    base: dict[str, Any] = {
+        "domain": "corporate_actions",
+        "timestamp": timestamp,
+        "run_id": str(replay_context.run_id),
+    }
+
+    if replay_context.dry_run:
+        return IngestionReplayResult(
+            **base,
+            status="dry_run",
+            summary={"dry_run": True, "timestamp": timestamp.isoformat()},
+        )
+
+    try:
+        from autonomous_trading_platform.scheduler.cycles.run_corporate_action_ingestion_cycle import (
+            run_corporate_action_ingestion_cycle,
+        )
+
+        result = run_corporate_action_ingestion_cycle(
+            source_raw_bars_dataset_version_id=source_dataset_version_id,
+            trigger_type="platform_replay",
+            actor=replay_context.actor,
+        )
+    except Exception as exc:
+        return IngestionReplayResult(
+            **base,
+            status="failed",
+            errors=[str(exc)],
+        )
+
+    # The CA cycle produces two artifacts:
+    #   dataset_version_id              → corporate_actions events dataset
+    #   adjusted_bars_dataset_version_id → the adjusted bars dataset features need
+    # Expose the adjusted_bars ID as this result's dataset_version_id so the
+    # platform runner can pass it directly to the feature pipeline.
+    ca_events_id = str(result.get("dataset_version_id", "")) or None
+    adj_bars_id = str(result.get("adjusted_bars_dataset_version_id", "")) or None
+    return IngestionReplayResult(
+        **base,
+        status="ok",
+        dataset_version_id=adj_bars_id,  # adjusted_bars version for features
+        summary={
+            "corporate_actions_dataset_version_id": ca_events_id,
+            "adjusted_bars_dataset_version_id": adj_bars_id,
+            "source_raw_bars_dataset_version_id": source_dataset_version_id,
+            "timestamp": timestamp.isoformat(),
+            **{
+                k: v
+                for k, v in result.items()
+                if k not in ("dataset_version_id", "adjusted_bars_dataset_version_id")
+            },
+        },
+    )
+
+
 def build_ingestion_summary(*, session: Session) -> IngestionSummary:
     """Read latest ingestion state for the platform artifact bundle."""
     from autonomous_trading_platform.contracts.common.enums import PriceBasis

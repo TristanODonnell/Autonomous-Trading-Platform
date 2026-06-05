@@ -1,0 +1,104 @@
+platform_replay:
+  name: full_user_replay
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL]
+  start: 2024-01-01
+  end: 2024-03-01
+  starting_cash: 100000
+  random_seed: 42
+
+initial_state:
+  settings: {}
+  controls: {}
+  strategies: []
+  governance: []
+  allocations: []
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  research:
+    cadence: weekly
+    enabled: true
+
+  universe:
+    cadence: monthly
+    enabled: true
+
+  ingestion:
+    cadence: daily
+    enabled: true
+
+  features:
+    cadence: after_ingestion
+    enabled: true
+
+  trading_cycle:
+    cadence: daily
+    enabled: true
+
+  governance:
+    cadence: daily
+    enabled: true
+
+  risk:
+    cadence: daily
+    enabled: true
+
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+
+  operations_health:
+    cadence: daily
+    enabled: true
+
+timeline_events:
+  - at: 2024-01-15
+    type: settings_changed
+    patch:
+      risk_tolerance: aggressive
+    reason: simulated user switched to aggressive risk tolerance
+
+  - at: 2024-02-01
+    type: strategy_disabled
+    strategy_id: momentum_v1
+    reason: simulated user disabled underperformer
+
+  - at: 2024-02-10
+    type: failure_injected
+    target: ingestion
+    failure: missing_bars
+    reason: simulated missing bar data on 2024-02-10
+
+  - at: 2024-02-15
+    type: controls_paused
+    reason: simulated operator pause for portfolio review
+
+  - at: 2024-02-16
+    type: controls_resumed
+    reason: simulated operator resume after review
+
+  - at: 2024-02-20
+    type: governance_manual_transition
+    strategy_id: mean_reversion_v2
+    to_state: approved_for_paper_trading
+    reason: simulated operator promotion after manual review
+
+  - at: 2024-02-25
+    type: failure_injected
+    target: risk
+    failure: risk_limit_breach
+    reason: simulated gross exposure breach for testing risk response
+
+  - at: 2024-03-01
+    type: safety_emergency_halt
+    reason: simulated end-of-period emergency halt for safety gate testing
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: true
+  write_failure_report: true
+  write_dashboard_snapshot: true

@@ -1,0 +1,111 @@
+# scenario:
+#   name: runtime_failures
+#   purpose: >
+#     Inject runtime_job_failure to test that failed job entries appear in
+#     the SOR and surface correctly in the artifact error/warning output.
+#     Test questions:
+#       - Is a RuntimeJobRuns row with status='failed' written to the SOR?
+#       - Does the artifact warnings list include [INJECTED] marker for runtime?
+#       - Does the runner continue after the injection rather than aborting?
+#   expected_behavior: >
+#     2 runtime_job_failure injections (different jobs). RuntimeJobRuns rows
+#     written with status=failed. Artifact warnings contain [INJECTED] markers.
+#   recommended_use: event_validation
+#
+# IMPORTANT: Requires --inject-failures flag at runtime.
+#
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/failure_injection/runtime_failures.yaml \
+#     --inject-failures \
+#     --output artifacts/platform/backtests/runtime_failures.json
+
+platform_replay:
+  name: runtime_failures
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL]
+  start: 2024-01-02
+  end: 2024-01-31
+  starting_cash: 100000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: true
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1]
+  governance: []
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.50"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.50"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  # Daily after-close pipeline
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  # Market-hours trading
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  # EOD evaluation
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  # Slower cadence
+  universe:
+    cadence: monthly      # fires once at start of Jan — 1 rotation
+    enabled: true
+  research:
+    cadence: monthly      # fires once at start of Jan — 1 experiment run
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+
+timeline_events:
+  # Inject a trading_cycle job failure on day 8
+  - at: 2024-01-10
+    type: failure_injected
+    target: runtime
+    failure: runtime_job_failure
+    reason: simulated trading_cycle job failure for runtime error-handling test
+
+  # Inject a risk job failure on day 15
+  - at: 2024-01-17
+    type: failure_injected
+    target: runtime
+    failure: runtime_job_failure
+    reason: simulated risk evaluation job failure mid-month
+
+outputs:
+  write_event_log: true
+  write_equity_curve: false
+  write_portfolio_snapshots: false
+  write_governance_audit: false
+  write_failure_report: true
+  write_dashboard_snapshot: false

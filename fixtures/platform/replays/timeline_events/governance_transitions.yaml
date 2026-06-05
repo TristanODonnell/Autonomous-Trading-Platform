@@ -1,0 +1,112 @@
+# scenario:
+#   name: governance_transitions
+#   purpose: >
+#     Validate governance_manual_transition and health_review_acknowledged events.
+#     Tests that operator-driven governance state changes apply at the scheduled
+#     timestamp and appear in the governance summary and audit trail.
+#     Test questions:
+#       - Does mean_reversion_v1 transition to approved_for_paper_trading on 2024-01-11?
+#       - Is the transition audited in governance summary?
+#       - Does health_review_acknowledged on 2024-01-24 clear the pending review?
+#       - Are both events in timeline_events_applied?
+#   expected_behavior: >
+#     governance_manual_transition at 2024-01-11 for mean_reversion_v1.
+#     health_review_acknowledged at 2024-01-24 for momentum_v1.
+#     Governance summary shows promotions_executed >= 1.
+#   recommended_use: event_validation
+#
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/timeline_events/governance_transitions.yaml \
+#     --output artifacts/platform/backtests/governance_transitions.json
+
+platform_replay:
+  name: governance_transitions
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL]
+  start: 2024-01-02
+  end: 2024-01-31
+  starting_cash: 100000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: false
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1]
+  governance:
+    - strategy_id: mean_reversion_v1
+      state: pending_review
+    - strategy_id: momentum_v1
+      state: paper_trading_active
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "1.00"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  # Daily after-close pipeline
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  # Market-hours trading
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  # EOD evaluation
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  # Slower cadence
+  universe:
+    cadence: monthly      # fires once at start of Jan — 1 rotation
+    enabled: true
+  research:
+    cadence: monthly      # fires once at start of Jan — 1 experiment run
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+
+timeline_events:
+  # Operator manually promotes mean_reversion_v1 after reviewing paper results
+  - at: 2024-01-11
+    type: governance_manual_transition
+    strategy_id: mean_reversion_v1
+    to_state: approved_for_paper_trading
+    reason: operator reviewed paper sim results; promoting to approved_for_paper_trading
+
+  # Operator acknowledges pending health review for momentum_v1
+  - at: 2024-01-24
+    type: health_review_acknowledged
+    strategy_id: momentum_v1
+    reason: operator acknowledged health alert; no action required, monitoring continues
+
+outputs:
+  write_event_log: true
+  write_equity_curve: false
+  write_portfolio_snapshots: true
+  write_governance_audit: true
+  write_failure_report: false
+  write_dashboard_snapshot: false

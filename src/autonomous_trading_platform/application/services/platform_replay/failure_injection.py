@@ -272,7 +272,9 @@ def inject_governance_demotion_trigger(
     from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
     from autonomous_trading_platform.storage.sor.models.simulation_runs import SimulationRuns
 
-    # Find or create a simulation run row for this strategy
+    # Find an existing simulation run for this strategy.
+    # Metrics summary has an FK on run_id → simulation_runs, so we can only inject
+    # if a simulation run already exists. If none exists, return None to signal skip.
     run = session.scalar(
         select(SimulationRuns)
         .where(SimulationRuns.strategy_id == strategy_id)
@@ -280,7 +282,10 @@ def inject_governance_demotion_trigger(
         .limit(1)
     )
 
-    run_id_str = str(run.run_id) if run else str(uuid.uuid4())
+    if run is None:
+        return None  # type: ignore[return-value]  # caller handles None as skip
+
+    run_id_str = str(run.run_id)
     metrics_id = f"inject-metrics-{uuid.uuid4().hex[:12]}"
 
     existing = session.scalar(

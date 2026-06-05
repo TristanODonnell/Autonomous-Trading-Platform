@@ -147,6 +147,16 @@ def apply_governance_event(
                 actor_role=event.actor_role,
                 source_run_id=event.source_run_id,
             )
+        except LookupError as exc:
+            # Strategy not seeded in DB — skip gracefully, don't fail the tick
+            return GovernanceReplayResult(
+                **base,
+                status="skipped",
+                warnings=[
+                    f"governance_manual_transition skipped: {exc}. "
+                    f"Seed strategy '{event.strategy_id}' before running."
+                ],
+            )
         except Exception as exc:
             return GovernanceReplayResult(
                 **base,
@@ -175,6 +185,15 @@ def apply_governance_event(
                 event.strategy_id,
                 actor=event.actor,
                 reason=event.reason,
+            )
+        except (LookupError, ValueError) as exc:
+            return GovernanceReplayResult(
+                **base,
+                status="skipped",
+                warnings=[
+                    f"health_review_acknowledged skipped: {exc}. "
+                    f"Seed strategy '{event.strategy_id}' before running."
+                ],
             )
         except Exception as exc:
             return GovernanceReplayResult(

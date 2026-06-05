@@ -1,0 +1,114 @@
+# scenario:
+#   name: governance_failures
+#   purpose: >
+#     Inject governance_demotion_trigger to test that the governance hook
+#     surfaces the seeded failing metrics and that auto-demotion fires on the
+#     next governance tick after injection.
+#     Test questions:
+#       - Is a MetricsSummary row with sharpe=-0.5 / drawdown=0.30 written on 2024-01-15?
+#       - Does the governance tick on or after 2024-01-15 trigger a demotion?
+#       - Is demotions_executed >= 1 in the governance summary?
+#       - Are strategies_in_breach populated?
+#   expected_behavior: >
+#     1 governance_demotion_trigger injection. Governance summary:
+#     demotions_executed >= 1, strategies_in_breach non-empty.
+#     Artifact warnings contain [INJECTED] marker.
+#   recommended_use: event_validation
+#
+# IMPORTANT: Requires --inject-failures flag at runtime.
+#
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/failure_injection/governance_failures.yaml \
+#     --inject-failures \
+#     --output artifacts/platform/backtests/governance_failures.json
+#
+#   Check: cat artifacts/platform/backtests/governance_failures.json | \
+#     jq '.governance.demotions_executed, .governance.strategies_in_breach'
+
+platform_replay:
+  name: governance_failures
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL]
+  start: 2024-01-02
+  end: 2024-01-31
+  starting_cash: 100000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: true
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1]
+  governance:
+    - strategy_id: momentum_v1
+      state: paper_trading_active
+    - strategy_id: mean_reversion_v1
+      state: paper_trading_active
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.50"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.50"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  # Daily after-close pipeline
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  # Market-hours trading
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  # EOD evaluation
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  # Slower cadence
+  universe:
+    cadence: monthly      # fires once at start of Jan — 1 rotation
+    enabled: true
+  research:
+    cadence: monthly      # fires once at start of Jan — 1 experiment run
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+
+timeline_events:
+  # Inject bad metrics for momentum_v1 — auto-demotion should fire on next governance tick
+  - at: 2024-01-15
+    type: failure_injected
+    target: governance
+    failure: governance_demotion_trigger
+    reason: simulated failing sharpe/drawdown metrics to trigger auto-demotion for momentum_v1
+
+outputs:
+  write_event_log: true
+  write_equity_curve: false
+  write_portfolio_snapshots: false
+  write_governance_audit: true
+  write_failure_report: true
+  write_dashboard_snapshot: false

@@ -1,0 +1,173 @@
+# scenario:
+#   name: full_year_demo
+#   purpose: >
+#     Full calendar year 2024 replay. ~261 trading days. Demonstrates the complete
+#     platform lifecycle: strategy deployment, governance promotions, settings
+#     evolution across market regimes, safety events, and end-of-year state.
+#     Use for: replay visualizer testing, stakeholder demos, pre-release regression.
+#   expected_behavior: >
+#     ~261 ticks. 12 universe rotations. ~52 research cycles. ~10 timeline events.
+#     Full equity curve output. Complete governance audit trail for the year.
+#     Artifact suitable for replay visualization and UI state validation.
+#   recommended_use: demo
+#
+# NOTE: Long-running — plan first to confirm trading day count and event schedule.
+#   Expect significantly larger artifact bundle than short/medium configs.
+#   Suitable for replay visualizer and dashboard validation.
+#
+# Command:
+#   atp platform backtest plan \
+#     --fixture fixtures/platform/replays/long/full_year_demo.yaml
+#
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/long/full_year_demo.yaml \
+#     --output artifacts/platform/backtests/full_year_demo.json
+
+platform_replay:
+  name: full_year_demo
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL, MSFT, GLD, TLT]
+  start: 2024-01-02
+  end: 2024-12-31
+  starting_cash: 1000000
+  random_seed: 2024
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: true
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1, macd_crossover_v1]
+  governance:
+    - strategy_id: momentum_v1
+      state: paper_trading_active
+    - strategy_id: mean_reversion_v1
+      state: paper_trading_active
+    - strategy_id: macd_crossover_v1
+      state: approved_for_paper_trading
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.40"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.40"
+    - strategy_id: macd_crossover_v1
+      allocation_pct: "0.20"
+  universe:
+    selection_mode: fixed
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  universe:
+    cadence: monthly      # 12 rotations across full year
+    enabled: true
+  research:
+    cadence: monthly      # 12 full experiment pipeline runs across full year
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+
+timeline_events:
+  # Q1 — initial platform deployment and tuning
+  - at: 2024-01-22
+    type: settings_changed
+    patch:
+      max_drawdown_limit: "0.12"
+    reason: tightening drawdown after higher-than-expected Q1 start volatility
+
+  - at: 2024-02-05
+    type: governance_manual_transition
+    strategy_id: macd_crossover_v1
+    to_state: paper_trading_active
+    reason: Q1 paper evaluation passed; promoting macd_crossover_v1 to active
+
+  # Q1 end — allocation rebalance to reflect all 3 active strategies
+  - at: 2024-03-25
+    type: settings_changed
+    patch:
+      auto_promote_enabled: true
+      max_drawdown_limit: "0.15"
+    reason: end of Q1; restoring baseline risk config for Q2 deployment
+
+  # Q2 — April earnings season precautionary halt
+  - at: 2024-04-10
+    type: safety_emergency_halt
+    reason: earnings season volatility; precautionary halt
+
+  - at: 2024-04-15
+    type: safety_release_halt
+    reason: earnings volatility normalized; halt released
+
+  # Q2 — May: disable momentum temporarily (drawdown regime shift)
+  - at: 2024-05-06
+    type: strategy_disabled
+    strategy_id: momentum_v1
+    reason: regime shift detected; disabling momentum_v1 for mean-reversion environment
+
+  - at: 2024-05-20
+    type: strategy_enabled
+    strategy_id: momentum_v1
+    reason: regime conditions normalizing; re-enabling momentum_v1 with tighter limits
+
+  # Q3 — August: mid-year review pause
+  - at: 2024-08-05
+    type: controls_paused
+    reason: scheduled mid-year portfolio review; operator paused trading
+
+  - at: 2024-08-08
+    type: controls_resumed
+    reason: mid-year review complete; resuming H2 trading
+
+  # Q4 — October: shift to conservative for year-end risk management
+  - at: 2024-10-01
+    type: settings_changed
+    patch:
+      risk_tolerance: low
+      max_drawdown_limit: "0.08"
+      auto_promote_enabled: false
+    reason: Q4 year-end risk reduction; shifting to conservative posture
+
+  # Q4 end of year: final review
+  - at: 2024-12-16
+    type: controls_paused
+    reason: year-end review and portfolio close-out preparation
+
+  - at: 2024-12-20
+    type: controls_resumed
+    reason: year-end review complete; resuming for final trading days
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: true
+  write_failure_report: false
+  write_dashboard_snapshot: true

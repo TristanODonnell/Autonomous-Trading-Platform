@@ -1,0 +1,144 @@
+# scenario:
+#   name: two_month_with_events
+#   purpose: >
+#     2-month replay with a realistic mix of timeline events across all categories:
+#     settings changes, controls pause/resume, governance transitions, and a
+#     safety event with recovery. No failure injections — this is about verifying
+#     that multiple event categories work together over a realistic operational period.
+#     Tests: event ordering, state transitions, artifact coherence across ~44 ticks.
+#   expected_behavior: >
+#     8 timeline events applied across 44 trading days. Final state: trading active,
+#     moderate settings, all strategies enabled, momentum_v1 at approved_for_paper_trading.
+#     timeline_events_applied list = 8. All summaries present and non-empty.
+#   recommended_use: integration
+#
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/medium/two_month_with_events.yaml \
+#     --output artifacts/platform/backtests/two_month_with_events.json
+
+platform_replay:
+  name: two_month_with_events
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL, MSFT]
+  start: 2024-01-02
+  end: 2024-02-29
+  starting_cash: 250000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: false
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1, macd_crossover_v1]
+  governance:
+    - strategy_id: momentum_v1
+      state: pending_review
+    - strategy_id: mean_reversion_v1
+      state: paper_trading_active
+    - strategy_id: macd_crossover_v1
+      state: paper_trading_active
+  allocations:
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.50"
+    - strategy_id: macd_crossover_v1
+      allocation_pct: "0.50"
+  universe:
+    selection_mode: fixed
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  universe:
+    cadence: monthly      # ~2 rotations over 2 months
+    enabled: true
+  research:
+    cadence: monthly      # ~2 experiment runs over 2 months
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+
+timeline_events:
+  # Week 2: settings shift to moderate-aggressive
+  - at: 2024-01-10
+    type: settings_changed
+    patch:
+      risk_tolerance: medium
+      max_drawdown_limit: "0.18"
+      auto_promote_enabled: true
+    reason: operator enables auto-promote and loosens drawdown limit for Q1 growth phase
+
+  # Week 2: governance promotion for momentum_v1 after initial review
+  - at: 2024-01-12
+    type: governance_manual_transition
+    strategy_id: momentum_v1
+    to_state: approved_for_paper_trading
+    reason: 2-week paper evaluation complete; promoting momentum_v1
+
+  # Week 3: operator sets allocation tilt toward momentum
+  - at: 2024-01-19
+    type: allocation_override_set
+    strategy_id: momentum_v1
+    allocation_pct: "0.45"
+    reason: tilt toward newly promoted momentum_v1 for initial live evaluation period
+
+  # Week 4: brief mid-month pause for rebalance review
+  - at: 2024-01-26
+    type: controls_paused
+    reason: end-of-month rebalance review; operator paused trading
+
+  - at: 2024-01-29
+    type: controls_resumed
+    reason: rebalance review complete; resuming trading
+
+  # Month 2: safety event (e.g. macro shock at start of February)
+  - at: 2024-02-05
+    type: safety_emergency_halt
+    reason: simulated macro shock at Feb 5; operator triggered emergency halt
+
+  - at: 2024-02-08
+    type: safety_release_halt
+    reason: macro conditions stabilized; halt released after 3-day review
+
+  # Month 2: clear allocation override, restore policy splits
+  - at: 2024-02-15
+    type: allocation_override_cleared
+    strategy_id: momentum_v1
+    reason: evaluation period complete; restoring policy-driven allocation
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: true
+  write_failure_report: false
+  write_dashboard_snapshot: true

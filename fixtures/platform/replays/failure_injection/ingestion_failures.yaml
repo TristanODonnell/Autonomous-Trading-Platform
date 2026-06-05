@@ -1,0 +1,117 @@
+# scenario:
+#   name: ingestion_failures
+#   purpose: >
+#     Inject missing_bars and late_bars at specific timestamps to test that
+#     the platform runner surfaces ingestion failures clearly in the artifact
+#     and continues the replay rather than aborting.
+#     Test questions:
+#       - Are MissingBarIncidents rows written to the SOR for the injected symbols?
+#       - Does tick_results for the injection date show the injected event?
+#       - Does the artifact warnings list include [INJECTED] entries?
+#       - Does the runner continue to the next tick after injection?
+#   expected_behavior: >
+#     2 injections applied. Artifact: warnings contain [INJECTED] markers.
+#     Runner continues. ticks_ok + ticks_failed sums to total tick count.
+#     Ingestion summary shows missing_bar_incident_count >= 2.
+#   recommended_use: event_validation
+#
+# IMPORTANT: Requires --inject-failures flag at runtime.
+#
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/failure_injection/ingestion_failures.yaml \
+#     --inject-failures \
+#     --output artifacts/platform/backtests/ingestion_failures.json
+#
+#   Check: cat artifacts/platform/backtests/ingestion_failures.json | \
+#     jq '.ingestion.missing_bar_incident_count, .warnings'
+
+platform_replay:
+  name: ingestion_failures
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL]
+  start: 2024-01-02
+  end: 2024-01-31
+  starting_cash: 100000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: true
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1]
+  governance: []
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.50"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.50"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  # Daily after-close pipeline
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  # Market-hours trading
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  # EOD evaluation
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  # Slower cadence
+  universe:
+    cadence: monthly      # fires once at start of Jan — 1 rotation
+    enabled: true
+  research:
+    cadence: monthly      # fires once at start of Jan — 1 experiment run
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+
+timeline_events:
+  # Inject missing bars on day 5 — all 3 symbols missing
+  - at: 2024-01-08
+    type: failure_injected
+    target: ingestion
+    failure: missing_bars
+    reason: simulated missing bar data for all symbols on 2024-01-08
+
+  # Inject late bar delivery on day 12 — simulates delayed feed
+  - at: 2024-01-17
+    type: failure_injected
+    target: ingestion
+    failure: late_bars
+    reason: simulated late bar delivery on 2024-01-17
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: false
+  write_governance_audit: false
+  write_failure_report: true
+  write_dashboard_snapshot: false

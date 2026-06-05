@@ -161,6 +161,16 @@ def apply_controls_event(
                 warnings=[f"Unhandled controls event type: {event.event_type}"],
             )
 
+    except LookupError as exc:
+        session.rollback()
+        return ControlsReplayResult(
+            **base,
+            status="skipped",
+            warnings=[
+                f"Controls event skipped (strategy not found): {exc}. "
+                "Seed the strategy before running."
+            ],
+        )
     except Exception as exc:
         session.rollback()
         return ControlsReplayResult(

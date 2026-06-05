@@ -1,0 +1,115 @@
+# scenario:
+#   name: settings_change
+#   purpose: >
+#     Validate that settings_changed and settings_reset_defaults events apply
+#     correctly at their scheduled timestamps and are visible in the artifact.
+#     Test questions:
+#       - Did the patch apply on day 8?
+#       - Did the second change apply on day 15?
+#       - Does the artifact settings summary reflect the final state?
+#       - Are both events in timeline_events_applied?
+#   expected_behavior: >
+#     Two settings events in timeline_events_applied. settings.risk_tolerance
+#     transitions moderate → aggressive on 2024-01-10, then conservative on
+#     2024-01-22. Final artifact settings summary shows conservative.
+#   recommended_use: event_validation
+#
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/timeline_events/settings_change.yaml \
+#     --output artifacts/platform/backtests/settings_change.json
+#
+#   Check: cat artifacts/platform/backtests/settings_change.json | jq '.settings, .timeline_events_applied'
+
+platform_replay:
+  name: settings_change
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL]
+  start: 2024-01-02
+  end: 2024-01-31
+  starting_cash: 100000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: true
+    rebalance_frequency: daily
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies: [momentum_v1, mean_reversion_v1]
+  governance: []
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.50"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.50"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  # Daily after-close pipeline
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  # Market-hours trading
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  # EOD evaluation
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  # Slower cadence
+  universe:
+    cadence: monthly      # fires once at start of Jan — 1 rotation
+    enabled: true
+  research:
+    cadence: monthly      # fires once at start of Jan — 1 experiment run
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: true
+
+timeline_events:
+  # Event 1: shift to aggressive risk on day 7
+  - at: 2024-01-10
+    type: settings_changed
+    patch:
+      risk_tolerance: high
+      max_drawdown_limit: "0.25"
+    reason: operator shifted to aggressive risk posture for Q1 growth push
+
+  # Event 2: walk risk back to conservative mid-month
+  - at: 2024-01-22
+    type: settings_changed
+    patch:
+      risk_tolerance: low
+      max_drawdown_limit: "0.08"
+      auto_promote_enabled: false
+    reason: operator pulled back to conservative after mid-month volatility
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: true
+  write_failure_report: false
+  write_dashboard_snapshot: true

@@ -435,6 +435,8 @@ class PlatformBacktestArtifact:
     end_date: str
     started_at: str
     completed_at: str
+    fixture_name: str | None = None
+    inject_failures: bool = False
 
     # Per-domain summaries
     admin: AdminPreflightSummary | None = None
