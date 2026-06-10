@@ -358,6 +358,21 @@ def handle_backtest_run(args: argparse.Namespace) -> int:
     inject_failures: bool = getattr(args, "inject_failures", False)
     output: Path | None = getattr(args, "output", None)
     artifact_dir = output.parent if output else None
+    checkpoint_path: Path | None = None
+    if not dry_run:
+        # Auto-derive checkpoint path from output or fixture name so restarts
+        # can resume without any extra flags.
+        _cp_stem = (
+            output.stem
+            if output
+            else (
+                fixture.platform_replay.name.replace(" ", "_").lower()
+                if fixture and fixture.platform_replay.name
+                else "backtest"
+            )
+        )
+        checkpoint_path = Path("artifacts/platform/backtests") / f"{_cp_stem}.checkpoint.json"
+        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
     show_progress = params.outputs.show_progress and not getattr(args, "no_progress", False)
     progress_printer = _build_backtest_progress_printer() if show_progress else None
 
@@ -388,6 +403,7 @@ def handle_backtest_run(args: argparse.Namespace) -> int:
         },
         initial_state=fixture.initial_state if fixture else None,
         progress_callback=progress_printer,
+        checkpoint_path=checkpoint_path,
     )
 
     print_header(f"Platform Backtest Run {'(dry-run)' if dry_run else ''}")
