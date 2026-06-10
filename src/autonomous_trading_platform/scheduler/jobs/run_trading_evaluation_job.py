@@ -226,10 +226,23 @@ def run_trading_evaluation_job(
                         },
                     )
 
-            if strategy_job_result.target_bar_timestamp is None:
-                raise ValueError("target_bar_timestamp is required for order intent generation")
+            if not strategy_job_result.evaluated:
+                logger.info(
+                    "evaluation_job.bars_not_ready",
+                    extra={"reason": strategy_job_result.reason},
+                )
+                record_job_completed(
+                    logger=logger,
+                    metrics=TRADING_EVALUATION_JOB_METRICS,
+                    job=job,
+                    component=component,
+                    run_id=str(manifest.run_id),
+                    duration_seconds=perf_counter() - job_start,
+                )
+                return strategy_job_result, iter([])
 
             signal_symbols = sorted({signal.symbol for signal in strategy_job_result.signals})
+            bar_timestamp: datetime = strategy_job_result.target_bar_timestamp  # type: ignore[assignment]
 
             # Fetch real positions and prices
             positions = _fetch_positions(broker_client)
@@ -238,7 +251,7 @@ def run_trading_evaluation_job(
             recent_closes = _fetch_recent_closes(
                 strategy_context=strategy_context,
                 symbols=signal_symbols,
-                bar_timestamp=strategy_job_result.target_bar_timestamp,
+                bar_timestamp=bar_timestamp,
                 lookback_bars=_VOL_LOOKBACK_BARS,
             )
 
@@ -256,7 +269,7 @@ def run_trading_evaluation_job(
             aggregation_result = aggregator.aggregate(
                 signals_by_strategy={manifest.strategy_id: strategy_job_result.signals},
                 run_id=manifest.run_id,
-                bar_timestamp=strategy_job_result.target_bar_timestamp,
+                bar_timestamp=bar_timestamp,
                 prices=prices,
             )
 
@@ -289,7 +302,7 @@ def run_trading_evaluation_job(
                     run_id=manifest.run_id,
                     strategy_id=manifest.strategy_id,
                     approval_status=approval_status,
-                    bar_timestamp=strategy_job_result.target_bar_timestamp,
+                    bar_timestamp=bar_timestamp,
                     now=now_utc,
                     recent_closes=recent_closes,
                 )

@@ -127,8 +127,8 @@ def test_paper_trading_golden_path_smoke_runs_all_cycles(
 
     original_builder = trading_cycle_common.build_trading_cycle_dependencies
 
-    def patched_builder():
-        deps = original_builder()
+    def patched_builder(**kwargs):
+        deps = original_builder(**kwargs)
         deps.audit_logger = FakeAuditLogger()
         return deps
 
@@ -351,8 +351,8 @@ def test_intraday_golden_path_runs_ingestion_features_trading(
 
     original_builder = trading_cycle_common.build_trading_cycle_dependencies
 
-    def patched_builder():
-        deps = original_builder()
+    def patched_builder(**kwargs):
+        deps = original_builder(**kwargs)
         deps.audit_logger = FakeAuditLogger()
         return deps
 
@@ -475,8 +475,8 @@ def test_full_trading_day_appends_to_same_daily_raw_dataset(
 
     original_builder = trading_cycle_common.build_trading_cycle_dependencies
 
-    def patched_builder():
-        deps = original_builder()
+    def patched_builder(**kwargs):
+        deps = original_builder(**kwargs)
         deps.audit_logger = FakeAuditLogger()
         return deps
 

@@ -6,6 +6,7 @@ services:
     image: postgres:16
     container_name: ratp_postgres
     restart: unless-stopped
+    command: postgres -c max_connections=300 -c shared_buffers=256MB
     env_file:
       - infra/.env
     ports:

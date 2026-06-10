@@ -25,6 +25,8 @@ def run_trading_evaluation_cycle(
         now_utc=resolved_now_utc,
         cycle_start=trading_cycle_window.cycle_start,
         cycle_end=trading_cycle_window.cycle_end,
+        strategy_id=deps.active_strategy_id,
+        governance_state=deps.active_governance_state,
     )
 
     try:

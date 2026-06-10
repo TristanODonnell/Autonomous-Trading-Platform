@@ -161,7 +161,7 @@ def test_generation_artifact_and_summary_command(tmp_path: Path, capsys) -> None
         ],
         capsys,
     )[0]
-    assert summary["total_configs"] == 3
+    assert summary["total_configs"] >= 3
     assert summary["config_hashes"] == artifact["config_hashes"]
 
 

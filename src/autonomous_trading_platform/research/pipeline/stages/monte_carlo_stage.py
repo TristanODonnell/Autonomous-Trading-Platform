@@ -244,6 +244,7 @@ class MonteCarloStage(BaseStage):
         random_seed: int,
         price_basis: PriceBasis,
         initial_cash: float,
+        resample_to_daily: bool = False,
     ) -> StageResult:
         if not survivors:
             logger.warning("Stage %s received empty survivor list — skipping.", self.stage_name)
@@ -269,9 +270,14 @@ class MonteCarloStage(BaseStage):
                 base_seed=random_seed,
                 price_basis=price_basis,
                 initial_cash=initial_cash,
+                resample_to_daily=resample_to_daily,
             )
             if aggregation is None:
-                final_survivors.append(config)
+                logger.warning(
+                    "Stage %s: all MC trials returned no result for %s — eliminating",
+                    self.stage_name,
+                    config.strategy_id,
+                )
                 continue
 
             # All N raw results flow into the stage output
@@ -352,6 +358,7 @@ class MonteCarloStage(BaseStage):
         base_seed: int,
         price_basis: PriceBasis,
         initial_cash: float,
+        resample_to_daily: bool = False,
     ) -> MonteCarloAggregation | None:
         """
         Run the strategy N times with seeds [base_seed, base_seed+1, …,
@@ -374,6 +381,7 @@ class MonteCarloStage(BaseStage):
                 initial_cash=initial_cash,
                 window_role=f"mc_run_{run_index}",
                 stage_name=self.stage_name,
+                resample_to_daily=resample_to_daily,
             )
             units.append(
                 ExecutionUnit(

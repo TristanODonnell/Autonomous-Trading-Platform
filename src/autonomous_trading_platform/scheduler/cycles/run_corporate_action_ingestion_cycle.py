@@ -75,6 +75,9 @@ def run_corporate_action_ingestion_cycle(
     source_raw_bars_dataset_version_id: str | None = None,
     trigger_type: str = "scheduler",
     actor: str | None = None,
+    fetch_start: str | None = None,
+    fetch_end: str | None = None,
+    fetch_symbols: list[str] | None = None,
 ) -> dict[str, object]:
     """
     Entry point for the Airflow DAG.
@@ -301,6 +304,9 @@ def run_corporate_action_ingestion_cycle(
                         adjusted_bars_dataset_version_id=str(adjusted_bars_dataset_version_id),
                         bar_repository=bar_repository,
                         source_raw_bars_dataset_version_id=source_raw_bars_dataset_version_id,
+                        fetch_start=fetch_start,
+                        fetch_end=fetch_end,
+                        fetch_symbols=fetch_symbols,
                     )
                     job.ingest_corporate_actions_job()
 

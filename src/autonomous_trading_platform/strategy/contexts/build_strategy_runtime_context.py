@@ -12,6 +12,7 @@ from autonomous_trading_platform.research.simulation.services.lookahead_guard_se
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
 from autonomous_trading_platform.storage.parquet.datasets import (
     ADJUSTED_BARS_DATASET,
+    RAW_BARS_DATASET,
     ParquetDataset,
 )
 from autonomous_trading_platform.storage.parquet.reader import HistoricalBarDatasetReader
@@ -60,6 +61,8 @@ def build_strategy_runtime_context(
     dataset_version: str = "v1",
     fallback_dataset: ParquetDataset | None = None,
     fallback_dataset_version: str | None = None,
+    use_raw_bars: bool = False,
+    lookback_bars: int = 300,
 ) -> StrategyRuntimeContext:
     universe_repository = UniverseVersionRepository(session)
     runtime_state_repository = StrategyRuntimeStateRepository(session)
@@ -75,8 +78,8 @@ def build_strategy_runtime_context(
 
     strategy_context_builder = StrategyContextBuilder(
         market_bar_reader=bar_reader,
-        bars_dataset=ADJUSTED_BARS_DATASET,
-        lookback_bars=300,
+        bars_dataset=RAW_BARS_DATASET if use_raw_bars else ADJUSTED_BARS_DATASET,
+        lookback_bars=lookback_bars,
         lookahead_guard_service=lookahead_guard_service,
         dataset_version=dataset_version,
         fallback_dataset=fallback_dataset,

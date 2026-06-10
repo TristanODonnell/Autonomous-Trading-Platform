@@ -2,19 +2,11 @@
 #   name: full_year_demo
 #   purpose: >
 #     Full calendar year 2024 replay. ~261 trading days. Demonstrates the complete
-#     platform lifecycle: strategy deployment, governance promotions, settings
-#     evolution across market regimes, safety events, and end-of-year state.
-#     Use for: replay visualizer testing, stakeholder demos, pre-release regression.
-#   expected_behavior: >
-#     ~261 ticks. 12 universe rotations. ~52 research cycles. ~10 timeline events.
-#     Full equity curve output. Complete governance audit trail for the year.
-#     Artifact suitable for replay visualization and UI state validation.
-#   recommended_use: demo
-#
-# NOTE: Long-running — plan first to confirm trading day count and event schedule.
-#   Expect significantly larger artifact bundle than short/medium configs.
-#   Suitable for replay visualizer and dashboard validation.
-#
+#     platform lifecycle running autonomously: research generates strategies monthly,
+#     governance promotes survivors, quality-based reallocation shifts capital over
+#     time, and the drawdown ladder self-manages risk without manual intervention.
+#   recommended_use: storytelling demo, stakeholder replay, pre-release regression
+
 # Command:
 #   atp platform backtest plan \
 #     --fixture fixtures/platform/replays/long/full_year_demo.yaml
@@ -26,144 +18,127 @@
 platform_replay:
   name: full_year_demo
   mode: historical_backtest
-  symbols: [SPY, QQQ, AAPL, MSFT, GLD, TLT]
+
+  # Data universe — ingestion pulls bars for all of these.
+  # Universe rotation (monthly) then selects the best subset to actually trade,
+  # using the prior month's performance data. First rotation fires on tick 1.
+  symbols:
+    # Broad market / macro
+    - SPY   # S&P 500
+    - QQQ   # Nasdaq 100
+    - IWM   # Russell 2000 small-cap
+    - GLD   # Gold
+    - TLT   # Long-duration treasuries
+    # Large-cap tech
+    - AAPL
+    - MSFT
+    - NVDA
+    - GOOGL
+    # Large-cap non-tech
+    - JPM   # Financials
+    - JNJ   # Healthcare
+    - XOM   # Energy
+    - WMT   # Consumer staples
+
   start: 2024-01-02
   end: 2024-12-31
   starting_cash: 1000000
   random_seed: 2024
+  # cadence_minutes omitted = 390 = one full trading day per tick (~261 ticks)
 
+# ── Initial state ────────────────────────────────────────────────────────────
+# Seeded once before tick 1. Everything after this is system-driven.
 initial_state:
+
   settings:
+    # ── Risk posture ─────────────────────────────────────────────────────────
+    # risk_tolerance: label used in UI/audit log ("low" | "medium" | "high")
     risk_tolerance: medium
-    max_drawdown_limit: "0.15"
+
+    # Portfolio-level: halt new orders if portfolio drops >12% from its peak.
+    # Code default is 10% — we use 12% for moderate headroom during drawdowns.
+    max_drawdown_limit: "0.12"
+
+    # Per-strategy: auto-demote a strategy if it pulls back >15% from its own peak.
+    # AutoDemotionService evaluates this daily.
+    max_strategy_drawdown: "0.15"
+
+    # Max allocation to any single strategy (concentration cap).
+    # Code default is 25%. 35% gives top-performing strategies room to grow.
+    per_strategy_cap: "0.35"
+
+    # Target portfolio annualised volatility for risk-budgeting calculations.
+    # Code default is 15%. Moderate = keep it at 15%.
+    target_portfolio_volatility: "0.15"
+
+    # ── Governance automation ─────────────────────────────────────────────────
+    # Allow AutoPromotionService to promote strategies through research → paper
+    # without manual sign-off. Code default is False (safe for live); True here
+    # so the demo shows the full autonomous promotion pipeline.
     auto_promote_enabled: true
-    rebalance_frequency: daily
-  controls:
-    trading_mode: paper
-    kill_switch_active: false
-  strategies: [momentum_v1, mean_reversion_v1, macd_crossover_v1]
+
+    # Allow QualityBasedReallocationService to shift capital between strategies
+    # as quality scores diverge. Code default is False. Must be True for the
+    # allocation story to be visible in the equity curve.
+    auto_rebalance_enabled: true
+
+    # ── Rebalance stability ───────────────────────────────────────────────────
+    # Only rebalance once per week at most (hysteresis cadence).
+    # Code default is weekly. "daily" causes noisy churn; weekly is the right
+    # level for a month-long quality signal horizon.
+    rebalance_frequency: weekly
+
+    # Minimum hours between two rebalance events (interval guard).
+    # 168h = one week. Prevents rapid allocation oscillation.
+    min_rebalance_interval_hours: "168"
+
+    # Minimum absolute allocation change required to trigger a rebalance.
+    # 2% dead-band: small quality drifts don't generate unnecessary turnover.
+    min_allocation_change_pct: "0.02"
+
+  # ── Seed strategies ────────────────────────────────────────────────────────
+  # Three strategies pre-approved for paper trading on day 1.
+  # Research runs monthly and seeds additional strategies through governance;
+  # by month 2 there will be 20-50+ strategies in the pipeline.
   governance:
     - strategy_id: momentum_v1
-      state: paper_trading_active
+      state: approved_for_paper_trading
     - strategy_id: mean_reversion_v1
-      state: paper_trading_active
+      state: approved_for_paper_trading
     - strategy_id: macd_crossover_v1
       state: approved_for_paper_trading
+
+  # Equal-weight starting allocation.
+  # Quality-based reallocation will drift these as performance diverges over time.
   allocations:
     - strategy_id: momentum_v1
-      allocation_pct: "0.40"
+      allocation_pct: "0.34"
     - strategy_id: mean_reversion_v1
-      allocation_pct: "0.40"
+      allocation_pct: "0.33"
     - strategy_id: macd_crossover_v1
-      allocation_pct: "0.20"
-  universe:
-    selection_mode: fixed
-  datasets: {}
+      allocation_pct: "0.33"
 
+# ── Scheduled jobs ────────────────────────────────────────────────────────────
+# Cadences: daily | per_tick | after_ingestion | weekly | biweekly | monthly
 scheduled_jobs:
-  ingestion:
-    cadence: daily
-    enabled: true
-  corporate_actions:
-    cadence: daily
-    enabled: true
-  features:
-    cadence: after_ingestion
-    enabled: true
-  trading_cycle:
-    cadence: daily
-    enabled: true
-  risk:
-    cadence: daily
-    enabled: true
-  governance:
-    cadence: daily
-    enabled: true
-  portfolio_snapshot:
-    cadence: daily
-    enabled: true
-  operations_health:
-    cadence: daily
-    enabled: true
-  universe:
-    cadence: monthly      # 12 rotations across full year
-    enabled: true
-  research:
-    cadence: monthly      # 12 full experiment pipeline runs across full year
-    enabled: true
-  dashboard_snapshot:
-    cadence: daily
-    enabled: true
+  ingestion:          { cadence: daily,           enabled: true }
+  corporate_actions:  { cadence: daily,           enabled: true }
+  features:           { cadence: after_ingestion, enabled: true }
+  trading_cycle:      { cadence: daily,           enabled: true }
+  risk:               { cadence: daily,           enabled: true }
+  governance:         { cadence: daily,           enabled: true }
+  portfolio_snapshot: { cadence: daily,           enabled: true }
+  operations_health:  { cadence: daily,           enabled: true }
+  universe:           { cadence: monthly,         enabled: true }  # ~12 rotations
+  research:           { cadence: monthly,         enabled: true }  # ~12 pipeline runs
 
-timeline_events:
-  # Q1 — initial platform deployment and tuning
-  - at: 2024-01-22
-    type: settings_changed
-    patch:
-      max_drawdown_limit: "0.12"
-    reason: tightening drawdown after higher-than-expected Q1 start volatility
+# No timeline_events block.
+# If the kill switch fires → drawdown governance triggered it.
+# If a strategy is demoted → AutoDemotionService caught a breach.
+# If allocations shift → QualityBasedReallocationService scored a divergence.
+# Everything is system-driven from day 1.
 
-  - at: 2024-02-05
-    type: governance_manual_transition
-    strategy_id: macd_crossover_v1
-    to_state: paper_trading_active
-    reason: Q1 paper evaluation passed; promoting macd_crossover_v1 to active
-
-  # Q1 end — allocation rebalance to reflect all 3 active strategies
-  - at: 2024-03-25
-    type: settings_changed
-    patch:
-      auto_promote_enabled: true
-      max_drawdown_limit: "0.15"
-    reason: end of Q1; restoring baseline risk config for Q2 deployment
-
-  # Q2 — April earnings season precautionary halt
-  - at: 2024-04-10
-    type: safety_emergency_halt
-    reason: earnings season volatility; precautionary halt
-
-  - at: 2024-04-15
-    type: safety_release_halt
-    reason: earnings volatility normalized; halt released
-
-  # Q2 — May: disable momentum temporarily (drawdown regime shift)
-  - at: 2024-05-06
-    type: strategy_disabled
-    strategy_id: momentum_v1
-    reason: regime shift detected; disabling momentum_v1 for mean-reversion environment
-
-  - at: 2024-05-20
-    type: strategy_enabled
-    strategy_id: momentum_v1
-    reason: regime conditions normalizing; re-enabling momentum_v1 with tighter limits
-
-  # Q3 — August: mid-year review pause
-  - at: 2024-08-05
-    type: controls_paused
-    reason: scheduled mid-year portfolio review; operator paused trading
-
-  - at: 2024-08-08
-    type: controls_resumed
-    reason: mid-year review complete; resuming H2 trading
-
-  # Q4 — October: shift to conservative for year-end risk management
-  - at: 2024-10-01
-    type: settings_changed
-    patch:
-      risk_tolerance: low
-      max_drawdown_limit: "0.08"
-      auto_promote_enabled: false
-    reason: Q4 year-end risk reduction; shifting to conservative posture
-
-  # Q4 end of year: final review
-  - at: 2024-12-16
-    type: controls_paused
-    reason: year-end review and portfolio close-out preparation
-
-  - at: 2024-12-20
-    type: controls_resumed
-    reason: year-end review complete; resuming for final trading days
-
+# ── Outputs ───────────────────────────────────────────────────────────────────
 outputs:
   write_event_log: true
   write_equity_curve: true

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
+from datetime import time as dt_time
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -22,6 +23,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.missing_bar_incid
     MissingBarIncidentsRepository,
 )
 
+_MARKET_OPEN_UTC = dt_time(14, 30)  # 09:30 ET = 14:30 UTC (EST, no DST adjustment)
+_MARKET_CLOSE_UTC = dt_time(21, 0)  # 16:00 ET = 21:00 UTC
+
 
 def run_ingestion_at_timestamp(
     *,
@@ -29,6 +33,8 @@ def run_ingestion_at_timestamp(
     timestamp: datetime,
     replay_context: PlatformReplayContext,
     dry_run: bool = False,
+    full_day: bool = False,
+    backtest_dataset_version_id: str | None = None,
 ) -> IngestionReplayResult:
     """Run market ingestion cycle for the given timestamp.
 
@@ -49,12 +55,24 @@ def run_ingestion_at_timestamp(
         )
 
     warnings: list[str] = []
+
+    cycle_start_override: datetime | None = None
+    cycle_end_override: datetime | None = None
+    if full_day:
+        tick_date = timestamp.date()
+        cycle_start_override = datetime.combine(tick_date, _MARKET_OPEN_UTC).replace(tzinfo=UTC)
+        cycle_end_override = datetime.combine(tick_date, _MARKET_CLOSE_UTC).replace(tzinfo=UTC)
+
     try:
         summary = run_market_ingestion_cycle(
             now_utc=timestamp,
             symbols_override=replay_context.symbols if replay_context.symbols else None,
+            enforce_lateness=False,  # historical replay — bars for past dates are never "late"
             trigger_type="platform_replay",
             actor=replay_context.actor,
+            cycle_start_override=cycle_start_override,
+            cycle_end_override=cycle_end_override,
+            dataset_version_id_override=backtest_dataset_version_id,
         )
     except Exception as exc:
         return IngestionReplayResult(

@@ -85,6 +85,7 @@ class BaseStage(ABC):
         random_seed: int,
         price_basis: PriceBasis,
         initial_cash: float,
+        resample_to_daily: bool = False,
     ) -> StageResult: ...
 
     @classmethod

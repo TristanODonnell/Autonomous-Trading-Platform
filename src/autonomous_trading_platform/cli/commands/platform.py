@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -84,8 +85,8 @@ def register(subparsers) -> None:
     run_parser.add_argument(
         "--cadence-minutes",
         type=int,
-        default=390,
-        help="Tick cadence in minutes (default: 390 = full trading day)",
+        default=None,
+        help="Tick cadence in minutes (default: from fixture or 390 = full trading day; use 5 for intraday)",
     )
     run_parser.add_argument(
         "--actor",
@@ -106,6 +107,11 @@ def register(subparsers) -> None:
         "--output",
         type=Path,
         help="Write artifact bundle JSON to this path",
+    )
+    run_parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable the one-line shell progress indicator.",
     )
     run_parser.set_defaults(func=handle_backtest_run)
 
@@ -245,6 +251,7 @@ def _merge_params(fixture, args):
             cli_end=getattr(args, "end", None),
             cli_starting_cash=getattr(args, "starting_cash", None),
             cli_random_seed=getattr(args, "random_seed", None),
+            cli_cadence_minutes=getattr(args, "cadence_minutes", None),
         )
     except ValueError as exc:
         return None, str(exc)
@@ -285,6 +292,47 @@ def handle_backtest_plan(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _build_backtest_progress_printer():
+    last_len = 0
+    bar_width = 28
+
+    def emit(payload: dict[str, object]) -> None:
+        nonlocal last_len
+        if payload.get("status") == "final_newline":
+            if last_len:
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+                last_len = 0
+            return
+
+        total_ticks = int(str(payload.get("total_ticks") or 0))
+        completed_ticks = int(str(payload.get("completed_ticks") or 0))
+        current_tick = int(str(payload.get("current_tick") or completed_ticks))
+        percent = (completed_ticks / total_ticks * 100.0) if total_ticks else 0.0
+        filled = min(bar_width, max(0, int(round(bar_width * percent / 100.0))))
+        bar = "#" * filled + "-" * (bar_width - filled)
+        tick_date = str(payload.get("tick_date") or "?")
+        start_date = str(payload.get("start_date") or "?")
+        end_date = str(payload.get("end_date") or "?")
+        status = str(payload.get("status") or "running")
+        ticks_ok = int(str(payload.get("ticks_ok") or 0))
+        ticks_failed = int(str(payload.get("ticks_failed") or 0))
+        total_orders = int(str(payload.get("total_orders") or 0))
+        total_fills = int(str(payload.get("total_fills") or 0))
+
+        line = (
+            f"Progress [{bar}] {percent:6.2f}% | {status} {tick_date} | "
+            f"tick {current_tick}/{total_ticks} | {start_date}->{end_date} | "
+            f"ok {ticks_ok} fail {ticks_failed} orders {total_orders} fills {total_fills}"
+        )
+        padding = " " * max(0, last_len - len(line))
+        sys.stdout.write("\r" + line + padding)
+        sys.stdout.flush()
+        last_len = len(line)
+
+    return emit
+
+
 def handle_backtest_run(args: argparse.Namespace) -> int:
     from autonomous_trading_platform.application.services.platform_backtest_service import (
         PlatformBacktestInputs,
@@ -310,6 +358,8 @@ def handle_backtest_run(args: argparse.Namespace) -> int:
     inject_failures: bool = getattr(args, "inject_failures", False)
     output: Path | None = getattr(args, "output", None)
     artifact_dir = output.parent if output else None
+    show_progress = params.outputs.show_progress and not getattr(args, "no_progress", False)
+    progress_printer = _build_backtest_progress_printer() if show_progress else None
 
     # Build typed timeline events from fixture
     typed_timeline = (
@@ -324,7 +374,7 @@ def handle_backtest_run(args: argparse.Namespace) -> int:
         end_date=params.end_date,
         starting_cash=params.starting_cash,
         random_seed=params.random_seed,
-        cadence_minutes=getattr(args, "cadence_minutes", 390),
+        cadence_minutes=params.cadence_minutes,
         actor=actor,
         dry_run=dry_run,
         artifact_dir=artifact_dir,
@@ -336,6 +386,8 @@ def handle_backtest_run(args: argparse.Namespace) -> int:
             name: {"cadence": cfg.cadence, "enabled": cfg.enabled}
             for name, cfg in params.scheduled_jobs.items()
         },
+        initial_state=fixture.initial_state if fixture else None,
+        progress_callback=progress_printer,
     )
 
     print_header(f"Platform Backtest Run {'(dry-run)' if dry_run else ''}")
@@ -356,6 +408,9 @@ def handle_backtest_run(args: argparse.Namespace) -> int:
     except Exception as exc:
         print_error(f"Backtest run failed: {exc}")
         return 1
+    finally:
+        if progress_printer:
+            progress_printer({"status": "final_newline"})
 
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)

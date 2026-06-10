@@ -60,8 +60,13 @@ class StrategyContextBuilder:
             ParquetBarRepository,
         )
 
-        # ~78 five-minute bars per trading day; add buffer for weekends/holidays
-        lookback_days = max(self.lookback_bars // 78 + 5, 10)
+        # For 5-min bars (~78/day): lookback_bars // 78 days + buffer.
+        # For daily bars (lookback_bars <= 78): multiply by 2 and add holiday buffer
+        # so that a 31-bar warmup covers ~62+ calendar days (~44 trading days).
+        if self.lookback_bars <= 78:
+            lookback_days = self.lookback_bars * 2 + 14
+        else:
+            lookback_days = max(self.lookback_bars // 78 + 5, 10)
         start_date = (bar_timestamp - timedelta(days=lookback_days)).date()
         end_date = bar_timestamp.date()
 
@@ -125,27 +130,35 @@ class StrategyContextBuilder:
         """
         Simulation path — reads bars from a pre-loaded SimulationWindowData
         rather than hitting Parquet on every call.
+
+        Uses bisect on the precomputed sorted timestamp list for O(log N)
+        lookups instead of a full O(N) scan per call.
         """
+        import bisect
+
         symbol_bars = window.bars_by_symbol.get(symbol, [])
-
-        bars_up_to = sorted(
-            [b for b in symbol_bars if b.timestamp < timestamp],
-            key=lambda b: b.timestamp,
-        )
-
-        if len(bars_up_to) < self.lookback_bars:
+        if not symbol_bars:
             return None
 
-        context_bars = bars_up_to[-self.lookback_bars :]
+        # O(log N) binary search using the precomputed sorted timestamp index.
+        # Falls back to O(N) linear scan when the index isn't available (e.g.
+        # legacy test mocks that don't populate sorted_timestamps_by_symbol).
+        ts_index = getattr(window, "sorted_timestamps_by_symbol", None)
+        if ts_index is not None:
+            symbol_ts = ts_index.get(symbol, [])
+            idx = bisect.bisect_left(symbol_ts, timestamp)
+        else:
+            idx = sum(1 for b in symbol_bars if b.timestamp < timestamp)
+
+        if idx < self.lookback_bars:
+            return None
+
+        context_bars = symbol_bars[idx - self.lookback_bars : idx]
 
         self.lookahead_guard_service.assert_historical_only(
             symbol=symbol,
             simulation_timestamp=timestamp,
             bars=context_bars,
-        )
-        print(
-            f"DEBUG context_bars for {symbol} at {timestamp}: "
-            f"{len(bars_up_to)} available, {len(context_bars)} passed to strategy"
         )
         feature_tables_by_symbol = getattr(window, "feature_tables_by_symbol", {})
 

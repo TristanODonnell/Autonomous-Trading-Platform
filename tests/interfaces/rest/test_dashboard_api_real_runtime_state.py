@@ -84,8 +84,8 @@ def _run_golden_path(db_session, fixture, monkeypatch):
 
     original_builder = trading_cycle_common.build_trading_cycle_dependencies
 
-    def patched_builder():
-        deps = original_builder()
+    def patched_builder(**kwargs):
+        deps = original_builder(**kwargs)
         deps.audit_logger = FakeAuditLogger()
         return deps
 

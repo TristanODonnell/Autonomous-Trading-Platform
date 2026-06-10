@@ -87,6 +87,9 @@ def run_market_ingestion_cycle(
     enforce_lateness: bool = True,
     trigger_type: str = "scheduler",
     actor: str | None = None,
+    cycle_start_override: datetime | None = None,
+    cycle_end_override: datetime | None = None,
+    dataset_version_id_override: str | None = None,
 ) -> dict[str, object]:
     """
     Entry point for the Airflow DAG.
@@ -97,6 +100,9 @@ def run_market_ingestion_cycle(
 
     Pass enforce_lateness=False for historical replay — bars fetched via
     HTTP for past timestamps are not subject to streaming lateness checks.
+
+    Pass dataset_version_id_override to accumulate bars into a pre-existing
+    dataset version (platform backtest uses one cumulative version per run).
     """
 
     if now_utc is None:
@@ -204,8 +210,12 @@ def run_market_ingestion_cycle(
                 resolved_universe_source = active_version.source
                 resolved_universe_member_count = len(expected_symbols)
 
-        cycle_end = floor_to_five_minutes(now_utc)
-        cycle_start = cycle_end - timedelta(minutes=5)
+        if cycle_start_override is not None and cycle_end_override is not None:
+            cycle_start = cycle_start_override
+            cycle_end = cycle_end_override
+        else:
+            cycle_end = floor_to_five_minutes(now_utc)
+            cycle_start = cycle_end - timedelta(minutes=5)
 
         trading_date = cycle_end.date()
 
@@ -217,28 +227,40 @@ def run_market_ingestion_cycle(
             "actor": actor,
         }
 
-        dataset_version = daily_dataset_resolver_service.get_or_create_active_daily_dataset(
-            dataset_name=RAW_BARS_DATASET.dataset_key,
-            price_basis=PriceBasis.RAW,
-            interval=BarInterval.FIVE_MIN,
-            trading_date=trading_date,
-            created_at=now_utc,
-            source="alpaca",
-            schema_version=RAW_BARS_DATASET.schema_version,
-            symbol_coverage=len(expected_symbols),
-            date_coverage_start=trading_date,
-            date_coverage_end=trading_date,
-            source_manifest={
-                "pipeline": "market_ingestion",
-                "cycle_start": cycle_start.isoformat(),
-                "cycle_end": cycle_end.isoformat(),
-                "symbols": sorted(expected_symbols),
-            },
-            metadata_json={
-                **base_metadata,
-                "dataset_type": "incremental_market_bars",
-            },
-        )
+        if dataset_version_id_override is not None:
+            # Platform backtest: reuse a pre-registered cumulative version so all
+            # daily ingestion writes accumulate into a single dataset version.
+            existing = dataset_registration_service.get_by_dataset_version_id(
+                dataset_version_id_override
+            )
+            if existing is None:
+                raise RuntimeError(
+                    f"dataset_version_id_override not found in SOR: {dataset_version_id_override}"
+                )
+            dataset_version = existing
+        else:
+            dataset_version = daily_dataset_resolver_service.get_or_create_active_daily_dataset(
+                dataset_name=RAW_BARS_DATASET.dataset_key,
+                price_basis=PriceBasis.RAW,
+                interval=BarInterval.FIVE_MIN,
+                trading_date=trading_date,
+                created_at=now_utc,
+                source="alpaca",
+                schema_version=RAW_BARS_DATASET.schema_version,
+                symbol_coverage=len(expected_symbols),
+                date_coverage_start=trading_date,
+                date_coverage_end=trading_date,
+                source_manifest={
+                    "pipeline": "market_ingestion",
+                    "cycle_start": cycle_start.isoformat(),
+                    "cycle_end": cycle_end.isoformat(),
+                    "symbols": sorted(expected_symbols),
+                },
+                metadata_json={
+                    **base_metadata,
+                    "dataset_type": "incremental_market_bars",
+                },
+            )
 
         dataset_version_id = dataset_version.dataset_version_id
 

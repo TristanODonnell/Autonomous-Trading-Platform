@@ -38,6 +38,7 @@ from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.execution.contexts.build_execution_context import (
     build_execution_context,
 )
+from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.portfolio.simulation_allocation_provider import (
     SimulationAllocationProvider,
     snapshot_allocation_config,
@@ -167,6 +168,8 @@ def _build_backtest_dependencies(
         safety_context=safety_context,
         execution_context=execution_context,
         portfolio_engine=allocation_provider,
+        active_strategy_id=f"backtest_{run_id}",
+        active_governance_state=GovernanceState.APPROVED_PAPER,
     )
 
 

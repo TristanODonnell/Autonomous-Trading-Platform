@@ -133,6 +133,7 @@ class SimulationStage(BaseStage):
         random_seed: int,
         price_basis: PriceBasis,
         initial_cash: float,
+        resample_to_daily: bool = False,
     ) -> StageResult:
         if not survivors:
             logger.warning("Stage %s received empty survivor list — skipping.", self.stage_name)
@@ -166,6 +167,7 @@ class SimulationStage(BaseStage):
                 initial_cash=initial_cash,
                 window_role=cfg.window_role,
                 stage_name=self.stage_name,
+                resample_to_daily=resample_to_daily,
             )
             units.append(
                 ExecutionUnit(

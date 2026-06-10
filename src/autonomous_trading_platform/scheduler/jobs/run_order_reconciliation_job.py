@@ -38,13 +38,14 @@ def run_order_reconciliation_job(
     *,
     run_id: str,
     now_utc: datetime | None = None,
+    broker_client: object | None = None,
 ) -> None:
     resolved_now = now_utc or datetime.now(UTC)
     component = "scheduler.jobs.order_reconciliation_job"
     job = "order_reconciliation_job"
     job_start = perf_counter()
 
-    dependencies = build_trading_cycle_dependencies()
+    dependencies = build_trading_cycle_dependencies(broker_client=broker_client)
     session = dependencies.session
     execution_context = dependencies.execution_context
     audit_logger = AuditLoggingService(session)

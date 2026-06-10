@@ -7,14 +7,20 @@ VALID_TRANSITIONS = {
     },
     StrategyState.SIGNALLED: {
         StrategyEvent.ORDER_INTENTS_CREATED: StrategyState.PENDING,
+        # Re-signal: new bar arrives before order intents were generated (e.g. holiday gap).
+        StrategyEvent.SIGNAL_GENERATED: StrategyState.SIGNALLED,
         StrategyEvent.RESET: StrategyState.IDLE,
     },
     StrategyState.PENDING: {
         StrategyEvent.TARGET_POSITION_REACHED: StrategyState.IN_POSITION,
+        # Re-signal from PENDING: new signal supersedes the pending intent.
+        StrategyEvent.SIGNAL_GENERATED: StrategyState.SIGNALLED,
         StrategyEvent.RESET: StrategyState.IDLE,
     },
     StrategyState.IN_POSITION: {
         StrategyEvent.EXIT_SIGNAL_GENERATED: StrategyState.EXIT_PENDING,
+        # Rebalance: new BUY signal while already holding a position.
+        StrategyEvent.SIGNAL_GENERATED: StrategyState.SIGNALLED,
     },
     StrategyState.EXIT_PENDING: {
         StrategyEvent.POSITION_CLOSED: StrategyState.COOLDOWN,

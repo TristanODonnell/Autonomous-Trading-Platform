@@ -67,6 +67,9 @@ class CorporateActionIngestionService:
         cycle_timestamp: datetime,
         bar_repository: ParquetBarRepository,
         source_raw_bars_dataset_version_id: str,
+        fetch_start: str | None = None,
+        fetch_end: str | None = None,
+        fetch_symbols: list[str] | None = None,
     ) -> None:
         self.session = session
         self.normalization_service = CorporateActionNormalizationService()
@@ -77,6 +80,9 @@ class CorporateActionIngestionService:
         self.audit_logger = audit_logger
         self.bar_repository = bar_repository
         self.source_raw_bars_dataset_version_id = source_raw_bars_dataset_version_id
+        self.fetch_start = fetch_start
+        self.fetch_end = fetch_end
+        self.fetch_symbols = fetch_symbols
 
     def ingest_corporate_actions(self) -> CorporateActionProcessingResult:
         component = "ingestion.corporate_action_ingestion_service"
@@ -99,7 +105,11 @@ class CorporateActionIngestionService:
                 request_span.set_attribute("ratp.component", component)
                 request_span.set_attribute("ratp.cycle_timestamp", self.cycle_timestamp.isoformat())
 
-                payload: dict = client.fetch_corporate_actions()
+                payload: dict = client.fetch_corporate_actions(
+                    start=self.fetch_start,
+                    end=self.fetch_end,
+                    symbols=self.fetch_symbols,
+                )
 
             request_duration = perf_counter() - request_start
             corporate_action_request_latency_seconds.record(

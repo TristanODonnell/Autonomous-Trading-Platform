@@ -20,6 +20,16 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # Drop the earlier version of this table (created in 36406d0a0f0b with
+    # lowercase enum values and no indexes) so we can replace it with the
+    # canonical schema.
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    if "ingestion_checkpoints" in insp.get_table_names():
+        op.drop_table("ingestion_checkpoints")
+    sa.Enum(name="checkpoint_status_enum").drop(bind, checkfirst=True)
+    sa.Enum(name="checkpoint_scope_enum").drop(bind, checkfirst=True)
+
     checkpoint_scope_enum = postgresql.ENUM(
         "BACKFILL",
         "CYCLE",
@@ -36,8 +46,8 @@ def upgrade() -> None:
         create_type=False,
     )
 
-    checkpoint_scope_enum.create(op.get_bind(), checkfirst=True)
-    checkpoint_status_enum.create(op.get_bind(), checkfirst=True)
+    checkpoint_scope_enum.create(bind, checkfirst=True)
+    checkpoint_status_enum.create(bind, checkfirst=True)
 
     op.create_table(
         "ingestion_checkpoints",

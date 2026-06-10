@@ -20,7 +20,7 @@ class DeterministicSeedInputs:
 class DeterministicSeedService:
     """Derive per-unit seeds from stable research-unit identity fields."""
 
-    _MAX_NUMPY_SEED = (2**32) - 1
+    _MAX_NUMPY_SEED = (2**31) - 1
 
     def derive_seed(self, inputs: DeterministicSeedInputs) -> int:
         if not isinstance(inputs.base_seed, int):

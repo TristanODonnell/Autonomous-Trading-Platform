@@ -136,10 +136,11 @@ class HistoricalBarDatasetReader:
 
         dataset_obj = ds.dataset([str(f) for f in files], format="parquet")
 
-        filter_expr = (
-            (ds.field("symbol") == symbol)
-            & (ds.field("timestamp") >= pa.scalar(start_ts))
-            & (ds.field("timestamp") < pa.scalar(end_ts))
+        # Symbol is not a stored column — it's inferred from the partition path
+        # (symbol=X/year=Y/month=M). list_partition_files already navigates to the
+        # correct path, so filtering by timestamp alone is sufficient and correct.
+        filter_expr = (ds.field("timestamp") >= pa.scalar(start_ts)) & (
+            ds.field("timestamp") < pa.scalar(end_ts)
         )
 
         table = dataset_obj.to_table(filter=filter_expr)

@@ -1,0 +1,215 @@
+# scenario:
+#   name: two_year_full
+#   purpose: >
+#     Two full calendar years 2023–2024 replay. ~504 trading days. Demonstrates
+#     the complete platform lifecycle over a realistic investment horizon: research
+#     generates strategies monthly, walk-forward and Monte Carlo validation kick in
+#     from month 3 onward, governance promotes survivors, quality-based reallocation
+#     shifts capital as regimes change across two distinct market years (2023 bull run
+#     + 2024 continued growth), and the drawdown ladder self-manages risk without
+#     manual intervention.
+#   recommended_use: overnight run, visualization data generation, storytelling demo
+
+# Command:
+#   atp platform backtest plan \
+#     --fixture fixtures/platform/replays/long/two_year_full.yaml
+#
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/long/two_year_full.yaml \
+#     --output artifacts/platform/backtests/two_year_full.json
+
+platform_replay:
+  name: two_year_full
+  mode: historical_backtest
+
+  # Data universe — ingestion pulls bars for all of these.
+  # Universe rotation (monthly) then selects the best subset to actually trade,
+  # using the prior month's performance data. First rotation fires on tick 1.
+  # 100-symbol candidate pool. Universe rotation selects the best 20 to actively
+  # trade each month based on dollar volume, momentum, and bar quality scoring.
+  # Ingestion covers all 100; research and execution operate on the active 20.
+  symbols:
+    # ── Broad market / macro ETFs ─────────────────────────────────────────────
+    - SPY   # S&P 500
+    - QQQ   # Nasdaq 100
+    - IWM   # Russell 2000 small-cap
+    - DIA   # Dow Jones
+    - VTI   # Total market
+    - TLT   # Long-duration treasuries
+    - GLD   # Gold
+    # ── Sector ETFs ───────────────────────────────────────────────────────────
+    - XLK   # Technology
+    - XLF   # Financials
+    - XLE   # Energy
+    - XLV   # Healthcare
+    - XLU   # Utilities
+    - XLY   # Consumer discretionary
+    - XLP   # Consumer staples
+    - XLI   # Industrials
+    # ── Mega-cap technology ───────────────────────────────────────────────────
+    - AAPL
+    - MSFT
+    - NVDA
+    - GOOGL
+    - META
+    - AMZN
+    - TSLA
+    - AVGO
+    - ORCL
+    - AMD
+    - ADBE
+    - CRM
+    - INTU
+    - QCOM
+    - TXN
+    - CSCO
+    - IBM
+    - INTC
+    - ACN
+    - NOW
+    # ── Financials ────────────────────────────────────────────────────────────
+    - JPM
+    - BAC
+    - WFC
+    - GS
+    - MS
+    - V
+    - MA
+    - AXP
+    - BLK
+    - C
+    - COF
+    - SPGI
+    - ICE
+    # ── Healthcare ────────────────────────────────────────────────────────────
+    - UNH
+    - LLY
+    - JNJ
+    - ABBV
+    - MRK
+    - ABT
+    - TMO
+    - AMGN
+    - GILD
+    - PFE
+    - ISRG
+    - CVS
+    - REGN
+    - VRTX
+    # ── Consumer discretionary ────────────────────────────────────────────────
+    - HD
+    - MCD
+    - COST
+    - SBUX
+    - NKE
+    - LOW
+    - TGT
+    - BKNG
+    - WMT
+    # ── Consumer staples ──────────────────────────────────────────────────────
+    - PG
+    - KO
+    - PEP
+    - PM
+    - MO
+    - CL
+    # ── Energy ────────────────────────────────────────────────────────────────
+    - XOM
+    - CVX
+    - COP
+    - SLB
+    - EOG
+    - OXY
+    # ── Industrials ───────────────────────────────────────────────────────────
+    - CAT
+    - HON
+    - UPS
+    - GE
+    - RTX
+    - DE
+    - EMR
+    - FDX
+    - WM
+    # ── Utilities ─────────────────────────────────────────────────────────────
+    - NEE
+    - DUK
+    - SO
+    # ── Materials ─────────────────────────────────────────────────────────────
+    - LIN
+    - SHW
+    # ── Healthcare / diversified ──────────────────────────────────────────────
+    - ZTS
+    - ELV
+    - SYK
+
+  start: 2023-01-02
+  end: 2024-12-31
+  starting_cash: 1000000
+  random_seed: 2023
+  cadence_minutes: 5  # 5-min bar cadence: 78 ticks/day × ~504 trading days ≈ 39,312 trading cycle calls
+
+# ── Initial state ────────────────────────────────────────────────────────────
+# Seeded once before tick 1. Everything after this is system-driven.
+initial_state:
+
+  settings:
+    # ── Risk posture ─────────────────────────────────────────────────────────
+    risk_tolerance: medium
+    max_drawdown_limit: "0.12"
+    max_strategy_drawdown: "0.15"
+    per_strategy_cap: "0.35"
+    target_portfolio_volatility: "0.15"
+
+    # ── Governance automation ─────────────────────────────────────────────────
+    # Full autonomous pipeline: research promotes → paper trading without manual sign-off.
+    auto_promote_enabled: true
+    auto_rebalance_enabled: true
+
+    # ── Rebalance stability ───────────────────────────────────────────────────
+    rebalance_frequency: weekly
+    min_rebalance_interval_hours: "168"
+    min_allocation_change_pct: "0.02"
+
+  # ── Seed strategies ────────────────────────────────────────────────────────
+  # Three strategies pre-approved for paper trading on day 1 so the portfolio
+  # is trading from tick 1 while research ramps up over the first 3 months.
+  governance:
+    - strategy_id: momentum_v1
+      state: approved_for_paper_trading
+    - strategy_id: mean_reversion_v1
+      state: approved_for_paper_trading
+    - strategy_id: macd_crossover_v1
+      state: approved_for_paper_trading
+
+  # Equal-weight starting allocation.
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.34"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.33"
+    - strategy_id: macd_crossover_v1
+      allocation_pct: "0.33"
+
+# ── Scheduled jobs ────────────────────────────────────────────────────────────
+scheduled_jobs:
+  ingestion:          { cadence: daily,           enabled: true }
+  corporate_actions:  { cadence: daily,           enabled: true }
+  features:           { cadence: after_ingestion, enabled: true }
+  trading_cycle:      { cadence: daily,           enabled: true }
+  risk:               { cadence: daily,           enabled: true }
+  governance:         { cadence: daily,           enabled: true }
+  portfolio_snapshot: { cadence: daily,           enabled: true }
+  operations_health:  { cadence: daily,           enabled: true }
+  universe:           { cadence: monthly,         enabled: true }  # ~24 rotations
+  research:           { cadence: monthly,         enabled: true }  # ~24 pipeline runs
+
+# No timeline_events block — everything is system-driven.
+
+# ── Outputs ───────────────────────────────────────────────────────────────────
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: true
+  write_failure_report: false
+  write_dashboard_snapshot: true

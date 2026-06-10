@@ -96,9 +96,12 @@ class UniverseCandidateBuilder:
         self,
         session: Session,
         raw_pool_query_service: RawMarketPoolQuery,
+        *,
+        dataset_version_id: str | None = None,
     ) -> None:
         self.session = session
         self.raw_pool_query_service = raw_pool_query_service
+        self.dataset_version_id = dataset_version_id
 
     def build_candidate(
         self,
@@ -300,23 +303,26 @@ class UniverseCandidateBuilder:
     ) -> tuple[_SymbolMetrics, str | None] | None:
         window_start = config.as_of - timedelta(days=config.lookback_days * 3)
 
-        stmt = (
-            select(
-                MarketBar.timestamp,
-                MarketBar.close,
-                MarketBar.volume,
-                MarketBar.trade_count,
+        if self.dataset_version_id is not None:
+            rows = self._fetch_parquet_rows(symbol, window_start, config.as_of)
+        else:
+            stmt = (
+                select(
+                    MarketBar.timestamp,
+                    MarketBar.close,
+                    MarketBar.volume,
+                    MarketBar.trade_count,
+                )
+                .where(
+                    MarketBar.symbol == symbol,
+                    MarketBar.interval == BarInterval.FIVE_MIN,
+                    MarketBar.timestamp <= config.as_of,
+                    MarketBar.timestamp >= window_start,
+                )
+                .order_by(MarketBar.timestamp.asc())
             )
-            .where(
-                MarketBar.symbol == symbol,
-                MarketBar.interval == BarInterval.FIVE_MIN,
-                MarketBar.timestamp <= config.as_of,
-                MarketBar.timestamp >= window_start,
-            )
-            .order_by(MarketBar.timestamp.asc())
-        )
+            rows = self.session.execute(stmt).all()
 
-        rows = self.session.execute(stmt).all()
         if not rows:
             return None
 
@@ -380,6 +386,60 @@ class UniverseCandidateBuilder:
             ), "excessive_missing_bars"
 
         return _SymbolMetrics(symbol=symbol, liquidity=liq, quality=qual), None
+
+    def _fetch_parquet_rows(
+        self,
+        symbol: str,
+        window_start: datetime,
+        as_of: datetime,
+    ) -> list[tuple]:
+        try:
+            from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
+            from autonomous_trading_platform.storage.parquet.paths import get_data_root
+            from autonomous_trading_platform.storage.parquet.reader import (
+                HistoricalBarDatasetReader,
+            )
+
+            if self.dataset_version_id is None:
+                return []
+            reader = HistoricalBarDatasetReader(base_path=get_data_root(), session=self.session)
+            table = reader.read(
+                dataset=RAW_BARS_DATASET,
+                dataset_version=self.dataset_version_id,
+                symbol=symbol,
+                start_date=window_start.date(),
+                end_date=as_of.date(),
+                engine="duckdb",
+            )
+            if table.num_rows == 0:
+                return []
+            result = []
+            as_of_aware = as_of if as_of.tzinfo is not None else as_of.replace(tzinfo=UTC)
+            window_start_aware = (
+                window_start
+                if window_start.tzinfo is not None
+                else window_start.replace(tzinfo=UTC)
+            )
+            for row in table.to_pylist():
+                ts = row.get("timestamp")
+                if ts is None:
+                    continue
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=UTC)
+                if ts < window_start_aware or ts > as_of_aware:
+                    continue
+                result.append((ts, row.get("close"), row.get("volume"), row.get("trade_count")))
+            return sorted(result, key=lambda r: r[0])
+        except Exception as exc:
+            logger.warning(
+                "universe_candidate_builder.parquet_fetch_failed",
+                extra={
+                    "symbol": symbol,
+                    "dataset_version_id": self.dataset_version_id,
+                    "error": str(exc),
+                },
+            )
+            return []
 
     def _compute_scores(
         self,

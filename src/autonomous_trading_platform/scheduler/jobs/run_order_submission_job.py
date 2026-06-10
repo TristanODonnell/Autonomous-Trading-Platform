@@ -123,15 +123,6 @@ def run_order_submission_job(
                     )
                     return
 
-                current_state = execution_context.strategy_runtime_state_service.get_current_state(
-                    uow=uow,
-                    strategy_id=manifest.strategy_id,
-                )
-                print(
-                    f"[SUBMISSION] strategy_id={manifest.strategy_id} "
-                    f"current_state_before_transition={current_state}"
-                )
-
             for intent in generated_intents:
                 if not order_intents_created:
                     with SorUnitOfWork(session) as uow:
@@ -487,6 +478,25 @@ def run_order_submission_job(
                         )
 
                     raise
+
+        # If the signal fired but no intents were generated (e.g. holiday gap, missing
+        # prices, or allocation denied for all symbols), reset the strategy state to IDLE
+        # so the next tick can re-signal cleanly from IDLE.
+        if not order_intents_created:
+            try:
+                with SorUnitOfWork(session) as uow:
+                    execution_context.strategy_runtime_state_service.apply_event(
+                        uow=uow,
+                        strategy_id=manifest.strategy_id,
+                        event=StrategyEvent.RESET,
+                        now_utc=now_utc,
+                    )
+                logger.info(
+                    "order_submission_job.reset_after_empty_intents",
+                    extra={"strategy_id": manifest.strategy_id, "run_id": str(run_id)},
+                )
+            except Exception:
+                pass  # best-effort; don't fail the job over a state-reset
 
         duration = perf_counter() - job_start
         record_job_completed(

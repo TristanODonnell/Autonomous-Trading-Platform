@@ -224,6 +224,21 @@ def register(subparsers) -> None:
         "--actor",
         help="Operator identity to include in run metadata for manual invocations",
     )
+    run_corporate_actions_parser.add_argument(
+        "--start",
+        dest="fetch_start",
+        help="Start date for corporate actions fetch (ISO format, e.g. 2023-10-01)",
+    )
+    run_corporate_actions_parser.add_argument(
+        "--end",
+        dest="fetch_end",
+        help="End date for corporate actions fetch (ISO format, e.g. 2024-12-31)",
+    )
+    run_corporate_actions_parser.add_argument(
+        "--symbols",
+        dest="fetch_symbols",
+        help="Comma-separated symbols to filter corporate actions (e.g. AAPL,MSFT)",
+    )
     run_corporate_actions_parser.set_defaults(func=handle_run_corporate_actions)
 
     inspect_bar_parser = ingestion_subparsers.add_parser(
@@ -317,10 +332,18 @@ def handle_run_corporate_actions(args: argparse.Namespace) -> int:
         print_json(plan)
         return 0
 
+    fetch_symbols = (
+        [s.strip().upper() for s in args.fetch_symbols.split(",")]
+        if getattr(args, "fetch_symbols", None)
+        else None
+    )
     summary = run_corporate_action_ingestion_cycle(
         source_raw_bars_dataset_version_id=args.source_raw_bars_dataset_version,
         trigger_type="manual_cli",
         actor=args.actor,
+        fetch_start=getattr(args, "fetch_start", None),
+        fetch_end=getattr(args, "fetch_end", None),
+        fetch_symbols=fetch_symbols,
     )
     print_header("Run Corporate Actions")
     print_json(

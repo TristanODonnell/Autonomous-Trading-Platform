@@ -56,6 +56,46 @@ def run_universe_at_timestamp(
         )
 
     warnings: list[str] = []
+
+    # ── Step 1: refresh raw market pool via screener ─────────────────────────
+    # Point-in-time correct: ranks all active US equities by dollar volume as
+    # of this rotation date, so the candidate pool reflects that month's market.
+    try:
+        from autonomous_trading_platform.storage.sor.repositories.core.raw_market_pool_repository import (
+            RawMarketPoolRepository,
+        )
+        from autonomous_trading_platform.universe.providers.alpaca_screener_provider import (
+            AlpacaScreenerProvider,
+        )
+        from autonomous_trading_platform.universe.services.raw_market_pool_refresh_service import (
+            RawMarketPoolRefreshService,
+        )
+
+        screener = AlpacaScreenerProvider(as_of=timestamp.date(), top_n=500)
+        pool_repo = RawMarketPoolRepository(session)
+        refresh_svc = RawMarketPoolRefreshService(pool_repo, screener)
+        refresh_svc.refresh(cadence="monthly", captured_at=timestamp)
+        session.commit()
+    except Exception as exc:
+        warnings.append(f"screener_refresh_failed: {exc}")
+
+    # ── Step 2: generate scored candidate universe from pool ─────────────────
+    try:
+        from autonomous_trading_platform.universe.jobs.run_candidate_generation import (
+            run_candidate_generation,
+        )
+        from autonomous_trading_platform.universe.types import CandidateGenerationConfig
+
+        run_candidate_generation(
+            as_of=timestamp,
+            config=CandidateGenerationConfig(as_of=timestamp, lookback_days=20, max_symbols=500),
+            rebalance_reason="platform_replay_monthly",
+            dataset_version_id=replay_context.dataset_version_id,
+        )
+    except Exception as exc:
+        warnings.append(f"candidate_generation_failed: {exc}")
+
+    # ── Step 3: rotate — select best 20 from scored candidates ──────────────
     try:
         result = run_universe_rotation(
             candidate_version_id=None,
@@ -72,6 +112,7 @@ def run_universe_at_timestamp(
             **base,
             status="failed",
             errors=[str(exc)],
+            warnings=warnings,
         )
 
     if result is None:

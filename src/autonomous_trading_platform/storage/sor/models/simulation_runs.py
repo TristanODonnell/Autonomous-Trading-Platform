@@ -4,13 +4,13 @@ from datetime import date
 from typing import Any
 
 from sqlalchemy import Date, ForeignKey, String
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from autonomous_trading_platform.contracts.common.types import UTCDateTime
 
 from .base import Base
-from .helpers.sa_types import UTCDateTimeType
+from .helpers.sa_types import JSONStringListType, UTCDateTimeType
 
 
 class SimulationRuns(Base):
@@ -38,7 +38,7 @@ class SimulationRuns(Base):
 
     universe_version: Mapped[str] = mapped_column(String(64), nullable=False)
     price_basis: Mapped[str] = mapped_column(String(16), nullable=False)
-    symbols: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False)
+    symbols: Mapped[list[str]] = mapped_column(JSONStringListType(), nullable=False)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     window_role: Mapped[str | None] = mapped_column(String(32), nullable=True)

@@ -102,6 +102,7 @@ class SimulationRunRequest:
     shuffle_timestamp: bool = False
     window_role: str | None = None
     stage_name: str | None = None
+    resample_to_daily: bool = False
 
 
 @dataclass(slots=True)
@@ -229,9 +230,14 @@ class SimulationRunner:
             # Registry warmup replaces the former parameter-name heuristic
             # (_long_window * 78).  The registry warmup functions already return
             # bars directly; no day-to-bar conversion is needed here.
-            registry = get_registry()
-            defn = registry.get_definition(strategy_type)
-            warmup_bars = defn.compute_warmup_bars(strategy_parameters)
+            # When resampling to daily bars, skip intraday warmup entirely —
+            # the StrategyContextBuilder lookback window serves as effective warmup.
+            if request.resample_to_daily:
+                warmup_bars = 0
+            else:
+                registry = get_registry()
+                defn = registry.get_definition(strategy_type)
+                warmup_bars = defn.compute_warmup_bars(strategy_parameters)
             feature_requests = []
             resolved_feature_dataset_ids = {}
 
@@ -254,6 +260,7 @@ class SimulationRunner:
                 feature_datasets=feature_requests or None,
                 strict=request.strict_data_loading,
                 warmup_bars=warmup_bars,
+                resample_to_daily=request.resample_to_daily,
             )
 
             if request.shuffle_timestamp:

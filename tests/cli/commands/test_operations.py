@@ -56,7 +56,7 @@ def _extract_json(output: str) -> dict[str, Any]:
 def _seed_healthy_runtime_window(db_session: Session) -> None:
     window_start = datetime(2026, 5, 8, 12, 0, tzinfo=UTC)
     window_end = datetime(2026, 5, 8, 12, 30, tzinfo=UTC)
-    dataset_created_at = _sqlite_round_trip_utc(window_end - timedelta(minutes=5))
+    dataset_created_at = window_end - timedelta(minutes=5)
 
     for index, job_name in enumerate(
         (
@@ -135,11 +135,6 @@ def _seed_healthy_runtime_window(db_session: Session) -> None:
         )
     )
     db_session.flush()
-
-
-def _sqlite_round_trip_utc(timestamp: datetime) -> datetime:
-    local_offset = timestamp.astimezone().utcoffset() or timedelta(0)
-    return timestamp + local_offset
 
 
 def test_operations_verify_runtime_soak_command_is_registered() -> None:
