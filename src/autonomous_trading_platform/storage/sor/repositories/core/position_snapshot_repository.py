@@ -1,6 +1,7 @@
 from typing import cast
 
 from sqlalchemy import desc, select
+from sqlalchemy.exc import IntegrityError
 
 from autonomous_trading_platform.storage.sor.models.position_snapshots import PositionSnapshot
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
@@ -60,21 +61,29 @@ class PositionSnapshotRepository(BaseRepository):
     # -----------------------------
 
     def upsert(self, row: PositionSnapshot) -> PositionSnapshot:
-        """Insert or update. Falls back to lookup by unique constraint (run_id, timestamp, source)
-        so that multiple fills within the same bar don't collide on that constraint."""
+        """Insert or update.
+
+        Uses a savepoint so that a UniqueViolation on uq_position_snapshots_run_ts_source
+        (multiple fills in the same 5-min bar) rolls back only the savepoint and then
+        falls back to updating the existing row — leaving the outer transaction intact.
+        """
         existing = self.get_by_snapshot_id(row.snapshot_id)
+        if existing is not None:
+            existing.positions = row.positions
+            return existing
 
-        if existing is None:
-            existing = self._get_by_run_ts_source(row.run_id, row.timestamp, row.source)
-
-        if existing is None:
+        sp = self.session.begin_nested()
+        try:
             self.session.add(row)
+            sp.commit()
             return row
-
-        existing.timestamp = row.timestamp
-        existing.source = row.source
-        existing.positions = row.positions
-        return existing
+        except IntegrityError:
+            sp.rollback()
+            existing = self._get_by_run_ts_source(row.run_id, row.timestamp, row.source)
+            if existing is not None:
+                existing.positions = row.positions
+                return existing
+            raise
 
     def _get_by_run_ts_source(
         self,
