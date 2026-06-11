@@ -63,8 +63,8 @@ class _IntentProxy:
         self.limit_price: Decimal | None = (
             Decimal(str(limit_raw)) if limit_raw is not None else None
         )
-        # Used by SimulatedExecutionService for deterministic fill-ID generation.
-        self.run_id: str = "backtest"
+        # Used by SimulatedExecutionService for fill-ID generation.
+        self.run_id: str = str(uuid4())
         self.intent_id: str = broker_order_id
 
 

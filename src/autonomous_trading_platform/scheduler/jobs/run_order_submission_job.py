@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from time import perf_counter
 from uuid import UUID
 
@@ -411,6 +412,38 @@ def run_order_submission_job(
                             account_id=manifest.broker_account_id,
                             now_utc=now_utc,
                         )
+                        # Simulated broker fills synchronously — broker_order arrives
+                        # already FILLED, so the reconciliation job (which only picks up
+                        # PENDING_NEW/SUBMITTED orders) never runs. Persist the fill here.
+                        if broker_order.status == OrderStatus.FILLED:
+                            fill_result = (
+                                execution_context.broker_order_mapper.extract_incremental_fill(
+                                    broker_order=broker_order,
+                                    previous_filled_qty=Decimal("0"),
+                                    previous_avg_fill_price=None,
+                                    received_at=now_utc,
+                                )
+                            )
+                            if fill_result.fill is not None:
+                                uow.fills.upsert(
+                                    execution_context.broker_order_mapper.to_fill_orm_row(
+                                        fill_result.fill
+                                    )
+                                )
+                                try:
+                                    execution_context.post_fill_accounting_service.apply_fill(
+                                        uow=uow,
+                                        fill=fill_result.fill,
+                                        now_utc=now_utc,
+                                    )
+                                except Exception as _fill_acc_exc:
+                                    logger.warning(
+                                        "post_fill_accounting.failed",
+                                        extra={
+                                            "fill_id": fill_result.fill.fill_id,
+                                            "error": str(_fill_acc_exc),
+                                        },
+                                    )
 
                     if policy_result is not None and policy_config.record_fill_quality:
                         try:

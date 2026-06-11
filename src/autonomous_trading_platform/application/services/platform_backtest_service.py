@@ -286,7 +286,11 @@ class PlatformBacktestRunner:
         # In a backtest with N symbols we may generate N order intents in a single tick.
         # Raise the limits for the duration of this run so the safety gate doesn't block
         # legitimate backtest order flow.  Restored on exit regardless of outcome.
-        _throttle_keys = {"MAX_ORDERS_PER_BAR": "1000", "MAX_ORDERS_PER_HOUR": "100000"}
+        _throttle_keys = {
+            "MAX_ORDERS_PER_BAR": "1000",
+            "MAX_ORDERS_PER_HOUR": "100000",
+            "SHADOW_MODE_ENABLED": "false",  # backtest always uses simulated execution
+        }
         _saved_throttle = {k: os.environ.get(k) for k in _throttle_keys}
         for k, v in _throttle_keys.items():
             os.environ[k] = v
@@ -517,10 +521,16 @@ class PlatformBacktestRunner:
                                 _uv_svc = _UVService(_uv_repo2)
                                 if True:
                                     _target_size = _URConfig().target_universe_size
+                                    _ingested_symbols = set(inputs.symbols)
                                     if _screener_records:
-                                        _bootstrap_symbols = [
-                                            r.symbol for r in _screener_records[:_target_size]
+                                        _filtered_records = [
+                                            r
+                                            for r in _screener_records
+                                            if r.symbol in _ingested_symbols
                                         ]
+                                        _bootstrap_symbols = [
+                                            r.symbol for r in _filtered_records[:_target_size]
+                                        ] or list(_ingested_symbols)[:_target_size]
                                         _fallback_source = "screener_bootstrap"
                                         _fallback_reason = "no_bar_data_for_candidate_scoring"
                                     else:

@@ -13,6 +13,8 @@ VALID_TRANSITIONS = {
     },
     StrategyState.PENDING: {
         StrategyEvent.TARGET_POSITION_REACHED: StrategyState.IN_POSITION,
+        # Re-submission: new order intents replace a previous pending batch.
+        StrategyEvent.ORDER_INTENTS_CREATED: StrategyState.PENDING,
         # Re-signal from PENDING: new signal supersedes the pending intent.
         StrategyEvent.SIGNAL_GENERATED: StrategyState.SIGNALLED,
         StrategyEvent.RESET: StrategyState.IDLE,
