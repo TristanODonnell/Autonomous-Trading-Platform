@@ -828,6 +828,7 @@ class PlatformBacktestRunner:
                             session=session,
                             timestamp=bar_timestamps[0],
                             dataset_version_id=backtest_dataset_version_id,
+                            starting_cash=inputs.starting_cash,
                         )
                         if is_intraday
                         else None

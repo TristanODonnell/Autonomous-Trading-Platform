@@ -122,7 +122,11 @@ def run_trading_cycle_at_timestamp(
 
 
 def _build_simulated_broker_client(
-    *, session: Session, timestamp: datetime, dataset_version_id: str | None = None
+    *,
+    session: Session,
+    timestamp: datetime,
+    dataset_version_id: str | None = None,
+    starting_cash: Decimal = Decimal("1000000"),
 ) -> object:
     """Build a SimulatedBrokerClient wired to the research simulation fill engine."""
 
@@ -162,4 +166,5 @@ def _build_simulated_broker_client(
         timestamp=timestamp,
         simulated_execution_service=execution_service,
         dataset_version_id=dataset_version_id,
+        starting_cash=starting_cash,
     )
