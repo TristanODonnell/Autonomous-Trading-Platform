@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -21,6 +22,8 @@ from autonomous_trading_platform.storage.sor.models.position_snapshots import (
     PositionSnapshot as OrmPositionSnapshot,
 )
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
+
+_POSITION_SNAPSHOT_NS = uuid.UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
 
 
 @dataclass
@@ -74,7 +77,12 @@ class PostFillAccountingService:
             updated_position=position_result.updated_position,
         )
 
-        new_snapshot_id = uuid4()
+        # Deterministic ID: same (run_id, timestamp, source) → same snapshot_id so that
+        # multiple fills within one bar merge into the same row via upsert(get_by_snapshot_id).
+        new_snapshot_id = uuid.uuid5(
+            _POSITION_SNAPSHOT_NS,
+            f"{fill.run_id}:{now_utc.isoformat()}:{OrderSource.LEDGER.value}",
+        )
         new_position_snapshot = OrmPositionSnapshot(
             snapshot_id=new_snapshot_id,
             run_id=fill.run_id,
