@@ -81,9 +81,11 @@ class PostFillAccountingService:
             timestamp=now_utc,
             source=OrderSource.LEDGER,
         )
+        # Do NOT set snapshot_id on items — let SQLAlchemy populate it via the
+        # relationship so the upsert can reassign items to an existing snapshot row
+        # when multiple fills share the same bar timestamp.
         new_position_snapshot.positions = [
             OrmPositionSnapshotItem(
-                snapshot_id=new_snapshot_id,
                 symbol=pos.symbol,
                 quantity=pos.quantity,
                 avg_cost=pos.avg_cost,
