@@ -176,6 +176,24 @@ class SimulatedBrokerClient:
     # ------------------------------------------------------------------
 
     def get_account(self) -> dict[str, Any]:
+        # Read actual equity from the DB cash snapshot so the portfolio engine
+        # sizes positions against true net worth (cash + open position value),
+        # not just remaining cash.
+        try:
+            from autonomous_trading_platform.storage.sor.repositories.core.cash_snapshot_repository import (
+                CashSnapshotRepository,
+            )
+
+            latest = CashSnapshotRepository(self._session).get_latest()
+            if latest is not None:
+                return {
+                    "equity": str(latest.equity),
+                    "cash": str(latest.cash),
+                    "buying_power": str(latest.buying_power),
+                    "portfolio_value": str(latest.equity),
+                }
+        except Exception:
+            pass
         return {
             "equity": str(self._cash),
             "cash": str(self._cash),
@@ -184,9 +202,39 @@ class SimulatedBrokerClient:
         }
 
     def get_positions(self) -> list[dict[str, Any]]:
-        return []
+        # Read open positions from the DB so the portfolio engine can see what
+        # is already held and avoid doubling up on every bar.
+        try:
+            from autonomous_trading_platform.storage.sor.repositories.core.position_snapshot_repository import (
+                PositionSnapshotRepository,
+            )
+
+            latest = PositionSnapshotRepository(self._session).get_latest()
+            if latest is None:
+                return []
+            result = []
+            for item in latest.positions:
+                qty = item.quantity
+                if qty is None or qty <= 0:
+                    continue
+                result.append(
+                    {
+                        "symbol": item.symbol,
+                        "qty": str(qty),
+                        "avg_entry_price": str(item.avg_cost or "0"),
+                        "current_price": str(item.market_price or "0"),
+                        "market_value": str(item.market_value or "0"),
+                        "unrealized_pl": str(item.unrealized_pnl or "0"),
+                    }
+                )
+            return result
+        except Exception:
+            return []
 
     def get_position(self, symbol: str) -> dict[str, Any] | None:
+        for pos in self.get_positions():
+            if pos["symbol"] == symbol:
+                return pos
         return None
 
     # ------------------------------------------------------------------
