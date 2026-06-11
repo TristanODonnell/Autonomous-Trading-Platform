@@ -18,9 +18,6 @@ from autonomous_trading_platform.storage.sor.models.cash_snapshots import (
 from autonomous_trading_platform.storage.sor.models.position_snapshot_items import (
     PositionSnapshotItem as OrmPositionSnapshotItem,
 )
-from autonomous_trading_platform.storage.sor.models.position_snapshots import (
-    PositionSnapshot as OrmPositionSnapshot,
-)
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 _POSITION_SNAPSHOT_NS = uuid.UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
@@ -78,21 +75,21 @@ class PostFillAccountingService:
         )
 
         # Deterministic ID: same (run_id, timestamp, source) → same snapshot_id so that
-        # multiple fills within one bar merge into the same row via upsert(get_by_snapshot_id).
+        # multiple fills within one bar merge into the same row.
         new_snapshot_id = uuid.uuid5(
             _POSITION_SNAPSHOT_NS,
             f"{fill.run_id}:{now_utc.isoformat()}:{OrderSource.LEDGER.value}",
         )
-        new_position_snapshot = OrmPositionSnapshot(
+        # get_or_create_header returns the persistent snapshot without touching .positions,
+        # so there is no risk of a transient snapshot object being cascade-added to the
+        # session via back-populates before we commit the header row.
+        target_snapshot = uow.position_snapshots.get_or_create_header(
             snapshot_id=new_snapshot_id,
             run_id=fill.run_id,
             timestamp=now_utc,
             source=OrderSource.LEDGER,
         )
-        # Do NOT set snapshot_id on items — let SQLAlchemy populate it via the
-        # relationship so the upsert can reassign items to an existing snapshot row
-        # when multiple fills share the same bar timestamp.
-        new_position_snapshot.positions = [
+        target_snapshot.positions = [
             OrmPositionSnapshotItem(
                 symbol=pos.symbol,
                 quantity=pos.quantity,
@@ -103,7 +100,6 @@ class PostFillAccountingService:
             )
             for pos in updated_positions
         ]
-        uow.position_snapshots.upsert(new_position_snapshot)
 
         currency = latest_cash_snapshot.currency if latest_cash_snapshot is not None else "USD"
         capital_bucket = (
