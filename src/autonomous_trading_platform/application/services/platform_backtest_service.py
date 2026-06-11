@@ -444,6 +444,49 @@ class PlatformBacktestRunner:
                             [f"initial_state: {e}" for e in _initial_state_summary["errors"]]
                         )
 
+                # ── Phase 4b-2: seed initial cash snapshot ─────────────────
+                # post_fill_accounting reads the latest cash snapshot to
+                # compute starting_settled. Without a seed row it defaults to
+                # $0, making every buy produce negative cash and equity ≈ $0.
+                # The drawdown governance then sets a tiny peak ($663) from
+                # rounding noise and triggers a permanent 15% breach once cash
+                # goes slightly more negative. Seed $starting_cash so the
+                # ledger always starts from the correct base.
+                if not inputs.dry_run:
+                    from uuid import uuid4 as _uuid4
+
+                    from autonomous_trading_platform.contracts.common.enums import (
+                        OrderSource as _OrderSource,
+                    )
+                    from autonomous_trading_platform.storage.sor.models.cash_snapshots import (
+                        CashSnapshot as _OrmCashSnapshot,
+                    )
+                    from autonomous_trading_platform.storage.sor.repositories.core.cash_snapshot_repository import (
+                        CashSnapshotRepository as _CashSnapshotRepo,
+                    )
+
+                    _existing_snap = _CashSnapshotRepo(session).get_latest()
+                    if _existing_snap is None:
+                        _seed_cash = inputs.starting_cash
+                        _seed_snap = _OrmCashSnapshot(
+                            snapshot_id=_uuid4(),
+                            run_id=ctx.run_id,
+                            timestamp=ctx.timestamp,
+                            currency="USD",
+                            cash=_seed_cash,
+                            buying_power=_seed_cash,
+                            reserved_cash=Decimal("0"),
+                            equity=_seed_cash,
+                            source=_OrderSource.LEDGER,
+                            settled_cash=_seed_cash,
+                            unsettled_cash=Decimal("0"),
+                        )
+                        session.add(_seed_snap)
+                        try:
+                            session.commit()
+                        except Exception:
+                            session.rollback()
+
                 # ── Phase 4c: universe bootstrap ────────────────────────────
                 if not inputs.dry_run:
                     from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
