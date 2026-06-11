@@ -60,20 +60,34 @@ class PositionSnapshotRepository(BaseRepository):
     # -----------------------------
 
     def upsert(self, row: PositionSnapshot) -> PositionSnapshot:
-        """
-        Insert or update based on deterministic ID.
-        """
+        """Insert or update. Falls back to lookup by unique constraint (run_id, timestamp, source)
+        so that multiple fills within the same bar don't collide on that constraint."""
         existing = self.get_by_snapshot_id(row.snapshot_id)
+
+        if existing is None:
+            existing = self._get_by_run_ts_source(row.run_id, row.timestamp, row.source)
 
         if existing is None:
             self.session.add(row)
             return row
 
-        # Update fields (explicit updates recommended)
-        for column in PositionSnapshot.__table__.columns:
-            setattr(existing, column.name, getattr(row, column.name))
-
+        existing.timestamp = row.timestamp
+        existing.source = row.source
+        existing.positions = row.positions
         return existing
+
+    def _get_by_run_ts_source(
+        self,
+        run_id: object,
+        timestamp: object,
+        source: object,
+    ) -> PositionSnapshot | None:
+        stmt = select(PositionSnapshot).where(
+            PositionSnapshot.run_id == run_id,
+            PositionSnapshot.timestamp == timestamp,
+            PositionSnapshot.source == source,
+        )
+        return cast(PositionSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     # -----------------------------
     # Deletes (optional)
