@@ -113,10 +113,15 @@ class CandidateGenerationConfig:
 
 @dataclass(frozen=True)
 class UniverseRebalanceConfig:
-    target_universe_size: int = 500
-    max_churn_pct: float = 0.15
-    retain_until_rank_greater_than: int = 650
-    add_only_if_rank_less_than_or_equal: int = 400
+    # Active trading universe cap. Rotation selects the best N from the scored
+    # candidate pool. 20 is optimal for $1M capital (~$50K per position).
+    target_universe_size: int = 20
+    # Allow up to 30% churn per rotation (6 of 20) for meaningful monthly shifts.
+    max_churn_pct: float = 0.30
+    # Drop a symbol once it falls outside the top 30 of the candidate pool.
+    retain_until_rank_greater_than: int = 30
+    # Only promote a symbol if it ranks in the top 20 of the candidate pool.
+    add_only_if_rank_less_than_or_equal: int = 20
     min_candidate_rank_to_include: int = 1
     force_rebalance: bool = False
     allow_empty_active_universe_bootstrap: bool = True

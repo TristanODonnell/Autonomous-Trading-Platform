@@ -51,6 +51,7 @@ class FakeStage(BaseStage):
         random_seed: int,
         price_basis: PriceBasis,
         initial_cash: float,
+        resample_to_daily: bool = False,
     ) -> StageResult:
         return StageResult(stage_name=self.stage_name, survivors=survivors)
 

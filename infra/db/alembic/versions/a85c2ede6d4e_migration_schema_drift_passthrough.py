@@ -212,4 +212,7 @@ def downgrade() -> None:
 
 def _has_column(table_name: str, column_name: str) -> bool:
     bind = op.get_bind()
-    return column_name in {column["name"] for column in inspect(bind).get_columns(table_name)}
+    insp = inspect(bind)
+    if table_name not in insp.get_table_names():
+        return False
+    return column_name in {column["name"] for column in insp.get_columns(table_name)}

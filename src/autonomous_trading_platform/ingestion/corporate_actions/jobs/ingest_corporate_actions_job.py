@@ -59,6 +59,9 @@ class IngestCorporateActionsJob:
         adjusted_bars_dataset_version_id: str,
         source_raw_bars_dataset_version_id: str,
         bar_repository: ParquetBarRepository,
+        fetch_start: str | None = None,
+        fetch_end: str | None = None,
+        fetch_symbols: list[str] | None = None,
     ) -> None:
         self.session = session
         self.run_id = run_id
@@ -69,6 +72,9 @@ class IngestCorporateActionsJob:
         self.source_raw_bars_dataset_version_id = source_raw_bars_dataset_version_id
         self.bar_repository = bar_repository
         self.adjusted_bars_dataset_version_id = adjusted_bars_dataset_version_id
+        self.fetch_start = fetch_start
+        self.fetch_end = fetch_end
+        self.fetch_symbols = fetch_symbols
 
     def ingest_corporate_actions_job(self) -> None:
         component = "ingestion.ingest_corporate_actions_job"
@@ -100,6 +106,9 @@ class IngestCorporateActionsJob:
                     cycle_timestamp=self.cycle_timestamp,
                     bar_repository=self.bar_repository,
                     source_raw_bars_dataset_version_id=self.source_raw_bars_dataset_version_id,
+                    fetch_start=self.fetch_start,
+                    fetch_end=self.fetch_end,
+                    fetch_symbols=self.fetch_symbols,
                 )
                 result = service.ingest_corporate_actions()
 

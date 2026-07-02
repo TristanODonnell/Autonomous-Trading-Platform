@@ -30,6 +30,7 @@ def run_candidate_generation(
     source: str = UniverseSource.CUSTOM,
     rebalance_reason: str | None = None,
     dry_run: bool = False,
+    dataset_version_id: str | None = None,
 ) -> CandidateBuildResult:
     """
     Generate and persist a candidate universe version.
@@ -54,7 +55,9 @@ def run_candidate_generation(
 
         raw_pool_repo = RawMarketPoolRepository(session)
         raw_pool_query_service = RawMarketPoolQueryService(raw_pool_repo)
-        builder = UniverseCandidateBuilder(session, raw_pool_query_service)
+        builder = UniverseCandidateBuilder(
+            session, raw_pool_query_service, dataset_version_id=dataset_version_id
+        )
         version_repository = UniverseVersionRepository(session)
 
         result = builder.build_candidate(

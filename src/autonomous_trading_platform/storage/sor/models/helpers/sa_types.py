@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.types import DateTime, Numeric, TypeDecorator
+from sqlalchemy.types import DateTime, Numeric, Text, TypeDecorator
 
 UUID_PK = PG_UUID(as_uuid=True)  # SQLAlchemy column type
 uuid_pk_default = uuid4  # default generator
@@ -58,3 +59,40 @@ class QuantityType(TypeDecorator):
         if isinstance(value, Decimal):
             return value
         raise TypeError("Quantity must be Decimal")
+
+
+class JSONStringListType(TypeDecorator):
+    """Cross-DB list[str] column.
+
+    Postgres: delegates to the native ARRAY(String) column (stored natively).
+    SQLite / other dialects: serializes to a JSON text string on write,
+    deserializes on read.
+
+    Use this instead of ``ARRAY(String)`` for columns that need to work in
+    both Postgres (production) and SQLite (tests).
+    """
+
+    impl = Text
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            from sqlalchemy import String
+            from sqlalchemy.dialects.postgresql import ARRAY
+
+            return dialect.type_descriptor(ARRAY(String))
+        return dialect.type_descriptor(Text())
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if dialect.name == "postgresql":
+            return value  # pass the list directly; ARRAY handles it
+        return json.dumps(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return value  # Postgres ARRAY already deserializes
+        return json.loads(value)

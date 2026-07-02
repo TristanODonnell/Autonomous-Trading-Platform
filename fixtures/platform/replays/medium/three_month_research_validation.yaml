@@ -1,0 +1,92 @@
+# scenario:
+#   name: three_month_research_validation
+#   purpose: >
+#     Q1 2024 (Jan–Mar, ~65 trading days). Quick validation that the research
+#     pipeline produces survivors after the lookback_bars fix. Mirrors full_year_demo
+#     config (same seeds, auto-promote, monthly research) at 1/4 the runtime.
+#     Expect: 3 research runs, at least some stage-1 survivors, governance promotions.
+#   expected_behavior: >
+#     ~65 ticks. Research fires 3× (Jan, Feb, Mar). Stage-1 survivors > 0 each month.
+#     At least 1 strategy seeded to approved_research by end of run.
+#     Governance auto-promotions > 0. Portfolio value moves (simulated fills).
+#   recommended_use: research validation, post-fix regression
+
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/medium/three_month_research_validation.yaml \
+#     --output artifacts/platform/backtests/three_month_research_validation.json
+
+platform_replay:
+  name: three_month_research_validation
+  mode: historical_backtest
+  cadence_minutes: 5
+
+  symbols:
+    - SPY
+    - QQQ
+    - IWM
+    - GLD
+    - TLT
+    - AAPL
+    - MSFT
+    - NVDA
+    - GOOGL
+    - JPM
+    - JNJ
+    - XOM
+    - WMT
+
+  start: 2024-01-02
+  end: 2024-03-28
+  starting_cash: 100000
+  random_seed: 2024
+
+initial_state:
+
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.12"
+    max_strategy_drawdown: "0.15"
+    per_strategy_cap: "0.35"
+    target_portfolio_volatility: "0.15"
+    auto_promote_enabled: true
+    auto_rebalance_enabled: true
+    rebalance_frequency: weekly
+    min_rebalance_interval_hours: "168"
+    min_allocation_change_pct: "0.02"
+
+  governance:
+    - strategy_id: momentum_v1
+      state: approved_for_paper_trading
+    - strategy_id: mean_reversion_v1
+      state: approved_for_paper_trading
+    - strategy_id: macd_crossover_v1
+      state: approved_for_paper_trading
+
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.34"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.33"
+    - strategy_id: macd_crossover_v1
+      allocation_pct: "0.33"
+
+scheduled_jobs:
+  ingestion:          { cadence: daily,           enabled: true }
+  corporate_actions:  { cadence: daily,           enabled: true }
+  features:           { cadence: after_ingestion, enabled: true }
+  trading_cycle:      { cadence: daily,           enabled: true }
+  risk:               { cadence: daily,           enabled: true }
+  governance:         { cadence: daily,           enabled: true }
+  portfolio_snapshot: { cadence: daily,           enabled: true }
+  operations_health:  { cadence: daily,           enabled: true }
+  universe:           { cadence: monthly,         enabled: true }  # ~3 rotations
+  research:           { cadence: monthly,         enabled: true }  # ~3 pipeline runs
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: true
+  write_failure_report: false
+  write_dashboard_snapshot: true

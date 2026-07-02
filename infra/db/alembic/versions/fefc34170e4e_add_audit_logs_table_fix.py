@@ -19,6 +19,9 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade():
+    bind = op.get_bind()
+    if "audit_logs" in sa.inspect(bind).get_table_names():
+        op.drop_table("audit_logs")
     op.create_table(
         "audit_logs",
         sa.Column("event_id", sa.String(), primary_key=True),

@@ -67,6 +67,19 @@ class BarChunkWriterService:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         if output_path.exists():
-            output_path.unlink()
+            # Merge incoming bars with existing partition data, deduplicating by bar_id.
+            # Required for incremental daily ingestion: each day's bars share a month
+            # partition file, so we accumulate rather than overwrite.
+            import pyarrow as pa
+
+            existing = pq.ParquetFile(output_path).read()
+            combined = pa.concat_tables([existing, table])
+            # Deduplicate: keep last occurrence per bar_id (new data wins on re-ingest)
+            bar_ids = combined.column("bar_id").to_pylist()
+            seen: dict[str, int] = {}
+            for i, bid in enumerate(bar_ids):
+                seen[bid] = i
+            keep_indices = sorted(seen.values())
+            table = combined.take(keep_indices)
 
         pq.write_table(table, output_path)

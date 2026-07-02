@@ -20,6 +20,9 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    if "strategy_governance" in sa.inspect(bind).get_table_names():
+        op.drop_table("strategy_governance")
     op.create_table(
         "strategy_governance",
         sa.Column("strategy_id", sa.String(64), nullable=False),

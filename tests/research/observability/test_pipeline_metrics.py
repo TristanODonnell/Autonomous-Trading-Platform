@@ -32,7 +32,14 @@ class _PassAllStage(BaseStage):
         return self._name
 
     def run(
-        self, survivors, experiment_id, dataset_version, random_seed, price_basis, initial_cash
+        self,
+        survivors,
+        experiment_id,
+        dataset_version,
+        random_seed,
+        price_basis,
+        initial_cash,
+        resample_to_daily=False,
     ):
         filter_outputs = [MagicMock() for _ in survivors]
         return StageResult(
@@ -54,7 +61,14 @@ class _FailAllStage(BaseStage):
         return "fail_all"
 
     def run(
-        self, survivors, experiment_id, dataset_version, random_seed, price_basis, initial_cash
+        self,
+        survivors,
+        experiment_id,
+        dataset_version,
+        random_seed,
+        price_basis,
+        initial_cash,
+        resample_to_daily=False,
     ):
         filter_outputs = [MagicMock() for _ in survivors]
         return StageResult(

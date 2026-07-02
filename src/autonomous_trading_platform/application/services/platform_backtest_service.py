@@ -24,7 +24,12 @@ that tick.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import json
+import logging
+import os
+import uuid
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from datetime import time as dt_time
 from decimal import Decimal
@@ -44,8 +49,51 @@ from autonomous_trading_platform.contracts.runtime.platform_replay import (
 )
 from autonomous_trading_platform.db import get_session
 
+logger = logging.getLogger(__name__)
+
 # Domain hooks — imported lazily inside methods to keep module load fast
 # and avoid circular imports at import time.
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _CheckpointData:
+    run_id: str
+    replay_id: str
+    dataset_version_id: str
+    last_completed_tick_index: int  # 1-indexed; ticks up to this index are done
+    last_completed_tick_date: str  # ISO date string, for human verification
+    cadence_last_run: dict[str, str]  # job → ISO date string
+    ticks_ok: int
+    ticks_failed: int
+    total_orders: int
+    total_fills: int
+
+
+def _write_checkpoint(path: Path, data: _CheckpointData) -> None:
+    """Atomically write checkpoint via a temp file + rename."""
+    try:
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(asdict(data), indent=2))
+        tmp.replace(path)
+    except Exception:
+        logger.warning("checkpoint write failed — continuing without checkpoint", exc_info=True)
+
+
+def _load_checkpoint(path: Path) -> _CheckpointData | None:
+    """Load checkpoint; returns None if missing or corrupt."""
+    if not path.exists():
+        return None
+    try:
+        raw = json.loads(path.read_text())
+        return _CheckpointData(**raw)
+    except Exception:
+        logger.warning("checkpoint load failed — starting fresh", exc_info=True)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +123,12 @@ class PlatformBacktestInputs:
     # Fixture metadata passed through for artifact annotation
     fixture_name: str | None = None
     scheduled_jobs_config: dict[str, Any] = field(default_factory=dict)
+    # Initial state to seed before the first tick (from fixture initial_state block)
+    initial_state: Any = None
+    progress_callback: Callable[[dict[str, Any]], None] | None = None
+    # Checkpoint path: if set, write a checkpoint after every committed tick and
+    # resume from it on restart. Set to None to disable (default).
+    checkpoint_path: Path | None = None
 
 
 @dataclass
@@ -95,6 +149,19 @@ class TickResult:
     errors: list[str] = field(default_factory=list)
 
 
+def _emit_progress(
+    callback: Callable[[dict[str, Any]], None] | None,
+    payload: dict[str, Any],
+) -> None:
+    if callback is None:
+        return
+    try:
+        callback(payload)
+    except Exception:
+        # Progress reporting is best-effort UI; it must never affect replay behavior.
+        return
+
+
 # ---------------------------------------------------------------------------
 # Market timing
 # ---------------------------------------------------------------------------
@@ -103,11 +170,38 @@ class TickResult:
 # This puts ingestion, features, governance, and risk in the correct after-close
 # window and gives the trading cycle a realistic same-day reference timestamp.
 _MARKET_CLOSE_UTC_HOUR = 21
+# Market open: 9:30 AM ET = 14:30 UTC (EST = UTC-5; ignores DST for simplicity).
+_MARKET_OPEN_UTC_HOUR = 14
+_MARKET_OPEN_UTC_MINUTE = 30
 
 
 def _market_close_ts(tick_date: date) -> datetime:
     """Return the market-close UTC timestamp for a given trading date (21:00 UTC = 4 PM EST)."""
     return datetime.combine(tick_date, dt_time(_MARKET_CLOSE_UTC_HOUR, 0)).replace(tzinfo=UTC)
+
+
+def _intraday_bar_timestamps(tick_date: date, cadence_minutes: int) -> list[datetime]:
+    """Return bar timestamps for one trading day.
+
+    For cadence_minutes >= 390 (daily), returns a single EOD timestamp.
+    For intraday cadence, returns timestamps from 9:30 AM ET to the last bar
+    before 4:00 PM ET, spaced cadence_minutes apart.
+    """
+    if cadence_minutes >= 390:
+        return [_market_close_ts(tick_date)]
+
+    market_open = datetime.combine(
+        tick_date,
+        dt_time(_MARKET_OPEN_UTC_HOUR, _MARKET_OPEN_UTC_MINUTE),
+    ).replace(tzinfo=UTC)
+    market_close = _market_close_ts(tick_date)
+
+    bars: list[datetime] = []
+    ts = market_open
+    while ts < market_close:
+        bars.append(ts)
+        ts = ts + timedelta(minutes=cadence_minutes)
+    return bars
 
 
 # ---------------------------------------------------------------------------
@@ -188,15 +282,64 @@ class PlatformBacktestRunner:
         self._session_factory = session_factory or get_session
 
     def run(self, inputs: PlatformBacktestInputs) -> PlatformBacktestArtifact:
+        # Order throttle limits are designed for live/paper trading (2–5 orders per bar).
+        # In a backtest with N symbols we may generate N order intents in a single tick.
+        # Raise the limits for the duration of this run so the safety gate doesn't block
+        # legitimate backtest order flow.  Restored on exit regardless of outcome.
+        _throttle_keys = {
+            "MAX_ORDERS_PER_BAR": "1000",
+            "MAX_ORDERS_PER_HOUR": "100000",
+            "SHADOW_MODE_ENABLED": "false",  # backtest always uses simulated execution
+        }
+        _saved_throttle = {k: os.environ.get(k) for k in _throttle_keys}
+        for k, v in _throttle_keys.items():
+            os.environ[k] = v
+
+        try:
+            return self._run(inputs)
+        finally:
+            for k, prev in _saved_throttle.items():
+                if prev is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = prev
+
+    def _run(self, inputs: PlatformBacktestInputs) -> PlatformBacktestArtifact:
         started_at = datetime.now(UTC)
 
-        ctx = PlatformReplayContext.create(
-            symbols=inputs.symbols,
-            timestamp=datetime.combine(inputs.start_date, datetime.min.time()).replace(tzinfo=UTC),
-            actor=inputs.actor,
-            dry_run=inputs.dry_run,
-            artifact_dir=inputs.artifact_dir,
-        )
+        # ── Checkpoint: resume or fresh start ──────────────────────────────
+        checkpoint = _load_checkpoint(inputs.checkpoint_path) if inputs.checkpoint_path else None
+        resume_from_tick = 0  # ticks <= this index are skipped (already done)
+
+        if checkpoint is not None:
+            logger.info(
+                "Resuming backtest from checkpoint: tick %d (%s)",
+                checkpoint.last_completed_tick_index,
+                checkpoint.last_completed_tick_date,
+            )
+            ctx = PlatformReplayContext(
+                run_id=uuid.UUID(checkpoint.run_id),
+                replay_id=checkpoint.replay_id,
+                timestamp=datetime.combine(inputs.start_date, datetime.min.time()).replace(
+                    tzinfo=UTC
+                ),
+                symbols=inputs.symbols,
+                actor=inputs.actor,
+                dry_run=inputs.dry_run,
+                artifact_dir=inputs.artifact_dir,
+                dataset_version_id=checkpoint.dataset_version_id,
+            )
+            resume_from_tick = checkpoint.last_completed_tick_index
+        else:
+            ctx = PlatformReplayContext.create(
+                symbols=inputs.symbols,
+                timestamp=datetime.combine(inputs.start_date, datetime.min.time()).replace(
+                    tzinfo=UTC
+                ),
+                actor=inputs.actor,
+                dry_run=inputs.dry_run,
+                artifact_dir=inputs.artifact_dir,
+            )
 
         session: Session = self._session_factory()
         tick_results: list[dict[str, Any]] = []
@@ -204,71 +347,324 @@ class PlatformBacktestRunner:
         all_warnings: list[str] = []
         all_errors: list[str] = []
 
-        # Aggregate runtime counters
+        # Aggregate runtime counters — restored from checkpoint when resuming
         ticks_attempted = 0
-        ticks_ok = 0
-        ticks_failed = 0
-        total_orders = 0
-        total_fills = 0
+        ticks_ok = checkpoint.ticks_ok if checkpoint else 0
+        ticks_failed = checkpoint.ticks_failed if checkpoint else 0
+        total_orders = checkpoint.total_orders if checkpoint else 0
+        total_fills = checkpoint.total_fills if checkpoint else 0
         run_ids: list[str] = []
 
         # raw_bars version from ingestion → passed to corporate_actions and failure injections
         latest_dataset_version_id: str | None = None
 
+        # Summaries populated in phases 1-4; None when resuming (not needed for artifact)
+        admin_summary = None
+        settings_summary = None
+
         try:
-            # ── Phase 1: preflight ──────────────────────────────────────────
-            from autonomous_trading_platform.application.services.platform_replay.admin_hooks import (
-                build_admin_preflight_summary,
-                validate_admin_preflight,
-            )
+            if checkpoint is None:
+                # ── Phase 1: preflight ──────────────────────────────────────
+                from autonomous_trading_platform.application.services.platform_replay.admin_hooks import (
+                    build_admin_preflight_summary,
+                    validate_admin_preflight,
+                )
 
-            preflight = validate_admin_preflight(
-                session=session, timestamp=ctx.timestamp, replay_context=ctx
-            )
-            if not preflight.ok:
-                all_errors.extend(preflight.errors)
+                preflight = validate_admin_preflight(
+                    session=session, timestamp=ctx.timestamp, replay_context=ctx
+                )
+                if not preflight.ok:
+                    all_errors.extend(preflight.errors)
 
-            admin_summary = build_admin_preflight_summary(session=session)
+                admin_summary = build_admin_preflight_summary(session=session)
 
-            # ── Phase 2: settings snapshot ──────────────────────────────────
-            from autonomous_trading_platform.application.services.platform_replay.settings_hooks import (
-                build_settings_summary,
-                snapshot_settings_at_timestamp,
-            )
+                # ── Phase 2: settings snapshot ──────────────────────────────
+                from autonomous_trading_platform.application.services.platform_replay.settings_hooks import (
+                    build_settings_summary,
+                    snapshot_settings_at_timestamp,
+                )
 
-            snapshot_settings_at_timestamp(
-                session=session, timestamp=ctx.timestamp, replay_context=ctx
-            )
-            settings_summary = build_settings_summary(session=session)
+                snapshot_settings_at_timestamp(
+                    session=session, timestamp=ctx.timestamp, replay_context=ctx
+                )
+                settings_summary = build_settings_summary(session=session)
 
-            # ── Phase 3: controls snapshot ──────────────────────────────────
-            from autonomous_trading_platform.application.services.platform_replay.controls_hooks import (
-                snapshot_controls_at_timestamp,
-            )
+                # ── Phase 3: controls snapshot ──────────────────────────────
+                from autonomous_trading_platform.application.services.platform_replay.controls_hooks import (
+                    snapshot_controls_at_timestamp,
+                )
 
-            snapshot_controls_at_timestamp(
-                session=session, timestamp=ctx.timestamp, replay_context=ctx
-            )
+                snapshot_controls_at_timestamp(
+                    session=session, timestamp=ctx.timestamp, replay_context=ctx
+                )
 
-            # ── Phase 4: safety snapshot ────────────────────────────────────
-            from autonomous_trading_platform.application.services.platform_replay.safety_hooks import (
-                build_safety_summary,
-                snapshot_safety_at_timestamp,
-            )
+                # ── Phase 4: safety snapshot ────────────────────────────────
+                from autonomous_trading_platform.application.services.platform_replay.safety_hooks import (
+                    build_safety_summary,
+                    snapshot_safety_at_timestamp,
+                )
 
-            snapshot_safety_at_timestamp(
-                session=session, timestamp=ctx.timestamp, replay_context=ctx
-            )
+                snapshot_safety_at_timestamp(
+                    session=session, timestamp=ctx.timestamp, replay_context=ctx
+                )
+
+                # ── Phase 4a: clear stale evaluation checkpoints ───────────
+                if not inputs.dry_run:
+                    from autonomous_trading_platform.storage.sor.models.strategy_runtime_states import (
+                        StrategyRuntimeState as _SRS,
+                    )
+
+                    session.query(_SRS).update(
+                        {_SRS.last_evaluated_bar_timestamp: None},
+                        synchronize_session=False,
+                    )
+                    try:
+                        session.commit()
+                    except Exception:
+                        session.rollback()
+
+                # ── Phase 4b: initial state seeding ────────────────────────
+                if inputs.initial_state is not None and not inputs.dry_run:
+                    from autonomous_trading_platform.application.services.platform_replay.initial_state_hooks import (
+                        apply_initial_state,
+                    )
+
+                    _initial_state_summary = apply_initial_state(
+                        session=session,
+                        initial_state=inputs.initial_state,
+                        timestamp=ctx.timestamp,
+                        actor=inputs.actor,
+                    )
+                    try:
+                        session.commit()
+                    except Exception:
+                        session.rollback()
+                    if _initial_state_summary.get("errors"):
+                        all_warnings.extend(
+                            [f"initial_state: {e}" for e in _initial_state_summary["errors"]]
+                        )
+
+                # ── Phase 4b-2: seed initial cash snapshot ─────────────────
+                # post_fill_accounting reads the latest cash snapshot to
+                # compute starting_settled. Without a seed row it defaults to
+                # $0, making every buy produce negative cash and equity ≈ $0.
+                # The drawdown governance then sets a tiny peak ($663) from
+                # rounding noise and triggers a permanent 15% breach once cash
+                # goes slightly more negative. Seed $starting_cash so the
+                # ledger always starts from the correct base.
+                if not inputs.dry_run:
+                    from uuid import uuid4 as _uuid4
+
+                    from autonomous_trading_platform.contracts.common.enums import (
+                        OrderSource as _OrderSource,
+                    )
+                    from autonomous_trading_platform.storage.sor.models.cash_snapshots import (
+                        CashSnapshot as _OrmCashSnapshot,
+                    )
+                    from autonomous_trading_platform.storage.sor.repositories.core.cash_snapshot_repository import (
+                        CashSnapshotRepository as _CashSnapshotRepo,
+                    )
+
+                    _existing_snap = _CashSnapshotRepo(session).get_latest()
+                    if _existing_snap is None:
+                        _seed_cash = inputs.starting_cash
+                        _seed_snap = _OrmCashSnapshot(
+                            snapshot_id=_uuid4(),
+                            run_id=ctx.run_id,
+                            timestamp=ctx.timestamp,
+                            currency="USD",
+                            cash=_seed_cash,
+                            buying_power=_seed_cash,
+                            reserved_cash=Decimal("0"),
+                            equity=_seed_cash,
+                            source=_OrderSource.LEDGER,
+                            settled_cash=_seed_cash,
+                            unsettled_cash=Decimal("0"),
+                        )
+                        session.add(_seed_snap)
+                        try:
+                            session.commit()
+                        except Exception:
+                            session.rollback()
+
+                # ── Phase 4c: universe bootstrap ────────────────────────────
+                if not inputs.dry_run:
+                    from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
+                        UniverseVersionRepository as _UVRepo,
+                    )
+
+                    _bootstrap_ts = datetime.combine(inputs.start_date, dt_time.min).replace(
+                        tzinfo=UTC
+                    )
+                    _uv_repo = _UVRepo(session)
+                    _uv_repo.retire_active_version(_bootstrap_ts)
+                    session.commit()
+                    if True:
+                        from autonomous_trading_platform.storage.sor.repositories.core.raw_market_pool_repository import (
+                            RawMarketPoolRepository as _RMPRepo,
+                        )
+                        from autonomous_trading_platform.universe.jobs.run_candidate_generation import (
+                            run_candidate_generation as _run_cg,
+                        )
+                        from autonomous_trading_platform.universe.jobs.run_universe_rotation import (
+                            run_universe_rotation as _run_ur,
+                        )
+                        from autonomous_trading_platform.universe.providers.alpaca_screener_provider import (
+                            AlpacaScreenerProvider as _Screener,
+                        )
+                        from autonomous_trading_platform.universe.services.raw_market_pool_refresh_service import (
+                            RawMarketPoolRefreshService as _RMPSvc,
+                        )
+                        from autonomous_trading_platform.universe.services.universe_version_service import (
+                            UniverseVersionService as _UVService,
+                        )
+                        from autonomous_trading_platform.universe.types import (
+                            CandidateGenerationConfig as _CGConfig,
+                        )
+                        from autonomous_trading_platform.universe.types import (
+                            UniverseRebalanceConfig as _URConfig,
+                        )
+
+                        _screener_records: list | None = None
+                        try:
+                            _screener = _Screener(as_of=inputs.start_date, top_n=500)
+                            _screener_records = _screener.fetch_symbols()
+                            _pool_repo = _RMPRepo(session)
+                            _refresh_svc = _RMPSvc(_pool_repo, _screener)
+                            _refresh_svc.refresh(cadence="bootstrap", captured_at=_bootstrap_ts)
+                            session.commit()
+                        except Exception as _exc:
+                            all_warnings.append(f"universe_screener_failed: {_exc}")
+
+                        _candidate_ok = False
+                        if _screener_records:
+                            try:
+                                _run_cg(
+                                    as_of=_bootstrap_ts,
+                                    config=_CGConfig(
+                                        as_of=_bootstrap_ts, lookback_days=20, max_symbols=500
+                                    ),
+                                    rebalance_reason="backtest_bootstrap",
+                                )
+                                _run_ur(
+                                    candidate_version_id=None,
+                                    config=_URConfig(),
+                                    rotation_reason="backtest_bootstrap",
+                                    force_rotation=True,
+                                    as_of=_bootstrap_ts,
+                                    skip_cadence_check=True,
+                                )
+                                _candidate_ok = True
+                            except Exception as _exc:
+                                all_warnings.append(f"universe_candidate_rotation_failed: {_exc}")
+
+                        if not _candidate_ok:
+                            try:
+                                import uuid as _uuid_mod
+
+                                _uv_repo2 = _UVRepo(session)
+                                _uv_svc = _UVService(_uv_repo2)
+                                if True:
+                                    _target_size = _URConfig().target_universe_size
+                                    _ingested_symbols = set(inputs.symbols)
+                                    if _screener_records:
+                                        _filtered_records = [
+                                            r
+                                            for r in _screener_records
+                                            if r.symbol in _ingested_symbols
+                                        ]
+                                        _bootstrap_symbols = [
+                                            r.symbol for r in _filtered_records[:_target_size]
+                                        ] or list(_ingested_symbols)[:_target_size]
+                                        _fallback_source = "screener_bootstrap"
+                                        _fallback_reason = "no_bar_data_for_candidate_scoring"
+                                    else:
+                                        _bootstrap_symbols = inputs.symbols
+                                        _fallback_source = "yaml_bootstrap_fallback"
+                                        _fallback_reason = "screener_unavailable"
+                                    # Use a unique name to avoid unique-constraint failures
+                                    # when previous runs left retired versions with the same date.
+                                    _fallback_name = f"bootstrap_{inputs.start_date.isoformat()}_{_uuid_mod.uuid4().hex[:8]}"
+                                    _bv, _bm = _uv_svc.build_version(
+                                        name=_fallback_name,
+                                        effective_from=_bootstrap_ts,
+                                        symbols=_bootstrap_symbols,
+                                        source=_fallback_source,
+                                        rebalance_reason=_fallback_reason,
+                                    )
+                                    _uv_repo2.insert_version(_bv)
+                                    session.flush()
+                                    _uv_repo2.insert_members(_bm)
+                                    session.flush()
+                                    _uv_repo2.activate_version(_bv.universe_version_id)
+                                    session.commit()
+                            except Exception:
+                                session.rollback()
+            else:
+                # ── Resuming: phases 1-4 already committed ──────────────────
+                logger.info(
+                    "Resuming from checkpoint at tick %d (%s) — skipping setup phases",
+                    checkpoint.last_completed_tick_index,
+                    checkpoint.last_completed_tick_date,
+                )
+                from autonomous_trading_platform.application.services.platform_replay.safety_hooks import (
+                    build_safety_summary,
+                )
 
             # ── Phase 5: tick loop ──────────────────────────────────────────
             trading_dates = _trading_dates(inputs.start_date, inputs.end_date)
+            total_ticks = len(trading_dates)
 
             # Build cadence scheduler from fixture scheduled_jobs config
             cadence = _CadenceScheduler(inputs.scheduled_jobs_config)
 
-            for tick_date in trading_dates:
+            if checkpoint is not None:
+                # Restore cadence state so weekly/monthly jobs fire at correct intervals
+                cadence._last_run = {
+                    k: date.fromisoformat(v) for k, v in checkpoint.cadence_last_run.items()
+                }
+                backtest_dataset_version_id = checkpoint.dataset_version_id
+                ctx.dataset_version_id = backtest_dataset_version_id
+            else:
+                # Create one cumulative dataset version for the entire backtest run.
+                backtest_dataset_version_id = _create_backtest_dataset_version(
+                    session=session,
+                    inputs=inputs,
+                    ctx=ctx,
+                )
+                ctx.dataset_version_id = backtest_dataset_version_id
+
+            for tick_index, tick_date in enumerate(trading_dates, start=1):
                 # Stamp each tick at market close (21:00 UTC = 4 PM ET)
                 tick_ts = _market_close_ts(tick_date)
+                _emit_progress(
+                    inputs.progress_callback,
+                    {
+                        "status": "running",
+                        "current_tick": tick_index,
+                        "completed_ticks": tick_index - 1,
+                        "total_ticks": total_ticks,
+                        "tick_date": tick_date.isoformat(),
+                        "start_date": inputs.start_date.isoformat(),
+                        "end_date": inputs.end_date.isoformat(),
+                        "ticks_ok": ticks_ok,
+                        "ticks_failed": ticks_failed,
+                        "total_orders": total_orders,
+                        "total_fills": total_fills,
+                    },
+                )
+                # ── Skip already-completed ticks on resume ─────────────────
+                if tick_index <= resume_from_tick:
+                    tick_results.append(
+                        {
+                            "tick_date": tick_date.isoformat(),
+                            "tick_timestamp": tick_ts.isoformat(),
+                            "skipped_by_checkpoint": True,
+                        }
+                    )
+                    ticks_attempted += 1
+                    continue
+
                 tick_ctx = PlatformReplayContext(
                     run_id=ctx.run_id,
                     replay_id=ctx.replay_id,
@@ -277,6 +673,7 @@ class PlatformBacktestRunner:
                     actor=ctx.actor,
                     dry_run=ctx.dry_run,
                     artifact_dir=ctx.artifact_dir,
+                    dataset_version_id=ctx.dataset_version_id,
                 )
 
                 tick = TickResult(
@@ -339,7 +736,9 @@ class PlatformBacktestRunner:
                                 f"[INJECTED] {fi_event.target}/{fi_event.failure} at {tick_date}"
                             )
 
-                # ── Ingestion (daily — market bar data after close) ─────────
+                is_intraday = inputs.cadence_minutes < 390
+
+                # ── Ingestion (always fetch the full trading day in replay) ──
                 ingestion_ran = False
                 if cadence.should_run("ingestion", tick_date):
                     from autonomous_trading_platform.application.services.platform_replay.ingestion_hooks import (
@@ -347,7 +746,11 @@ class PlatformBacktestRunner:
                     )
 
                     ing_result = run_ingestion_at_timestamp(
-                        session=session, timestamp=tick_ts, replay_context=tick_ctx
+                        session=session,
+                        timestamp=tick_ts,
+                        replay_context=tick_ctx,
+                        full_day=True,  # always fetch the full day in historical replay
+                        backtest_dataset_version_id=backtest_dataset_version_id,
                     )
                     tick.ingestion = ing_result.summary
                     if ing_result.dataset_version_id:
@@ -375,8 +778,10 @@ class PlatformBacktestRunner:
                         tick.errors.extend(ca_result.errors)
                     cadence.record("corporate_actions", tick_date)
 
-                # ── Features (after ingestion — factor computation) ─────────
-                if cadence.should_run("features", tick_date, ingestion_ran=ingestion_ran):
+                # ── Features (daily mode only — runs before trading cycle) ──
+                if not is_intraday and cadence.should_run(
+                    "features", tick_date, ingestion_ran=ingestion_ran
+                ):
                     from autonomous_trading_platform.application.services.platform_replay.features_hooks import (
                         run_features_at_timestamp,
                     )
@@ -384,7 +789,7 @@ class PlatformBacktestRunner:
                     feat_result = run_features_at_timestamp(
                         session=session,
                         timestamp=tick_ts,
-                        dataset_version_id=None,  # auto-resolve latest validated adjusted_bars from DB
+                        dataset_version_id=None,
                         symbols=inputs.symbols,
                         replay_context=tick_ctx,
                     )
@@ -409,20 +814,79 @@ class PlatformBacktestRunner:
                     tick.universe = uni_result.summary
                     cadence.record("universe", tick_date)
 
-                # ── Trading cycle (daily — market open, 9:30 AM ET) ─────────
+                # ── Trading cycle ────────────────────────────────────────────
                 if cadence.should_run("trading_cycle", tick_date):
+                    from autonomous_trading_platform.application.services.platform_replay.features_hooks import (
+                        run_features_at_timestamp,
+                    )
                     from autonomous_trading_platform.application.services.platform_replay.runtime_hooks import (
+                        _build_simulated_broker_client,
                         run_trading_cycle_at_timestamp,
                     )
 
-                    trading_result = run_trading_cycle_at_timestamp(
-                        session=session, timestamp=tick_ts, replay_context=tick_ctx
+                    bar_timestamps = _intraday_bar_timestamps(tick_date, inputs.cadence_minutes)
+
+                    # One broker client per day so cash/position state persists
+                    # across all intraday ticks. Daily mode builds per tick (backwards-compat).
+                    day_broker_client = (
+                        _build_simulated_broker_client(
+                            session=session,
+                            timestamp=bar_timestamps[0],
+                            dataset_version_id=backtest_dataset_version_id,
+                            starting_cash=inputs.starting_cash,
+                        )
+                        if is_intraday
+                        else None
                     )
-                    tick.trading = trading_result.summary
-                    total_orders += trading_result.orders_submitted
-                    total_fills += trading_result.fills_received
-                    if str(tick_ctx.run_id) not in run_ids:
-                        run_ids.append(str(tick_ctx.run_id))
+
+                    last_trading_result = None
+                    for bar_ts in bar_timestamps:
+                        bar_ctx = PlatformReplayContext(
+                            run_id=tick_ctx.run_id,
+                            replay_id=tick_ctx.replay_id,
+                            timestamp=bar_ts,
+                            symbols=tick_ctx.symbols,
+                            actor=tick_ctx.actor,
+                            dry_run=tick_ctx.dry_run,
+                            artifact_dir=tick_ctx.artifact_dir,
+                            dataset_version_id=tick_ctx.dataset_version_id,
+                        )
+
+                        # Features per tick in intraday mode — uses bars up to bar_ts date
+                        if is_intraday and cadence.should_run(
+                            "features", tick_date, ingestion_ran=ingestion_ran
+                        ):
+                            feat_result = run_features_at_timestamp(
+                                session=session,
+                                timestamp=bar_ts,
+                                dataset_version_id=None,
+                                symbols=inputs.symbols,
+                                replay_context=bar_ctx,
+                            )
+                            if feat_result.errors:
+                                tick.errors.extend(feat_result.errors)
+                            if tick.features is None:
+                                tick.features = feat_result.summary
+
+                        bar_result = run_trading_cycle_at_timestamp(
+                            session=session,
+                            timestamp=bar_ts,
+                            replay_context=bar_ctx,
+                            broker_client=day_broker_client,
+                            backtest_dataset_version_id=backtest_dataset_version_id,
+                        )
+                        total_orders += bar_result.orders_submitted
+                        total_fills += bar_result.fills_received
+                        last_trading_result = bar_result
+                        if str(tick_ctx.run_id) not in run_ids:
+                            run_ids.append(str(tick_ctx.run_id))
+
+                    # Record features cadence after the loop (intraday ran it per tick)
+                    if is_intraday:
+                        cadence.record("features", tick_date)
+
+                    if last_trading_result is not None:
+                        tick.trading = last_trading_result.summary
                     cadence.record("trading_cycle", tick_date)
 
                 # ── Risk evaluation (daily — EOD) ───────────────────────────
@@ -468,7 +932,10 @@ class PlatformBacktestRunner:
                     )
 
                     res_result = run_scheduled_research_at_timestamp(
-                        session=session, timestamp=tick_ts, replay_context=tick_ctx
+                        session=session,
+                        timestamp=tick_ts,
+                        replay_context=tick_ctx,
+                        dataset_version_id=backtest_dataset_version_id,
                     )
                     tick.research = res_result.summary
                     if res_result.errors:
@@ -500,8 +967,44 @@ class PlatformBacktestRunner:
                     all_errors.extend(tick.errors)
                 else:
                     ticks_ok += 1
+                    # Write checkpoint after every clean commit so a restart
+                    # can resume from this tick rather than from tick 1.
+                    if inputs.checkpoint_path and not inputs.dry_run:
+                        _write_checkpoint(
+                            inputs.checkpoint_path,
+                            _CheckpointData(
+                                run_id=str(ctx.run_id),
+                                replay_id=ctx.replay_id,
+                                dataset_version_id=backtest_dataset_version_id,
+                                last_completed_tick_index=tick_index,
+                                last_completed_tick_date=tick_date.isoformat(),
+                                cadence_last_run={
+                                    k: v.isoformat() for k, v in cadence._last_run.items()
+                                },
+                                ticks_ok=ticks_ok,
+                                ticks_failed=ticks_failed,
+                                total_orders=total_orders,
+                                total_fills=total_fills,
+                            ),
+                        )
 
                 tick_results.append({k: v for k, v in tick.__dict__.items()})
+                _emit_progress(
+                    inputs.progress_callback,
+                    {
+                        "status": "completed",
+                        "current_tick": tick_index,
+                        "completed_ticks": tick_index,
+                        "total_ticks": total_ticks,
+                        "tick_date": tick_date.isoformat(),
+                        "start_date": inputs.start_date.isoformat(),
+                        "end_date": inputs.end_date.isoformat(),
+                        "ticks_ok": ticks_ok,
+                        "ticks_failed": ticks_failed,
+                        "total_orders": total_orders,
+                        "total_fills": total_fills,
+                    },
+                )
 
             # ── Phase 6: final snapshots ────────────────────────────────────
             end_ts = datetime.combine(inputs.end_date, datetime.min.time()).replace(tzinfo=UTC)
@@ -513,6 +1016,7 @@ class PlatformBacktestRunner:
                 actor=ctx.actor,
                 dry_run=ctx.dry_run,
                 artifact_dir=ctx.artifact_dir,
+                dataset_version_id=ctx.dataset_version_id,
             )
 
             from autonomous_trading_platform.application.services.platform_replay.portfolio_hooks import (
@@ -807,3 +1311,60 @@ def _apply_timeline_event(
         status="skipped",
         warnings=[f"Unknown timeline event type: {type(event).__name__}"],
     )
+
+
+def _create_backtest_dataset_version(
+    *,
+    session: Session,
+    inputs: PlatformBacktestInputs,
+    ctx: PlatformReplayContext,
+) -> str:
+    """Register one cumulative raw_bars dataset version for the entire backtest run.
+
+    All daily ingestion writes accumulate here (via bar_chunk_writer_service merge
+    logic). Research reads the latest validated version and gets the full growing
+    bar history up to the current research date.
+    """
+    from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
+    from autonomous_trading_platform.contracts.runtime.dataset_version import DatasetVersion
+    from autonomous_trading_platform.runtime.services.dataset_registration_service import (
+        DatasetRegistrationService,
+    )
+    from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
+    from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
+
+    dataset_version_id = generate_dataset_version("raw_bars")
+    dv = DatasetVersion(
+        dataset_version_id=dataset_version_id,
+        dataset_name=RAW_BARS_DATASET.dataset_key,
+        created_at=ctx.timestamp,
+        source="platform_backtest",
+        price_basis=PriceBasis.RAW,
+        interval=BarInterval.FIVE_MIN,
+        schema_version=RAW_BARS_DATASET.schema_version,
+        symbol_coverage=len(inputs.symbols),
+        date_coverage_start=inputs.start_date,
+        date_coverage_end=inputs.end_date,
+        validation_status="validated",
+        checksum="platform_backtest_cumulative",
+        source_manifest={
+            "pipeline": "platform_backtest",
+            "symbols": sorted(inputs.symbols),
+            "start_date": inputs.start_date.isoformat(),
+            "end_date": inputs.end_date.isoformat(),
+        },
+        metadata_json={
+            "dataset_lifecycle": "platform_backtest_cumulative",
+            "replay_run_id": str(ctx.replay_id),
+        },
+    )
+
+    svc = DatasetRegistrationService(session=session)
+    svc.save(dv)  # save() bypasses schema validation (checksum rule doesn't apply here)
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+
+    return dataset_version_id

@@ -4,17 +4,27 @@ from autonomous_trading_platform.execution.errors import InvalidStrategyTransiti
 VALID_TRANSITIONS = {
     StrategyState.IDLE: {
         StrategyEvent.SIGNAL_GENERATED: StrategyState.SIGNALLED,
+        # Exit-only path: positions exist from a prior cycle but no new signal this bar.
+        StrategyEvent.ORDER_INTENTS_CREATED: StrategyState.PENDING,
     },
     StrategyState.SIGNALLED: {
         StrategyEvent.ORDER_INTENTS_CREATED: StrategyState.PENDING,
+        # Re-signal: new bar arrives before order intents were generated (e.g. holiday gap).
+        StrategyEvent.SIGNAL_GENERATED: StrategyState.SIGNALLED,
         StrategyEvent.RESET: StrategyState.IDLE,
     },
     StrategyState.PENDING: {
         StrategyEvent.TARGET_POSITION_REACHED: StrategyState.IN_POSITION,
+        # Re-submission: new order intents replace a previous pending batch.
+        StrategyEvent.ORDER_INTENTS_CREATED: StrategyState.PENDING,
+        # Re-signal from PENDING: new signal supersedes the pending intent.
+        StrategyEvent.SIGNAL_GENERATED: StrategyState.SIGNALLED,
         StrategyEvent.RESET: StrategyState.IDLE,
     },
     StrategyState.IN_POSITION: {
         StrategyEvent.EXIT_SIGNAL_GENERATED: StrategyState.EXIT_PENDING,
+        # Rebalance: new BUY signal while already holding a position.
+        StrategyEvent.SIGNAL_GENERATED: StrategyState.SIGNALLED,
     },
     StrategyState.EXIT_PENDING: {
         StrategyEvent.POSITION_CLOSED: StrategyState.COOLDOWN,

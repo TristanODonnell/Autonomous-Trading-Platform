@@ -72,6 +72,7 @@ class IngestBarsJob:
         self.received_symbols: set[str] = set()
         self.completed_cycle_bars: list[MarketBar] = []
         self.current_cycle_timestamp: datetime | None = None
+        self.enforce_lateness = enforce_lateness
         self.ingestion_service = BarIngestionService(
             session=session,
             run_id=run_id,
@@ -111,7 +112,6 @@ class IngestBarsJob:
         component = "ingestion.ingest_bars_job"
 
         missing_symbols = self.expected_symbols - self.received_symbols
-        symbols_to_evaluate = sorted(self.expected_symbols & self.received_symbols)
         record_runtime_freshness(
             symbols_expected=len(self.expected_symbols),
             symbols_received=len(self.received_symbols),
@@ -205,14 +205,13 @@ class IngestBarsJob:
                 },
             )
 
-            raise RuntimeError(f"Too many missing bars ({missing_ratio:.2%}) at {cycle_timestamp}")
-
-        # TODO TEMP: evaluation hook
-        if symbols_to_evaluate:
-            print(
-                f"[EVALUATION_TRIGGER] {cycle_timestamp.isoformat()} "
-                f"symbols={len(symbols_to_evaluate)}"
-            )
+            # In historical replay (enforce_lateness=False) bars arrive per-symbol
+            # sequentially, so early cycle finalizations always look "missing" for
+            # the remaining symbols. The check is only meaningful in live streaming.
+            if self.enforce_lateness:
+                raise RuntimeError(
+                    f"Too many missing bars ({missing_ratio:.2%}) at {cycle_timestamp}"
+                )
 
     async def _process_symbol_bars(self, symbol_bars) -> None:
         for provider_bar in symbol_bars:

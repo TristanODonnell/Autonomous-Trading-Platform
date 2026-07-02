@@ -349,8 +349,8 @@ def test_activity_events_are_emitted(
 
     original_builder = trading_cycle_common.build_trading_cycle_dependencies
 
-    def patched_builder():
-        deps = original_builder()
+    def patched_builder(**kwargs):
+        deps = original_builder(**kwargs)
         deps.audit_logger = FakeAuditLogger()
         return deps
 
@@ -531,8 +531,8 @@ def test_skipped_runtime_control_cycle_writes_runtime_job_run_and_activity_event
 
     original_builder = trading_cycle_common.build_trading_cycle_dependencies
 
-    def patched_builder():
-        deps = original_builder()
+    def patched_builder(**kwargs):
+        deps = original_builder(**kwargs)
         deps.audit_logger = FakeAuditLogger()
         return deps
 
@@ -622,8 +622,8 @@ def test_trading_cycle_marks_degraded_when_paper_execution_fails(
         def update_total_capital(self, *args, **kwargs):
             raise RuntimeError("simulated paper execution failure")
 
-    def patched_builder():
-        deps = original_builder()
+    def patched_builder(**kwargs):
+        deps = original_builder(**kwargs)
         deps.portfolio_engine = FailingPortfolioEngine()
         return deps
 
@@ -673,8 +673,8 @@ def test_pre_trade_risk_rejection_blocks_order_submission(
         def assert_order_allowed(self, order_intent, now):
             raise GrossExposureLimitExceededError("simulated pre-trade risk rejection")
 
-    def patched_builder():
-        deps = original_builder()
+    def patched_builder(**kwargs):
+        deps = original_builder(**kwargs)
         deps.execution_context.portfolio_construction_service.pre_trade_risk_service = (
             RejectingPreTradeRiskService()
         )

@@ -80,6 +80,7 @@ class PipelineRunner:
         random_seed: int,
         price_basis: PriceBasis,
         initial_cash: float,
+        resample_to_daily: bool = False,
     ) -> PipelineRunResult:
 
         result = PipelineRunResult()
@@ -134,6 +135,7 @@ class PipelineRunner:
                         random_seed=random_seed,
                         price_basis=price_basis,
                         initial_cash=initial_cash,
+                        resample_to_daily=resample_to_daily,
                     )
             except Exception as exc:
                 duration = time.perf_counter() - t0

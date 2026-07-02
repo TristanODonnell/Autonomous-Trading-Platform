@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import contextlib
+from datetime import UTC, date, datetime
+from datetime import time as dt_time
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -22,6 +24,84 @@ from autonomous_trading_platform.storage.sor.repositories.core.missing_bar_incid
     MissingBarIncidentsRepository,
 )
 
+_MARKET_OPEN_UTC = dt_time(14, 30)  # 09:30 ET = 14:30 UTC (EST, no DST adjustment)
+_MARKET_CLOSE_UTC = dt_time(21, 0)  # 16:00 ET = 21:00 UTC
+
+
+def _compact_day_partitions(
+    dataset_version_id: str,
+    tick_date: date,
+    symbols: list[str],
+) -> None:
+    """Merge all per-bar part-*.parquet fragments into a single data.parquet
+    per symbol-month partition after each day's ingestion.
+
+    The ingest writer creates one UUID-named file per 5-min cycle call
+    (78 files/day per symbol). Compacting into one file per month partition
+    keeps subsequent reads O(1) regardless of how many days have been ingested,
+    and allows the universe candidate scorer to read bar history efficiently.
+    Only called in backtest mode (when dataset_version_id_override is set).
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
+    from autonomous_trading_platform.storage.parquet.paths import get_data_root, partition_path
+
+    base_path = get_data_root()
+    year = f"{tick_date.year:04d}"
+    month = f"{tick_date.month:02d}"
+
+    for symbol in symbols:
+        part_dir = partition_path(
+            base_path=base_path,
+            dataset=RAW_BARS_DATASET,
+            dataset_version=dataset_version_id,
+            partitions={"symbol": symbol.upper(), "year": year, "month": month},
+        )
+        if not part_dir.exists():
+            continue
+
+        fragment_files = sorted(part_dir.glob("part-*.parquet"))
+        if not fragment_files:
+            continue
+
+        data_file = part_dir / "data.parquet"
+
+        tables: list[pa.Table] = []
+        # Use ParquetFile.read() (not pq.read_table) to read individual files
+        # without triggering PyArrow's Hive dataset scanner, which walks up the
+        # directory tree and tries to merge schemas across all partitions — causing
+        # ArrowTypeError when int32 and dictionary<int32> year columns coexist.
+        if data_file.exists():
+            with contextlib.suppress(Exception):
+                tables.append(pq.ParquetFile(str(data_file)).read())
+        for f in fragment_files:
+            with contextlib.suppress(Exception):
+                tables.append(pq.ParquetFile(str(f)).read())
+
+        if not tables:
+            continue
+
+        combined = pa.concat_tables(tables, promote_options="default")
+
+        # Deduplicate by bar_id — newest write wins on re-ingest
+        bar_ids = combined.column("bar_id").to_pylist()
+        seen: dict[str, int] = {}
+        for i, bid in enumerate(bar_ids):
+            seen[bid] = i
+        keep_indices = sorted(seen.values())
+        table = combined.take(keep_indices).sort_by([("timestamp", "ascending")])
+
+        # Atomic write: temp + rename so a crash mid-write never corrupts data_file
+        tmp = data_file.with_suffix(".tmp.parquet")
+        pq.write_table(table, tmp)
+        tmp.replace(data_file)
+
+        for f in fragment_files:
+            with contextlib.suppress(Exception):
+                f.unlink()
+
 
 def run_ingestion_at_timestamp(
     *,
@@ -29,6 +109,8 @@ def run_ingestion_at_timestamp(
     timestamp: datetime,
     replay_context: PlatformReplayContext,
     dry_run: bool = False,
+    full_day: bool = False,
+    backtest_dataset_version_id: str | None = None,
 ) -> IngestionReplayResult:
     """Run market ingestion cycle for the given timestamp.
 
@@ -49,12 +131,24 @@ def run_ingestion_at_timestamp(
         )
 
     warnings: list[str] = []
+
+    cycle_start_override: datetime | None = None
+    cycle_end_override: datetime | None = None
+    if full_day:
+        tick_date = timestamp.date()
+        cycle_start_override = datetime.combine(tick_date, _MARKET_OPEN_UTC).replace(tzinfo=UTC)
+        cycle_end_override = datetime.combine(tick_date, _MARKET_CLOSE_UTC).replace(tzinfo=UTC)
+
     try:
         summary = run_market_ingestion_cycle(
             now_utc=timestamp,
             symbols_override=replay_context.symbols if replay_context.symbols else None,
+            enforce_lateness=False,  # historical replay — bars for past dates are never "late"
             trigger_type="platform_replay",
             actor=replay_context.actor,
+            cycle_start_override=cycle_start_override,
+            cycle_end_override=cycle_end_override,
+            dataset_version_id_override=backtest_dataset_version_id,
         )
     except Exception as exc:
         return IngestionReplayResult(
@@ -94,6 +188,17 @@ def run_ingestion_at_timestamp(
         "timestamp": timestamp.isoformat(),
         **{k: v for k, v in summary.items() if k not in ("dataset_version_id", "row_count")},
     }
+
+    # Compact fragment files into one data.parquet per symbol-month.
+    # Only in backtest mode (dataset_version_id_override set) — live/paper
+    # bars are written in real-time and compacted by a separate nightly job.
+    if backtest_dataset_version_id and replay_context.symbols:
+        with contextlib.suppress(Exception):
+            _compact_day_partitions(
+                dataset_version_id=backtest_dataset_version_id,
+                tick_date=timestamp.date(),
+                symbols=replay_context.symbols,
+            )
 
     return IngestionReplayResult(
         **base,

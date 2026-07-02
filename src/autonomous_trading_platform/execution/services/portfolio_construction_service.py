@@ -42,6 +42,7 @@ from autonomous_trading_platform.observability.metrics import (
 )
 from autonomous_trading_platform.portfolio.exceptions import (
     AllocationDeniedError,
+    InsufficientCapitalError,
     MissingPositionScalingDataError,
     NoPolicyFoundError,
 )
@@ -125,14 +126,21 @@ class PortfolioConstructionService:
 
         for delta in deltas:
             symbol = str(delta["symbol"])
-            order_intent = self.build_order_intent(
-                delta=delta,
-                prices=prices,
-                run_id=run_id,
-                strategy_id=strategy_id,
-                bar_timestamp=bar_timestamp,
-                now=now,
-            )
+            try:
+                order_intent = self.build_order_intent(
+                    delta=delta,
+                    prices=prices,
+                    run_id=run_id,
+                    strategy_id=strategy_id,
+                    bar_timestamp=bar_timestamp,
+                    now=now,
+                )
+            except KeyError:
+                logger.warning(
+                    "order_intent.skipped_missing_price",
+                    extra={"symbol": symbol, "run_id": str(run_id)},
+                )
+                continue
             combined_metadata: dict[str, Any] = {}
             signal = signals_by_symbol.get(symbol)
             if signal is not None:
@@ -228,7 +236,7 @@ class PortfolioConstructionService:
                     combined_scalar=scalar_result.combined_scalar,
                     realized_drawdown=realized_drawdown,
                 )
-            except (AllocationDeniedError, NoPolicyFoundError) as exc:
+            except (AllocationDeniedError, NoPolicyFoundError, InsufficientCapitalError) as exc:
                 logger.warning(
                     "portfolio_construction.allocation_skipped",
                     extra={
@@ -493,7 +501,10 @@ class PortfolioConstructionService:
 
         side = Side.BUY if delta_qty > 0 else Side.SELL
         qty = abs(delta_qty)
-        price = Decimal(str(prices[symbol]))
+        raw_price = prices.get(symbol)
+        if raw_price is None:
+            raise KeyError(f"No price available for {symbol} — cannot build order intent")
+        price = Decimal(str(raw_price))
 
         client_order_id = self._build_client_order_id(
             run_id=run_id,

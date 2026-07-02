@@ -1,0 +1,23 @@
+{
+  "run_id": "53452265-ee5e-40c5-a0c4-c5f98f9d67d9",
+  "replay_id": "replay-265f06cede20",
+  "dataset_version_id": "raw_bars_20260613T010246Z_c0536a67",
+  "last_completed_tick_index": 88,
+  "last_completed_tick_date": "2023-05-03",
+  "cadence_last_run": {
+    "ingestion": "2023-05-03",
+    "corporate_actions": "2023-05-03",
+    "universe": "2023-05-01",
+    "features": "2023-05-03",
+    "trading_cycle": "2023-05-03",
+    "risk": "2023-05-03",
+    "governance": "2023-05-03",
+    "portfolio_snapshot": "2023-05-03",
+    "research": "2023-05-01",
+    "operations_health": "2023-05-03"
+  },
+  "ticks_ok": 87,
+  "ticks_failed": 1,
+  "total_orders": 3928,
+  "total_fills": 3928
+}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import traceback
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -11,6 +12,7 @@ from autonomous_trading_platform.contracts.runtime.platform_replay import (
     UniverseReplayResult,
     UniverseSummary,
 )
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.repositories.core.universe_rotation_repository import (
     UniverseRotationRepository,
 )
@@ -21,6 +23,8 @@ from autonomous_trading_platform.universe.jobs.run_universe_rotation import (
     run_universe_rotation,
 )
 from autonomous_trading_platform.universe.types import UniverseRebalanceConfig
+
+_logger = get_logger(__name__)
 
 
 def run_universe_at_timestamp(
@@ -56,22 +60,75 @@ def run_universe_at_timestamp(
         )
 
     warnings: list[str] = []
+
+    # ── Step 1: refresh raw market pool via screener ─────────────────────────
+    # Point-in-time correct: ranks all active US equities by dollar volume as
+    # of this rotation date, so the candidate pool reflects that month's market.
     try:
+        from autonomous_trading_platform.storage.sor.repositories.core.raw_market_pool_repository import (
+            RawMarketPoolRepository,
+        )
+        from autonomous_trading_platform.universe.providers.alpaca_screener_provider import (
+            AlpacaScreenerProvider,
+        )
+        from autonomous_trading_platform.universe.services.raw_market_pool_refresh_service import (
+            RawMarketPoolRefreshService,
+        )
+
+        screener = AlpacaScreenerProvider(as_of=timestamp.date(), top_n=500)
+        pool_repo = RawMarketPoolRepository(session)
+        refresh_svc = RawMarketPoolRefreshService(pool_repo, screener)
+        refresh_svc.refresh(cadence="monthly", captured_at=timestamp)
+        session.commit()
+    except Exception as exc:
+        warnings.append(f"screener_refresh_failed: {exc}")
+
+    # ── Step 2: generate scored candidate universe from pool ─────────────────
+    try:
+        from autonomous_trading_platform.universe.jobs.run_candidate_generation import (
+            run_candidate_generation,
+        )
+        from autonomous_trading_platform.universe.types import CandidateGenerationConfig
+
+        run_candidate_generation(
+            as_of=timestamp,
+            config=CandidateGenerationConfig(as_of=timestamp, lookback_days=20, max_symbols=500),
+            rebalance_reason="platform_replay_monthly",
+            dataset_version_id=replay_context.dataset_version_id,
+        )
+    except Exception as exc:
+        warnings.append(f"candidate_generation_failed: {exc}")
+
+    # ── Step 3: rotate — select best 20 from scored candidates ──────────────
+    try:
+        # Always force rotation in a platform replay: the churn guard (max_churn_pct=0.30)
+        # is designed for live trading where real capital is at risk. In a historical
+        # backtest the universe should rotate freely so the simulation reflects real
+        # month-over-month composition changes. config_hash_unchanged still gates no-op skips.
         result = run_universe_rotation(
             candidate_version_id=None,
             config=UniverseRebalanceConfig(),
             rotation_reason="platform_replay",
-            force_rotation=force_rotation,
+            force_rotation=True,
             approved_by=replay_context.actor,
             as_of=timestamp,
             skip_cadence_check=skip_cadence_check,
             dry_run=False,
         )
     except Exception as exc:
+        _logger.error(
+            "universe rotation failed in replay hook",
+            extra={
+                "timestamp": timestamp.isoformat(),
+                "error": str(exc),
+                "traceback": traceback.format_exc(),
+            },
+        )
         return UniverseReplayResult(
             **base,
             status="failed",
             errors=[str(exc)],
+            warnings=warnings,
         )
 
     if result is None:

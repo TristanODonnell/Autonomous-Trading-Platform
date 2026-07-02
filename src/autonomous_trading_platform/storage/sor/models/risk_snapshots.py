@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Boolean, Float, String
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy import Boolean, Float
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from autonomous_trading_platform.contracts.common.types import Money, UTCDateTime
 
 from .base import Base
-from .helpers.sa_types import UUID_PK, MoneyType, UTCDateTimeType
+from .helpers.sa_types import UUID_PK, JSONStringListType, MoneyType, UTCDateTimeType
 
 
 class RiskSnapshot(Base):
@@ -32,4 +32,4 @@ class RiskSnapshot(Base):
     utilization: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
 
     is_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    block_reasons: Mapped[list[str] | None] = mapped_column(ARRAY(String(64)), nullable=True)
+    block_reasons: Mapped[list[str] | None] = mapped_column(JSONStringListType(), nullable=True)

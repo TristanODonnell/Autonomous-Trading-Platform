@@ -1,5 +1,9 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from autonomous_trading_platform.research.cache.simulation_result_cache import SimulationResultCache
+from autonomous_trading_platform.research.cache.strategy_generation_cache import (
+    StrategyGenerationCache,
+)
 from autonomous_trading_platform.research.experiments.services.experiment_orchestration_service import (
     ExperimentOrchestrationService,
 )
@@ -32,3 +36,7 @@ class SimulationContext:
     simulation_runner: SimulationRunner
     simulation_engine: SimulationExecutionEngine
     experiment_orchestration_service: ExperimentOrchestrationService
+    simulation_result_cache: SimulationResultCache = field(default_factory=SimulationResultCache)
+    strategy_generation_cache: StrategyGenerationCache = field(
+        default_factory=StrategyGenerationCache
+    )

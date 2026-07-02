@@ -22,6 +22,7 @@ platform_replay:
   end: 2024-01-08
   starting_cash: 100000
   random_seed: 42
+  cadence_minutes: 5  # 5-min bars: 78 ticks/day × 5 days = 390 total trading cycle calls
 
 initial_state:
   settings:

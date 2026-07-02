@@ -9,14 +9,14 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from sqlalchemy import ARRAY, Date, String
+from sqlalchemy import Date, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from autonomous_trading_platform.contracts.common.types import UTCDateTime
 
 from .base import Base
-from .helpers.sa_types import UTCDateTimeType
+from .helpers.sa_types import JSONStringListType, UTCDateTimeType
 
 
 class UniverseSnapshot(Base):
@@ -26,7 +26,7 @@ class UniverseSnapshot(Base):
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
     effective_start: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
     effective_end: Mapped[UTCDateTime | None] = mapped_column(UTCDateTimeType(), nullable=True)
-    symbols: Mapped[list[str]] = mapped_column(ARRAY(String(32)), nullable=False)
+    symbols: Mapped[list[str]] = mapped_column(JSONStringListType(), nullable=False)
     criteria: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     version: Mapped[str] = mapped_column(String, nullable=False)
     source: Mapped[str] = mapped_column(String, nullable=False)

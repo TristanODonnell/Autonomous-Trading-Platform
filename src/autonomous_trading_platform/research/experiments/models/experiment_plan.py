@@ -43,3 +43,4 @@ class ExperimentDefinition:
     universe_set: list[list[str]] | None = None
     staged_pipeline_config: StagedPipelineConfig | None = None
     universe_resolution_mode: UniverseResolutionMode | None = None
+    resample_to_daily: bool = False

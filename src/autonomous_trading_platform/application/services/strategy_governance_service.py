@@ -45,6 +45,7 @@ _STATE_ALIASES = {
     "approved_research": "approved_research",
     "approved_for_research": "approved_research",
     "paper": "approved_for_paper_trading",
+    "paper_trading_active": "approved_for_paper_trading",
     "approved_paper": "approved_for_paper_trading",
     "approved_for_paper_trading": "approved_for_paper_trading",
     "live": "approved_for_live_trading",

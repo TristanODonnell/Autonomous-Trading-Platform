@@ -1,3 +1,4 @@
+import contextlib
 from datetime import UTC, datetime
 from time import perf_counter
 
@@ -125,11 +126,18 @@ def _get_active_daily_raw_bars_dataset(
     return row if isinstance(row, DatasetVersions) else None
 
 
-def run_trading_cycle(now_utc: datetime | None = None):
+def run_trading_cycle(
+    now_utc: datetime | None = None,
+    broker_client: object | None = None,
+    dataset_version_id_override: str | None = None,
+):
     if now_utc is None:
         now_utc = datetime.now(UTC)
 
-    trading_cycle_dependencies = build_trading_cycle_dependencies()
+    trading_cycle_dependencies = build_trading_cycle_dependencies(
+        broker_client=broker_client,
+        dataset_version_id_override=dataset_version_id_override,
+    )
 
     settings = trading_cycle_dependencies.settings
     session = trading_cycle_dependencies.session
@@ -228,6 +236,8 @@ def run_trading_cycle(now_utc: datetime | None = None):
         universe_version_id=resolved_universe_version_id,
         universe_source=resolved_universe_source,
         universe_member_count=resolved_universe_member_count,
+        strategy_id=trading_cycle_dependencies.active_strategy_id,
+        governance_state=trading_cycle_dependencies.active_governance_state,
     )
     manifest.status = "running"
     manifest.current_step = "starting"
@@ -833,7 +843,11 @@ def run_trading_cycle(now_utc: datetime | None = None):
                     step_span.set_attribute("ratp.run_id", str(run_id))
                     step_span.set_attribute("ratp.step", step)
 
-                    run_order_reconciliation_job(run_id=str(run_id), now_utc=now_utc)
+                    run_order_reconciliation_job(
+                        run_id=str(run_id),
+                        now_utc=now_utc,
+                        broker_client=broker_client,
+                    )
 
                 duration = perf_counter() - step_start
                 record_step_completed(
@@ -1110,6 +1124,10 @@ def _evaluate_portfolio_governance_for_trading(*, session, logger, component: st
         return None
 
     except Exception as exc:
+        # Rollback any partial transaction state so the session remains usable
+        # for the rest of the trading cycle.
+        with contextlib.suppress(Exception):
+            session.rollback()
         logger.warning(
             "portfolio_governance.trading_check_error_fail_open",
             extra={"component": component, "error": str(exc)},

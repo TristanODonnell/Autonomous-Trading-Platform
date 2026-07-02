@@ -1,6 +1,8 @@
 from typing import cast
+from uuid import UUID
 
 from sqlalchemy import desc, select
+from sqlalchemy.exc import IntegrityError
 
 from autonomous_trading_platform.storage.sor.models.position_snapshots import PositionSnapshot
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
@@ -17,7 +19,7 @@ class PositionSnapshotRepository(BaseRepository):
     # Basic lookup
     # -----------------------------
 
-    def get_by_snapshot_id(self, id_value: str) -> PositionSnapshot | None:
+    def get_by_snapshot_id(self, id_value: str | UUID) -> PositionSnapshot | None:
         stmt = select(PositionSnapshot).where(PositionSnapshot.snapshot_id == id_value)
         return cast(PositionSnapshot | None, self.session.scalars(stmt).one_or_none())
 
@@ -59,21 +61,63 @@ class PositionSnapshotRepository(BaseRepository):
     # Upserts
     # -----------------------------
 
-    def upsert(self, row: PositionSnapshot) -> PositionSnapshot:
-        """
-        Insert or update based on deterministic ID.
-        """
-        existing = self.get_by_snapshot_id(row.snapshot_id)
+    def get_or_create_header(
+        self,
+        snapshot_id: UUID,
+        run_id: object,
+        timestamp: object,
+        source: object,
+    ) -> PositionSnapshot:
+        """Return the existing snapshot for (run_id, timestamp, source), or INSERT a new one.
 
+        Does NOT touch .positions — caller is responsible for setting positions on the
+        returned object.  Using a savepoint so a concurrent INSERT (same 5-min bar,
+        multiple fills) degrades gracefully to a SELECT fallback without poisoning the
+        outer transaction.
+        """
+        existing = self.get_by_snapshot_id(snapshot_id)
+        if existing is not None:
+            return existing
+
+        sp = self.session.begin_nested()
+        try:
+            new_row = PositionSnapshot(
+                snapshot_id=snapshot_id,
+                run_id=run_id,
+                timestamp=timestamp,
+                source=source,
+            )
+            self.session.add(new_row)
+            sp.commit()
+            return new_row
+        except IntegrityError:
+            sp.rollback()
+            existing = self._get_by_run_ts_source(run_id, timestamp, source)
+            if existing is not None:
+                return existing
+            raise
+
+    def upsert(self, row: PositionSnapshot) -> PositionSnapshot:
+        """Insert-or-update by snapshot_id."""
+        existing = self.get_by_snapshot_id(row.snapshot_id)
         if existing is None:
             self.session.add(row)
             return row
-
-        # Update fields (explicit updates recommended)
-        for column in PositionSnapshot.__table__.columns:
-            setattr(existing, column.name, getattr(row, column.name))
-
+        existing.positions = row.positions
         return existing
+
+    def _get_by_run_ts_source(
+        self,
+        run_id: object,
+        timestamp: object,
+        source: object,
+    ) -> PositionSnapshot | None:
+        stmt = select(PositionSnapshot).where(
+            PositionSnapshot.run_id == run_id,
+            PositionSnapshot.timestamp == timestamp,
+            PositionSnapshot.source == source,
+        )
+        return cast(PositionSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     # -----------------------------
     # Deletes (optional)

@@ -607,9 +607,6 @@ class SimulationExecutionEngine:
                 state=strategy_state,
             )
 
-            if context is not None:
-                print(f"{timestamp} | {symbol} | bars={len(context.bars)}")
-
             if context is None:
                 continue
 

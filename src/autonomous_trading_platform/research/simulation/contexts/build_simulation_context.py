@@ -6,6 +6,10 @@ from autonomous_trading_platform.execution.services.cash_ledger_service import C
 from autonomous_trading_platform.execution.services.position_ledger_service import (
     PositionLedgerService,
 )
+from autonomous_trading_platform.research.cache.simulation_result_cache import SimulationResultCache
+from autonomous_trading_platform.research.cache.strategy_generation_cache import (
+    StrategyGenerationCache,
+)
 from autonomous_trading_platform.research.experiments.filtering.config import (
     FilterConfig,
     ScoringWeights,
@@ -82,12 +86,13 @@ from autonomous_trading_platform.strategy.contexts.strategy_context_builder impo
 )
 from autonomous_trading_platform.strategy.factories.strategy_factory import StrategyFactory
 
-# TODO: drive from experiment config / universe definition
 _DEFAULT_UNIVERSE_SIZE = 5
 _DEFAULT_TOTAL_CAPITAL = 100_000.00
 
 
-def build_simulation_context(*, session: Session) -> SimulationContext:
+def build_simulation_context(
+    *, session: Session, universe_size: int | None = None, lookback_bars: int = 50
+) -> SimulationContext:
     strategy_factory = StrategyFactory()
 
     bar_reader = HistoricalBarDatasetReader(session=session, base_path="data")
@@ -106,14 +111,14 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
     context_builder = StrategyContextBuilder(
         market_bar_reader=bar_reader,
         bars_dataset=ADJUSTED_BARS_DATASET,
-        lookback_bars=300,
+        lookback_bars=lookback_bars,
         lookahead_guard_service=lookahead_guard_service,
     )
 
     # Simulation sizing: pure math, no DB, no governance, no policies.
     position_sizer = SimplePositionSizer(
         total_capital=_DEFAULT_TOTAL_CAPITAL,
-        universe_size=_DEFAULT_UNIVERSE_SIZE,
+        universe_size=universe_size if universe_size is not None else _DEFAULT_UNIVERSE_SIZE,
     )
 
     simulation_cost_model_service = SimulationCostModelService(
@@ -164,6 +169,9 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         filter_score_service=filter_score_service,
     )
 
+    simulation_result_cache = SimulationResultCache()
+    strategy_generation_cache = StrategyGenerationCache()
+
     return SimulationContext(
         bar_reader=bar_reader,
         dataset_resolver=dataset_resolver,
@@ -173,4 +181,6 @@ def build_simulation_context(*, session: Session) -> SimulationContext:
         simulation_runner=simulation_runner,
         simulation_engine=simulation_engine,
         experiment_orchestration_service=experiment_orchestration_service,
+        simulation_result_cache=simulation_result_cache,
+        strategy_generation_cache=strategy_generation_cache,
     )

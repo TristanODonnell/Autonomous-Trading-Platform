@@ -40,6 +40,7 @@ class PlatformReplayContext:
     actor: str
     dry_run: bool
     artifact_dir: Path | None = None
+    dataset_version_id: str | None = None
 
     @classmethod
     def create(

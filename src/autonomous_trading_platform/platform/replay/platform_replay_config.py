@@ -245,11 +245,12 @@ class OutputConfig(BaseModel):
     write_governance_audit: bool = True
     write_failure_report: bool = True
     write_dashboard_snapshot: bool = True
+    show_progress: bool = True
 
 
 class InitialStateConfig(BaseModel):
-    # All fields are documentation-only — the runner does not apply initial_state.
-    # Use `atp platform fixture seed` to actually seed DB state before a replay run.
+    # Applied by the runner before the first tick via apply_initial_state().
+    # Seeds operator settings, strategy governance states, and allocation overrides.
     settings: dict[str, Any] = Field(default_factory=dict)
     controls: dict[str, Any] = Field(default_factory=dict)
     strategies: list[Any] = Field(default_factory=list)
@@ -267,6 +268,7 @@ class PlatformReplayBlock(BaseModel):
     end: str | None = None
     starting_cash: Decimal | None = None
     random_seed: int | None = None
+    cadence_minutes: int = 390  # 390 = daily (one tick per trading day); 5 = 5-min intraday
 
     @field_validator("symbols")
     @classmethod
@@ -359,6 +361,7 @@ class MergedReplayParams:
     end_date: date
     starting_cash: Decimal
     random_seed: int
+    cadence_minutes: int = 390
     fixture: PlatformReplayFixture | None = None
     scheduled_jobs: dict[str, ScheduledJobConfig] = field(default_factory=dict)
     timeline_events: list[TimelineEventConfig] = field(default_factory=list)
@@ -374,6 +377,7 @@ def merge_fixture_with_cli(
     cli_end: str | None = None,
     cli_starting_cash: Decimal | None = None,
     cli_random_seed: int | None = None,
+    cli_cadence_minutes: int | None = None,
 ) -> MergedReplayParams:
     """Merge fixture + CLI overrides. Raises ValueError on missing required fields."""
     cfg = fixture.platform_replay if fixture else None
@@ -400,6 +404,12 @@ def merge_fixture_with_cli(
         if cli_random_seed is not None
         else ((cfg.random_seed if cfg else None) or 42)
     )
+    # CLI takes precedence over fixture; fixture takes precedence over default
+    cadence_minutes = (
+        cli_cadence_minutes
+        if cli_cadence_minutes is not None
+        else (cfg.cadence_minutes if cfg else 390)
+    )
 
     return MergedReplayParams(
         symbols=symbols,
@@ -407,6 +417,7 @@ def merge_fixture_with_cli(
         end_date=end_date,
         starting_cash=starting_cash,
         random_seed=random_seed,
+        cadence_minutes=cadence_minutes,
         fixture=fixture,
         scheduled_jobs=fixture.scheduled_jobs if fixture else {},
         timeline_events=fixture.domain_timeline_events() if fixture else [],

@@ -189,6 +189,12 @@ def _column_type_shape(column_or_type: Column[Any] | Any) -> str:
         return "uuid"
 
     if isinstance(column_type, TypeDecorator):
+        from autonomous_trading_platform.storage.sor.models.helpers.sa_types import (
+            JSONStringListType,
+        )
+
+        if isinstance(column_type, JSONStringListType):
+            return "json"
         column_type = column_type.impl
 
     if _is_array_type(column_type):

@@ -93,6 +93,13 @@ class OrderReconciliationService:
                 return self._handle_broker_order_not_found(tracked_order, timestamp=timestamp)
             raise
 
+        # Simulated broker returns {"status": "not_found"} instead of raising HTTP 404.
+        if (
+            raw_payload.get("status") == "not_found"
+            and tracked_order.current_status in _EXPIRABLE_STATUSES
+        ):
+            return self._handle_broker_order_not_found(tracked_order, timestamp=timestamp)
+
         broker_order = self.broker_order_mapper.to_broker_order(
             payload=raw_payload,
             intent_id=tracked_order.intent_id,

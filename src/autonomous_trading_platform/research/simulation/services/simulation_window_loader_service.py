@@ -49,6 +49,10 @@ def shuffle_window_bar_timestamps(
 
     shuffled_timeline = sorted(shuffled_bars_by_timestamp.keys())
 
+    shuffled_timestamps_by_symbol = {
+        symbol: [b.timestamp for b in bars] for symbol, bars in shuffled_bars_by_symbol.items()
+    }
+
     return SimulationWindowData(
         start_date=window.start_date,
         end_date=window.end_date,
@@ -60,6 +64,7 @@ def shuffle_window_bar_timestamps(
         feature_tables_by_symbol=window.feature_tables_by_symbol,
         warmup_bars_by_symbol=window.warmup_bars_by_symbol,
         warmup_timestamps=window.warmup_timestamps,
+        sorted_timestamps_by_symbol=shuffled_timestamps_by_symbol,
     )
 
 
@@ -89,11 +94,19 @@ class SimulationWindowData:
     warmup_bars_by_symbol: dict[str, list[MarketBar]] = None  # type: ignore[assignment]
     warmup_timestamps: set[datetime] = None  # type: ignore[assignment]
 
+    # Precomputed sorted timestamp lists per symbol for O(log N) bisect lookups
+    # in build_from_window. Populated by SimulationWindowLoader.load_window().
+    sorted_timestamps_by_symbol: dict[str, list[datetime]] = None  # type: ignore[assignment]
+
     def __post_init__(self) -> None:
         if self.warmup_bars_by_symbol is None:
             self.warmup_bars_by_symbol = {}
         if self.warmup_timestamps is None:
             self.warmup_timestamps = set()
+        if self.sorted_timestamps_by_symbol is None:
+            self.sorted_timestamps_by_symbol = {
+                symbol: [b.timestamp for b in bars] for symbol, bars in self.bars_by_symbol.items()
+            }
 
     def is_warmup(self, timestamp: datetime) -> bool:
         """Return True if this timestamp belongs to the warmup period.
@@ -134,6 +147,7 @@ class SimulationWindowLoader:
         engine: str = "duckdb",
         strict: bool = False,
         warmup_bars: int = 0,
+        resample_to_daily: bool = False,
     ) -> SimulationWindowData:
         """Load bar and feature data for a simulation window.
 
@@ -206,11 +220,13 @@ class SimulationWindowLoader:
 
             all_bars = [self._row_to_market_bar(row) for row in bar_table.to_pylist()]
 
+            # Ensure bars are always sorted by timestamp so bisect lookups in
+            # build_from_window are correct. Sort once here rather than O(N) scan
+            # per timestamp in the simulation loop.
+            all_bars.sort(key=lambda b: b.timestamp)
+
             if warmup_bars > 0:
-                pre_bars = sorted(
-                    [b for b in all_bars if b.timestamp.date() < start_date],
-                    key=lambda b: b.timestamp,
-                )
+                pre_bars = [b for b in all_bars if b.timestamp.date() < start_date]
                 live_bars = [b for b in all_bars if b.timestamp.date() >= start_date]
                 # Trim pre_bars to exactly warmup_bars (take the most recent ones)
                 warmup_slice = pre_bars[-warmup_bars:] if len(pre_bars) > warmup_bars else pre_bars
@@ -255,6 +271,9 @@ class SimulationWindowLoader:
 
                     feature_tables_by_symbol[symbol][feature_request.feature_name] = feature_table
 
+        if resample_to_daily:
+            bars_by_symbol = self._resample_bars_to_daily(bars_by_symbol)
+
         bars_by_timestamp: dict[datetime, dict[str, MarketBar]] = {}
 
         for symbol, bars in bars_by_symbol.items():
@@ -286,6 +305,56 @@ class SimulationWindowLoader:
             warmup_bars_by_symbol=warmup_bars_by_symbol,
             warmup_timestamps=warmup_timestamps,
         )
+
+    @staticmethod
+    def _resample_bars_to_daily(
+        bars_by_symbol: dict[str, list[MarketBar]],
+    ) -> dict[str, list[MarketBar]]:
+        """Aggregate intraday bars to one OHLCV bar per symbol per trading day.
+
+        Uses the last intraday bar's timestamp as the daily bar's timestamp so
+        date-based warmup filtering (b.timestamp.date() < start_date) still works.
+        """
+        from collections import defaultdict
+
+        from autonomous_trading_platform.contracts.common.enums import BarInterval, MarketSession
+
+        daily: dict[str, list[MarketBar]] = {}
+        for symbol, bars in bars_by_symbol.items():
+            sorted_bars = sorted(bars, key=lambda b: b.timestamp)
+            by_date: dict = defaultdict(list)
+            for bar in sorted_bars:
+                by_date[bar.timestamp.date()].append(bar)
+
+            day_bars: list[MarketBar] = []
+            for day in sorted(by_date.keys()):
+                day_list: list[MarketBar] = by_date[day]
+                first, last = day_list[0], day_list[-1]
+                trade_count_sum = sum(b.trade_count for b in day_list if b.trade_count is not None)
+                day_bars.append(
+                    MarketBar(
+                        bar_id=f"{symbol}_daily_{day.isoformat()}",
+                        timestamp=last.timestamp,
+                        end_timestamp=last.end_timestamp,
+                        interval=BarInterval.ONE_DAY,
+                        symbol=symbol,
+                        open=first.open,
+                        high=max(b.high for b in day_list),
+                        low=min(b.low for b in day_list),
+                        close=last.close,
+                        volume=sum(b.volume for b in day_list),
+                        vwap=None,
+                        trade_count=trade_count_sum if trade_count_sum else None,
+                        price_basis=first.price_basis,
+                        adjustment_factor=first.adjustment_factor,
+                        source=first.source,
+                        ingested_at=first.ingested_at,
+                        quality_flags=[],
+                        session=MarketSession.REGULAR,
+                    )
+                )
+            daily[symbol] = day_bars
+        return daily
 
     @staticmethod
     def _row_to_market_bar(row: dict[str, Any]) -> MarketBar:
