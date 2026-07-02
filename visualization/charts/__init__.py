@@ -1,0 +1,16 @@
+from visualization.charts import (  # noqa: F401
+    benchmark_gauntlet,
+    cost_sensitivity,
+    drawdown,
+    equity_curve,
+    execution_quality,
+    exposure_allocation,
+    governance_timeline,
+    monthly_returns,
+    operational_health,
+    performance_table,
+    platform_contribution,
+    research_funnel,
+    rolling_risk,
+    strategy_lifecycle,
+)

@@ -4,6 +4,8 @@ from autonomous_trading_platform.execution.errors import InvalidStrategyTransiti
 VALID_TRANSITIONS = {
     StrategyState.IDLE: {
         StrategyEvent.SIGNAL_GENERATED: StrategyState.SIGNALLED,
+        # Exit-only path: positions exist from a prior cycle but no new signal this bar.
+        StrategyEvent.ORDER_INTENTS_CREATED: StrategyState.PENDING,
     },
     StrategyState.SIGNALLED: {
         StrategyEvent.ORDER_INTENTS_CREATED: StrategyState.PENDING,

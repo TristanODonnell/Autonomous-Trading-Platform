@@ -69,17 +69,21 @@ def _compact_day_partitions(
         data_file = part_dir / "data.parquet"
 
         tables: list[pa.Table] = []
+        # Use ParquetFile.read() (not pq.read_table) to read individual files
+        # without triggering PyArrow's Hive dataset scanner, which walks up the
+        # directory tree and tries to merge schemas across all partitions — causing
+        # ArrowTypeError when int32 and dictionary<int32> year columns coexist.
         if data_file.exists():
             with contextlib.suppress(Exception):
-                tables.append(pq.read_table(data_file))
+                tables.append(pq.ParquetFile(str(data_file)).read())
         for f in fragment_files:
             with contextlib.suppress(Exception):
-                tables.append(pq.read_table(f))
+                tables.append(pq.ParquetFile(str(f)).read())
 
         if not tables:
             continue
 
-        combined = pa.concat_tables(tables)
+        combined = pa.concat_tables(tables, promote_options="default")
 
         # Deduplicate by bar_id — newest write wins on re-ingest
         bar_ids = combined.column("bar_id").to_pylist()

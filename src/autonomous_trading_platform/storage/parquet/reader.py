@@ -100,7 +100,14 @@ def list_partition_files(
         )
 
         if partition_dir.exists():
-            files.extend(sorted(partition_dir.glob("*.parquet")))
+            data_file = partition_dir / "data.parquet"
+            if data_file.exists():
+                # Prefer the compacted data.parquet — it has a consistent schema
+                # (includes physical partition columns). Fragments lack those columns
+                # and cause ArrowTypeError when mixed with data.parquet in ds.dataset().
+                files.append(data_file)
+            else:
+                files.extend(sorted(partition_dir.glob("part-*.parquet")))
 
     return files
 

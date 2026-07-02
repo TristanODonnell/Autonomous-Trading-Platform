@@ -560,6 +560,8 @@ class PlatformBacktestRunner:
 
                         if not _candidate_ok:
                             try:
+                                import uuid as _uuid_mod
+
                                 _uv_repo2 = _UVRepo(session)
                                 _uv_svc = _UVService(_uv_repo2)
                                 if True:
@@ -580,8 +582,11 @@ class PlatformBacktestRunner:
                                         _bootstrap_symbols = inputs.symbols
                                         _fallback_source = "yaml_bootstrap_fallback"
                                         _fallback_reason = "screener_unavailable"
+                                    # Use a unique name to avoid unique-constraint failures
+                                    # when previous runs left retired versions with the same date.
+                                    _fallback_name = f"bootstrap_{inputs.start_date.isoformat()}_{_uuid_mod.uuid4().hex[:8]}"
                                     _bv, _bm = _uv_svc.build_version(
-                                        name=f"bootstrap_{inputs.start_date.isoformat()}",
+                                        name=_fallback_name,
                                         effective_from=_bootstrap_ts,
                                         symbols=_bootstrap_symbols,
                                         source=_fallback_source,

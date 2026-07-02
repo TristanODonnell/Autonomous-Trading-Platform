@@ -244,9 +244,12 @@ def run_trading_evaluation_job(
             signal_symbols = sorted({signal.symbol for signal in strategy_job_result.signals})
             bar_timestamp: datetime = strategy_job_result.target_bar_timestamp  # type: ignore[assignment]
 
-            # Fetch real positions and prices
+            # Fetch real positions and prices — include position symbols so that
+            # build_order_intent can price exit deltas for holdings with no new signal.
             positions = _fetch_positions(broker_client)
-            prices = _fetch_prices(broker_client, signal_symbols)
+            position_symbols = sorted(positions.keys())
+            all_price_symbols = sorted(set(signal_symbols) | set(position_symbols))
+            prices = _fetch_prices(broker_client, all_price_symbols)
 
             recent_closes = _fetch_recent_closes(
                 strategy_context=strategy_context,

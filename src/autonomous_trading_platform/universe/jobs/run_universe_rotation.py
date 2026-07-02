@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.config.settings import Settings
-from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.universe.services.universe_rotation_service import (
     RotationResult,
     UniverseRotationService,
@@ -56,7 +55,13 @@ def run_universe_rotation(
 
     effective_reason = rotation_reason or settings.universe_rebalance_cadence
 
-    session: Session = get_session()
+    from sqlalchemy.orm import sessionmaker as _sessionmaker
+
+    from autonomous_trading_platform.db import get_engine as _get_engine
+
+    session: Session = _sessionmaker(
+        bind=_get_engine(), autoflush=False, autocommit=False, expire_on_commit=False
+    )()
     try:
         svc = UniverseRotationService(session)
         result = svc.rotate(

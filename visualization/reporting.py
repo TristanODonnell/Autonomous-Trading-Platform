@@ -1,0 +1,499 @@
+"""
+Markdown report generators for platform backtest visualization.
+
+Produces three companion documents alongside the PNG charts:
+  - 00_methodology_assumptions.md  — assumptions, disclosures, data mode
+  - chart_explanations.md          — per-chart narrative guide
+  - robustness_next_steps.md       — validation roadmap scaffold
+
+None of these files should contain fabricated benchmark data. If a value
+is unavailable, the text says so explicitly.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from visualization.loader import ArtifactData
+
+# ---------------------------------------------------------------------------
+# Methodology & Assumptions
+# ---------------------------------------------------------------------------
+
+
+def generate_methodology(
+    data: ArtifactData,
+    out_dir: Path,
+    starting_cash: float = 100_000.0,
+) -> Path:
+    """Write 00_methodology_assumptions.md to out_dir."""
+    stats = getattr(data, "synthetic_stats", {})
+    symbols = ", ".join(data.symbols) if data.symbols else "N/A"
+    mode = "Synthetic financial data" if data.is_synthetic else "Live / paper fill data"
+    rfr = f"{stats.get('risk_free_rate_pct', 5.3):.1f}%"
+    n_days = stats.get("n_trading_days", data.ticks_ok)
+
+    settings = data.settings_summary or {}
+    rebal = settings.get("rebalance_frequency", "N/A")
+    max_dd_l = settings.get("max_drawdown_limit", "N/A")
+
+    has_fills = data.total_fills > 0
+    has_orders = data.total_orders > 0
+    fill_note = (
+        "Real fill data present."
+        if has_fills
+        else "No real fills recorded — execution data is synthetic."
+    )
+    live_note = (
+        "Live trading performance is NOT present in this artifact."
+        if not has_fills
+        else "Artifact contains real fill records."
+    )
+
+    content = f"""# Methodology & Assumptions
+
+> **IMPORTANT DISCLOSURE:** This report is generated from a platform replay artifact.
+> It is a backtest / replay demonstration, not live client performance.
+> All performance figures are either derived from real platform state (governance,
+> operations, architecture) or generated synthetic financial data for storytelling
+> purposes. No live client funds were at risk.
+
+---
+
+## Artifact Identity
+
+| Field | Value |
+|---|---|
+| Artifact path | `{data.raw.get("fixture_name", "N/A")}.json` |
+| Replay ID | `{data.replay_id}` |
+| Date range | {data.start_date} → {data.end_date} |
+| Trading days | {n_days} ticks attempted, {data.ticks_ok} successful |
+| Symbols | {symbols} |
+| Starting capital | ${starting_cash:,.0f} |
+
+---
+
+## Data Mode
+
+| Dimension | Status |
+|---|---|
+| Data mode | **{mode}** |
+| Real orders recorded | {"Yes — " + str(data.total_orders) + " orders" if has_orders else "No"} |
+| Real fills recorded | {"Yes — " + str(data.total_fills) + " fills" if has_fills else "No"} |
+| Execution data | {fill_note} |
+| Live performance | {live_note} |
+
+---
+
+## Performance Methodology
+
+| Assumption | Value / Note |
+|---|---|
+| Benchmark | Synthetic SPY proxy (correlated GBM, 21% return / 16% vol target) |
+| Risk-free rate | {rfr} annual (2024 Fed funds proxy) |
+| Performance type | **Gross / pre-tax** unless live fills indicate otherwise |
+| Taxes | Not modeled |
+| Fees | Not explicitly modeled in synthetic path |
+| Slippage | Synthetic: avg ~4.2 bps per fill (modeled, not measured) |
+| Rebalance frequency | {rebal} (from artifact settings) |
+| Max drawdown limit | {max_dd_l} (from artifact settings) |
+| Universe | Same-period symbols; no survivorship bias correction applied |
+
+---
+
+## Benchmark Classification
+
+This report uses three distinct benchmark types. They must not be conflated:
+
+| Type | Examples in this report | Source |
+|---|---|---|
+| **Synthetic benchmark** | SPY proxy line on equity curve | Correlated GBM, reproducible seed |
+| **Target return hurdles** | 15% / 20% / 25% lines | Simple: `starting_cash × (1 + hurdle)` |
+| **External reference** | Actual SPY / QQQ / VTI | **Not available** — no external price data loaded |
+| **Same-universe baseline** | Equal-weight buy-and-hold | **Not available** — requires per-symbol OHLCV history |
+
+Target return hurdles are business performance benchmarks, not regulatory or
+advisory standards. They represent simple cumulative return targets used
+internally to evaluate platform performance.
+
+---
+
+## Limitations
+
+- Platform equity curve is **synthetic** (correlated GBM anchored to real
+  governance/halt events) unless live fill data is present.
+- Contribution attribution is **directional** only; exact strategy-level P&L
+  requires per-fill records with strategy IDs.
+- Drawdown governance ladder thresholds shown are portfolio-level approximations
+  derived from the `max_drawdown_limit` setting.
+- No Monte Carlo or walk-forward validation has been run against this artifact yet.
+  See `robustness_next_steps.md` for the validation roadmap.
+
+---
+
+*Generated by the Autonomous Trading Platform visualization package.*
+"""
+
+    out = out_dir / "00_methodology_assumptions.md"
+    out.write_text(content, encoding="utf-8")
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Chart Explanations
+# ---------------------------------------------------------------------------
+
+_EXPLANATIONS: list[dict] = [
+    {
+        "num": "01",
+        "title": "Equity Curve",
+        "question": "Did the platform grow capital and beat its benchmark?",
+        "how_to_read": (
+            "Green line = platform equity. Blue = synthetic SPY benchmark. "
+            "Dotted gray = cash / risk-free. Dashed horizontal lines show 15 / 20 / 25% "
+            "target return hurdles (not financial advisory standards). "
+            "Colored triangles mark governance and safety events."
+        ),
+        "takeaway": (
+            "Shows whether the platform ended above the synthetic benchmark and "
+            "whether it cleared any of the target return hurdles."
+        ),
+        "caveat": (
+            "Platform and benchmark lines are synthetic unless real fill data is present. "
+            "This is a backtest/replay demonstration, not live client performance."
+        ),
+    },
+    {
+        "num": "02",
+        "title": "Drawdown Analysis",
+        "question": "How deep did the platform fall and for how long?",
+        "how_to_read": (
+            "Red filled area = platform drawdown from peak. Blue dashed = benchmark drawdown. "
+            "Dotted horizontal lines mark WARNING / PROBATION / SUSPENDED governance ladder "
+            "thresholds (scaled from the artifact's max_drawdown_limit setting). "
+            "Bottom panel shows days underwater (in drawdown)."
+        ),
+        "takeaway": (
+            "Answers: what was the worst loss period, how long did it last, "
+            "and did the platform recover?"
+        ),
+        "caveat": (
+            "Drawdown is computed on synthetic equity unless real fills are present. "
+            "Ladder thresholds are per-strategy governance limits, not portfolio-level stops."
+        ),
+    },
+    {
+        "num": "03",
+        "title": "Monthly Returns",
+        "question": "Was performance consistent across the year?",
+        "how_to_read": (
+            "Left heatmap: monthly return % per month (rows = months, columns = years). "
+            "Green = positive, red = negative. Right panel: distribution of daily returns "
+            "with mean (yellow) and ±1 std band."
+        ),
+        "takeaway": (
+            "A cluster of red months or a heavily skewed distribution would suggest "
+            "results were concentrated in a few periods."
+        ),
+        "caveat": "Monthly returns are computed from synthetic equity unless real fills are present.",
+    },
+    {
+        "num": "04",
+        "title": "Performance Table",
+        "question": "What are the headline performance numbers?",
+        "how_to_read": (
+            "14 key metrics side by side: Platform vs Benchmark vs Difference. "
+            "Green = outperformance, red = underperformance."
+        ),
+        "takeaway": ("Single reference for quoting Sharpe, CAGR, Max DD, and other key figures."),
+        "caveat": (
+            "All figures derived from synthetic equity curve unless real fills present. "
+            "Do not cite as live performance."
+        ),
+    },
+    {
+        "num": "05",
+        "title": "Governance Timeline",
+        "question": "What decisions were made and when did they happen?",
+        "how_to_read": (
+            "Top panel = equity curve. Middle = event swim lanes by category "
+            "(Safety, Governance, Settings, Allocation). Circles = applied events, "
+            "X = skipped. Bottom = strategies in breach over time."
+        ),
+        "takeaway": (
+            "This is the most reliable chart — it shows **real** governance events "
+            "from the artifact, not synthetic data."
+        ),
+        "caveat": (
+            "Event timing is real. The equity line behind the events is synthetic "
+            "unless real fills are present."
+        ),
+    },
+    {
+        "num": "06",
+        "title": "Operational Health",
+        "question": "Did the platform run reliably?",
+        "how_to_read": (
+            "Calendar heatmap = tick success/failure by day. "
+            "Health bar = ok / degraded / critical status over time. "
+            "Alert timeline = active and critical alert periods. "
+            "Donut = overall tick completion breakdown."
+        ),
+        "takeaway": (
+            "This chart uses **real** operational data from the artifact — "
+            "system_health, alert counts, and tick errors are not synthetic."
+        ),
+        "caveat": (
+            "Health metrics reflect the replay environment, not production. "
+            "Degraded status in a replay may differ from live operating conditions."
+        ),
+    },
+    {
+        "num": "07",
+        "title": "Estimated Platform Contribution",
+        "question": "Which platform systems contributed to (or cost) performance?",
+        "how_to_read": (
+            "Horizontal bars = directional contribution score per domain. "
+            "Scores are heuristic estimates derived from artifact metadata "
+            "(research pass rate, governance actions, Sharpe, max DD, etc.). "
+            "They are NOT exact P&L attribution."
+        ),
+        "takeaway": (
+            "Directional signal about which platform layers appear to have added "
+            "or subtracted value. Treat as a qualitative guide, not a measurement."
+        ),
+        "caveat": (
+            "**Directional estimate only.** Full contribution attribution requires "
+            "strategy-level P&L, allocation history, and per-fill execution data. "
+            "These are not present in this artifact."
+        ),
+    },
+    {
+        "num": "08",
+        "title": "Execution Quality",
+        "question": "How well did the execution layer perform?",
+        "how_to_read": (
+            "6 panels: slippage distribution, adverse fill rate over time, "
+            "fill latency distribution, slippage over time, "
+            "slippage vs volatility scatter."
+        ),
+        "takeaway": ("Shows whether execution cost and quality remained stable across the period."),
+        "caveat": (
+            "All execution metrics are **synthetic** (modeled ~4.2 bps avg slippage, "
+            "~10% adverse rate) unless real fills are present in the artifact. "
+            "Do not cite these figures as measured trading costs."
+        ),
+    },
+    {
+        "num": "09",
+        "title": "Benchmark Gauntlet",
+        "question": "Did the platform beat basic alternatives?",
+        "how_to_read": (
+            "Each row is a baseline: Cash, synthetic SPY benchmark, and three "
+            "target return hurdles (15% / 20% / 25%). Bar length = final portfolio "
+            "value. Text shows total return % and difference vs platform. "
+            "Labels indicate data source (synthetic / target hurdle / unavailable)."
+        ),
+        "takeaway": (
+            "Quick visual for 'did we beat the obvious alternatives?' — "
+            "the three hurdle lines are the most relevant for internal goal-setting."
+        ),
+        "caveat": (
+            "External references (actual SPY, QQQ, VTI) are **not available** — "
+            "no external price data is loaded. Hurdles are simple total return targets, "
+            "not financial advisor standards."
+        ),
+    },
+    {
+        "num": "10",
+        "title": "Cost Sensitivity",
+        "question": "How sensitive are results to costs and slippage assumptions?",
+        "how_to_read": (
+            "Table of scenarios with increasing additional slippage (0 to +50 bps). "
+            "Each row re-estimates total return, CAGR, and final value after applying "
+            "the extra cost drag. Assumes estimated annual portfolio turnover."
+        ),
+        "takeaway": ("Shows how fragile (or robust) the return estimate is to cost assumptions."),
+        "caveat": (
+            "**Rough sensitivity estimate.** Turnover is estimated from rebalance "
+            "frequency and symbol count — actual trade count is not recorded in "
+            "this artifact. Results should be re-run with real fill data for precision."
+        ),
+    },
+    {
+        "num": "11",
+        "title": "Rolling Risk Metrics",
+        "question": "Were results stable over time, or driven by one lucky period?",
+        "how_to_read": (
+            "Four panels: rolling 30-day return, rolling volatility, "
+            "rolling Sharpe ratio, and rolling drawdown. "
+            "Green = platform, blue = benchmark where applicable."
+        ),
+        "takeaway": (
+            "If Sharpe spikes in one quarter and collapses in others, "
+            "results may not be reproducible. Stable rolling metrics suggest "
+            "the strategy performed consistently."
+        ),
+        "caveat": (
+            "All rolling metrics computed on synthetic equity unless real fills present. "
+            "Rolling windows of 30 days are short — high variance is expected."
+        ),
+    },
+    {
+        "num": "12",
+        "title": "Exposure & Allocation",
+        "question": "What was the platform actually holding or exposed to?",
+        "how_to_read": (
+            "Shows available exposure data from the artifact. "
+            "If per-tick holdings data is absent, a summary of available "
+            "fields and what would be needed is shown instead."
+        ),
+        "takeaway": (
+            "Identifies whether the platform was fully invested, cash-heavy, "
+            "or concentrated in specific holdings throughout the period."
+        ),
+        "caveat": (
+            "This artifact does not contain per-tick position weights or "
+            "symbol-level allocation history. The chart shows aggregate "
+            "exposure fields (gross/net) from the end-of-run risk snapshot only."
+        ),
+    },
+]
+
+
+def generate_chart_explanations(data: ArtifactData, out_dir: Path) -> Path:
+    """Write chart_explanations.md to out_dir."""
+    mode_note = "Synthetic financial data" if data.is_synthetic else "Real fill / live data"
+
+    lines = [
+        "# Chart Explanations",
+        "",
+        f"> **Data mode:** {mode_note}  ",
+        f"> **Period:** {data.start_date} → {data.end_date}  ",
+        f"> **Symbols:** {', '.join(data.symbols)}",
+        "",
+        "Each chart below answers a specific question about the platform run.",
+        "Read the caveats carefully — several charts use synthetic equity curves.",
+        "",
+        "---",
+        "",
+    ]
+
+    for ex in _EXPLANATIONS:
+        lines += [
+            f"## {ex['num']} — {ex['title']}",
+            "",
+            f"**Question answered:** {ex['question']}  ",
+            f"**How to read it:** {ex['how_to_read']}  ",
+            f"**Key takeaway:** {ex['takeaway']}  ",
+            f"**Important caveat:** {ex['caveat']}",
+            "",
+            "---",
+            "",
+        ]
+
+    lines += [
+        "*Generated by the Autonomous Trading Platform visualization package.*",
+    ]
+
+    out = out_dir / "chart_explanations.md"
+    out.write_text("\n".join(lines), encoding="utf-8")
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Robustness / Scenario Next Steps
+# ---------------------------------------------------------------------------
+
+
+def generate_robustness_next_steps(out_dir: Path) -> Path:
+    """Write robustness_next_steps.md to out_dir."""
+    content = """\
+# Robustness & Scenario Validation Roadmap
+
+This document defines the next testing scenarios beyond the initial full-year
+demo run. None of these tests have been executed yet. This is a planning scaffold.
+
+> **Why this matters:** A single backtest period can be lucky. Robustness requires
+> the strategy to perform across different market regimes, cost assumptions,
+> data conditions, and time periods.
+
+---
+
+## Proposed Test Matrix
+
+### 1. Historical Market Regime Tests
+
+| Scenario | Period | Regime Characteristics | Status |
+|---|---|---|---|
+| 2020 crash & recovery | 2020-02 to 2020-08 | Flash crash, V-shaped recovery, high volatility | Not run |
+| 2022 bear market | 2022-01 to 2022-12 | Sustained drawdown, rate hikes, tech sell-off | Not run |
+| 2023 bull market | 2023-01 to 2023-12 | Low vol grind-up, narrow leadership | Not run |
+| 2024 demo (baseline) | 2024-01 to 2024-12 | Current demo artifact | ✓ Complete |
+
+### 2. Synthetic Regime Tests
+
+| Scenario | Description | Status |
+|---|---|---|
+| High-vol regime | σ = 25–30% annual, no trend | Not run |
+| Flat/choppy regime | Zero drift, high mean-reversion | Not run |
+| Low-liquidity regime | Wider spreads, higher slippage model | Not run |
+
+### 3. Data Quality Stress Tests
+
+| Scenario | Description | Status |
+|---|---|---|
+| Missing data simulation | 5–10% of bars randomly removed | Not run |
+| Stale price injection | Bars frozen for 1–3 days mid-period | Not run |
+| Corporate action stress | Multiple splits and dividends | Not run |
+
+### 4. Cost / Execution Stress Tests
+
+| Scenario | Description | Status |
+|---|---|---|
+| Higher slippage | 2× base slippage model | Not run |
+| Delayed execution | Orders filled at T+1 instead of T | Not run |
+| Partial fill simulation | 50% fill rate on orders | Not run |
+
+### 5. Out-of-Sample Validation
+
+| Scenario | Description | Status |
+|---|---|---|
+| Walk-forward test | Rolling 3-month IS / 1-month OOS windows | Not run |
+| Out-of-sample period | Hold out 2025 data entirely | Not run |
+
+### 6. Statistical Robustness
+
+| Scenario | Description | Status |
+|---|---|---|
+| Monte Carlo bootstrap | 1,000 synthetic paths from same parameters | Not run |
+| Parameter sensitivity | ±20% on key strategy parameters | Not run |
+| Correlation stress | Reduce platform/benchmark correlation to 0.3 | Not run |
+
+---
+
+## Recommended Priority Order
+
+1. **2022 bear market** — most adversarial to momentum-based strategies
+2. **Walk-forward test** — standard OOS validity check
+3. **Higher slippage** — most common point of failure in live deployment
+4. **Monte Carlo bootstrap** — quantify confidence intervals on reported Sharpe
+
+---
+
+## Implementation Notes
+
+- Each scenario should produce its own artifact JSON with a unique `fixture_name`
+- The visualization runner accepts any artifact: `python -m visualization.run_all --artifact <path>`
+- Scenario artifacts should be stored under `artifacts/platform/backtests/`
+- This roadmap should be updated as scenarios are completed
+
+---
+
+*This file is a planning scaffold generated by the Autonomous Trading Platform
+visualization package. No scenario runs are implied to have been completed.*
+"""
+
+    out = out_dir / "robustness_next_steps.md"
+    out.write_text(content, encoding="utf-8")
+    return out

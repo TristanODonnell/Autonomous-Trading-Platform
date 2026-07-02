@@ -160,6 +160,14 @@ initial_state:
     per_strategy_cap: "0.35"
     target_portfolio_volatility: "0.15"
 
+    # ── Portfolio drawdown governance ─────────────────────────────────────────
+    # warn_only: governance evaluates and logs breaches but never blocks trading.
+    # auto_resume: breach clears automatically when equity recovers (no operator ack needed).
+    # Both are appropriate for a backtest — no human operator is present to acknowledge.
+    portfolio_drawdown_action: warn_only
+    portfolio_drawdown_recovery_mode: auto_resume
+    portfolio_max_drawdown_pct: "0.15"
+
     # ── Governance automation ─────────────────────────────────────────────────
     # Full autonomous pipeline: research promotes → paper trading without manual sign-off.
     auto_promote_enabled: true

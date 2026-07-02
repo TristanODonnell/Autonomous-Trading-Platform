@@ -153,6 +153,9 @@ def _apply_operator_settings(*, session: Session, patch: dict[str, Any], now: da
         "target_portfolio_volatility": ("target_portfolio_volatility", float),
         "min_rebalance_interval_hours": ("min_rebalance_interval_hours", float),
         "min_allocation_change_pct": ("min_allocation_change_pct", float),
+        "portfolio_drawdown_action": ("portfolio_drawdown_action", str),
+        "portfolio_drawdown_recovery_mode": ("portfolio_drawdown_recovery_mode", str),
+        "portfolio_max_drawdown_pct": ("portfolio_max_drawdown_pct", float),
     }
 
     for fixture_key, (model_field, coerce) in field_map.items():

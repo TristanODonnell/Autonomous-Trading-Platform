@@ -186,6 +186,20 @@ class UniverseRotationService:
             max_churn_pct=config.max_churn_pct,
         )
 
+        logger.info(
+            "universe rotation pre_insert",
+            extra={
+                **base_log,
+                "force_rotation": force_rotation,
+                "proposed_version_id": proposed.universe_version_id,
+                "proposed_member_count": len(proposed_members),
+                "proposed_config_hash": proposed.config_hash,
+                "active_config_hash": active.config_hash if active else None,
+                "hash_match": proposed.config_hash == (active.config_hash if active else None),
+                "churn_pct": rebalance_result.churn_pct,
+            },
+        )
+
         if not force_rotation and active is not None and proposed.config_hash == active.config_hash:
             rotation_record = self._build_rotation_record(
                 rotation_type="scheduled",
@@ -221,12 +235,35 @@ class UniverseRotationService:
             )
 
         self._version_repo.insert_version(proposed)
+        logger.info("universe rotation step", extra={**base_log, "step": "version_inserted"})
         if rebalance_result.proposed_members:
             self._version_repo.insert_members(rebalance_result.proposed_members)
+            logger.info(
+                "universe rotation step",
+                extra={
+                    **base_log,
+                    "step": "members_inserted",
+                    "count": len(rebalance_result.proposed_members),
+                },
+            )
         self._rebalance_repo.insert_run(rebalance_result.rebalance_run)
+        logger.info("universe rotation step", extra={**base_log, "step": "rebalance_run_inserted"})
+
+        # Flush pending inserts so activate_version's get_members() query sees them.
+        # autoflush=False on the session means they won't be visible to DB queries otherwise.
+        self._session.flush()
 
         retired = self._version_repo.retire_active_version(proposed.effective_from)
+        logger.info(
+            "universe rotation step",
+            extra={
+                **base_log,
+                "step": "active_retired",
+                "retired_id": retired.universe_version_id if retired else None,
+            },
+        )
         self._version_repo.activate_version(proposed.universe_version_id)
+        logger.info("universe rotation step", extra={**base_log, "step": "version_activated"})
 
         rotation_record = self._build_rotation_record(
             rotation_type="scheduled",
