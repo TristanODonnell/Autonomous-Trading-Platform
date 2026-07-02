@@ -251,7 +251,9 @@ class UniverseRotationService:
 
         # Flush pending inserts so activate_version's get_members() query sees them.
         # autoflush=False on the session means they won't be visible to DB queries otherwise.
-        self._session.flush()
+        # Guard for test fixtures that inject stub repos without a real session.
+        if (_session := getattr(self, "_session", None)) is not None:
+            _session.flush()
 
         retired = self._version_repo.retire_active_version(proposed.effective_from)
         logger.info(
