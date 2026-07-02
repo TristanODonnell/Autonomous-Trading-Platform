@@ -105,11 +105,14 @@ class CorporateActionIngestionService:
                 request_span.set_attribute("ratp.component", component)
                 request_span.set_attribute("ratp.cycle_timestamp", self.cycle_timestamp.isoformat())
 
-                payload: dict = client.fetch_corporate_actions(
-                    start=self.fetch_start,
-                    end=self.fetch_end,
-                    symbols=self.fetch_symbols,
-                )
+                _kwargs: dict = {}
+                if self.fetch_start is not None:
+                    _kwargs["start"] = self.fetch_start
+                if self.fetch_end is not None:
+                    _kwargs["end"] = self.fetch_end
+                if self.fetch_symbols is not None:
+                    _kwargs["symbols"] = self.fetch_symbols
+                payload: dict = client.fetch_corporate_actions(**_kwargs)
 
             request_duration = perf_counter() - request_start
             corporate_action_request_latency_seconds.record(

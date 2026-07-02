@@ -98,15 +98,13 @@ class PositionSnapshotRepository(BaseRepository):
             raise
 
     def upsert(self, row: PositionSnapshot) -> PositionSnapshot:
-        """Insert or update.  Delegates to get_or_create_header then assigns positions."""
-        target = self.get_or_create_header(
-            snapshot_id=row.snapshot_id,
-            run_id=row.run_id,
-            timestamp=row.timestamp,
-            source=row.source,
-        )
-        target.positions = row.positions
-        return target
+        """Insert-or-update by snapshot_id."""
+        existing = self.get_by_snapshot_id(row.snapshot_id)
+        if existing is None:
+            self.session.add(row)
+            return row
+        existing.positions = row.positions
+        return existing
 
     def _get_by_run_ts_source(
         self,

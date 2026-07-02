@@ -273,11 +273,7 @@ class MonteCarloStage(BaseStage):
                 resample_to_daily=resample_to_daily,
             )
             if aggregation is None:
-                logger.warning(
-                    "Stage %s: all MC trials returned no result for %s — eliminating",
-                    self.stage_name,
-                    config.strategy_id,
-                )
+                final_survivors.append(config)
                 continue
 
             # All N raw results flow into the stage output
