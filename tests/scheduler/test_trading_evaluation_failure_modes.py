@@ -177,14 +177,26 @@ class TestGeneratorExceptionHandling:
             "before record_job_completed, losing observability of the true failure point."
         )
 
-    def test_safety_error_skips_rejected_symbol_others_yield(self) -> None:
-        """SafetyError from assert_order_allowed skips that order; remaining intents still yield."""
-        service = _make_service(risk=_RiskService(reject_symbol="NVDA"))
-        results = _intents(service, [_signal("AAPL"), _signal("NVDA")])
+    def test_safety_error_propagates_to_caller(self) -> None:
+        """SafetyError from assert_order_allowed propagates out of the generator.
 
-        symbols = {i.symbol for i in results}
-        assert "AAPL" in symbols, "AAPL should yield an intent"
-        assert "NVDA" not in symbols, "NVDA blocked by SafetyError should be skipped"
+        Pre-trade risk rejections must reach the trading cycle manifest (see
+        test_pre_trade_risk_rejection_blocks_order_submission), so this is not
+        swallowed per-symbol — the whole evaluation halts. Symbols ordered before
+        the offending one still yield, since the generator is lazy.
+        """
+        service = _make_service(risk=_RiskService(reject_symbol="NVDA"))
+        gen = service.generate_order_intents(
+            signals=[_signal("NVDA")],
+            positions={},
+            prices={"NVDA": 900.0},
+            run_id=_RUN_ID,
+            strategy_id=_STRATEGY_ID,
+            bar_timestamp=_BAR_TS,
+            now=_NOW,
+        )
+        with pytest.raises(SafetyError):
+            list(gen)
 
     def test_missing_price_keyerror_skips_that_symbol(self) -> None:
         """KeyError from build_order_intent (missing price) skips that symbol only."""
@@ -231,14 +243,14 @@ class TestGeneratorExceptionHandling:
         assert "AAPL" in symbols
         assert "AMZN" not in symbols
 
-    def test_compute_target_positions_unexpected_exception_returns_empty(self) -> None:
-        """An unexpected error in _compute_target_positions causes the generator to return empty.
+    def test_compute_target_positions_unexpected_exception_propagates(self) -> None:
+        """An unexpected error in _compute_target_positions propagates out of the generator.
 
-        The generator catches all exceptions from _compute_target_positions via:
-            except Exception as exc:
-                logger.warning(...)
-                return
-        This means list() on the generator returns [] rather than propagating.
+        Only the specific domain exceptions (AllocationDeniedError, NoPolicyFoundError,
+        InsufficientCapitalError) are caught and turned into a per-symbol skip; anything
+        else — including MissingPositionScalingDataError for live-mode fail-closed
+        (see TestLiveModeFailClosed) — must propagate rather than being silently
+        swallowed.
         """
 
         class _BrokenSizer:
@@ -246,29 +258,25 @@ class TestGeneratorExceptionHandling:
                 raise RuntimeError("disk I/O failure during sizing")
 
         service = _make_service(sizer=_BrokenSizer())
-        results = _intents(service, [_signal("AAPL")], prices={"AAPL": 150.0})
+        with pytest.raises(RuntimeError, match="disk I/O failure during sizing"):
+            _intents(service, [_signal("AAPL")], prices={"AAPL": 150.0})
 
-        assert results == [], "Unexpected sizer error must produce empty generator, not propagate"
-
-    def test_all_symbols_rejected_by_risk_produces_empty_list(self) -> None:
-        """When every order is rejected by pre-trade risk, list() returns [] without raising."""
+    def test_all_symbols_rejected_by_risk_raises_on_first(self) -> None:
+        """When pre-trade risk rejects every order, the first rejection raises immediately."""
         service = _make_service(risk=_RejectAllRiskService())
-        results = _intents(service, [_signal("AAPL"), _signal("MSFT")])
+        with pytest.raises(SafetyError):
+            _intents(service, [_signal("AAPL"), _signal("MSFT")])
 
-        assert results == []
-
-    def test_mixed_errors_only_failing_symbols_skipped(self) -> None:
-        """Multiple error types in the same generator run; only affected symbols are skipped."""
-        # NVDA → SafetyError; AMZN → missing price; AAPL → succeeds
+    def test_mixed_errors_domain_errors_skipped_safety_error_propagates(self) -> None:
+        """Domain sizing errors are skipped per-symbol, but a SafetyError still propagates."""
+        # NVDA → SafetyError; AMZN → missing price (skipped); AAPL → succeeds
         service = _make_service(risk=_RiskService(reject_symbol="NVDA"))
-        results = _intents(
-            service,
-            [_signal("AAPL"), _signal("AMZN"), _signal("NVDA")],
-            prices={"AAPL": 150.0, "NVDA": 900.0},  # AMZN price absent
-        )
-
-        symbols = {i.symbol for i in results}
-        assert symbols == {"AAPL"}
+        with pytest.raises(SafetyError):
+            _intents(
+                service,
+                [_signal("AAPL"), _signal("AMZN"), _signal("NVDA")],
+                prices={"AAPL": 150.0, "NVDA": 900.0},  # AMZN price absent
+            )
 
     def test_sell_signal_against_held_position_generates_sell_intent(self) -> None:
         """SELL signal while holding a position produces a SELL order intent."""
