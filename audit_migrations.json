@@ -1,0 +1,637 @@
+[
+  {
+    "file": "1ee1ec15f1a8_add_metadata_tables.py",
+    "revision": "1ee1ec15f1a8",
+    "down_revision": "8943572f1891",
+    "create_date": "2026-04-12 16:30:37.801882",
+    "doc": "add metadata tables"
+  },
+  {
+    "file": "32874c09231e_governance_models.py",
+    "revision": "32874c09231e",
+    "down_revision": "589ae84a18f2",
+    "create_date": null,
+    "doc": ""
+  },
+  {
+    "file": "3467a0ff2319_add_operator_settings_model_table.py",
+    "revision": "3467a0ff2319",
+    "down_revision": "f7c1743b620d",
+    "create_date": "2026-05-09 14:42:26.152371",
+    "doc": "add operator settings model table"
+  },
+  {
+    "file": "36406d0a0f0b_add_ingestion_checkpoints.py",
+    "revision": "36406d0a0f0b",
+    "down_revision": "77afde93f3e2",
+    "create_date": null,
+    "doc": ""
+  },
+  {
+    "file": "3756456ba962_create_feature_dataset_versions_table.py",
+    "revision": "3756456ba962",
+    "down_revision": "c270b4c5b0b8",
+    "create_date": "2026-04-24 10:59:10.323765",
+    "doc": "create feature dataset versions table"
+  },
+  {
+    "file": "3f5e6f4b281f_add_strategy_governance_table.py",
+    "revision": "3f5e6f4b281f",
+    "down_revision": "67d0d81b6e05",
+    "create_date": "2026-05-05 10:03:35.714510",
+    "doc": "add strategy governance table"
+  },
+  {
+    "file": "42ade1fb045a_update_research_experiment_models.py",
+    "revision": "42ade1fb045a",
+    "down_revision": "8af2897c5784",
+    "create_date": "2026-04-29 14:57:32.889427",
+    "doc": "update research experiment models"
+  },
+  {
+    "file": "44f3da085c13_create_missing_metrics_summary_table.py",
+    "revision": "44f3da085c13",
+    "down_revision": "42ade1fb045a",
+    "create_date": "2026-04-29 15:03:19.314760",
+    "doc": "create missing metrics summary table"
+  },
+  {
+    "file": "4817529eb17c_strategy_config_string_revision.py",
+    "revision": "4817529eb17c",
+    "down_revision": "72bcc9eb202b",
+    "create_date": "2026-04-29 19:17:47.678898",
+    "doc": "strategy config string revision"
+  },
+  {
+    "file": "4981b5a58d62_add_artifact_manifest_and_schema_.py",
+    "revision": "4981b5a58d62",
+    "down_revision": "1ee1ec15f1a8",
+    "create_date": "2026-04-14 16:12:30.711906",
+    "doc": "add artifact_manifest and schema_definition to run_manifests"
+  },
+  {
+    "file": "589ae84a18f2_add_strategy_governance_table.py",
+    "revision": "589ae84a18f2",
+    "down_revision": "e2dd52335906",
+    "create_date": "2026-05-01 15:49:09.195683",
+    "doc": "add strategy_governance table"
+  },
+  {
+    "file": "59b23d6f9b58_create_simulation_runs_table.py",
+    "revision": "59b23d6f9b58",
+    "down_revision": "3756456ba962",
+    "create_date": "2026-04-28 14:11:45.864447",
+    "doc": "create simulation runs table"
+  },
+  {
+    "file": "60d949166807_sync_checkpoint_enum_values.py",
+    "revision": "60d949166807",
+    "down_revision": "62066786c890",
+    "create_date": "2026-04-23 16:24:56.405011",
+    "doc": "sync checkpoint enum values"
+  },
+  {
+    "file": "62066786c890_sync_dataset_versions_columns.py",
+    "revision": "62066786c890",
+    "down_revision": "77aeb5b5252f",
+    "create_date": "2026-04-23 15:35:03.603365",
+    "doc": "sync dataset_versions columns"
+  },
+  {
+    "file": "67d0d81b6e05_add_fill_quality_metrics.py",
+    "revision": "67d0d81b6e05",
+    "down_revision": "32874c09231e",
+    "create_date": "2026-05-03 18:35:08.702746",
+    "doc": "add fill quality metrics"
+  },
+  {
+    "file": "72bcc9eb202b_add_additional_columns_to_simulation_.py",
+    "revision": "72bcc9eb202b",
+    "down_revision": "44f3da085c13",
+    "create_date": "2026-04-29 16:20:32.297978",
+    "doc": "add additional columns to simulation runs"
+  },
+  {
+    "file": "77aeb5b5252f_add_backfill_to_run_type_enum.py",
+    "revision": "77aeb5b5252f",
+    "down_revision": "36406d0a0f0b",
+    "create_date": "2026-04-23 14:55:55.655632",
+    "doc": "add BACKFILL to run_type_enum"
+  },
+  {
+    "file": "77afde93f3e2_add_metadata_constraints_and_indexes.py",
+    "revision": "77afde93f3e2",
+    "down_revision": "4981b5a58d62",
+    "create_date": "2026-04-14 16:30:51.202261",
+    "doc": "add metadata constraints and indexes"
+  },
+  {
+    "file": "857ff324e54a_add_runtime_job_run_table.py",
+    "revision": "857ff324e54a",
+    "down_revision": "3f5e6f4b281f",
+    "create_date": "2026-05-05 17:00:27.736899",
+    "doc": "add runtime_job_run table"
+  },
+  {
+    "file": "8809a513a5ef_add_broker_account_snapshots.py",
+    "revision": "8809a513a5ef",
+    "down_revision": "a85c2ede6d4e",
+    "create_date": "2026-05-09 18:56:52.154770",
+    "doc": "add broker account snapshots"
+  },
+  {
+    "file": "8943572f1891_add_strategy_runtime_states.py",
+    "revision": "8943572f1891",
+    "down_revision": "fefc34170e4e",
+    "create_date": "2026-03-30 19:06:25.236887",
+    "doc": "add strategy_runtime_states"
+  },
+  {
+    "file": "8af2897c5784_add_simulation_to_run_type_enum.py",
+    "revision": "8af2897c5784",
+    "down_revision": "d7e129a4cae3",
+    "create_date": "2026-04-28 19:06:31.416760",
+    "doc": "add SIMULATION to run_type_enum"
+  },
+  {
+    "file": "951c00580d2b_add_runtime_control_state_table.py",
+    "revision": "951c00580d2b",
+    "down_revision": "a7ac640c34dc",
+    "create_date": "2026-05-05",
+    "doc": "add runtime control state table"
+  },
+  {
+    "file": "a1b2c3d4e5f6_add_corporate_action_ingestion_to_run_type_enum.py",
+    "revision": "a1b2c3d4e5f6",
+    "down_revision": "8809a513a5ef",
+    "create_date": "2026-05-12 00:00:00.000000",
+    "doc": "add CORPORATE_ACTION_INGESTION to run_type_enum"
+  },
+  {
+    "file": "a7ac640c34dc_add_governance_state_to_run_manifests.py",
+    "revision": "a7ac640c34dc",
+    "down_revision": "857ff324e54a",
+    "create_date": "2026-05-05 17:48:21.696138",
+    "doc": "add governance state to run manifests"
+  },
+  {
+    "file": "a85c2ede6d4e_migration_schema_drift_passthrough.py",
+    "revision": "a85c2ede6d4e",
+    "down_revision": "3467a0ff2319",
+    "create_date": "2026-05-09 15:20:14.606725",
+    "doc": "migration schema drift passthrough"
+  },
+  {
+    "file": "a9b8c7d6e5f4_add_strategy_drawdown_and_target_volatility_to_operator_settings.py",
+    "revision": "a9b8c7d6e5f4",
+    "down_revision": "f6a1b2c3d4e5",
+    "create_date": "2026-05-11 00:00:00.000000",
+    "doc": "Add strategy drawdown and target volatility to operator_settings"
+  },
+  {
+    "file": "aa10bb22cc43_strategy_health_monitoring.py",
+    "revision": "aa10bb22cc43",
+    "down_revision": "zz09aa21bb32",
+    "create_date": "2026-05-27 00:00:00.000000",
+    "doc": "add strategy health monitoring tables (FINDING-09)"
+  },
+  {
+    "file": "aa11bb23cc34_shadow_runtime_validation_tables.py",
+    "revision": "aa11bb23cc34",
+    "down_revision": "zz09aa21bb32",
+    "create_date": "2026-05-27 00:00:00.000000",
+    "doc": "add shadow runtime validation tables (Phase 5.5)"
+  },
+  {
+    "file": "aa57bb69cc80_add_black_litterman_research_runs.py",
+    "revision": "aa57bb69cc80",
+    "down_revision": "zz09aa21bb32",
+    "create_date": "2026-05-27 00:00:00.000000",
+    "doc": "add black-litterman research artifact table"
+  },
+  {
+    "file": "aaa10bb22cc54_add_factor_exposure_snapshots.py",
+    "revision": "aaa10bb22cc54",
+    "down_revision": "zz09aa21bb32",
+    "create_date": "2026-05-27 00:00:00.000000",
+    "doc": "add factor exposure monitoring snapshots"
+  },
+  {
+    "file": "aabb11cc22dd_add_rebalance_stability_operator_settings.py",
+    "revision": "aabb11cc22dd",
+    "down_revision": "zz09aa21bb32",
+    "create_date": "2026-05-26 00:00:00.000000",
+    "doc": "Add rebalance stability columns to operator_settings"
+  },
+  {
+    "file": "ab12cd34ef56_add_governance_run_type_enum.py",
+    "revision": "ab12cd34ef56",
+    "down_revision": "e7f8a9b0c1d2",
+    "create_date": "2026-05-13 00:00:00.000000",
+    "doc": "add governance run type enum"
+  },
+  {
+    "file": "b2c3d4e5f6a1_extend_runtime_job_runs_error_message.py",
+    "revision": "b2c3d4e5f6a1",
+    "down_revision": "a1b2c3d4e5f6",
+    "create_date": "2026-05-12 00:00:01.000000",
+    "doc": "extend runtime_job_runs error_message to TEXT"
+  },
+  {
+    "file": "b4c5d6e7f8a9_add_governance_promotion_operator_settings.py",
+    "revision": "b4c5d6e7f8a9",
+    "down_revision": "a9b8c7d6e5f4",
+    "create_date": "2026-05-11 00:00:00.000000",
+    "doc": "Add governance promotion fields to operator_settings"
+  },
+  {
+    "file": "bb11cc23dd44_add_correlation_covariance_snapshots.py",
+    "revision": "bb11cc23dd44",
+    "down_revision": "aa10bb22cc43",
+    "create_date": "2026-05-27 00:00:00.000000",
+    "doc": "add correlation and covariance snapshot tables (TASK-5.1)"
+  },
+  {
+    "file": "bbb10cc22dd55_add_factor_neutralization_runs.py",
+    "revision": "bbb10cc22dd55",
+    "down_revision": "aaa10bb22cc54",
+    "create_date": "2026-05-27 00:00:00.000000",
+    "doc": "add factor neutralization runs"
+  },
+  {
+    "file": "bbcc22dd33ee_add_allocation_rebalance_history_table.py",
+    "revision": "bbcc22dd33ee",
+    "down_revision": "aabb11cc22dd",
+    "create_date": "2026-05-26 00:00:00.000000",
+    "doc": "Add allocation_rebalance_history table"
+  },
+  {
+    "file": "bc23de45fg67_add_governance_notification_flags.py",
+    "revision": "bc23de45fg67",
+    "down_revision": "ab12cd34ef56",
+    "create_date": "2026-05-13 00:00:00.000000",
+    "doc": "Add governance notification flags to operator_settings"
+  },
+  {
+    "file": "c270b4c5b0b8_add_ingestion_checkpoints_table.py",
+    "revision": "c270b4c5b0b8",
+    "down_revision": "60d949166807",
+    "create_date": "2026-04-24 10:00:34.724876",
+    "doc": "add ingestion checkpoints table"
+  },
+  {
+    "file": "c3d4e5f6a1b2_add_ingestion_to_run_type_enum.py",
+    "revision": "c3d4e5f6a1b2",
+    "down_revision": "b2c3d4e5f6a1",
+    "create_date": "2026-05-12 00:00:02.000000",
+    "doc": "add INGESTION to run_type_enum"
+  },
+  {
+    "file": "c5d6e7f8a9b0_add_notification_operator_settings.py",
+    "revision": "c5d6e7f8a9b0",
+    "down_revision": "b4c5d6e7f8a9",
+    "create_date": "2026-05-11 00:00:00.000000",
+    "doc": "Add notification fields to operator_settings"
+  },
+  {
+    "file": "cc22dd34ee55_add_risk_budget_snapshots.py",
+    "revision": "cc22dd34ee55",
+    "down_revision": "bb11cc23dd44",
+    "create_date": "2026-05-27 00:00:00.000000",
+    "doc": "add risk budget snapshots table (TASK-5.2)"
+  },
+  {
+    "file": "ccdd33ee44ff_add_strategy_live_performance_snapshots.py",
+    "revision": "ccdd33ee44ff",
+    "down_revision": "bbcc22dd33ee",
+    "create_date": "2026-05-26 00:00:00.000000",
+    "doc": "Add strategy_live_performance_snapshots table"
+  },
+  {
+    "file": "d4e5f6a1b2c3_audit_logs_event_timestamp_with_tz.py",
+    "revision": "d4e5f6a1b2c3",
+    "down_revision": "c3d4e5f6a1b2",
+    "create_date": "2026-05-11 00:00:00.000000",
+    "doc": "audit_logs event_timestamp to TIMESTAMP WITH TIME ZONE"
+  },
+  {
+    "file": "d6e7f8a9b0c1_add_simulation_backtest_to_order_source_enum.py",
+    "revision": "d6e7f8a9b0c1",
+    "down_revision": "c5d6e7f8a9b0",
+    "create_date": "2026-05-12 00:00:00.000000",
+    "doc": "Add SIMULATION and BACKTEST to order_source_enum"
+  },
+  {
+    "file": "d7e129a4cae3_add_price_basis_to_run_manifests.py",
+    "revision": "d7e129a4cae3",
+    "down_revision": "59b23d6f9b58",
+    "create_date": "2026-04-28 18:41:17.828565",
+    "doc": "add price basis to run manifests"
+  },
+  {
+    "file": "da2aa2397611_add_audit_logs_table.py",
+    "revision": "da2aa2397611",
+    "down_revision": "e62e75b1c021",
+    "create_date": "2026-03-10 19:07:15.234142",
+    "doc": "add audit_logs table"
+  },
+  {
+    "file": "dd01ee23ff45_add_incremental_to_checkpoint_scope_enum.py",
+    "revision": "dd01ee23ff45",
+    "down_revision": "bc23de45fg67",
+    "create_date": "2026-05-13 19:27:41.364644",
+    "doc": "add INCREMENTAL to checkpoint_scope_enum"
+  },
+  {
+    "file": "dd33ee45ff66_add_optimizer_runs.py",
+    "revision": "dd33ee45ff66",
+    "down_revision": "cc22dd34ee55",
+    "create_date": "2026-05-27 00:00:00.000000",
+    "doc": "add optimizer_runs table (TASK-5.3)"
+  },
+  {
+    "file": "dd44ee55ff66_add_metric_lineage_fields.py",
+    "revision": "dd44ee55ff66",
+    "down_revision": [
+      "zz09aa21bb32",
+      "ccdd33ee44ff"
+    ],
+    "create_date": "2026-05-27 00:00:00.000000",
+    "doc": "Add metric lineage fields and blended_metrics_snapshots table"
+  },
+  {
+    "file": "e2dd52335906_simulation_runs_string_size.py",
+    "revision": "e2dd52335906",
+    "down_revision": "4817529eb17c",
+    "create_date": "2026-04-29 19:29:35.220520",
+    "doc": "simulation_runs string size"
+  },
+  {
+    "file": "e5f6a1b2c3d4_widen_strategy_id_varchar.py",
+    "revision": "e5f6a1b2c3d4",
+    "down_revision": "d4e5f6a1b2c3",
+    "create_date": "2026-05-12 00:00:00.000000",
+    "doc": "Widen strategy_id VARCHAR(64) to VARCHAR(128) across governance-related tables"
+  },
+  {
+    "file": "e62e75b1c021_init_schema.py",
+    "revision": "e62e75b1c021",
+    "down_revision": null,
+    "create_date": "2026-03-03 20:47:11.909207",
+    "doc": "init schema"
+  },
+  {
+    "file": "e7f8a9b0c1d2_add_auto_rebalance_operator_setting.py",
+    "revision": "e7f8a9b0c1d2",
+    "down_revision": "d6e7f8a9b0c1",
+    "create_date": "2026-05-13 00:00:00.000000",
+    "doc": "Add auto_rebalance_enabled to operator_settings"
+  },
+  {
+    "file": "ee12ff34aa56_widen_ingestion_checkpoints_checkpoint_.py",
+    "revision": "ee12ff34aa56",
+    "down_revision": "dd01ee23ff45",
+    "create_date": "2026-05-13 19:30:18.560913",
+    "doc": "widen ingestion_checkpoints checkpoint_id to VARCHAR(128)"
+  },
+  {
+    "file": "ee55ff66gg77_add_strategy_health_lifecycle.py",
+    "revision": "ee55ff66gg77",
+    "down_revision": [
+      "dd44ee55ff66",
+      "aa10bb22cc43"
+    ],
+    "create_date": "2026-05-28 00:00:00.000000",
+    "doc": "Add strategy health lifecycle tables and columns"
+  },
+  {
+    "file": "f6a1b2c3d4e5_add_slippage_cost_to_operator_settings.py",
+    "revision": "f6a1b2c3d4e5",
+    "down_revision": "e5f6a1b2c3d4",
+    "create_date": "2026-05-11 00:00:00.000000",
+    "doc": "Add slippage_model and transaction_cost_model to operator_settings"
+  },
+  {
+    "file": "f7c1743b620d_add_strategy_control_state_model.py",
+    "revision": "f7c1743b620d",
+    "down_revision": "951c00580d2b",
+    "create_date": "2026-05-08 11:44:37.708698",
+    "doc": "Add strategy_control_state model"
+  },
+  {
+    "file": "fbc5d464a623_add_market_session_to_market_bars.py",
+    "revision": "fbc5d464a623",
+    "down_revision": "da2aa2397611",
+    "create_date": "2026-03-25 16:27:01.507271",
+    "doc": "add market_session to market_bars"
+  },
+  {
+    "file": "fefc34170e4e_add_audit_logs_table_fix.py",
+    "revision": "fefc34170e4e",
+    "down_revision": "fbc5d464a623",
+    "create_date": "2026-03-30 19:01:53.422594",
+    "doc": "add audit_logs table (fix)"
+  },
+  {
+    "file": "ff23aa45bb67_widen_coverage_and_incident_ids_to_128.py",
+    "revision": "ff23aa45bb67",
+    "down_revision": "ee12ff34aa56",
+    "create_date": "2026-05-14 03:00:00.000000",
+    "doc": "widen symbol_date_coverages and missing_bar_incidents primary key columns to VARCHAR(128)"
+  },
+  {
+    "file": "ff66gg77hh88_add_portfolio_construction_layer.py",
+    "revision": "ff66gg77hh88",
+    "down_revision": "ee55ff66gg77",
+    "create_date": "2026-05-28 00:00:00.000000",
+    "doc": "Add portfolio construction pipeline tables"
+  },
+  {
+    "file": "gg34hh56ii78_add_runtime_job_run_steps_table.py",
+    "revision": "gg34hh56ii78",
+    "down_revision": "ff23aa45bb67",
+    "create_date": "2026-05-13 00:00:00.000000",
+    "doc": "add runtime_job_run_steps table"
+  },
+  {
+    "file": "gg77hh88ii99_add_drawdown_governance_ladder.py",
+    "revision": "gg77hh88ii99",
+    "down_revision": "ff66gg77hh88",
+    "create_date": "2026-05-28 00:00:00.000000",
+    "doc": "Add drawdown governance ladder tables"
+  },
+  {
+    "file": "hh45ii67jj89_add_reconciliation_snapshots_table.py",
+    "revision": "hh45ii67jj89",
+    "down_revision": "gg34hh56ii78",
+    "create_date": "2026-05-13 00:00:00.000000",
+    "doc": "add reconciliation_snapshots table"
+  },
+  {
+    "file": "hh88ii99jj00_schema_drift_fixes.py",
+    "revision": "hh88ii99jj00",
+    "down_revision": [
+      "dd33ee45ff66",
+      "aa11bb23cc34",
+      "bbb10cc22dd55",
+      "aa57bb69cc80",
+      "gg77hh88ii99"
+    ],
+    "create_date": "2026-06-01 00:00:00.000000",
+    "doc": "Schema drift fixes: order_status_enum values + operator_settings drawdown columns"
+  },
+  {
+    "file": "ii56jj78kk90_add_runtime_soak_reports_table.py",
+    "revision": "ii56jj78kk90",
+    "down_revision": "hh45ii67jj89",
+    "create_date": "2026-05-13 00:00:00.000000",
+    "doc": "add runtime_soak_reports table"
+  },
+  {
+    "file": "ii99jj00kk11_duration_ms_bigint.py",
+    "revision": "ii99jj00kk11",
+    "down_revision": "hh88ii99jj00",
+    "create_date": "2026-06-01 00:00:00.000000",
+    "doc": "Widen duration_ms columns from INTEGER to BIGINT"
+  },
+  {
+    "file": "jj00kk11ll22_signals_missing_columns.py",
+    "revision": "jj00kk11ll22",
+    "down_revision": "ii99jj00kk11",
+    "create_date": "2026-06-01 00:00:00.000000",
+    "doc": "Add missing columns to signals table"
+  },
+  {
+    "file": "jj67kk89ll01_add_execution_timestamps_to_broker_orders.py",
+    "revision": "jj67kk89ll01",
+    "down_revision": "ii56jj78kk90",
+    "create_date": "2026-05-13 00:00:00.000000",
+    "doc": "add execution timestamps to broker_orders"
+  },
+  {
+    "file": "kk11ll22mm33_governance_audit_events_table.py",
+    "revision": "kk11ll22mm33",
+    "down_revision": "jj00kk11ll22",
+    "create_date": "2026-06-01 00:00:00.000000",
+    "doc": "Create governance_audit_events table"
+  },
+  {
+    "file": "kk78ll90mm12_add_operational_alerts_table.py",
+    "revision": "kk78ll90mm12",
+    "down_revision": "jj67kk89ll01",
+    "create_date": "2026-05-15 00:00:00.000000",
+    "doc": "add operational_alerts table"
+  },
+  {
+    "file": "ll89mm01nn23_add_universe_versions_tables.py",
+    "revision": "ll89mm01nn23",
+    "down_revision": "kk78ll90mm12",
+    "create_date": "2026-05-14 00:00:00.000000",
+    "doc": "add universe_versions and universe_members tables"
+  },
+  {
+    "file": "mm90nn12oo34_add_raw_market_pool_tables.py",
+    "revision": "mm90nn12oo34",
+    "down_revision": "ll89mm01nn23",
+    "create_date": "2026-05-14 00:00:00.000000",
+    "doc": "add raw_market_symbols, raw_market_pool_snapshots, raw_market_pool_memberships tables"
+  },
+  {
+    "file": "nn01oo13pp45_add_universe_version_generation_metadata.py",
+    "revision": "nn01oo13pp45",
+    "down_revision": "mm90nn12oo34",
+    "create_date": "2026-05-15 00:00:00.000000",
+    "doc": "add generation_metadata_json to universe_versions"
+  },
+  {
+    "file": "nn22oo33pp44_add_pending_new_pending_cancel_expired_to_tracked_order_status_enum.py",
+    "revision": "nn22oo33pp44",
+    "down_revision": "kk11ll22mm33",
+    "create_date": "2026-06-07",
+    "doc": "add PENDING_NEW, PENDING_CANCEL, EXPIRED to tracked_order_status_enum"
+  },
+  {
+    "file": "oo14pp26rr58_add_rebalance_runs_table.py",
+    "revision": "oo14pp26rr58",
+    "down_revision": "nn01oo13pp45",
+    "create_date": "2026-05-15 00:00:00.000000",
+    "doc": "add universe_rebalance_runs table"
+  },
+  {
+    "file": "oo33pp44qq55_create_missing_orm_tables.py",
+    "revision": "oo33pp44qq55",
+    "down_revision": "nn22oo33pp44",
+    "create_date": "2026-06-07",
+    "doc": "Create tables missing from migration history: portfolio_drawdown_governance_state, ticker_lifecycle_events"
+  },
+  {
+    "file": "pp27qq39ss71_add_universe_linkage_to_run_manifests.py",
+    "revision": "pp27qq39ss71",
+    "down_revision": "oo14pp26rr58",
+    "create_date": "2026-05-15 00:00:00.000000",
+    "doc": "add universe linkage fields to run_manifests"
+  },
+  {
+    "file": "qq28rr40tt82_add_universe_rotation_records_table.py",
+    "revision": "qq28rr40tt82",
+    "down_revision": "pp27qq39ss71",
+    "create_date": "2026-05-15 00:00:00.000000",
+    "doc": "add universe_rotation_records table"
+  },
+  {
+    "file": "rr39ss51tt83_add_universe_resolution_fields_to_run_manifests.py",
+    "revision": "rr39ss51tt83",
+    "down_revision": "qq28rr40tt82",
+    "create_date": "2026-05-15 00:00:00.000000",
+    "doc": "add universe resolution fields to run_manifests"
+  },
+  {
+    "file": "ss40tt52uu84_add_settlement_fields_to_cash_snapshots.py",
+    "revision": "ss40tt52uu84",
+    "down_revision": "rr39ss51tt83",
+    "create_date": "2026-05-23 00:00:00.000000",
+    "doc": "add settlement fields to cash_snapshots"
+  },
+  {
+    "file": "tt41uu53vv95_add_dividend_settlement_fields_to_run_manifests.py",
+    "revision": "tt41uu53vv95",
+    "down_revision": "ss40tt52uu84",
+    "create_date": "2026-05-23 00:00:00.000000",
+    "doc": "add dividend and settlement fields to run_manifests"
+  },
+  {
+    "file": "uu54vv66ww07_add_kill_switch_state_table.py",
+    "revision": "uu54vv66ww07",
+    "down_revision": "tt41uu53vv95",
+    "create_date": "2026-05-25 00:00:00.000000",
+    "doc": "add kill_switch_state table"
+  },
+  {
+    "file": "vv65ww77xx08_add_max_total_allocation_to_operator_settings.py",
+    "revision": "vv65ww77xx08",
+    "down_revision": "uu54vv66ww07",
+    "create_date": "2026-05-25 00:00:00.000000",
+    "doc": "Add max_total_strategy_allocation_pct to operator_settings"
+  },
+  {
+    "file": "ww76xx88yy09_add_portfolio_symbol_exposure_limits.py",
+    "revision": "ww76xx88yy09",
+    "down_revision": "vv65ww77xx08",
+    "create_date": "2026-05-25 00:00:00.000000",
+    "doc": "Add portfolio symbol exposure limit columns to operator_settings"
+  },
+  {
+    "file": "xx87yy99zz10_add_promotion_maintenance_rules.py",
+    "revision": "xx87yy99zz10",
+    "down_revision": "ww76xx88yy09",
+    "create_date": "2026-05-26 00:00:00.000000",
+    "doc": "add promotion maintenance rule fields"
+  },
+  {
+    "file": "zz09aa21bb32_add_promotion_rules_live_constraints.py",
+    "revision": "zz09aa21bb32",
+    "down_revision": "xx87yy99zz10",
+    "create_date": "2026-05-26 00:00:00.000000",
+    "doc": "add promotion rules live-capital safety constraints"
+  }
+]
