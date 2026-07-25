@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Autonomous quantitative trading platform. FastAPI backend + React/TypeScript frontend. The frontend is a **static mockup** — no real API calls yet, all mock data. Wire up APIs only when told.
+Autonomous quantitative trading platform. FastAPI backend + React/TypeScript frontend. The frontend is wired to real backend endpoints (not mock data) but is uneven in places — some pages have drifted from recent backend changes, and frontend test coverage is thin. Verify current behavior against the backend before assuming a page reflects the latest API shape.
 
 ## Commands
 
@@ -112,11 +112,10 @@ interfaces/    ← REST API (FastAPI), CLI
 React 19 + Vite + TypeScript (strict), TanStack Router + Query, Zustand, Tailwind CSS, shadcn/ui, Recharts, TanStack Table, Framer Motion.
 
 ### Key Rules
-- All mock data lives in `frontend/src/mock/data.ts` — never hardcode data in components
+- The frontend calls real backend endpoints — `frontend/src/mock/data.ts` is a leftover from an earlier mock-only phase and is no longer imported anywhere; don't add new dependencies on it
 - Do not edit `frontend/src/components/ui/` (shadcn primitives)
-- Do not wire real API calls — mock data only until told otherwise
 - Colors: use CSS variables (`bg-[var(--surface)]`), not hardcoded hex
-- The file `trading_platform_screens.html` at the project root is the visual reference — match it exactly
+- `docs/design-reference/trading_platform_screens.html` is the original visual reference — useful for design intent, but the live frontend may have since drifted from it
 
 ### Design Tokens (defined in `frontend/src/index.css`)
 ```
@@ -146,7 +145,8 @@ Docker Compose services (all local dev):
 ## Docs
 
 Canonical architecture docs live in `docs/`. Key references:
-- `docs/architecture/v1-boundaries.md` — system boundary decisions
+- `docs/architecture/layering.md` — layer boundaries and domain ownership
 - `docs/architecture/safety-doctrine.md` — safety invariants (read before touching safety/ or execution/)
 - `docs/architecture/invariants.md` — hard invariants that must not be violated
-- `docs/storage/` — Parquet dataset versioning, Postgres SoR design
+- `docs/backend/storage-lineage/` — Parquet dataset versioning, Postgres SoR design
+- `docs/archived-docs/architecture/v1-boundaries.md` — historical v1-only system boundaries (superseded by multi-strategy/portfolio-governance work; kept for context only)
