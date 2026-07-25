@@ -28,7 +28,7 @@ export default function TopNav() {
         className="font-mono text-[13px] font-semibold text-[var(--accent)] uppercase tracking-[0.12em] py-[14px] pr-6 mr-2 shrink-0"
         style={{ borderRight: '1px solid var(--border)' }}
       >
-        ◈ WeTrade
+        ◈
       </div>
 
       {/* Nav tabs */}

@@ -1,6 +1,10 @@
 # Private working notes (self-audits, bug lists, resume drafts) — never public
 private-notes/
 
+# Claude Code local session state — machine/session-specific, not shared
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
 # Generated data / run artifacts — regeneratable, not source
 data/
 artifacts/
