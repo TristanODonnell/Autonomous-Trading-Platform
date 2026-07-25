@@ -357,6 +357,8 @@ def handle_verify_runtime_soak(args: argparse.Namespace) -> int:
             window_start=args.window_start,
             window_end=args.window_end,
         )
+        if not args.no_persist:
+            session.commit()
 
         print_header("Verify Runtime Soak")
         data = report.model_dump(mode="json")

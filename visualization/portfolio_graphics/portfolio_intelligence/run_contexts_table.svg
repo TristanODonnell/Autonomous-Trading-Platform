@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 16px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 11px; font-style: italic; }
+    .col-hdr-allow { fill: #00E5A0; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; }
+    .col-hdr-block { fill: #FF4D6D; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; }
+    .cell { fill: #C9D1D9; font-size: 12.5px; }
+    .col-bg-allow { fill: #00E5A00a; stroke: #00E5A0; stroke-width: 1; }
+    .col-bg-block { fill: #FF4D6D0a; stroke: #FF4D6D; stroke-width: 1; }
+    .row-line { stroke: #1C2532; stroke-width: 1; }
+  </style>
+  <rect class="bg" x="0" y="0" width="900" height="420"/>
+  <text class="title" x="30" y="34">Black-Litterman run_context — allowed vs blocked (lookup, not a flow)</text>
+  <text class="hint" x="30" y="54">enforced directly in code: raises unless context is on the allowlist and not simultaneously on the blocklist</text>
+
+  <rect class="col-bg-allow" x="30" y="76" width="400" height="300" rx="8"/>
+  <rect class="col-bg-block" x="460" y="76" width="400" height="300" rx="8"/>
+
+  <text class="col-hdr-allow" x="50" y="104">ALLOWED CONTEXTS</text>
+  <text class="col-hdr-block" x="480" y="104">BLOCKED CONTEXTS</text>
+  <line class="row-line" x1="50" y1="114" x2="410" y2="114"/>
+  <line class="row-line" x1="480" y1="114" x2="840" y2="114"/>
+
+  <text class="cell" x="50" y="144">research_cli</text>
+  <text class="cell" x="480" y="144">live_trading</text>
+
+  <text class="cell" x="50" y="174">experiment_pipeline</text>
+  <text class="cell" x="480" y="174">paper_trading</text>
+
+  <text class="cell" x="50" y="204">offline_simulation</text>
+  <text class="cell" x="480" y="204">production_rebalance</text>
+
+  <text class="cell" x="50" y="234">backtest</text>
+  <text class="cell" x="480" y="234">automatic_portfolio_construction</text>
+
+  <text class="cell" x="50" y="264">dry_run_allocation_analysis</text>
+  <text class="cell" x="480" y="264">runtime_allocation</text>
+
+  <text class="hint" x="50" y="340">a caller can't invoke the service from a live</text>
+  <text class="hint" x="50" y="356">context even by accident — both lists checked</text>
+</svg>

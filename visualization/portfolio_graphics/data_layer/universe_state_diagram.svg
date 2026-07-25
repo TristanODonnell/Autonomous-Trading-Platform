@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <defs>
+    <marker id="u-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#00E5A0"/></marker>
+    <marker id="u-retire" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4A5568"/></marker>
+  </defs>
+  <style>
+    .bg { fill: #070B0F; }
+    .node { fill: #0D1117; stroke: #1C2532; stroke-width: 1.5; rx: 8; }
+    .node-terminal { fill: #111820; stroke: #4A5568; stroke-width: 2.5; rx: 8; }
+    .label { fill: #C9D1D9; font-size: 14px; font-weight: 700; }
+    .sub { fill: #8B949E; font-size: 10.5px; }
+    .title { fill: #C9D1D9; font-size: 20px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 12px; font-style: italic; }
+    .edge-flow { stroke: #00E5A0; stroke-width: 1.75; fill: none; marker-end: url(#u-flow); }
+    .edge-retire { stroke: #4A5568; stroke-width: 1.5; fill: none; stroke-dasharray: 3 3; marker-end: url(#u-retire); opacity: 0.85; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1200" height="340"/>
+  <text class="title" x="30" y="42">Universe governance — same visual language as order &amp; strategy state machines</text>
+  <text class="hint" x="30" y="64">tested against a real database, not mocked · rollback builds a brand-new PROPOSED version, never rewinds ACTIVE</text>
+
+  <rect class="node" x="30" y="140" width="200" height="64"/>
+  <text class="label" x="50" y="172">CANDIDATE</text>
+
+  <rect class="node" x="330" y="140" width="200" height="64"/>
+  <text class="label" x="350" y="166">PROPOSED</text>
+  <text class="sub" x="350" y="184">churn check before activation</text>
+
+  <rect class="node" x="630" y="140" width="200" height="64"/>
+  <text class="label" x="650" y="172">ACTIVE</text>
+
+  <rect class="node-terminal" x="930" y="140" width="220" height="64"/>
+  <text class="label" x="950" y="166" fill="#FFFFFF">RETIRED</text>
+  <text class="sub" x="950" y="184">terminal — no outgoing edges</text>
+
+  <line class="edge-flow" x1="230" y1="172" x2="330" y2="172"/>
+  <line class="edge-flow" x1="530" y1="172" x2="630" y2="172"/>
+  <line class="edge-retire" x1="830" y1="172" x2="930" y2="172"/>
+
+  <!-- CANDIDATE can also jump straight to ACTIVE -->
+  <path class="edge-flow" d="M130,204 Q380,260 630,204"/>
+  <text class="hint" x="280" y="290">CANDIDATE → ACTIVE (direct)</text>
+
+  <!-- PROPOSED can also retire directly -->
+  <path class="edge-retire" d="M430,204 Q680,260 950,204"/>
+  <text class="hint" x="620" y="290">PROPOSED → RETIRED (direct)</text>
+</svg>

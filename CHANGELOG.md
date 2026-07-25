@@ -582,9 +582,21 @@ Shadow Mode
 Kill Switch (Internal Stub)
 - Initial kill switch service interface introduced
 - Internal kill switch checks integrated with runtime control flow
-- External out-of-band kill switch storage (S3 / Redis) deferred to future phase
 
 Notes:
 This release implements the core safety controls required before introducing
-broker execution logic. External kill switch infrastructure and distributed
-control mechanisms will be implemented in a later phase.
+broker execution logic.
+
+---
+
+## [Unreleased]
+
+Kill Switch (Durable)
+- Kill switch state moved to a DB-persisted `KillSwitchState` table (survives
+  restarts, deploys, and crashes), replacing the in-memory-only checks above.
+
+Note: substantial work has shipped since the "Phase 5" entries above
+(portfolio drawdown governance ladder, shadow runtime validation, factor
+exposure / Black-Litterman / portfolio-construction stack, and more) that
+predates this changelog being kept up to date. Treat entries above this point
+as historical rather than a complete record of current capabilities.

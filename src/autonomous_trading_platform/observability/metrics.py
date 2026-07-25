@@ -475,7 +475,7 @@ symbols_expected = meter.create_observable_gauge(
     name="ratp_symbols_expected",
     description="Number of symbols expected for ingestion in current cycle",
     callbacks=[_symbols_expected_callback],
-    unit="1",
+    unit="{symbols}",
 )
 
 
@@ -489,7 +489,7 @@ symbols_received = meter.create_observable_gauge(
     name="ratp_symbols_received",
     description="Number of symbols successfully received in ingestion",
     callbacks=[_symbols_received_callback],
-    unit="1",
+    unit="{symbols}",
 )
 
 # =============================
@@ -1145,7 +1145,7 @@ universe_active_size = meter.create_observable_gauge(
     name="ratp_universe_active_size",
     description="Number of symbols in the current active universe",
     callbacks=[_universe_active_size_callback],
-    unit="1",
+    unit="{symbols}",
 )
 
 

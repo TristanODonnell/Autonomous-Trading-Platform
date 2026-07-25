@@ -185,7 +185,7 @@
       "type": "logs",
       "gridPos": {"x": 16, "y": 23, "w": 8, "h": 7},
       "datasource": {"type": "loki", "uid": "loki"},
-      "targets": [{"refId": "A", "datasource": {"type": "loki", "uid": "loki"}, "expr": "{} | json | component=~\"universe.*\" |~ \"$correlation_id\"", "queryType": "range"}],
+      "targets": [{"refId": "A", "datasource": {"type": "loki", "uid": "loki"}, "expr": "{service_name=~\".+\"} | json | component=~\"universe.*\" |~ \"$correlation_id\"", "queryType": "range"}],
       "fieldConfig": {"defaults": {}, "overrides": []},
       "options": {}
     }

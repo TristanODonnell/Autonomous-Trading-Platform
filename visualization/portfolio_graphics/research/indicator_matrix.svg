@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 680" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 16px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 11px; font-style: italic; }
+    .hdr { fill: #8B949E; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+    .cell-name { fill: #C9D1D9; font-size: 12px; font-weight: 700; }
+    .cell { fill: #8B949E; font-size: 11px; }
+    .row-line { stroke: #1C2532; stroke-width: 1; }
+    .col-line { stroke: #1C2532; stroke-width: 1; opacity: 0.6; }
+    .domain-tag { font-size: 10px; font-weight: 700; padding: 2px; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1060" height="680"/>
+  <text class="title" x="30" y="34">Composite skeleton generator — 13 indicators × value domain × valid rule types</text>
+  <text class="hint" x="30" y="54">from _INDICATOR_DOMAIN in composite_generation.py · governs which indicators can drive which rule types</text>
+
+  <text class="hdr" x="30"  y="86">Indicator</text>
+  <text class="hdr" x="290" y="86">Value Domain</text>
+  <text class="hdr" x="520" y="86">Valid Rule Types</text>
+  <line class="row-line" x1="30" y1="96" x2="1030" y2="96"/>
+  <line class="col-line" x1="270" y1="96" x2="270" y2="656"/>
+  <line class="col-line" x1="500" y1="96" x2="500" y2="656"/>
+
+  <g>
+    <!-- zero_centered x4 -->
+    <text class="cell-name" x="30" y="120">momentum</text>
+    <text class="cell" x="290" y="120" fill="#3B9EFF">zero_centered</text>
+    <text class="cell" x="520" y="120">threshold (±0 / ±1.5 / ±2.0 variants)</text>
+    <line class="row-line" x1="30" y1="134" x2="1030" y2="134"/>
+
+    <text class="cell-name" x="30" y="158">rate_of_change</text>
+    <text class="cell" x="290" y="158" fill="#3B9EFF">zero_centered</text>
+    <text class="cell" x="520" y="158">threshold (trend-following / mean-reversion)</text>
+    <line class="row-line" x1="30" y1="172" x2="1030" y2="172"/>
+
+    <text class="cell-name" x="30" y="196">z_score</text>
+    <text class="cell" x="290" y="196" fill="#3B9EFF">zero_centered</text>
+    <text class="cell" x="520" y="196">threshold (mean-reversion at ±1.5 / ±2.0)</text>
+    <line class="row-line" x1="30" y1="210" x2="1030" y2="210"/>
+
+    <text class="cell-name" x="30" y="234">distance_from_moving_average</text>
+    <text class="cell" x="290" y="234" fill="#3B9EFF">zero_centered</text>
+    <text class="cell" x="520" y="234">threshold, crosses 0 naturally</text>
+    <line class="row-line" x1="30" y1="248" x2="1030" y2="248"/>
+
+    <!-- ratio x1 -->
+    <text class="cell-name" x="30" y="272">volume_ratio</text>
+    <text class="cell" x="290" y="272" fill="#E8A838">ratio (~1.0)</text>
+    <text class="cell" x="520" y="272">threshold at 1.0 / 1.2</text>
+    <line class="row-line" x1="30" y1="286" x2="1030" y2="286"/>
+
+    <!-- price_series x2 -->
+    <text class="cell-name" x="30" y="310">simple_moving_average</text>
+    <text class="cell" x="290" y="310" fill="#9B72FF">price_series</text>
+    <text class="cell" x="520" y="310">crossover / comparison only — not threshold</text>
+    <line class="row-line" x1="30" y1="324" x2="1030" y2="324"/>
+
+    <text class="cell-name" x="30" y="348">exponential_moving_average</text>
+    <text class="cell" x="290" y="348" fill="#9B72FF">price_series</text>
+    <text class="cell" x="520" y="348">crossover / comparison only — not threshold</text>
+    <line class="row-line" x1="30" y1="362" x2="1030" y2="362"/>
+
+    <!-- positive x3 -->
+    <text class="cell-name" x="30" y="386">rolling_standard_deviation</text>
+    <text class="cell" x="290" y="386" fill="#8B949E">positive</text>
+    <text class="cell" x="520" y="386">filter / gate only</text>
+    <line class="row-line" x1="30" y1="400" x2="1030" y2="400"/>
+
+    <text class="cell-name" x="30" y="424">realized_volatility</text>
+    <text class="cell" x="290" y="424" fill="#8B949E">positive</text>
+    <text class="cell" x="520" y="424">filter / gate only</text>
+    <line class="row-line" x1="30" y1="438" x2="1030" y2="438"/>
+
+    <text class="cell-name" x="30" y="462">average_volume</text>
+    <text class="cell" x="290" y="462" fill="#8B949E">positive</text>
+    <text class="cell" x="520" y="462">filter / gate only</text>
+    <line class="row-line" x1="30" y1="476" x2="1030" y2="476"/>
+
+    <!-- 0_100 x2 -->
+    <text class="cell-name" x="30" y="500">rsi</text>
+    <text class="cell" x="290" y="500" fill="#00E5A0">0–100</text>
+    <text class="cell" x="520" y="500">crossover / comparison — excluded from threshold (±10 cap)</text>
+    <line class="row-line" x1="30" y1="514" x2="1030" y2="514"/>
+
+    <text class="cell-name" x="30" y="538">rsi_wilder</text>
+    <text class="cell" x="290" y="538" fill="#00E5A0">0–100</text>
+    <text class="cell" x="520" y="538">crossover / comparison — excluded from threshold (±10 cap)</text>
+    <line class="row-line" x1="30" y1="552" x2="1030" y2="552"/>
+
+    <!-- boolean x1 -->
+    <text class="cell-name" x="30" y="576">volume_spike</text>
+    <text class="cell" x="290" y="576" fill="#FF4D6D">boolean</text>
+    <text class="cell" x="520" y="576">none — excluded from all rules, gate only</text>
+    <line class="row-line" x1="30" y1="590" x2="1030" y2="590"/>
+  </g>
+
+  <text class="hint" x="30" y="622">±10 schema cap: RSI's native 0–100 range exceeds the threshold rule's bounds, so it's routed to crossover/comparison instead</text>
+  <text class="hint" x="30" y="642">"positive" and "boolean" domains never drive a rule directly — they gate or filter another indicator's signal</text>
+</svg>

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 300" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <defs>
+    <marker id="lat-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#00E5A0"/></marker>
+  </defs>
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 16px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 11px; font-style: italic; }
+    .bar { fill: #0D1117; stroke: #1C2532; stroke-width: 1.25; }
+    .bar-label { fill: #8B949E; font-size: 11px; }
+    .marker-signal { fill: #E8A838; }
+    .marker-exec { fill: #00E5A0; }
+    .price-tag { font-size: 11px; font-weight: 700; }
+    .row-label { fill: #C9D1D9; font-size: 12px; font-weight: 700; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1100" height="300"/>
+  <text class="title" x="30" y="34">Order latency — deferred execution, not a price adjustment</text>
+  <text class="hint" x="30" y="54">with nonzero latency, an order fills at the execution bar's open — it didn't exist yet at the signal bar's close</text>
+
+  <!-- signal-bar row -->
+  <text class="row-label" x="30" y="110">signal bar</text>
+  <rect class="bar" x="200" y="80" width="140" height="50"/>
+  <rect class="bar" x="360" y="80" width="140" height="50" fill="#00E5A00d" stroke="#00E5A0"/>
+  <rect class="bar" x="520" y="80" width="140" height="50"/>
+  <circle class="marker-signal" cx="500" cy="130" r="6"/>
+  <text class="price-tag" fill="#E8A838" x="510" y="150">close — signal fires here</text>
+
+  <!-- execution-bar row -->
+  <text class="row-label" x="30" y="210">execution bar</text>
+  <rect class="bar" x="200" y="180" width="140" height="50"/>
+  <rect class="bar" x="360" y="180" width="140" height="50"/>
+  <rect class="bar" x="520" y="180" width="140" height="50" fill="#00E5A00d" stroke="#00E5A0"/>
+  <circle class="marker-exec" cx="520" cy="180" r="6"/>
+  <text class="price-tag" fill="#00E5A0" x="530" y="164">open — fills here (N bars later)</text>
+
+  <line x1="500" y1="130" x2="520" y2="180" stroke="#00E5A0" stroke-width="1.75" stroke-dasharray="4 3" marker-end="url(#lat-arrow)"/>
+
+  <text class="hint" x="30" y="260">reference price genuinely shifts close → open across the latency gap; dividends, by contrast, apply the instant the ex-date bar is reached</text>
+</svg>

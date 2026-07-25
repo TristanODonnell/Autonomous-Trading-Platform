@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 620" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <defs>
+    <marker id="arrow-pass" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#00E5A0"/>
+    </marker>
+  </defs>
+
+  <style>
+    .bg { fill: #070B0F; }
+    .gate-box {
+      fill: #0D1117;
+      stroke: #1C2532;
+      stroke-width: 1.5;
+      rx: 10;
+    }
+    .gate-title { fill: #C9D1D9; font-size: 18px; font-weight: 700; }
+    .gate-sub { fill: #8B949E; font-size: 12px; }
+    .gate-exc {
+      fill: #3B9EFF;
+      font-size: 11px;
+      font-family: 'SF Mono', Consolas, monospace;
+    }
+    .gate-status { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
+    .flow-arrow { stroke: #00E5A0; stroke-width: 2; fill: none; marker-end: url(#arrow-pass); }
+    .hint { fill: #FFFFFF; font-size: 12px; font-style: italic; }
+    .final-box { fill: #00E5A008; stroke: #00E5A0; stroke-width: 1.5; stroke-dasharray: 3 3; rx: 10; }
+    .final-text { fill: #00E5A0; font-size: 14px; font-weight: 700; }
+
+    .gate-status.pass { fill: #00E5A0; }
+  </style>
+
+  <rect class="bg" x="0" y="0" width="1440" height="620"/>
+
+  <text x="40" y="42" fill="#C9D1D9" font-size="20" font-weight="700">LiveTradingGateService — four independent gates</text>
+  <text x="40" y="64" class="hint">any single failure short-circuits the gates downstream of it</text>
+
+  <!-- connecting flow arrows between the four gates -->
+  <line class="flow-arrow" id="arrow1" x1="330" y1="220" x2="378" y2="220"/>
+  <line class="flow-arrow" id="arrow2" x1="678" y1="220" x2="726" y2="220"/>
+  <line class="flow-arrow" id="arrow3" x1="1026" y1="220" x2="1074" y2="220"/>
+
+  <!-- Gate 1 -->
+  <g class="gate" id="gate-1">
+    <rect class="gate-box" x="40" y="140" width="290" height="160"/>
+    <text class="gate-title" x="60" y="172">1 · Environment / Config</text>
+    <text class="gate-sub" x="60" y="192">NO_LIVE_TRADING · ENABLE_LIVE_TRADING</text>
+    <text class="gate-sub" x="60" y="208">build compiled w/ live modules?</text>
+    <text class="gate-exc" x="60" y="232">raises EnvironmentSafetyError</text>
+    <text class="gate-status pass" x="60" y="272">● PASS</text>
+  </g>
+
+  <!-- Gate 2 -->
+  <g class="gate" id="gate-2">
+    <rect class="gate-box" x="380" y="140" width="290" height="160"/>
+    <text class="gate-title" x="400" y="172">2 · Account Allowlist</text>
+    <text class="gate-sub" x="400" y="192">broker account id ∈ allowed set?</text>
+    <text class="gate-exc" x="400" y="232">raises AccountNotAllowedError</text>
+    <text class="gate-status pass" x="400" y="272">● PASS</text>
+  </g>
+
+  <!-- Gate 3 -->
+  <g class="gate" id="gate-3">
+    <rect class="gate-box" x="728" y="140" width="290" height="160"/>
+    <text class="gate-title" x="748" y="172">3 · Armed / Disarmed</text>
+    <text class="gate-sub" x="748" y="192">runtime state — operator armed</text>
+    <text class="gate-sub" x="748" y="208">the system for this cycle?</text>
+    <text class="gate-exc" x="748" y="232">raises RuntimeDisarmedError</text>
+    <text class="gate-status pass" x="748" y="272">● PASS</text>
+  </g>
+
+  <!-- Gate 4 -->
+  <g class="gate" id="gate-4">
+    <rect class="gate-box" x="1076" y="140" width="290" height="160"/>
+    <text class="gate-title" x="1096" y="172">4 · Kill Switch</text>
+    <text class="gate-sub" x="1096" y="192">Postgres-backed singleton row —</text>
+    <text class="gate-sub" x="1096" y="208">re-read fresh on every check</text>
+    <text class="gate-exc" x="1096" y="232">raises KillSwitchEngagedError</text>
+    <text class="gate-status pass" x="1096" y="272">● PASS</text>
+  </g>
+
+  <!-- final authorized state -->
+  <rect class="final-box" x="490" y="470" width="460" height="70"/>
+  <text class="final-text" x="520" y="512" text-anchor="start">✓ order proceeds to pre-trade risk checks</text>
+  <text class="hint" x="520" y="565" text-anchor="start">an unauthorized account never reaches the kill-switch check</text>
+</svg>

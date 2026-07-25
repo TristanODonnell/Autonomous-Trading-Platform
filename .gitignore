@@ -1,3 +1,13 @@
+# Private working notes (self-audits, bug lists, resume drafts) — never public
+private-notes/
+
+# Generated data / run artifacts — regeneratable, not source
+data/
+artifacts/
+.task_progress.json
+.runtime/
+.tmp/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

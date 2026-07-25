@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -10,9 +10,15 @@ from autonomous_trading_platform.application.services.portfolio_summary_service 
 
 
 @dataclass
+class FakePositionSnapshotItem:
+    quantity: Decimal
+
+
+@dataclass
 class FakePositionSnapshot:
     timestamp: datetime
     snapshot_id: str
+    positions: list[FakePositionSnapshotItem] = field(default_factory=list)
 
 
 @dataclass

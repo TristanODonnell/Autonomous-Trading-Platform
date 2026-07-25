@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 460" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 16px; font-weight: 700; }
+    .illustrative { fill: #E8A838; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; }
+    .hint { fill: #FFFFFF; font-size: 11px; font-style: italic; }
+    .pt-a { fill: #00E5A0; }
+    .pt-b { fill: #3B9EFF; }
+    .pt-c { fill: #9B72FF; }
+    .pt-outlier { fill: #8B949E; }
+    .cluster-ring { fill: none; stroke-width: 1.5; stroke-dasharray: 4 3; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1000" height="460"/>
+  <text class="title" x="30" y="34">Strategy clustering — near-duplicate variants merging</text>
+  <rect x="30" y="44" width="90" height="20" fill="#E8A83814" stroke="#E8A838" rx="4"/>
+  <text class="illustrative" x="38" y="58">ILLUSTRATIVE</text>
+  <text class="hint" x="140" y="58">single-linkage, hand-rolled — no external clustering library</text>
+
+  <!-- cluster A: tight group of near-duplicates -->
+  <ellipse class="cluster-ring" cx="220" cy="180" rx="80" ry="60" stroke="#00E5A0"/>
+  <circle class="pt-a" cx="190" cy="160" r="6"/>
+  <circle class="pt-a" cx="215" cy="175" r="6"/>
+  <circle class="pt-a" cx="235" cy="155" r="6"/>
+  <circle class="pt-a" cx="205" cy="200" r="6"/>
+  <circle class="pt-a" cx="250" cy="195" r="6"/>
+  <text fill="#00E5A0" font-size="11" font-weight="700" x="155" y="260">cluster A — 5 near-duplicate momentum variants</text>
+
+  <!-- cluster B -->
+  <ellipse class="cluster-ring" cx="620" cy="150" rx="60" ry="50" stroke="#3B9EFF"/>
+  <circle class="pt-b" cx="600" cy="135" r="6"/>
+  <circle class="pt-b" cx="630" cy="145" r="6"/>
+  <circle class="pt-b" cx="615" cy="170" r="6"/>
+  <text fill="#3B9EFF" font-size="11" font-weight="700" x="560" y="220">cluster B — mean-reversion pair</text>
+
+  <!-- cluster C, small -->
+  <ellipse class="cluster-ring" cx="800" cy="320" rx="50" ry="42" stroke="#9B72FF"/>
+  <circle class="pt-c" cx="785" cy="310" r="6"/>
+  <circle class="pt-c" cx="815" cy="325" r="6"/>
+  <text fill="#9B72FF" font-size="11" font-weight="700" x="750" y="380">cluster C</text>
+
+  <!-- independent outliers, no ring -->
+  <circle class="pt-outlier" cx="440" cy="330" r="6"/>
+  <circle class="pt-outlier" cx="500" cy="370" r="6"/>
+  <circle class="pt-outlier" cx="900" cy="150" r="6"/>
+  <circle class="pt-outlier" cx="350" cy="400" r="6"/>
+  <text fill="#8B949E" font-size="11" font-weight="700" x="420" y="420">independent strategies — genuinely distinct sources of edge</text>
+
+  <text class="hint" x="30" y="440">a ranked top-N can be a dozen variants of one idea — clustering surfaces that before it reads as diversification</text>
+</svg>

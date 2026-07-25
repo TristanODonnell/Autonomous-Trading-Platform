@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 
@@ -60,3 +61,10 @@ def setup_telemetry(service_name: str) -> None:
     root_logger = logging.getLogger()
     if not any(isinstance(h, LoggingHandler) for h in root_logger.handlers):
         root_logger.addHandler(LoggingHandler(level=logging.INFO, logger_provider=logger_provider))
+
+    # Short-lived CLI/backtest processes can exit before the batch processors'
+    # background threads get a scheduled export cycle — flush explicitly on exit
+    # so traces/metrics/logs from the process's final seconds aren't dropped.
+    atexit.register(tracer_provider.shutdown)
+    atexit.register(meter_provider.shutdown)
+    atexit.register(logger_provider.shutdown)

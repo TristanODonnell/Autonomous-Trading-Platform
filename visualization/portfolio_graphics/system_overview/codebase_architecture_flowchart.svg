@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1060" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <defs>
+    <marker id="ca-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#00E5A0"/></marker>
+    <marker id="ca-drive" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3B9EFF"/></marker>
+  </defs>
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 21px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 12px; font-style: italic; }
+    .node { fill: #0D1117; stroke-width: 1.75; rx: 10; }
+    .label { font-size: 14px; font-weight: 700; }
+    .sub { fill: #8B949E; font-size: 10.5px; }
+    .spoke { stroke: #232E3D; stroke-width: 1.25; fill: none; }
+    .flow { stroke: #00E5A0; stroke-width: 2; fill: none; marker-end: url(#ca-flow); }
+    .drive { stroke: #3B9EFF; stroke-width: 1.75; fill: none; marker-end: url(#ca-drive); stroke-dasharray: 5 3; }
+    .kicker { fill: #4A5568; font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; }
+  </style>
+
+  <rect class="bg" x="0" y="0" width="1600" height="1060"/>
+  <text class="title" x="40" y="40">Codebase architecture — one dependency spine, 23 subpackages</text>
+  <text class="hint" x="40" y="64">green arrows: request/data flow toward the user · dashed blue: automation triggers · thin grey lines: sibling packages wired at runtime, not by import</text>
+  <text class="hint" x="40" y="82">left → right = data flow; right → left = the only legal import direction (interfaces imports application imports storage imports contracts, never reversed)</text>
+
+  <!-- ============ SPOKES (draw first, under boxes) ============ -->
+  <!-- top satellites -> application top edge -->
+  <path class="spoke" d="M440,230 L895,430"/>
+  <path class="spoke" d="M760,230 L915,430"/>
+  <path class="spoke" d="M1080,230 L945,430"/>
+  <path class="spoke" d="M1400,230 L965,430"/>
+  <!-- bottom satellites -> application bottom edge -->
+  <path class="spoke" d="M440,780 L895,620"/>
+  <path class="spoke" d="M760,780 L915,620"/>
+  <path class="spoke" d="M1080,780 L945,620"/>
+  <path class="spoke" d="M1400,780 L965,620"/>
+
+  <!-- ============ DRIVER ARROWS ============ -->
+  <path class="drive" d="M260,545 Q 500,614 818,560"/>
+  <line class="drive" x1="150" y1="590" x2="150" y2="618"/>
+  <path class="drive" d="M260,660 Q420,660 560,510"/>
+
+  <!-- ============ SPINE FLOW ARROWS ============ -->
+  <line class="flow" x1="490" y1="525" x2="558" y2="525"/>
+  <line class="flow" x1="750" y1="520" x2="818" y2="520"/>
+  <line class="flow" x1="1040" y1="520" x2="1108" y2="520"/>
+  <line class="flow" x1="1300" y1="525" x2="1368" y2="525"/>
+
+  <!-- ============ TOP SATELLITES ============ -->
+  <rect class="node" x="300" y="100" width="280" height="130" stroke="#FF4D6D" fill="#FF4D6D0d"/>
+  <text class="kicker" x="316" y="120">safety/</text>
+  <text class="label" x="316" y="140" fill="#FF4D6D">SAFETY</text>
+  <text class="sub" x="316" y="160">4 chained gates → kill switch</text>
+  <text class="sub" x="316" y="176">DB-persisted, survives restarts</text>
+  <text class="sub" x="316" y="192">153 dedicated tests</text>
+
+  <rect class="node" x="620" y="100" width="280" height="130" stroke="#FF4D6D" fill="#FF4D6D0d"/>
+  <text class="kicker" x="636" y="120">governance (in application/)</text>
+  <text class="label" x="636" y="140" fill="#FF4D6D">GOVERNANCE</text>
+  <text class="sub" x="636" y="160">auto promotion / demotion</text>
+  <text class="sub" x="636" y="176">5-rung drawdown ladder</text>
+  <text class="sub" x="636" y="192">advisory-lock reallocation</text>
+
+  <rect class="node" x="940" y="100" width="280" height="130" stroke="#00E5A0" fill="#00E5A00d"/>
+  <text class="kicker" x="956" y="120">research/</text>
+  <text class="label" x="956" y="140" fill="#00E5A0">RESEARCH</text>
+  <text class="sub" x="956" y="160">generation → 4-stage funnel</text>
+  <text class="sub" x="956" y="176">walk-forward + Monte Carlo</text>
+  <text class="sub" x="956" y="192">lookahead + survivorship guard</text>
+
+  <rect class="node" x="1260" y="100" width="280" height="130" stroke="#9B72FF" fill="#9B72FF0d"/>
+  <text class="kicker" x="1276" y="120">black_litterman/ + intelligence/</text>
+  <text class="label" x="1276" y="140" fill="#9B72FF">PORTFOLIO INTELLIGENCE</text>
+  <text class="sub" x="1276" y="160">Black-Litterman, from scratch</text>
+  <text class="sub" x="1276" y="176">hand-rolled mean-variance optimizer</text>
+  <text class="sub" x="1276" y="192">clustering + robustness scoring</text>
+
+  <!-- ============ BOTTOM SATELLITES ============ -->
+  <rect class="node" x="300" y="780" width="280" height="130" stroke="#3B9EFF" fill="#3B9EFF0d"/>
+  <text class="kicker" x="316" y="800">universe/</text>
+  <text class="label" x="316" y="820" fill="#3B9EFF">UNIVERSE</text>
+  <text class="sub" x="316" y="840">propose → retire → activate</text>
+  <text class="sub" x="316" y="856">survivorship-safe, PIT-anchored</text>
+  <text class="sub" x="316" y="872">rollback copies forward</text>
+
+  <rect class="node" x="620" y="780" width="280" height="130" stroke="#9B72FF" fill="#9B72FF0d"/>
+  <text class="kicker" x="636" y="800">execution/</text>
+  <text class="label" x="636" y="820" fill="#9B72FF">EXECUTION</text>
+  <text class="sub" x="636" y="840">order state machine + recon</text>
+  <text class="sub" x="636" y="856">TWAP/VWAP slicing, idempotent</text>
+  <text class="sub" x="636" y="872">settled / unsettled / reserved</text>
+
+  <rect class="node" x="940" y="780" width="280" height="130" stroke="#E8A838" fill="#E8A8380d"/>
+  <text class="kicker" x="956" y="800">strategy/</text>
+  <text class="label" x="956" y="820" fill="#E8A838">STRATEGY</text>
+  <text class="sub" x="956" y="840">composite DSL + registry</text>
+  <text class="sub" x="956" y="856">7 families, typed params</text>
+  <text class="sub" x="956" y="872">per-bar explainability trace</text>
+
+  <rect class="node" x="1260" y="780" width="280" height="130" stroke="#3B9EFF" fill="#3B9EFF0d"/>
+  <text class="kicker" x="1276" y="800">feature_engineering/</text>
+  <text class="label" x="1276" y="820" fill="#3B9EFF">FEATURES</text>
+  <text class="sub" x="1276" y="840">indicator + feature pipeline</text>
+  <text class="sub" x="1276" y="856">dependency-resolver gate</text>
+  <text class="sub" x="1276" y="872">raw vs. adjusted price basis</text>
+
+  <!-- ============ LEFT DRIVERS ============ -->
+  <rect class="node" x="40" y="460" width="220" height="130" stroke="#8B949E" fill="#0D1117"/>
+  <text class="kicker" x="56" y="480">scheduler/</text>
+  <text class="label" x="56" y="500" fill="#C9D1D9">SCHEDULER</text>
+  <text class="sub" x="56" y="520">13-job registry</text>
+  <text class="sub" x="56" y="536" fill="#E8A838">(Airflow: 4 of 13 wired)</text>
+  <text class="sub" x="56" y="552">no-overlap lock</text>
+  <text class="sub" x="56" y="568">rest run via manual trigger</text>
+
+  <rect class="node" x="40" y="620" width="220" height="130" stroke="#8B949E" fill="#0D1117"/>
+  <text class="kicker" x="56" y="640">ingestion/</text>
+  <text class="label" x="56" y="660" fill="#C9D1D9">INGESTION</text>
+  <text class="sub" x="56" y="680">Alpaca data + corp actions</text>
+  <text class="sub" x="56" y="696">5-min bars → Parquet</text>
+  <text class="sub" x="56" y="712">feeds Storage directly</text>
+
+  <!-- ============ SPINE ============ -->
+  <rect class="node" x="300" y="460" width="190" height="130" stroke="#00E5A0" fill="#00E5A00d"/>
+  <text class="kicker" x="316" y="480">contracts/</text>
+  <text class="label" x="316" y="500" fill="#00E5A0">CONTRACTS</text>
+  <text class="sub" x="316" y="520">Pydantic data shapes</text>
+  <text class="sub" x="316" y="536">Decimal money, UTC time</text>
+  <text class="sub" x="316" y="552">92 files, used by all</text>
+
+  <rect class="node" x="560" y="460" width="190" height="130" stroke="#3B9EFF" fill="#3B9EFF0d"/>
+  <text class="kicker" x="576" y="480">storage/</text>
+  <text class="label" x="576" y="500" fill="#3B9EFF">STORAGE</text>
+  <text class="sub" x="576" y="520">Postgres SoR + Parquet</text>
+  <text class="sub" x="576" y="536">UoW: 30/69 repos wired</text>
+  <text class="sub" x="576" y="552" fill="#E8A838">newer repos skip it</text>
+  <text class="sub" x="576" y="568">170 files</text>
+
+  <rect class="node" x="820" y="430" width="220" height="190" stroke="#9B72FF" fill="#9B72FF12" stroke-width="2.25"/>
+  <text class="kicker" x="838" y="454">application/services/ — hub</text>
+  <text class="label" x="838" y="478" fill="#9B72FF" font-size="16">APPLICATION</text>
+  <text class="sub" x="838" y="502">70 services</text>
+  <text class="sub" x="838" y="518">orchestrates trading,</text>
+  <text class="sub" x="838" y="534">research + governance cycles</text>
+  <text class="sub" x="838" y="558">every satellite below is</text>
+  <text class="sub" x="838" y="574">invoked through this layer</text>
+
+  <rect class="node" x="1110" y="460" width="190" height="130" stroke="#E8A838" fill="#E8A8380d"/>
+  <text class="kicker" x="1126" y="480">interfaces/rest/</text>
+  <text class="label" x="1126" y="500" fill="#E8A838">INTERFACES</text>
+  <text class="sub" x="1126" y="520">REST API + CLI</text>
+  <text class="sub" x="1126" y="536">90 routes, 326 CLI cmds</text>
+  <text class="sub" x="1126" y="552">JWT auth + RBAC checks</text>
+
+  <rect class="node" x="1370" y="460" width="190" height="130" stroke="#C9D1D9" fill="#C9D1D908"/>
+  <text class="kicker" x="1386" y="480">frontend/</text>
+  <text class="label" x="1386" y="500" fill="#C9D1D9">FRONTEND</text>
+  <text class="sub" x="1386" y="520">React 19, TanStack Query</text>
+  <text class="sub" x="1386" y="536">24 endpoints wired live</text>
+  <text class="sub" x="1386" y="552" fill="#E8A838">generic SaaS shell today</text>
+  <text class="sub" x="1386" y="568" fill="#E8A838">needs domain-model rebuild</text>
+
+  <!-- ============ OBSERVABILITY FOOTER ============ -->
+  <rect x="40" y="960" width="1520" height="62" fill="#0D1117" stroke="#1C2532" stroke-width="1.5" stroke-dasharray="4 3" rx="8"/>
+  <text x="60" y="984" fill="#C9D1D9" font-size="12.5" font-weight="700">observability/ — instruments every box above</text>
+  <text x="60" y="1004" class="sub">OpenTelemetry: 261 instruments (126 counters, 129 histograms, 4 gauges, 2 up-down) · traced spans stamped with correlation_id/run_id/strategy_id · exported to Grafana</text>
+</svg>

@@ -447,7 +447,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{} | json | component=\"execution.broker_client\" |~ \"$correlation_id\"",
+          "expr": "{service_name=~\".+\"} | json | component=\"execution.broker_client\" |~ \"$correlation_id\"",
           "queryType": "range"
         }
       ],

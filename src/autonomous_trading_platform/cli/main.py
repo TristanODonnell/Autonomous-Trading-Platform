@@ -1,5 +1,7 @@
 import argparse
 
+from dotenv import load_dotenv
+
 from autonomous_trading_platform.cli.commands import (
     admin,
     backtesting,
@@ -49,6 +51,12 @@ def build_parser():
 
 
 def main() -> int:
+    load_dotenv()
+
+    from autonomous_trading_platform.observability.telemetry import setup_telemetry
+
+    setup_telemetry("atp-cli")
+
     parser = build_parser()
     args = parser.parse_args()
 

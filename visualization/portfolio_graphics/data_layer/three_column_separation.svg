@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 460" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 18px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 12px; font-style: italic; }
+    .col { fill: #0D1117; stroke: #1C2532; stroke-width: 1.5; rx: 10; }
+    .col-title { font-size: 15px; font-weight: 700; }
+    .col-body { fill: #8B949E; font-size: 12px; }
+    .divider { stroke: #1C2532; stroke-width: 1; stroke-dasharray: 2 4; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1200" height="460"/>
+  <text class="title" x="30" y="38">Three separate systems, deliberately not connected</text>
+  <text class="hint" x="30" y="60">no arrows between these columns on purpose — related concepts, independent implementations</text>
+
+  <rect class="col" x="30" y="90" width="350" height="330"/>
+  <text class="col-title" x="52" y="126" fill="#00E5A0">Corporate Actions</text>
+  <text class="col-body" x="52" y="156">8 modeled action types;</text>
+  <text class="col-body" x="52" y="174">only splits and cash dividends</text>
+  <text class="col-body" x="52" y="192">have implemented logic.</text>
+  <text class="col-body" x="52" y="222">Applied at processing time,</text>
+  <text class="col-body" x="52" y="240">not ingestion — raw bars are</text>
+  <text class="col-body" x="52" y="258">never mutated.</text>
+
+  <line class="divider" x1="400" y1="110" x2="400" y2="400"/>
+
+  <rect class="col" x="425" y="90" width="350" height="330"/>
+  <text class="col-title" x="447" y="126" fill="#3B9EFF">Survivorship</text>
+  <text class="col-body" x="447" y="156">Two layers:</text>
+  <text class="col-body" x="447" y="184">1. hard pre-flight gate</text>
+  <text class="col-body" x="447" y="212">2. softer validation service for</text>
+  <text class="col-body" x="447" y="230">   fold-level walk-forward checks</text>
+  <text class="col-body" x="447" y="260">A universe that silently drifts</text>
+  <text class="col-body" x="447" y="278">makes every backtest against it</text>
+  <text class="col-body" x="447" y="296">systematically optimistic.</text>
+
+  <line class="divider" x1="795" y1="110" x2="795" y2="400"/>
+
+  <rect class="col" x="820" y="90" width="350" height="330"/>
+  <text class="col-title" x="842" y="126" fill="#9B72FF">Ticker Lifecycle</text>
+  <text class="col-body" x="842" y="156">Flat event log:</text>
+  <text class="col-body" x="842" y="184">renames, delistings, mergers</text>
+  <text class="col-body" x="842" y="214">Walked as-of a given date,</text>
+  <text class="col-body" x="842" y="232">with explicit cycle protection</text>
+  <text class="col-body" x="842" y="250">against circular rename chains.</text>
+</svg>

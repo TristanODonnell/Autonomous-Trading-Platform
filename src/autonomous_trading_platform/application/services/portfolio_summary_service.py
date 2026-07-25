@@ -81,6 +81,7 @@ class PortfolioSummaryService:
 
         todays_pnl_amount = current_value - prior_value
         total_pnl_amount = current_value - starting_value
+        open_positions = sum(1 for item in latest_pos.positions if item.quantity != 0)
 
         return {
             "current_portfolio_value": current_value,
@@ -89,6 +90,7 @@ class PortfolioSummaryService:
             "total_pnl_amount": total_pnl_amount,
             "total_pnl_percent": self._percent_change(total_pnl_amount, starting_value),
             "cash_balance": Decimal(latest_cash.cash),
+            "open_positions": open_positions,
         }
 
     def _percent_change(self, amount: Decimal, base: Decimal) -> Decimal:
@@ -104,4 +106,5 @@ class PortfolioSummaryService:
             "total_pnl_amount": Decimal("0.00"),
             "total_pnl_percent": Decimal("0.00"),
             "cash_balance": Decimal("0.00"),
+            "open_positions": 0,
         }

@@ -216,10 +216,13 @@ def apply_governance_event(
 
 def build_governance_summary(*, session: Session) -> GovernanceSummary:
     """Read current governance state for the platform artifact bundle."""
-    from sqlalchemy import select
+    from sqlalchemy import func, select
 
     from autonomous_trading_platform.storage.sor.models.strategy_governance import (
         StrategyGovernance,
+    )
+    from autonomous_trading_platform.storage.sor.models.strategy_health_transitions import (
+        StrategyHealthTransitionRow,
     )
     from autonomous_trading_platform.storage.sor.repositories.core.drawdown_governance_ladder_state_repository import (
         DrawdownGovernanceLadderStateRepository,
@@ -232,10 +235,24 @@ def build_governance_summary(*, session: Session) -> GovernanceSummary:
         if row.ladder_state not in ("normal", "warning")
     ]
 
+    # Auto-promotions executed by the research pipeline (submitted_by="system"
+    # marks a strategy seeded from research survivors rather than a manual
+    # operator action or the initial fixture seed).
+    promotions_executed = sum(1 for row in all_rows if row.submitted_by == "system")
+
+    # Real health-state transitions recorded over the run. Auto-demotions
+    # have no equivalent per-transition table today — the demotion audit
+    # trail only distinguishes "skipped" from "completed" at the cycle
+    # level, not a queryable per-strategy executed count — so that field
+    # is left at 0 rather than guessed at.
+    health_transitions = (
+        session.scalar(select(func.count()).select_from(StrategyHealthTransitionRow)) or 0
+    )
+
     return GovernanceSummary(
         strategies_evaluated=len(all_rows),
-        promotions_executed=0,
+        promotions_executed=promotions_executed,
         demotions_executed=0,
-        health_transitions=0,
+        health_transitions=health_transitions,
         strategies_in_breach=in_breach,
     )

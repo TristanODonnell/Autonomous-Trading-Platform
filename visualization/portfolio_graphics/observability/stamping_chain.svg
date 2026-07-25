@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <defs>
+    <marker id="s-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#00E5A0"/></marker>
+  </defs>
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 18px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 12px; font-style: italic; }
+    .node { fill: #0D1117; stroke: #1C2532; stroke-width: 1.5; rx: 8; }
+    .node-ctx { fill: #00E5A00d; stroke: #00E5A0; stroke-width: 1.75; rx: 8; }
+    .label { fill: #C9D1D9; font-size: 13px; font-weight: 700; }
+    .sub { fill: #8B949E; font-size: 10.5px; }
+    .attr { fill: #3B9EFF; font-size: 11px; font-family: 'SF Mono', Consolas, monospace; }
+    .flow { stroke: #00E5A0; stroke-width: 1.75; fill: none; marker-end: url(#s-arrow); }
+  </style>
+  <rect class="bg" x="0" y="0" width="1200" height="420"/>
+  <text class="title" x="30" y="38">Trace stamping chain — one shared function, every span</text>
+  <text class="hint" x="30" y="60">a nested call inherits its caller's identity automatically — correctness of one seam guarantees consistency everywhere</text>
+
+  <rect class="node-ctx" x="30" y="120" width="240" height="90"/>
+  <text class="label" x="46" y="150" fill="#00E5A0">RuntimeContext</text>
+  <text class="sub" x="46" y="168">contextvars.ContextVar</text>
+  <text class="sub" x="46" y="184">merges onto whatever's bound</text>
+
+  <line class="flow" x1="270" y1="165" x2="330" y2="165"/>
+
+  <rect class="node" x="332" y="120" width="240" height="90"/>
+  <text class="label" x="348" y="150">tracing.py</text>
+  <text class="sub" x="348" y="168">reads context on every</text>
+  <text class="sub" x="348" y="184">span.set_attribute() call</text>
+
+  <line class="flow" x1="572" y1="165" x2="632" y2="165"/>
+
+  <rect class="node" x="634" y="90" width="290" height="150"/>
+  <text class="label" x="650" y="120">Span attributes</text>
+  <text class="attr" x="650" y="146">ratp.correlation_id</text>
+  <text class="attr" x="650" y="166">ratp.run_id</text>
+  <text class="attr" x="650" y="186">ratp.environment</text>
+  <text class="attr" x="650" y="206">ratp.job_run_id / job_name</text>
+  <text class="attr" x="650" y="226">ratp.strategy_id</text>
+
+  <line class="flow" x1="924" y1="165" x2="984" y2="165"/>
+
+  <rect class="node" x="986" y="120" width="184" height="90"/>
+  <text class="label" x="1002" y="150">Grafana / Tempo</text>
+  <text class="sub" x="1002" y="168">filter to exactly</text>
+  <text class="sub" x="1002" y="184">one run</text>
+
+  <text class="hint" x="30" y="320">a nested call — trading cycle → job → order execution → broker call — never has to remember to attach these itself</text>
+  <text class="hint" x="30" y="342">correlation_links.py builds a ready-to-click Grafana query straight from ratp.correlation_id, wired into the real API</text>
+</svg>

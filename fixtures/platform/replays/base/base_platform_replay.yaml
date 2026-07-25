@@ -28,6 +28,9 @@ initial_state:
     max_drawdown_limit: "0.15"
     auto_promote_enabled: true
     rebalance_frequency: daily
+    portfolio_drawdown_action: warn_only
+    portfolio_drawdown_recovery_mode: auto_resume
+    portfolio_max_drawdown_pct: "0.15"
   controls:
     trading_mode: paper
     kill_switch_active: false

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 360" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 16px; font-weight: 700; }
+    .illustrative { fill: #E8A838; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; }
+    .hint { fill: #FFFFFF; font-size: 11px; font-style: italic; }
+    .axis { stroke: #1C2532; stroke-width: 1; }
+    .legend-text { fill: #8B949E; font-size: 11px; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1100" height="360"/>
+  <text class="title" x="30" y="34">Three cash buckets — settled / unsettled / reserved</text>
+  <rect x="30" y="44" width="90" height="20" fill="#E8A83814" stroke="#E8A838" rx="4"/>
+  <text class="illustrative" x="38" y="58">SCHEMATIC</text>
+  <text class="hint" x="140" y="58">buying power = settled − reserved, a hard gate</text>
+
+  <line class="axis" x1="60" y1="300" x2="1060" y2="300"/>
+  <line class="axis" x1="60" y1="90"  x2="60"   y2="300"/>
+
+  <!-- stacked area bands: settled (bottom, green), unsettled (mid, blue), reserved (top, purple) -->
+  <path fill="#00E5A055" stroke="#00E5A0" stroke-width="1"
+    d="M60,300 L60,180 C220,190 350,150 480,160 C620,170 760,140 900,150 L1060,145 L1060,300 Z"/>
+  <path fill="#3B9EFF4d" stroke="#3B9EFF" stroke-width="1"
+    d="M60,180 C220,190 350,150 480,160 C620,170 760,140 900,150 L1060,145
+       L1060,120 C900,118 760,108 620,140 C480,120 350,110 220,150 L60,140 Z"/>
+  <path fill="#9B72FF4d" stroke="#9B72FF" stroke-width="1"
+    d="M60,140 C220,150 350,110 480,120 C620,140 760,108 900,118 L1060,120
+       L1060,95 C900,92 760,90 620,105 C480,95 350,88 220,110 L60,100 Z"/>
+
+  <g transform="translate(60,320)">
+    <rect x="0" y="0" width="14" height="14" fill="#00E5A055" stroke="#00E5A0"/>
+    <text class="legend-text" x="20" y="12">settled cash</text>
+    <rect x="180" y="0" width="14" height="14" fill="#3B9EFF4d" stroke="#3B9EFF"/>
+    <text class="legend-text" x="200" y="12">unsettled (pending T+ settlement)</text>
+    <rect x="480" y="0" width="14" height="14" fill="#9B72FF4d" stroke="#9B72FF"/>
+    <text class="legend-text" x="500" y="12">reserved (open buy orders)</text>
+  </g>
+  <text class="hint" x="30" y="80">settlement is bar-indexed, not wall-clock — runs at any bar cadence settle after the same number of bars</text>
+</svg>

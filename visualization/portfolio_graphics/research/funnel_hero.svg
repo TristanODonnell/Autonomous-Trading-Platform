@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 640" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 20px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 12px; font-style: italic; }
+    .stage-label { fill: #C9D1D9; font-size: 14px; font-weight: 700; }
+    .stage-sub { fill: #8B949E; font-size: 11px; }
+    .stage-count { fill: #00E5A0; font-size: 13px; font-weight: 700; }
+    .connector { stroke: #1C2532; stroke-width: 1; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1440" height="640"/>
+  <text class="title" x="40" y="42">Survivor funnel — generation to governance handoff</text>
+  <text class="hint" x="40" y="64">width ∝ candidates entering each stage · shape is representative of a real run, not one specific run's exact counts</text>
+
+  <!-- funnel trapezoids, widths decreasing left to right, centered on y=300 -->
+  <!-- stage 1: generation -->
+  <polygon points="60,200 340,200 320,400 80,400" fill="#00E5A022" stroke="#00E5A0" stroke-width="1.5"/>
+  <!-- stage 2: cheap sim -->
+  <polygon points="320,220 580,220 566,380 334,380" fill="#00E5A02e" stroke="#00E5A0" stroke-width="1.5"/>
+  <!-- stage 3: intermediate sim -->
+  <polygon points="566,238 800,238 790,362 576,362" fill="#3B9EFF22" stroke="#3B9EFF" stroke-width="1.5"/>
+  <!-- stage 4: walk-forward (9 folds) -->
+  <polygon points="790,254 1010,254 1002,346 798,346" fill="#3B9EFF2e" stroke="#3B9EFF" stroke-width="1.5"/>
+  <!-- stage 5: monte carlo (50 seeds) -->
+  <polygon points="1002,268 1200,268 1195,332 1007,332" fill="#9B72FF28" stroke="#9B72FF" stroke-width="1.5"/>
+  <!-- stage 6: survivors -->
+  <polygon points="1195,282 1360,282 1358,318 1197,318" fill="#00E5A0" stroke="#00E5A0" stroke-width="1.5"/>
+
+  <!-- labels below -->
+  <text class="stage-label" x="60" y="440">Generation</text>
+  <text class="stage-sub" x="60" y="458">grid / random / evolutionary /</text>
+  <text class="stage-sub" x="60" y="472">composite skeletons</text>
+
+  <text class="stage-label" x="320" y="440">Cheap Sim</text>
+  <text class="stage-sub" x="320" y="458">short window, loose</text>
+  <text class="stage-sub" x="320" y="472">thresholds</text>
+
+  <text class="stage-label" x="566" y="440">Intermediate Sim</text>
+  <text class="stage-sub" x="566" y="458">full window, real</text>
+  <text class="stage-sub" x="566" y="472">thresholds</text>
+
+  <text class="stage-label" x="790" y="440">Walk-Forward</text>
+  <text class="stage-sub" x="790" y="458">9 rolling folds ·</text>
+  <text class="stage-sub" x="790" y="472">6-of-9 pass required</text>
+
+  <text class="stage-label" x="1002" y="440">Monte Carlo</text>
+  <text class="stage-sub" x="1002" y="458">50 execution seeds ·</text>
+  <text class="stage-sub" x="1002" y="472">filtered per-run</text>
+
+  <text class="stage-label" x="1197" y="440" fill="#00E5A0">Survivors</text>
+  <text class="stage-sub" x="1197" y="458">→ approved_research</text>
+  <text class="stage-sub" x="1197" y="472">(governance)</text>
+
+  <!-- annotation: eliminations at each gate -->
+  <line class="connector" x1="60" y1="500" x2="1360" y2="500"/>
+  <text class="hint" x="60" y="524">cheapest, most-discriminating test runs first — a badly broken candidate dies before it consumes expensive compute</text>
+  <text class="hint" x="60" y="546">up to 70 simulations per full survivor (cheap + intermediate + up to 18 walk-forward + 50 Monte Carlo trials)</text>
+  <text class="hint" x="60" y="568">a committed 9-candidate sweep across 4 stages × 5 symbols can total ~630 simulations</text>
+</svg>

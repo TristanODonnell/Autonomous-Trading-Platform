@@ -498,7 +498,7 @@ def run_trading_cycle(
                 if not ingestion_result.ready:
                     if settings.skip_evaluation_on_ingestion_failure:
                         logger.warning(
-                            "trading_cycle_degraded",
+                            f"trading_cycle_degraded: ingestion_not_ready: {ingestion_result.reason}",
                             extra=LogContext(
                                 run_id=str(run_id),
                                 component=component,
@@ -608,7 +608,7 @@ def run_trading_cycle(
                     except Exception as exc:
                         if settings.hold_positions_on_evaluation_failure:
                             logger.warning(
-                                "trading_cycle_degraded",
+                                f"trading_cycle_degraded: {exc.__class__.__name__}: {exc}",
                                 extra=LogContext(
                                     run_id=str(run_id),
                                     component=component,

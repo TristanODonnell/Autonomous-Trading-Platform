@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <defs>
+    <marker id="t-diff" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6"><circle cx="5" cy="5" r="3" fill="#00E5A0"/></marker>
+  </defs>
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 18px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 12px; font-style: italic; }
+    .tier { fill: #0D1117; stroke: #1C2532; stroke-width: 1.5; rx: 10; }
+    .tier-label { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+    .node { fill: #111820; stroke: #1C2532; stroke-width: 1.25; rx: 6; }
+    .node-label { fill: #C9D1D9; font-size: 13px; font-weight: 700; }
+    .diff-line { stroke: #00E5A0; stroke-width: 1.75; }
+    .count { fill: #E8A838; font-size: 12px; font-weight: 700; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1200" height="400"/>
+  <text class="title" x="30" y="38">Schema-drift tripwire — two independent tiers</text>
+  <text class="hint" x="30" y="60">catches both contract-vs-code disagreement and code-vs-database disagreement</text>
+
+  <rect class="tier" x="30" y="90" width="540" height="140" fill="#00E5A00a" stroke="#00E5A0"/>
+  <text class="tier-label" x="50" y="118" fill="#00E5A0">fast tier — every run, no infra</text>
+  <rect class="node" x="60" y="150" width="180" height="50"/>
+  <text class="node-label" x="76" y="180">Contract</text>
+  <line class="diff-line" x1="240" y1="175" x2="330" y2="175"/>
+  <circle cx="285" cy="175" r="4" fill="#00E5A0"/>
+  <rect class="node" x="330" y="150" width="180" height="50"/>
+  <text class="node-label" x="346" y="180">ORM model</text>
+  <text class="count" x="60" y="216">28 pairs diffed field-by-field</text>
+
+  <rect class="tier" x="630" y="90" width="540" height="140" fill="#3B9EFF0a" stroke="#3B9EFF"/>
+  <text class="tier-label" x="650" y="118" fill="#3B9EFF">integration tier — real Postgres, CI</text>
+  <rect class="node" x="660" y="150" width="180" height="50"/>
+  <text class="node-label" x="676" y="180">ORM model</text>
+  <line class="diff-line" x1="840" y1="175" x2="930" y2="175" stroke="#3B9EFF"/>
+  <circle cx="885" cy="175" r="4" fill="#3B9EFF"/>
+  <rect class="node" x="930" y="150" width="180" height="50"/>
+  <text class="node-label" x="946" y="180">live Postgres</text>
+  <text class="count" x="660" y="216" fill="#3B9EFF">real migration applied, then diffed</text>
+
+  <text class="hint" x="30" y="270">catches the kind of failure that would surface a hand-edited or silently failed migration</text>
+  <text class="hint" x="30" y="292">24 documented exclusions — intentional, named divergences, not gaps</text>
+</svg>
