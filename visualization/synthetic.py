@@ -205,6 +205,35 @@ def _compute_drawdown(equity: np.ndarray) -> np.ndarray:
     return dd
 
 
+def _generate_synthetic_benchmark(
+    dates: pd.DatetimeIndex,
+    starting_cash: float,
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Generate a correlated-GBM SPY-proxy benchmark series.
+
+    No real external SPY price data is loaded by this package (see
+    methodology report), so the benchmark line is always this synthetic
+    proxy — used alongside either real or synthetic platform equity.
+    Returns (equity_b, drawdown_b, raw_returns_b).
+    """
+    rng = np.random.default_rng(seed)
+    n = len(dates)
+
+    daily_mu_b = _BENCHMARK_ANNUAL_RETURN / 252
+    daily_sig_b = _BENCHMARK_ANNUAL_VOL / np.sqrt(252)
+    raw_returns_b = daily_mu_b + rng.standard_normal(n) * daily_sig_b
+
+    years = n / 252
+    target_total_b = (1 + _BENCHMARK_ANNUAL_RETURN) ** years - 1
+    target_daily_b = (1 + target_total_b) ** (1 / n) - 1
+    raw_returns_b = raw_returns_b + (target_daily_b - np.mean(raw_returns_b))
+
+    equity_b = starting_cash * np.cumprod(1 + raw_returns_b)
+    drawdown_b = _compute_drawdown(equity_b)
+    return equity_b, drawdown_b, raw_returns_b
+
+
 def _add_synthetic_execution(
     df: pd.DataFrame,
     rng: np.random.Generator,
@@ -229,10 +258,48 @@ def _add_real_derived_columns(data: ArtifactData, starting_cash: float) -> None:
     df = data.tick_df
     if "portfolio_value" not in df.columns:
         return
-    pv = df["portfolio_value"].ffill().fillna(starting_cash)
+    pv = df["portfolio_value"].copy()
+    # A literal 0.0 on the very first tick(s) is a pre-seed snapshot artifact
+    # (the initial cash snapshot commits after tick 1's portfolio snapshot is
+    # taken) — not a real drop to zero capital. Treat leading zeros as missing.
+    leading_zero_mask = (pv == 0) & (pv.index < pv[pv != 0].index.min())
+    pv[leading_zero_mask] = np.nan
+    pv = pv.ffill().fillna(starting_cash)
     df["portfolio_value_s"] = pv
     df["daily_return_s"] = pv.pct_change().fillna(0)
     df["drawdown_s"] = _compute_drawdown(pv.values)
+
+    n = len(df.index)
+    if n > 0:
+        seed = _seed_from_replay_id(data.replay_id)
+        equity_b, drawdown_b, raw_returns_b = _generate_synthetic_benchmark(
+            df.index, starting_cash, seed
+        )
+        df["benchmark_value_s"] = equity_b
+        df["benchmark_drawdown_s"] = drawdown_b
+        df["benchmark_return_s"] = raw_returns_b
+        df["cash_value_s"] = starting_cash * np.cumprod(np.full(n, 1 + _RISK_FREE_RATE / 252))
+
+        data.synthetic_stats = _compute_stats(  # type: ignore[attr-defined]
+            df["daily_return_s"].values,
+            df["portfolio_value_s"].values,
+            df["drawdown_s"].values,
+            raw_returns_b,
+            equity_b,
+            drawdown_b,
+            starting_cash,
+            data.start_date,
+            data.end_date,
+        )
+
+        # Execution-quality metrics (slippage, adverse-fill rate, latency) are
+        # not captured per-fill in the artifact, so — like the benchmark line
+        # above — this is always a modeled/synthetic estimate, disclosed as
+        # such in the methodology report, regardless of whether the rest of
+        # the run used real fills.
+        rng = np.random.default_rng(seed)
+        df = _add_synthetic_execution(df, rng, n)
+
     data.starting_cash = starting_cash  # type: ignore[attr-defined]
 
 

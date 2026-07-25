@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 16px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 11px; font-style: italic; }
+    .grid { fill: none; stroke: #1C2532; stroke-width: 1; }
+    .axis { stroke: #1C2532; stroke-width: 1; }
+    .poly { fill: #00E5A022; stroke: #00E5A0; stroke-width: 2; }
+    .pt { fill: #00E5A0; }
+    .axis-label { fill: #C9D1D9; font-size: 12px; font-weight: 700; }
+    .axis-weight { fill: #8B949E; font-size: 10.5px; }
+  </style>
+  <rect class="bg" x="0" y="0" width="900" height="620"/>
+  <text class="title" x="30" y="34">Candidate ranking — one strategy's score across 7 weighted components</text>
+  <text class="hint" x="30" y="54">weights from RankingWeights defaults · deployability gate at composite ≥ 0.55</text>
+
+  <g transform="translate(0,60)">
+    <circle class="grid" cx="300" cy="300" r="40"/>
+    <circle class="grid" cx="300" cy="300" r="80"/>
+    <circle class="grid" cx="300" cy="300" r="120"/>
+    <circle class="grid" cx="300" cy="300" r="160"/>
+    <circle class="grid" cx="300" cy="300" r="200"/>
+
+    <line class="axis" x1="300" y1="300" x2="300"    y2="100"/>
+    <line class="axis" x1="300" y1="300" x2="456.36"  y2="175.3"/>
+    <line class="axis" x1="300" y1="300" x2="495"    y2="344.5"/>
+    <line class="axis" x1="300" y1="300" x2="386.78"  y2="480.2"/>
+    <line class="axis" x1="300" y1="300" x2="213.22"  y2="480.2"/>
+    <line class="axis" x1="300" y1="300" x2="105"     y2="344.5"/>
+    <line class="axis" x1="300" y1="300" x2="143.64"  y2="175.3"/>
+
+    <polygon class="poly" points="300,100 425.09,200.24 417,326.7 352.07,408.12 265.29,372.08 222,317.8 268.73,275.06"/>
+    <circle class="pt" cx="300"    cy="100"    r="4"/>
+    <circle class="pt" cx="425.09" cy="200.24" r="4"/>
+    <circle class="pt" cx="417"    cy="326.7"  r="4"/>
+    <circle class="pt" cx="352.07" cy="408.12" r="4"/>
+    <circle class="pt" cx="265.29" cy="372.08" r="4"/>
+    <circle class="pt" cx="222"    cy="317.8"  r="4"/>
+    <circle class="pt" cx="268.73" cy="275.06" r="4"/>
+
+    <text class="axis-label" x="300" y="86" text-anchor="middle">robustness_overall</text>
+    <text class="axis-weight" x="300" y="70" text-anchor="middle">0.25</text>
+
+    <text class="axis-label" x="470" y="165" text-anchor="start">overfitting_resistance</text>
+    <text class="axis-weight" x="470" y="150" text-anchor="start">0.20</text>
+
+    <text class="axis-label" x="505" y="350" text-anchor="start">regime_robustness</text>
+    <text class="axis-weight" x="505" y="366" text-anchor="start">0.15</text>
+
+    <text class="axis-label" x="400" y="510" text-anchor="middle">walk_forward_consistency</text>
+    <text class="axis-weight" x="400" y="526" text-anchor="middle">0.15</text>
+
+    <text class="axis-label" x="200" y="510" text-anchor="middle">stress_resilience</text>
+    <text class="axis-weight" x="200" y="526" text-anchor="middle">0.10</text>
+
+    <text class="axis-label" x="95" y="350" text-anchor="end">parameter_stability</text>
+    <text class="axis-weight" x="95" y="366" text-anchor="end">0.10</text>
+
+    <text class="axis-label" x="130" y="165" text-anchor="end">trade_reliability</text>
+    <text class="axis-weight" x="130" y="150" text-anchor="end">0.05</text>
+  </g>
+
+  <text class="hint" x="30" y="600">shape shown is illustrative for one candidate; weights themselves are the real RankingWeights defaults</text>
+</svg>

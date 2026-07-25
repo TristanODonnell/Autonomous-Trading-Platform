@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 20px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 12px; font-style: italic; }
+    .core { fill: #0D1117; stroke: #00E5A0; stroke-width: 2; }
+    .core-label { fill: #00E5A0; font-size: 15px; font-weight: 700; }
+    .core-sub { fill: #8B949E; font-size: 10.5px; }
+    .spoke { stroke: #1C2532; stroke-width: 1.5; }
+    .adapter { fill: #0D1117; stroke-width: 1.75; rx: 10; }
+    .adapter-label { font-size: 13px; font-weight: 700; }
+    .adapter-sub { fill: #8B949E; font-size: 10px; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1200" height="640"/>
+  <text class="title" x="30" y="38">One execution core, five swappable environment adapters</text>
+  <text class="hint" x="30" y="60">the same OrderExecutionService, OrderStateMachineService and PortfolioConstructionService run underneath every mode below</text>
+
+  <!-- spokes drawn first, under everything -->
+  <line class="spoke" x1="600" y1="380" x2="600" y2="180"/>
+  <line class="spoke" x1="600" y1="380" x2="847" y2="300"/>
+  <line class="spoke" x1="600" y1="380" x2="753" y2="590"/>
+  <line class="spoke" x1="600" y1="380" x2="447" y2="590"/>
+  <line class="spoke" x1="600" y1="380" x2="353" y2="300"/>
+
+  <!-- hex core -->
+  <polygon class="core" points="740,380 670,499 530,499 460,380 530,261 670,261"/>
+  <text class="core-label" x="600" y="360" text-anchor="middle">Execution Core</text>
+  <text class="core-sub" x="600" y="382" text-anchor="middle">OrderExecutionService</text>
+  <text class="core-sub" x="600" y="398" text-anchor="middle">OrderStateMachineService</text>
+  <text class="core-sub" x="600" y="414" text-anchor="middle">PortfolioConstructionService</text>
+
+  <!-- LIVE -->
+  <rect class="adapter" x="500" y="120" width="200" height="82" fill="#FF4D6D0d" stroke="#FF4D6D"/>
+  <text class="adapter-label" x="518" y="148" fill="#FF4D6D">LIVE</text>
+  <text class="adapter-sub" x="518" y="166">AlpacaBrokerClient</text>
+  <text class="adapter-sub" x="518" y="180">all 4 safety gates armed</text>
+  <text class="adapter-sub" x="518" y="194">real capital</text>
+
+  <!-- PAPER -->
+  <rect class="adapter" x="750" y="220" width="220" height="82" fill="#3B9EFF0d" stroke="#3B9EFF"/>
+  <text class="adapter-label" x="768" y="248" fill="#3B9EFF">PAPER</text>
+  <text class="adapter-sub" x="768" y="266">AlpacaBrokerClient — paper acct</text>
+  <text class="adapter-sub" x="768" y="280">same gates, no live capital</text>
+
+  <!-- BACKTEST / RESEARCH -->
+  <rect class="adapter" x="660" y="518" width="220" height="82" fill="#00E5A00d" stroke="#00E5A0"/>
+  <text class="adapter-label" x="678" y="546" fill="#00E5A0">BACKTEST / RESEARCH</text>
+  <text class="adapter-sub" x="678" y="564">SimulatedBrokerClient</text>
+  <text class="adapter-sub" x="678" y="578">deterministic seeded RNG</text>
+
+  <!-- SHADOW -->
+  <rect class="adapter" x="320" y="518" width="220" height="82" fill="#9B72FF0d" stroke="#9B72FF"/>
+  <text class="adapter-label" x="338" y="546" fill="#9B72FF">SHADOW</text>
+  <text class="adapter-sub" x="338" y="564">full pipeline runs, broker</text>
+  <text class="adapter-sub" x="338" y="578">submit call intercepted</text>
+
+  <!-- REPLAY / CHAOS TESTING -->
+  <rect class="adapter" x="200" y="220" width="230" height="82" fill="#E8A8380d" stroke="#E8A838"/>
+  <text class="adapter-label" x="218" y="248" fill="#E8A838">REPLAY / CHAOS TESTING</text>
+  <text class="adapter-sub" x="218" y="266">failure_injection.py</text>
+  <text class="adapter-sub" x="218" y="280">9 kinds × 6 targets, real DB rows</text>
+
+  <text class="hint" x="30" y="632">the core never knows which adapter it's talking to — that's the point: a passing test on one adapter is evidence about the other four</text>
+</svg>

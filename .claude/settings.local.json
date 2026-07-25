@@ -165,7 +165,9 @@
       "Bash(not exist *)",
       "PowerShell(New-Item *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(grep -c '\\\\.parquet$')",
+      "Bash(sort -t: -k2 -n)"
     ]
   }
 }

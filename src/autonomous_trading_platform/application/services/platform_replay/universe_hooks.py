@@ -114,6 +114,7 @@ def run_universe_at_timestamp(
             as_of=timestamp,
             skip_cadence_check=skip_cadence_check,
             dry_run=False,
+            session=session,
         )
     except Exception as exc:
         _logger.error(

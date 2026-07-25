@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <defs>
+    <marker id="g-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#00E5A0"/></marker>
+    <marker id="g-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#FF4D6D"/></marker>
+    <marker id="g-retire" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4A5568"/></marker>
+  </defs>
+  <style>
+    .bg { fill: #070B0F; }
+    .node { fill: #0D1117; stroke: #1C2532; stroke-width: 1.5; rx: 8; }
+    .node-terminal { fill: #111820; stroke: #4A5568; stroke-width: 2.5; rx: 8; }
+    .label { fill: #C9D1D9; font-size: 14px; font-weight: 700; }
+    .sub { fill: #8B949E; font-size: 10.5px; }
+    .title { fill: #C9D1D9; font-size: 20px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 12px; font-style: italic; }
+    .edge-flow { stroke: #00E5A0; stroke-width: 1.75; fill: none; marker-end: url(#g-flow); }
+    .edge-back { stroke: #FF4D6D; stroke-width: 1.5; fill: none; stroke-dasharray: 3 3; marker-end: url(#g-back); opacity: 0.85; }
+    .edge-retire { stroke: #4A5568; stroke-width: 1.5; fill: none; stroke-dasharray: 3 3; marker-end: url(#g-retire); opacity: 0.85; }
+    .edge-tag { fill: #FFFFFF; font-size: 10px; }
+    .legend-text { fill: #8B949E; font-size: 11px; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1200" height="420"/>
+  <text class="title" x="30" y="42">Strategy governance lifecycle — GovernanceState</text>
+  <text class="hint" x="30" y="64">role-gated at every arrow — research/system-risk/admin can move a candidate forward, admin-only into live</text>
+
+  <!-- nodes -->
+  <rect class="node" x="30" y="140" width="180" height="64"/>
+  <text class="label" x="50" y="172">PROPOSED</text>
+
+  <rect class="node" x="290" y="140" width="200" height="64"/>
+  <text class="label" x="310" y="166">APPROVED_RESEARCH</text>
+  <text class="sub" x="310" y="184">non-executing, no capital</text>
+
+  <rect class="node" x="570" y="140" width="200" height="64"/>
+  <text class="label" x="590" y="172">APPROVED_PAPER</text>
+
+  <rect class="node" x="850" y="140" width="200" height="64"/>
+  <text class="label" x="870" y="166">APPROVED_LIVE</text>
+  <text class="sub" x="870" y="184">admin approval only</text>
+
+  <rect class="node" x="290" y="300" width="200" height="64"/>
+  <text class="label" x="330" y="332" fill="#FF4D6D">REJECTED</text>
+  <text class="sub" x="310" y="350">re-submission allowed → PROPOSED</text>
+
+  <rect class="node-terminal" x="850" y="300" width="200" height="64"/>
+  <text class="label" x="900" y="332" fill="#FFFFFF">RETIRED</text>
+  <text class="sub" x="890" y="350">terminal — no outgoing edges</text>
+
+  <!-- forward flow -->
+  <line class="edge-flow" x1="210" y1="172" x2="290" y2="172"/>
+  <line class="edge-flow" x1="490" y1="172" x2="570" y2="172"/>
+  <line class="edge-flow" x1="770" y1="172" x2="850" y2="172"/>
+
+  <!-- rejected edges -->
+  <path class="edge-back" d="M120,204 Q120,260 290,320"/>
+  <path class="edge-back" d="M390,204 Q390,260 390,300"/>
+  <path class="edge-back" d="M670,204 Q550,270 490,320"/>
+  <path class="edge-back" d="M950,204 Q750,270 490,332"/>
+  <!-- rejected -> proposed resubmit -->
+  <path class="edge-back" d="M290,332 Q150,300 60,204"/>
+
+  <!-- retire edges -->
+  <path class="edge-retire" d="M390,204 Q650,280 850,320"/>
+  <path class="edge-retire" d="M670,204 Q800,260 850,332"/>
+  <path class="edge-retire" d="M950,204 L950,300"/>
+
+  <g transform="translate(30,220)">
+    <line x1="0" y1="0" x2="24" y2="0" class="edge-flow"/>
+    <text class="legend-text" x="32" y="4">forward approval</text>
+    <line x1="0" y1="22" x2="24" y2="22" class="edge-back"/>
+    <text class="legend-text" x="32" y="26">reject → re-submission from PROPOSED</text>
+    <line x1="0" y1="44" x2="24" y2="44" class="edge-retire"/>
+    <text class="legend-text" x="32" y="48">retire</text>
+  </g>
+</svg>

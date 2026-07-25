@@ -3,7 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Copy pinned dependencies first (better build caching)
-COPY src/requirements.txt /app/requirements.txt
+COPY requirements.txt /app/requirements.txt
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -14,4 +14,6 @@ COPY . /app
 # Install your package (src layout)
 RUN pip install --no-cache-dir -e .
 
-CMD ["python", "-c", "print('container ok')"]
+EXPOSE 8000
+
+CMD ["uvicorn", "autonomous_trading_platform.interfaces.rest.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

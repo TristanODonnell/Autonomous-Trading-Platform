@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 340" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <defs>
+    <marker id="l-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#00E5A0"/></marker>
+  </defs>
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 18px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 12px; font-style: italic; }
+    .node { fill: #0D1117; stroke: #1C2532; stroke-width: 1.5; rx: 8; }
+    .node-accent { fill: #00E5A00d; stroke: #00E5A0; stroke-width: 1.75; rx: 8; }
+    .node-gate { fill: #E8A8380d; stroke: #E8A838; stroke-width: 1.75; rx: 8; stroke-dasharray: 4 3; }
+    .label { fill: #C9D1D9; font-size: 13px; font-weight: 700; }
+    .sub { fill: #8B949E; font-size: 10.5px; }
+    .flow { stroke: #00E5A0; stroke-width: 1.75; fill: none; marker-end: url(#l-arrow); }
+  </style>
+  <rect class="bg" x="0" y="0" width="1400" height="340"/>
+  <text class="title" x="30" y="38">Dataset lineage — raw bars to simulation cache</text>
+  <text class="hint" x="30" y="60">adjustment happens at processing time; raw bars are never mutated</text>
+
+  <rect class="node" x="30" y="110" width="200" height="80"/>
+  <text class="label" x="46" y="140">Raw bars</text>
+  <text class="sub" x="46" y="158">versioned Parquet</text>
+  <text class="sub" x="46" y="174">immutable, checksum x2</text>
+
+  <line class="flow" x1="230" y1="150" x2="290" y2="150"/>
+
+  <rect class="node" x="292" y="110" width="220" height="80"/>
+  <text class="label" x="308" y="140">Corporate-action</text>
+  <text class="label" x="308" y="156">adjustment</text>
+  <text class="sub" x="308" y="174">splits + cash dividends</text>
+
+  <line class="flow" x1="512" y1="150" x2="572" y2="150"/>
+
+  <rect class="node-accent" x="574" y="110" width="200" height="80"/>
+  <text class="label" x="590" y="140" fill="#00E5A0">Adjusted bars</text>
+  <text class="sub" x="590" y="158">separately versioned</text>
+  <text class="sub" x="590" y="174">from raw</text>
+
+  <line class="flow" x1="774" y1="150" x2="834" y2="150"/>
+
+  <rect class="node-gate" x="836" y="100" width="260" height="100"/>
+  <text class="label" x="852" y="130" fill="#E8A838">Feature pipeline</text>
+  <text class="sub" x="852" y="148">dependency-resolver gate:</text>
+  <text class="sub" x="852" y="164">already computed? correct</text>
+  <text class="sub" x="852" y="180">price basis (raw vs adjusted)?</text>
+
+  <line class="flow" x1="1096" y1="150" x2="1156" y2="150"/>
+
+  <rect class="node" x="1158" y="110" width="200" height="80"/>
+  <text class="label" x="1174" y="140">Simulation cache</text>
+  <text class="sub" x="1174" y="158">keyed by dataset version</text>
+  <text class="sub" x="1174" y="174">+ config hash</text>
+
+  <text class="hint" x="30" y="270">two independent guards on the feature step: a performance check (already computed?) and a correctness check</text>
+  <text class="hint" x="30" y="290">(does the dataset satisfy required features, including price basis) — a dataset can pass one while failing the other</text>
+</svg>

@@ -334,7 +334,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{} | json | component=~\".*soak.*|.*verification.*|.*runtime.*\" |~ \"$correlation_id\"",
+          "expr": "{service_name=~\".+\"} | json | component=~\".*soak.*|.*verification.*|.*runtime.*\" |~ \"$correlation_id\"",
           "queryType": "range"
         }
       ],

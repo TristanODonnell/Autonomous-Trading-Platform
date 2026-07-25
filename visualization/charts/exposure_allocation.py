@@ -142,7 +142,13 @@ def render(data: ArtifactData, out_dir: Path) -> Path:
         ax_pos.fill_between(
             df.index, df["open_positions"], color=theme.ACCENT, alpha=0.5, step="mid"
         )
-        ax_pos.plot(df.index, df["open_positions"], color=theme.ACCENT, linewidth=1.2, step="mid")
+        ax_pos.plot(
+            df.index,
+            df["open_positions"],
+            color=theme.ACCENT,
+            linewidth=1.2,
+            drawstyle="steps-mid",
+        )
         ax_pos.set_ylabel("Open Positions", color=theme.TEXT)
         ax_pos.set_title("Open Positions Over Time", color=theme.TEXT, pad=8, fontsize=11)
         _fmt_xaxis(ax_pos)

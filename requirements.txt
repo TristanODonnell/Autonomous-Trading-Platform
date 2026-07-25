@@ -19,9 +19,21 @@ certifi==2026.2.25
     #   httpcore
     #   httpx
     #   requests
+cffi==2.1.0
+    # via clarabel
 charset-normalizer==3.4.7
     # via requests
+clarabel==0.11.1
+    # via cvxpy
+click==8.4.2
+    # via uvicorn
+colorama==0.4.6
+    # via click
+cvxpy==1.9.2
+    # via retail-autonomous-trading-platform (pyproject.toml)
 duckdb==1.5.2
+    # via retail-autonomous-trading-platform (pyproject.toml)
+exchange-calendars==4.13.2
     # via retail-autonomous-trading-platform (pyproject.toml)
 fastapi==0.136.1
     # via retail-autonomous-trading-platform (pyproject.toml)
@@ -34,7 +46,11 @@ greenlet==3.4.0
 grpcio==1.80.0
     # via opentelemetry-exporter-otlp-proto-grpc
 h11==0.16.0
-    # via httpcore
+    # via
+    #   httpcore
+    #   uvicorn
+highspy==1.15.1
+    # via cvxpy
 httpcore==1.0.9
     # via httpx
 httpx==0.28.1
@@ -46,10 +62,28 @@ idna==3.11
     #   requests
 importlib-metadata==8.7.1
     # via opentelemetry-api
+jinja2==3.1.6
+    # via osqp
+joblib==1.5.3
+    # via osqp
+korean-lunar-calendar==0.4.0
+    # via exchange-calendars
+markupsafe==3.0.3
+    # via jinja2
 msgpack==1.1.2
     # via alpaca-py
 numpy==2.4.4
-    # via pandas
+    # via
+    #   clarabel
+    #   cvxpy
+    #   exchange-calendars
+    #   highspy
+    #   osqp
+    #   pandas
+    #   qdldl
+    #   scipy
+    #   scs
+    #   sparsediffpy
 opentelemetry-api==1.41.0
     # via
     #   opentelemetry-exporter-otlp-proto-grpc
@@ -79,11 +113,14 @@ opentelemetry-sdk==1.41.0
     #   retail-autonomous-trading-platform (pyproject.toml)
 opentelemetry-semantic-conventions==0.62b0
     # via opentelemetry-sdk
+osqp==1.1.3
+    # via cvxpy
 packaging==26.1
     # via retail-autonomous-trading-platform (pyproject.toml)
 pandas==3.0.2
     # via
     #   alpaca-py
+    #   exchange-calendars
     #   retail-autonomous-trading-platform (pyproject.toml)
 protobuf==6.33.6
     # via
@@ -95,6 +132,8 @@ psycopg-binary==3.3.3
     # via psycopg
 pyarrow==23.0.1
     # via retail-autonomous-trading-platform (pyproject.toml)
+pycparser==3.0
+    # via cffi
 pydantic==2.13.2
     # via
     #   alpaca-py
@@ -102,6 +141,8 @@ pydantic==2.13.2
     #   retail-autonomous-trading-platform (pyproject.toml)
 pydantic-core==2.46.2
     # via pydantic
+pyluach==2.3.0
+    # via exchange-calendars
 python-dateutil==2.9.0.post0
     # via
     #   pandas
@@ -110,13 +151,26 @@ python-dotenv==1.2.2
     # via retail-autonomous-trading-platform (pyproject.toml)
 pyyaml==6.0.3
     # via retail-autonomous-trading-platform (pyproject.toml)
+qdldl==0.1.9.post1
+    # via cvxpy
 requests==2.33.1
     # via
     #   alpaca-py
     #   opentelemetry-exporter-otlp-proto-http
     #   retail-autonomous-trading-platform (pyproject.toml)
+scipy==1.17.1
+    # via
+    #   clarabel
+    #   cvxpy
+    #   osqp
+    #   qdldl
+    #   scs
+scs==3.2.11
+    # via cvxpy
 six==1.17.0
     # via python-dateutil
+sparsediffpy==0.3.0
+    # via cvxpy
 sqlalchemy==2.0.49
     # via retail-autonomous-trading-platform (pyproject.toml)
 sseclient-py==1.9.0
@@ -125,6 +179,8 @@ starlette==1.0.0
     # via fastapi
 tenacity==9.1.4
     # via retail-autonomous-trading-platform (pyproject.toml)
+toolz==1.1.0
+    # via exchange-calendars
 typing-extensions==4.15.0
     # via
     #   anyio
@@ -147,11 +203,17 @@ typing-inspection==0.4.2
     #   pydantic
 tzdata==2026.1
     # via
+    #   exchange-calendars
     #   pandas
     #   psycopg
 urllib3==2.6.3
     # via requests
+uvicorn==0.51.0
+    # via retail-autonomous-trading-platform (pyproject.toml)
 websockets==16.0
     # via alpaca-py
 zipp==3.23.1
     # via importlib-metadata
+
+# The following packages are considered to be unsafe in a requirements file:
+# setuptools

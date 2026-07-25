@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 220" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .tile { fill: #0D1117; stroke: #1C2532; stroke-width: 1.5; rx: 10; }
+    .stat { font-size: 34px; font-weight: 800; }
+    .stat-label { fill: #8B949E; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1200" height="220"/>
+
+  <rect class="tile" x="30" y="30" width="260" height="150"/>
+  <text class="stat" x="52" y="100" fill="#00E5A0">4,080</text>
+  <text class="stat-label" x="52" y="130">total tests</text>
+
+  <rect class="tile" x="310" y="30" width="260" height="150"/>
+  <text class="stat" x="332" y="100" fill="#3B9EFF">362</text>
+  <text class="stat-label" x="332" y="130">test files</text>
+
+  <rect class="tile" x="590" y="30" width="260" height="150"/>
+  <text class="stat" x="612" y="100" fill="#FF4D6D">153</text>
+  <text class="stat-label" x="612" y="130">safety tests</text>
+
+  <rect class="tile" x="870" y="30" width="300" height="150"/>
+  <text class="stat" x="892" y="100" fill="#E8A838">~0</text>
+  <text class="stat-label" x="892" y="130">skip / xfail debt</text>
+  <text class="stat-label" x="892" y="150" fill="#FFFFFF" font-size="10.5">1 xfail, 0 unconditional skips</text>
+</svg>

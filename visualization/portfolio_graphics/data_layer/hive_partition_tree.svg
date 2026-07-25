@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 460" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 16px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 11px; font-style: italic; }
+    .branch { stroke: #1C2532; stroke-width: 1.5; fill: none; }
+    .folder { fill: #3B9EFF; font-size: 13px; }
+    .file { fill: #8B949E; font-size: 12.5px; }
+    .partition-key { fill: #00E5A0; font-weight: 700; }
+  </style>
+  <rect class="bg" x="0" y="0" width="720" height="460"/>
+  <text class="title" x="24" y="32">Hive-partitioned Parquet layout</text>
+  <text class="hint" x="24" y="52">literal folder structure — 4-level partition, each level a real directory</text>
+
+  <g font-family="inherit">
+    <text class="folder" x="24" y="90">data/bars/raw/</text>
+
+    <path class="branch" d="M40,98 L40,120 L60,120"/>
+    <text class="folder" x="66" y="124"><tspan class="partition-key">symbol=AAPL</tspan>/</text>
+
+    <path class="branch" d="M40,98 L40,320 L60,320"/>
+    <text class="folder" x="66" y="324"><tspan class="partition-key">symbol=MSFT</tspan>/  <tspan fill="#FFFFFF">… (per symbol)</tspan></text>
+
+    <path class="branch" d="M76,132 L76,154 L96,154"/>
+    <text class="folder" x="102" y="158"><tspan class="partition-key">date=2026-07-14</tspan>/</text>
+
+    <path class="branch" d="M76,132 L76,270 L96,270"/>
+    <text class="folder" x="102" y="274"><tspan fill="#FFFFFF">… (per date)</tspan></text>
+
+    <path class="branch" d="M112,166 L112,192 L132,192"/>
+    <text class="file" x="138" y="196">data.parquet</text>
+
+    <path class="branch" d="M112,166 L112,220 L132,220"/>
+    <text class="file" x="138" y="224">_metadata.json</text>
+  </g>
+
+  <rect x="24" y="360" width="672" height="80" fill="#0D1117" stroke="#1C2532" rx="8"/>
+  <text class="hint" x="40" y="384">dataset_version pinned in _metadata.json — every cached simulation and audit record points at one exact version</text>
+  <text class="hint" x="40" y="404">before writing, the system checks whether a version already exists and raises rather than overwriting in place</text>
+  <text class="hint" x="40" y="424">old versions are never deleted, only superseded — ~33.6K committed Parquet files is the expected consequence</text>
+</svg>

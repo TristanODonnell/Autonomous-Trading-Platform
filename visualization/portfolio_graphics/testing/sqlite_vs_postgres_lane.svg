@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 320" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <defs>
+    <marker id="c-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#00E5A0"/></marker>
+  </defs>
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 16px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 11px; font-style: italic; }
+    .col { fill: #0D1117; stroke: #1C2532; stroke-width: 1.5; rx: 10; }
+    .col-title { font-size: 14px; font-weight: 700; }
+    .col-body { fill: #8B949E; font-size: 12px; }
+    .converge { fill: #00E5A00d; stroke: #00E5A0; stroke-width: 1.75; rx: 10; }
+    .flow { stroke: #00E5A0; stroke-width: 1.75; fill: none; marker-end: url(#c-arrow); }
+  </style>
+  <rect class="bg" x="0" y="0" width="1000" height="320"/>
+  <text class="title" x="30" y="34">Two lanes, one suite</text>
+  <text class="hint" x="30" y="54">the schema-drift integration tier is what makes this split safe</text>
+
+  <rect class="col" x="30" y="80" width="380" height="130"/>
+  <text class="col-title" x="52" y="112" fill="#3B9EFF">Local — SQLite in-memory</text>
+  <text class="col-body" x="52" y="140">Fast, no infra to boot.</text>
+  <text class="col-body" x="52" y="160">Default for day-to-day dev.</text>
+
+  <rect class="col" x="590" y="80" width="380" height="130"/>
+  <text class="col-title" x="612" y="112" fill="#9B72FF">CI — real Postgres container</text>
+  <text class="col-body" x="612" y="140">Integration-marked tests, including</text>
+  <text class="col-body" x="612" y="158">the schema-drift suite's DB half.</text>
+
+  <line class="flow" x1="410" y1="145" x2="450" y2="180"/>
+  <line class="flow" x1="590" y1="145" x2="550" y2="180"/>
+  <rect class="converge" x="380" y="230" width="240" height="60"/>
+  <text class="col-body" x="400" y="266" fill="#00E5A0" font-weight="700">same test suite</text>
+</svg>

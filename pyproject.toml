@@ -45,6 +45,7 @@ dependencies = [
 
   # API layer
   "fastapi>=0.115",
+  "uvicorn>=0.30",
 
   # external APIs
   "alpaca-py",

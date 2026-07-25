@@ -46,6 +46,7 @@ from autonomous_trading_platform.portfolio.exceptions import (
     MissingPositionScalingDataError,
     NoPolicyFoundError,
 )
+from autonomous_trading_platform.safety.errors import SafetyError
 from autonomous_trading_platform.safety.services.pre_trade_risk_service import PreTradeRiskService
 
 ZERO = Decimal("0")
@@ -151,7 +152,18 @@ class PortfolioConstructionService:
                 combined_metadata.update(sizing_meta)
             if combined_metadata:
                 order_intent.metadata = {**(order_intent.metadata or {}), **combined_metadata}
-            self.pre_trade_risk_service.assert_order_allowed(order_intent, now=now)
+            try:
+                self.pre_trade_risk_service.assert_order_allowed(order_intent, now=now)
+            except SafetyError as exc:
+                logger.warning(
+                    "order_intent.skipped_risk_rejected",
+                    extra={
+                        "symbol": symbol,
+                        "run_id": str(run_id),
+                        "reason": f"{exc.__class__.__name__}: {exc}",
+                    },
+                )
+                continue
             yield order_intent
 
     # ------------------------------------------------------------------

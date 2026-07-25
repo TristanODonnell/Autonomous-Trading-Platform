@@ -399,7 +399,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{} | json | component=~\".*reconciliation.*\" |~ \"$correlation_id\"",
+          "expr": "{service_name=~\".+\"} | json | component=~\".*reconciliation.*\" |~ \"$correlation_id\"",
           "queryType": "range"
         }
       ],

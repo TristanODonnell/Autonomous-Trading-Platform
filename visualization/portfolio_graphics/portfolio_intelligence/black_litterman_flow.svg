@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 420" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <defs>
+    <marker id="bl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#00E5A0"/></marker>
+  </defs>
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 18px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 12px; font-style: italic; }
+    .node { fill: #0D1117; stroke: #1C2532; stroke-width: 1.5; rx: 8; }
+    .node-accent { fill: #00E5A00d; stroke: #00E5A0; stroke-width: 1.75; rx: 8; }
+    .label { fill: #C9D1D9; font-size: 13px; font-weight: 700; }
+    .sub { fill: #8B949E; font-size: 10.5px; }
+    .flow { stroke: #00E5A0; stroke-width: 1.75; fill: none; marker-end: url(#bl-arrow); }
+    .eqn { fill: #3B9EFF; font-size: 13px; font-family: 'SF Mono', Consolas, monospace; }
+    .eqn-box { fill: #3B9EFF0d; stroke: #3B9EFF; stroke-width: 1; rx: 6; stroke-dasharray: 3 3; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1360" height="420"/>
+  <text class="title" x="30" y="38">Black-Litterman — from equilibrium prior to optimizer input</text>
+  <text class="hint" x="30" y="60">research-only: enforced by an explicit allow/block list on run_context, not just documentation</text>
+
+  <rect class="node" x="30" y="140" width="200" height="80"/>
+  <text class="label" x="46" y="170">Market weights</text>
+  <text class="sub" x="46" y="188">+ risk aversion (δ)</text>
+  <text class="sub" x="46" y="204">+ covariance matrix (Σ)</text>
+
+  <line class="flow" x1="230" y1="180" x2="290" y2="180"/>
+
+  <rect class="node-accent" x="292" y="140" width="200" height="80"/>
+  <text class="label" x="308" y="170" fill="#00E5A0">Implied prior (π)</text>
+  <text class="sub" x="308" y="188">equilibrium expected returns</text>
+
+  <rect class="eqn-box" x="292" y="240" width="280" height="40"/>
+  <text class="eqn" x="304" y="264">π = δ · Σ · w_mkt</text>
+
+  <line class="flow" x1="492" y1="180" x2="552" y2="180"/>
+
+  <rect class="node" x="554" y="140" width="220" height="80"/>
+  <text class="label" x="570" y="164">Operator views</text>
+  <text class="sub" x="570" y="182">confidence-weighted nudges</text>
+  <text class="sub" x="570" y="198">on specific expected returns</text>
+
+  <line class="flow" x1="664" y1="220" x2="664" y2="260"/>
+  <text class="hint" x="590" y="278">blended, not overwritten</text>
+
+  <line class="flow" x1="774" y1="180" x2="834" y2="180"/>
+
+  <rect class="node-accent" x="836" y="140" width="220" height="80"/>
+  <text class="label" x="852" y="170" fill="#00E5A0">Posterior returns</text>
+  <text class="sub" x="852" y="188">prior blended with views</text>
+
+  <line class="flow" x1="1056" y1="180" x2="1116" y2="180"/>
+
+  <rect class="node" x="1118" y="140" width="210" height="80"/>
+  <text class="label" x="1134" y="164">Optimizer</text>
+  <text class="sub" x="1134" y="182">projected-gradient solver,</text>
+  <text class="sub" x="1134" y="198">dry_run=True by default</text>
+
+  <text class="hint" x="30" y="340">rather than asking a researcher to specify raw expected returns directly — the weakest input in mean-variance optimization —</text>
+  <text class="hint" x="30" y="360">the service starts from an implied equilibrium prior and lets the operator nudge it with views they actually have confidence in</text>
+</svg>

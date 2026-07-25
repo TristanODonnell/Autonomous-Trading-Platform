@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 260" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 16px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 11px; font-style: italic; }
+    .seg-label { fill: #0D1117; font-size: 12px; font-weight: 700; }
+    .legend-text { fill: #8B949E; font-size: 12px; }
+    .legend-count { fill: #C9D1D9; font-size: 12px; font-weight: 700; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1000" height="260"/>
+  <text class="title" x="30" y="34">261 instruments — observability/metrics.py</text>
+  <text class="hint" x="30" y="54">histograms slightly outnumber counters — built to answer "what does this normally look like," not just "did it happen"</text>
+
+  <!-- stacked bar, width proportional to counts out of 261, total width 940 -->
+  <!-- histogram 129 -> 464px, counter 126 -> 453px, gauge 4 -> 14px, up_down 2 -> 7px -->
+  <g transform="translate(30,90)">
+    <rect x="0"   y="0" width="464" height="60" fill="#00E5A0"/>
+    <text class="seg-label" x="16" y="36">histograms — 129</text>
+
+    <rect x="464" y="0" width="453" height="60" fill="#3B9EFF"/>
+    <text class="seg-label" x="480" y="36">counters — 126</text>
+
+    <rect x="917" y="0" width="14" height="60" fill="#E8A838"/>
+    <rect x="931" y="0" width="9" height="60" fill="#9B72FF"/>
+  </g>
+
+  <g transform="translate(30,190)">
+    <rect x="0" y="0" width="14" height="14" fill="#E8A838"/>
+    <text class="legend-text" x="22" y="12">observable gauges</text>
+    <text class="legend-count" x="220" y="12">4</text>
+
+    <rect x="320" y="0" width="14" height="14" fill="#9B72FF"/>
+    <text class="legend-text" x="342" y="12">up/down counters</text>
+    <text class="legend-count" x="560" y="12">2</text>
+  </g>
+  <text class="hint" x="30" y="234">a codebase leaning this heavily on histograms is built to catch gradual drift, not just a clean outage</text>
+</svg>

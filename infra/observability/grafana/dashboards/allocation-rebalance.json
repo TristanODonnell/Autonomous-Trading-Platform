@@ -210,7 +210,7 @@
             "type": "postgres",
             "uid": "ratp-postgres"
           },
-          "rawSql": "SELECT event_timestamp, event_type, run_id, message, metadata FROM audit_logs WHERE $__timeFilter(event_timestamp) AND event_type IN ('STRATEGY_ALLOCATION_REBALANCED','STRATEGY_ALLOCATION_REBALANCE_SKIPPED','ALLOCATION_OVERRIDE_CREATED','ALLOCATION_OVERRIDE_EXPIRED') ORDER BY event_timestamp DESC LIMIT 100",
+          "rawSql": "SELECT event_timestamp, event_type, run_id, message, metadata FROM audit_logs WHERE $__timeFilter(event_timestamp) AND event_type IN ('STRATEGY_ALLOCATION_REBALANCED','STRATEGY_ALLOCATION_REBALANCE_NOOP','STRATEGY_ALLOCATION_REBALANCE_SKIPPED','STRATEGY_ALLOCATION_REBALANCE_FAILED','ALLOCATION_OVERRIDE_CREATED','ALLOCATION_OVERRIDE_EXPIRED') ORDER BY event_timestamp DESC LIMIT 100",
           "format": "table"
         }
       ],
@@ -348,7 +348,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{} | json | component=~\".*allocation.*|.*rebalance.*\" |~ \"$correlation_id\"",
+          "expr": "{service_name=~\".+\"} | json | component=~\".*allocation.*|.*rebalance.*\" |~ \"$correlation_id\"",
           "queryType": "range"
         }
       ],

@@ -30,6 +30,7 @@ def run_universe_rotation(
     as_of: datetime | None = None,
     skip_cadence_check: bool = False,
     dry_run: bool = False,
+    session: Session | None = None,
 ) -> RotationResult | None:
     """
     Run the scheduled universe rotation lifecycle.
@@ -43,6 +44,13 @@ def run_universe_rotation(
 
     Returns the RotationResult, or None if skipped due to cadence.
     In dry_run mode the transaction is rolled back after computing the result.
+
+    If `session` is provided, it is reused (and its commit/rollback left to the
+    caller) instead of opening a new connection — callers driving a longer-lived
+    unit of work (e.g. the platform replay tick loop) must pass their own session
+    so the rotation is visible within the same transaction, rather than committing
+    on a separate connection the caller's session won't see until its own
+    transaction boundary.
     """
     settings = Settings()
     now_utc = _ensure_utc(as_of or datetime.now(UTC))
@@ -55,13 +63,16 @@ def run_universe_rotation(
 
     effective_reason = rotation_reason or settings.universe_rebalance_cadence
 
-    from sqlalchemy.orm import sessionmaker as _sessionmaker
+    owns_session = session is None
+    if owns_session:
+        from sqlalchemy.orm import sessionmaker as _sessionmaker
 
-    from autonomous_trading_platform.db import get_engine as _get_engine
+        from autonomous_trading_platform.db import get_engine as _get_engine
 
-    session: Session = _sessionmaker(
-        bind=_get_engine(), autoflush=False, autocommit=False, expire_on_commit=False
-    )()
+        session = _sessionmaker(
+            bind=_get_engine(), autoflush=False, autocommit=False, expire_on_commit=False
+        )()
+    assert session is not None
     try:
         svc = UniverseRotationService(session)
         result = svc.rotate(
@@ -73,6 +84,9 @@ def run_universe_rotation(
             as_of=now_utc,
         )
 
+        if not owns_session:
+            return result
+
         if dry_run:
             session.rollback()
         else:
@@ -80,10 +94,12 @@ def run_universe_rotation(
 
         return result
     except Exception:
-        session.rollback()
+        if owns_session:
+            session.rollback()
         raise
     finally:
-        session.close()
+        if owns_session:
+            session.close()
 
 
 def _ensure_utc(value: datetime) -> datetime:

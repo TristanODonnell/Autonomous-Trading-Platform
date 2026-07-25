@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 560" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 16px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 11px; font-style: italic; }
+    .row-label { fill: #C9D1D9; font-size: 12px; }
+    .col-label { fill: #8B949E; font-size: 11px; font-weight: 700; }
+    .cell-on { fill: #00E5A0; }
+    .cell-off { fill: #111820; stroke: #1C2532; stroke-width: 1; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1100" height="560"/>
+  <text class="title" x="30" y="34">Chaos matrix — 9 failure kinds × 6 injection targets, from failure_injection.py</text>
+  <text class="hint" x="30" y="54">every incident written into real database tables, not mocked</text>
+
+  <!-- columns: 6 targets, x starting at 380, width 110 each -->
+  <g>
+    <text class="col-label" x="415" y="86"  text-anchor="middle">Ingestion</text>
+    <text class="col-label" x="525" y="86"  text-anchor="middle">Feature</text>
+    <text class="col-label" x="635" y="86"  text-anchor="middle">Risk</text>
+    <text class="col-label" x="745" y="86"  text-anchor="middle">Governance</text>
+    <text class="col-label" x="855" y="86"  text-anchor="middle">Execution</text>
+    <text class="col-label" x="965" y="86"  text-anchor="middle">Runtime</text>
+  </g>
+
+  <!-- rows: 9 kinds, y starting 110, height 44 -->
+  <g>
+    <text class="row-label" x="30" y="128">inject_ingestion_missing_bars</text>
+    <text class="row-label" x="30" y="172">inject_ingestion_late_bars</text>
+    <text class="row-label" x="30" y="216">inject_feature_validation_failure</text>
+    <text class="row-label" x="30" y="260">inject_risk_limit_breach</text>
+    <text class="row-label" x="30" y="304">inject_drawdown_breach</text>
+    <text class="row-label" x="30" y="348">inject_governance_demotion_trigger</text>
+    <text class="row-label" x="30" y="392">inject_broker_reconciliation_mismatch</text>
+    <text class="row-label" x="30" y="436">inject_order_rejected</text>
+    <text class="row-label" x="30" y="480">inject_runtime_job_failure</text>
+  </g>
+
+  <!-- grid cells: 9 rows x 6 cols, col x centers [415,525,635,745,855,965], row y tops [108,152,196,240,284,328,372,416,460] -->
+  <g>
+    <!-- helper: draw all off cells first -->
+    <!-- row1 -->
+    <rect class="cell-on"  x="360" y="108" width="110" height="34"/>
+    <rect class="cell-off" x="470" y="108" width="110" height="34"/>
+    <rect class="cell-off" x="580" y="108" width="110" height="34"/>
+    <rect class="cell-off" x="690" y="108" width="110" height="34"/>
+    <rect class="cell-off" x="800" y="108" width="110" height="34"/>
+    <rect class="cell-off" x="910" y="108" width="110" height="34"/>
+    <!-- row2 -->
+    <rect class="cell-on"  x="360" y="152" width="110" height="34"/>
+    <rect class="cell-off" x="470" y="152" width="110" height="34"/>
+    <rect class="cell-off" x="580" y="152" width="110" height="34"/>
+    <rect class="cell-off" x="690" y="152" width="110" height="34"/>
+    <rect class="cell-off" x="800" y="152" width="110" height="34"/>
+    <rect class="cell-off" x="910" y="152" width="110" height="34"/>
+    <!-- row3 -->
+    <rect class="cell-off" x="360" y="196" width="110" height="34"/>
+    <rect class="cell-on"  x="470" y="196" width="110" height="34"/>
+    <rect class="cell-off" x="580" y="196" width="110" height="34"/>
+    <rect class="cell-off" x="690" y="196" width="110" height="34"/>
+    <rect class="cell-off" x="800" y="196" width="110" height="34"/>
+    <rect class="cell-off" x="910" y="196" width="110" height="34"/>
+    <!-- row4 -->
+    <rect class="cell-off" x="360" y="240" width="110" height="34"/>
+    <rect class="cell-off" x="470" y="240" width="110" height="34"/>
+    <rect class="cell-on"  x="580" y="240" width="110" height="34"/>
+    <rect class="cell-off" x="690" y="240" width="110" height="34"/>
+    <rect class="cell-off" x="800" y="240" width="110" height="34"/>
+    <rect class="cell-off" x="910" y="240" width="110" height="34"/>
+    <!-- row5 -->
+    <rect class="cell-off" x="360" y="284" width="110" height="34"/>
+    <rect class="cell-off" x="470" y="284" width="110" height="34"/>
+    <rect class="cell-on"  x="580" y="284" width="110" height="34"/>
+    <rect class="cell-off" x="690" y="284" width="110" height="34"/>
+    <rect class="cell-off" x="800" y="284" width="110" height="34"/>
+    <rect class="cell-off" x="910" y="284" width="110" height="34"/>
+    <!-- row6 -->
+    <rect class="cell-off" x="360" y="328" width="110" height="34"/>
+    <rect class="cell-off" x="470" y="328" width="110" height="34"/>
+    <rect class="cell-off" x="580" y="328" width="110" height="34"/>
+    <rect class="cell-on"  x="690" y="328" width="110" height="34"/>
+    <rect class="cell-off" x="800" y="328" width="110" height="34"/>
+    <rect class="cell-off" x="910" y="328" width="110" height="34"/>
+    <!-- row7 -->
+    <rect class="cell-off" x="360" y="372" width="110" height="34"/>
+    <rect class="cell-off" x="470" y="372" width="110" height="34"/>
+    <rect class="cell-off" x="580" y="372" width="110" height="34"/>
+    <rect class="cell-off" x="690" y="372" width="110" height="34"/>
+    <rect class="cell-on"  x="800" y="372" width="110" height="34"/>
+    <rect class="cell-off" x="910" y="372" width="110" height="34"/>
+    <!-- row8 -->
+    <rect class="cell-off" x="360" y="416" width="110" height="34"/>
+    <rect class="cell-off" x="470" y="416" width="110" height="34"/>
+    <rect class="cell-off" x="580" y="416" width="110" height="34"/>
+    <rect class="cell-off" x="690" y="416" width="110" height="34"/>
+    <rect class="cell-on"  x="800" y="416" width="110" height="34"/>
+    <rect class="cell-off" x="910" y="416" width="110" height="34"/>
+    <!-- row9 -->
+    <rect class="cell-off" x="360" y="460" width="110" height="34"/>
+    <rect class="cell-off" x="470" y="460" width="110" height="34"/>
+    <rect class="cell-off" x="580" y="460" width="110" height="34"/>
+    <rect class="cell-off" x="690" y="460" width="110" height="34"/>
+    <rect class="cell-off" x="800" y="460" width="110" height="34"/>
+    <rect class="cell-on"  x="910" y="460" width="110" height="34"/>
+  </g>
+
+  <text class="hint" x="30" y="520">each function targets exactly one category today — the matrix is the honest current shape, not a padded 54-cell claim</text>
+</svg>

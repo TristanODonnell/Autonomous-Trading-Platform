@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 640" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <defs>
+    <marker id="esc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#FF4D6D"/></marker>
+    <marker id="rec" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#00E5A0"/></marker>
+  </defs>
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 20px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 12px; font-style: italic; }
+    .rung { stroke-width: 1.75; rx: 8; }
+    .rung-label { font-size: 14px; font-weight: 700; }
+    .rung-scalar { font-size: 12px; font-weight: 700; }
+    .esc-arrow { stroke: #FF4D6D; stroke-width: 1.75; fill: none; marker-end: url(#esc); }
+    .rec-arrow { stroke: #00E5A0; stroke-width: 1.75; fill: none; stroke-dasharray: 5 4; marker-end: url(#rec); }
+    .scalar-line { stroke: #E8A838; stroke-width: 2; fill: none; }
+    .scalar-pt { fill: #E8A838; }
+    .scalar-label { fill: #E8A838; font-size: 11px; font-weight: 700; }
+    .hyst-band { fill: #3B9EFF14; stroke: #3B9EFF; stroke-width: 1; stroke-dasharray: 3 3; }
+    .hyst-label { fill: #3B9EFF; font-size: 10.5px; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1320" height="640"/>
+  <text class="title" x="40" y="42">Portfolio drawdown governance — five-rung ladder</text>
+  <text class="hint" x="40" y="64">escalation can jump straight to any rung; recovery steps down one rung at a time, gated by hysteresis + cooldown</text>
+
+  <!-- allocation scalar line, above the rungs, right-to-left ascending as rungs step down -->
+  <text class="scalar-label" x="40" y="110">allocation scalar</text>
+  <polyline class="scalar-line" points="140,150 340,190 540,220 740,250 940,250"/>
+  <circle class="scalar-pt" cx="140" cy="150" r="4"/><text class="scalar-label" x="120" y="138">1.00</text>
+  <circle class="scalar-pt" cx="340" cy="190" r="4"/><text class="scalar-label" x="320" y="178">0.50</text>
+  <circle class="scalar-pt" cx="540" cy="220" r="4"/><text class="scalar-label" x="520" y="208">0.25</text>
+  <circle class="scalar-pt" cx="740" cy="250" r="4"/><text class="scalar-label" x="720" y="238">0.00</text>
+  <circle class="scalar-pt" cx="940" cy="250" r="4"/><text class="scalar-label" x="920" y="238">0.00</text>
+
+  <!-- 5 rungs -->
+  <rect class="rung" x="60"  y="380" width="180" height="90" fill="#00E5A014" stroke="#00E5A0"/>
+  <text class="rung-label" x="80" y="418" fill="#00E5A0">NORMAL</text>
+  <text class="rung-scalar" x="80" y="440" fill="#8B949E">scalar 1.00</text>
+
+  <rect class="rung" x="260" y="380" width="180" height="90" fill="#E8A83814" stroke="#E8A838"/>
+  <text class="rung-label" x="280" y="418" fill="#E8A838">WARNING</text>
+  <text class="rung-scalar" x="280" y="440" fill="#8B949E">scalar 0.50</text>
+
+  <rect class="rung" x="460" y="380" width="180" height="90" fill="#3B9EFF14" stroke="#3B9EFF"/>
+  <text class="rung-label" x="480" y="418" fill="#3B9EFF">PROBATION</text>
+  <text class="rung-scalar" x="480" y="440" fill="#8B949E">scalar 0.25</text>
+
+  <rect class="rung" x="660" y="380" width="180" height="90" fill="#9B72FF14" stroke="#9B72FF"/>
+  <text class="rung-label" x="680" y="418" fill="#9B72FF">SUSPENDED</text>
+  <text class="rung-scalar" x="680" y="440" fill="#8B949E">scalar 0.00</text>
+
+  <rect class="rung" x="860" y="380" width="200" height="90" fill="#FF4D6D14" stroke="#FF4D6D"/>
+  <text class="rung-label" x="880" y="418" fill="#FF4D6D">BREACHED</text>
+  <text class="rung-scalar" x="880" y="440" fill="#8B949E">scalar 0.00</text>
+  <text class="rung-scalar" x="880" y="458" fill="#FF4D6D" font-size="10">requires operator ack to recover</text>
+
+  <!-- escalation arrows: can jump any distance, drawn as arcs above the rungs -->
+  <path class="esc-arrow" d="M150,378 Q220,330 350,378"/>
+  <path class="esc-arrow" d="M150,378 Q400,300 550,378"/>
+  <path class="esc-arrow" d="M150,378 Q550,260 750,378"/>
+  <path class="esc-arrow" d="M150,378 Q650,220 950,378"/>
+  <text class="hint" x="140" y="330" fill="#FF4D6D" font-style="normal" font-size="11">escalation — can jump straight to any rung</text>
+
+  <!-- recovery arrows: one rung at a time, below -->
+  <path class="rec-arrow" d="M950,490 Q900,530 750,490"/>
+  <path class="rec-arrow" d="M750,490 Q700,530 550,490"/>
+  <path class="rec-arrow" d="M550,490 Q500,530 350,490"/>
+  <path class="rec-arrow" d="M350,490 Q300,530 150,490"/>
+  <text class="hint" x="140" y="560" fill="#00E5A0" font-style="normal" font-size="11">recovery — one rung at a time, hysteresis + cooldown gated (longer cooldown at higher severity)</text>
+
+  <rect class="hyst-band" x="60" y="590" width="12" height="12"/>
+  <text class="hyst-label" x="80" y="600">hysteresis band — a proposed recovery inside this band does not trigger a step-down</text>
+</svg>

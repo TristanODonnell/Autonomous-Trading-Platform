@@ -553,6 +553,7 @@ class PlatformBacktestRunner:
                                     force_rotation=True,
                                     as_of=_bootstrap_ts,
                                     skip_cadence_check=True,
+                                    session=session,
                                 )
                                 _candidate_ok = True
                             except Exception as _exc:

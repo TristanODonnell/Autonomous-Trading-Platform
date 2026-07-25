@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 16px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 12px; font-style: italic; }
+    .axis { stroke: #1C2532; stroke-width: 1.5; }
+    .frozen-line { stroke: #00E5A0; stroke-width: 3; }
+    .tick { stroke: #1C2532; stroke-width: 1; }
+    .tick-label { fill: #FFFFFF; font-size: 10px; }
+    .snapshot { fill: #00E5A0; }
+    .snap-label { fill: #00E5A0; font-size: 12px; font-weight: 700; }
+    .fail-x { stroke: #FF4D6D; stroke-width: 3; }
+    .fail-label { fill: #FF4D6D; font-size: 11px; font-weight: 700; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1200" height="320"/>
+  <text class="title" x="30" y="34">Allocation config — snapshotted once, frozen for the whole bar loop</text>
+  <text class="hint" x="30" y="54">the second database read simply doesn't exist — the guarantee is structural, not incidental</text>
+
+  <line class="axis" x1="80" y1="180" x2="1120" y2="180"/>
+  <text class="tick-label" x="70" y="200" text-anchor="end">t=0</text>
+  <text class="tick-label" x="1120" y="200" text-anchor="middle">t=N (run end)</text>
+
+  <circle class="snapshot" cx="80" cy="180" r="7"/>
+  <text class="snap-label" x="60" y="150">config snapshot taken</text>
+
+  <line class="frozen-line" x1="80" y1="180" x2="1120" y2="180"/>
+  <text class="snap-label" x="500" y="160" fill="#00E5A0">"policy frozen" — same values read every bar</text>
+
+  <!-- operator edit attempt, mid-run -->
+  <line class="fail-x" x1="640" y1="220" x2="670" y2="250"/>
+  <line class="fail-x" x1="670" y1="220" x2="640" y2="250"/>
+  <text class="fail-label" x="600" y="270">✗ live operator edit — does not reach this run</text>
+  <line class="tick" x1="655" y1="180" x2="655" y2="220" stroke-dasharray="3 3"/>
+
+  <text class="hint" x="30" y="300">a multi-year backtest re-reading policy from the DB on every bar has no way of knowing if an operator edited it mid-run — this does</text>
+</svg>

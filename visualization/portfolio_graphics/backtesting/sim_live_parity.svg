@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 16px; font-weight: 700; }
+    .hint { fill: #FFFFFF; font-size: 11px; font-style: italic; }
+    .col { fill: #0D1117; stroke: #1C2532; stroke-width: 1.5; rx: 10; }
+    .col-title { font-size: 14px; font-weight: 700; }
+    .node { fill: #111820; stroke: #1C2532; stroke-width: 1.25; rx: 6; }
+    .node-label { fill: #C9D1D9; font-size: 11.5px; }
+    .meta-blob { fill: #3B9EFF14; stroke: #3B9EFF; stroke-width: 1.5; stroke-dasharray: 3 3; rx: 8; }
+    .fill-node { fill: #00E5A014; stroke: #00E5A0; stroke-width: 1.25; rx: 6; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1200" height="400"/>
+  <text class="title" x="30" y="34">TWAP/VWAP slicing — same math, different routing</text>
+  <text class="hint" x="30" y="54">both engines construct the identical slicer classes; only what happens to the slices diverges</text>
+
+  <rect class="col" x="30" y="80" width="530" height="280" fill="#3B9EFF0a" stroke="#3B9EFF"/>
+  <text class="col-title" x="52" y="112" fill="#3B9EFF">Live path</text>
+  <rect class="node" x="60" y="140" width="200" height="60"/>
+  <text class="node-label" x="76" y="174">One broker order</text>
+  <line x1="260" y1="170" x2="330" y2="170" stroke="#3B9EFF" stroke-width="1.5"/>
+  <rect class="meta-blob" x="332" y="130" width="200" height="80"/>
+  <text class="node-label" x="348" y="160">slice schedule folded</text>
+  <text class="node-label" x="348" y="178">into order metadata</text>
+  <text class="hint" x="60" y="250">honest caveat: not routed as real</text>
+  <text class="hint" x="60" y="266">child orders on the live path</text>
+
+  <rect class="col" x="620" y="80" width="550" height="280" fill="#00E5A00a" stroke="#00E5A0"/>
+  <text class="col-title" x="642" y="112" fill="#00E5A0">Sim path</text>
+  <rect class="fill-node" x="650" y="140" width="90" height="40"/><text class="node-label" x="662" y="164">fill 1</text>
+  <rect class="fill-node" x="750" y="140" width="90" height="40"/><text class="node-label" x="762" y="164">fill 2</text>
+  <rect class="fill-node" x="850" y="140" width="90" height="40"/><text class="node-label" x="862" y="164">fill 3</text>
+  <rect class="fill-node" x="950" y="140" width="90" height="40"/><text class="node-label" x="960" y="164">fill …N</text>
+  <text class="hint" x="650" y="200">each slice genuinely scheduled and</text>
+  <text class="hint" x="650" y="216">filled independently, bar by bar</text>
+</svg>

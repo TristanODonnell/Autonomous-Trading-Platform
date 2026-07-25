@@ -348,7 +348,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{} | json | component=~\".*governance.*|.*strategy.*\" |~ \"$correlation_id\"",
+          "expr": "{service_name=~\".+\"} | json | component=~\".*governance.*|.*strategy.*\" |~ \"$correlation_id\"",
           "queryType": "range"
         }
       ],

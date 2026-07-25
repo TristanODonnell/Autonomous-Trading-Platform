@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 780" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <defs>
+    <marker id="a-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C9D1D9"/></marker>
+    <marker id="a-fill" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#00E5A0"/></marker>
+    <marker id="a-cancel" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3B9EFF"/></marker>
+    <marker id="a-reject" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#FF4D6D"/></marker>
+    <marker id="a-expire" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#E8A838"/></marker>
+  </defs>
+  <style>
+    .bg { fill: #070B0F; }
+    .node { fill: #0D1117; stroke: #1C2532; stroke-width: 1.5; rx: 8; }
+    .node-terminal { fill: #111820; stroke-width: 2.5; rx: 8; }
+    .node-terminal.filled { stroke: #00E5A0; }
+    .node-terminal.canceled { stroke: #3B9EFF; }
+    .node-terminal.rejected { stroke: #FF4D6D; }
+    .node-terminal.expired { stroke: #E8A838; }
+    .label { fill: #C9D1D9; font-size: 15px; font-weight: 700; }
+    .label-terminal { fill: #C9D1D9; font-size: 15px; font-weight: 700; }
+    .sub { fill: #FFFFFF; font-size: 10.5px; letter-spacing: 0.03em; }
+    .edge-flow { stroke: #4A5568; stroke-width: 1.5; fill: none; marker-end: url(#a-flow); opacity: 0.9; }
+    .edge-fill { stroke: #00E5A0; stroke-width: 1.75; fill: none; marker-end: url(#a-fill); opacity: 0.85; }
+    .edge-cancel { stroke: #3B9EFF; stroke-width: 1.5; fill: none; marker-end: url(#a-cancel); opacity: 0.8; }
+    .edge-reject { stroke: #FF4D6D; stroke-width: 1.5; fill: none; marker-end: url(#a-reject); opacity: 0.75; stroke-dasharray: 3 3; }
+    .edge-expire { stroke: #E8A838; stroke-width: 1.5; fill: none; marker-end: url(#a-expire); opacity: 0.75; stroke-dasharray: 3 3; }
+    .legend-text { fill: #8B949E; font-size: 12px; }
+    .section-tag { fill: #FFFFFF; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+  </style>
+
+  <rect class="bg" x="0" y="0" width="1440" height="780"/>
+  <text x="40" y="42" fill="#C9D1D9" font-size="20" font-weight="700">Order state machine — VALID_TRANSITIONS</text>
+  <text x="40" y="64" fill="#FFFFFF" font-size="12" font-style="italic">every legal transition is declared as data in one table; terminal states have no outgoing edges</text>
+
+  <text class="section-tag" x="40" y="110">active states</text>
+  <text class="section-tag" x="40" y="600">terminal states — no outgoing transitions</text>
+
+  <!-- ACTIVE NODES -->
+  <rect class="node" x="60" y="130" width="200" height="64"/>
+  <text class="label" x="80" y="168">NEW</text>
+
+  <rect class="node" x="360" y="130" width="200" height="64"/>
+  <text class="label" x="380" y="160">PENDING_NEW</text>
+  <text class="sub" x="380" y="178">awaiting broker ack</text>
+
+  <rect class="node" x="660" y="130" width="200" height="64"/>
+  <text class="label" x="680" y="160">SUBMITTED</text>
+  <text class="sub" x="680" y="178">live at broker</text>
+
+  <rect class="node" x="660" y="330" width="200" height="64"/>
+  <text class="label" x="680" y="360">PARTIALLY_FILLED</text>
+  <text class="sub" x="680" y="378">self-loop on repeat fills</text>
+
+  <rect class="node" x="1000" y="330" width="200" height="64"/>
+  <text class="label" x="1020" y="360">PENDING_CANCEL</text>
+  <text class="sub" x="1020" y="378">cancel requested</text>
+
+  <!-- TERMINAL NODES -->
+  <rect class="node-terminal rejected" x="60" y="620" width="200" height="64"/>
+  <text class="label-terminal" x="80" y="658">REJECTED</text>
+
+  <rect class="node-terminal expired" x="360" y="620" width="200" height="64"/>
+  <text class="label-terminal" x="380" y="658">EXPIRED</text>
+
+  <rect class="node-terminal canceled" x="660" y="620" width="200" height="64"/>
+  <text class="label-terminal" x="680" y="658">CANCELED</text>
+
+  <rect class="node-terminal filled" x="1000" y="620" width="200" height="64"/>
+  <text class="label-terminal" x="1020" y="658">FILLED</text>
+
+  <!-- EDGES: forward flow -->
+  <path class="edge-flow" d="M260,162 L360,162"/>
+  <path class="edge-flow" d="M560,150 L660,150"/>
+  <path class="edge-flow" d="M160,194 Q160,262 660,174" />
+
+  <!-- EDGES: to PARTIALLY_FILLED / fill progress -->
+  <path class="edge-fill" d="M760,194 L760,330"/>
+  <path class="edge-fill" d="M810,194 Q950,260 1010,330"/>
+  <path class="edge-fill" d="M860,362 Q940,362 1000,362"/>
+  <path class="edge-fill" d="M1150,330 Q1150,240 1100,620" />
+  <path class="edge-fill" d="M760,330 Q950,470 1000,652"/>
+  <path class="edge-fill" d="M700,330 Q560,470 500,620" transform="translate(200,0)" opacity="0"/>
+  <!-- SUBMITTED -> FILLED (direct) -->
+  <path class="edge-fill" d="M840,194 Q1140,420 1100,620"/>
+  <!-- PARTIALLY_FILLED self loop -->
+  <path class="edge-fill" d="M860,345 Q900,300 860,355" fill="none"/>
+
+  <!-- EDGES: cancel family -->
+  <path class="edge-cancel" d="M860,175 Q1150,220 1150,330"/>
+  <path class="edge-cancel" d="M700,194 Q660,400 660,620"/>
+  <path class="edge-cancel" d="M700,394 Q680,500 700,620"/>
+  <path class="edge-cancel" d="M1050,394 Q900,500 760,620"/>
+
+  <!-- EDGES: reject family -->
+  <path class="edge-reject" d="M120,194 Q100,400 120,620"/>
+  <path class="edge-reject" d="M400,194 Q260,400 200,620"/>
+  <path class="edge-reject" d="M760,194 Q520,420 220,620"/>
+
+  <!-- EDGES: expire family -->
+  <path class="edge-expire" d="M480,194 Q440,400 420,620"/>
+  <path class="edge-expire" d="M820,194 Q650,420 420,650"/>
+  <path class="edge-expire" d="M760,394 Q560,500 420,620"/>
+  <path class="edge-expire" d="M1140,394 Q750,520 420,635"/>
+
+  <!-- LEGEND -->
+  <g transform="translate(1080,120)">
+    <rect x="0" y="0" width="320" height="180" fill="#0D1117" stroke="#1C2532" rx="8"/>
+    <text x="16" y="24" fill="#C9D1D9" font-size="12" font-weight="700">EVENT FAMILY</text>
+    <line x1="16" y1="42" x2="46" y2="42" class="edge-flow"/>
+    <text class="legend-text" x="56" y="46">SUBMIT / PENDING_SUBMIT</text>
+    <line x1="16" y1="66" x2="46" y2="66" class="edge-fill"/>
+    <text class="legend-text" x="56" y="70">PARTIAL_FILL / FULL_FILL</text>
+    <line x1="16" y1="90" x2="46" y2="90" class="edge-cancel"/>
+    <text class="legend-text" x="56" y="94">CANCEL / REQUEST_CANCEL</text>
+    <line x1="16" y1="114" x2="46" y2="114" class="edge-reject"/>
+    <text class="legend-text" x="56" y="118">REJECT</text>
+    <line x1="16" y1="138" x2="46" y2="138" class="edge-expire"/>
+    <text class="legend-text" x="56" y="142">EXPIRE</text>
+    <text x="16" y="164" fill="#FFFFFF" font-size="10.5px" font-style="italic">any transition not in the table</text>
+    <text x="16" y="176" fill="#FFFFFF" font-size="10.5px" font-style="italic">raises an error immediately</text>
+  </g>
+</svg>

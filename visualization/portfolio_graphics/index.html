@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portfolio Graphics — Preview</title>
+<style>
+  :root {
+    --bg: #070B0F; --surface: #0D1117; --border: #1C2532;
+    --text: #C9D1D9; --text2: #8B949E;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, Segoe UI, sans-serif; margin: 0; padding: 40px; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  p.sub { color: var(--text2); margin-top: 0; font-size: 13px; }
+  section { margin: 40px 0; }
+  h2 { font-size: 15px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-top: 16px; }
+  .card object { width: 100%; height: auto; display: block; }
+  .caption { color: var(--text2); font-size: 12px; margin-top: 8px; }
+</style>
+</head>
+<body>
+  <h1>Portfolio Graphics</h1>
+  <p class="sub">Standalone SVGs for the portfolio/case-study copy — built section by section, review here as we go.</p>
+
+  <section>
+    <h2>System Overview — hero</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="system_overview/hexagonal_adapters_hero.svg"></object>
+    </div>
+    <p class="caption">Ports-and-adapters: one execution core, five swappable environment adapters (live / paper / backtest / shadow / replay-testing). Grounded in AlpacaBrokerClient, SimulatedBrokerClient, and platform_replay.</p>
+  </section>
+
+  <section>
+    <h2>Safety — hero</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="safety/four_gates_hero.svg"></object>
+    </div>
+    <p class="caption">Interactive: click a gate to fail it and watch downstream gates short-circuit (gray out).</p>
+  </section>
+
+  <section>
+    <h2>Safety — static</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="safety/order_state_machine.svg"></object>
+    </div>
+    <p class="caption">Order state machine — real VALID_TRANSITIONS table. Reused style will drive the governance and universe state diagrams later.</p>
+  </section>
+
+  <section>
+    <h2>Research / Experiments / Strategy — hero</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="research/funnel_hero.svg"></object>
+    </div>
+    <p class="caption">Survivor funnel, width-encoded, generation through governance handoff.</p>
+  </section>
+
+  <section>
+    <h2>Research — static inset</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="research/walkforward_gantt.svg"></object>
+    </div>
+    <p class="caption">Rolling 365-day train / 90-day test walk-forward windows, 9 folds.</p>
+  </section>
+
+  <section>
+    <h2>Research — static matrix</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="research/indicator_matrix.svg"></object>
+    </div>
+    <p class="caption">13 indicators × value domain × valid rule types, pulled from the real _INDICATOR_DOMAIN table.</p>
+  </section>
+
+  <section>
+    <h2>Governance — hero</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="governance/drawdown_ladder_hero.svg"></object>
+    </div>
+    <p class="caption">Five-rung drawdown ladder with allocation scalar overlay, asymmetric escalation/recovery arrows.</p>
+  </section>
+
+  <section>
+    <h2>Governance — static state diagram</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="governance/strategy_lifecycle.svg"></object>
+    </div>
+    <p class="caption">Strategy lifecycle from the real GovernanceState / ALLOWED_TRANSITIONS table. Same visual language as the order state machine.</p>
+  </section>
+
+  <section>
+    <h2>Governance — schematic chart</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="governance/blended_quality_score.svg"></object>
+    </div>
+    <p class="caption">Blended quality score, alpha rising as live track record accumulates — labeled illustrative.</p>
+  </section>
+
+  <section>
+    <h2>Portfolio Intelligence — flow diagram</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="portfolio_intelligence/black_litterman_flow.svg"></object>
+    </div>
+    <p class="caption">Market weights + risk aversion → implied prior (π) → posterior returns → optimizer, with the π equation labeled.</p>
+  </section>
+
+  <section>
+    <h2>Portfolio Intelligence — lookup table</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="portfolio_intelligence/run_contexts_table.svg"></object>
+    </div>
+    <p class="caption">Real allowed/blocked run_context sets from black_litterman_research_service.py.</p>
+  </section>
+
+  <section>
+    <h2>Portfolio Intelligence — radar</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="portfolio_intelligence/ranking_radar.svg"></object>
+    </div>
+    <p class="caption">Ranking score broken into its 7 weighted components — real RankingWeights defaults, illustrative candidate shape.</p>
+  </section>
+
+  <section>
+    <h2>Portfolio Intelligence — clustering schematic</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="portfolio_intelligence/clustering_schematic.svg"></object>
+    </div>
+    <p class="caption">Illustrative 2D scatter of near-duplicate strategies merging into clusters. Swap for real embeddings if/when available.</p>
+  </section>
+
+  <section>
+    <h2>Dataset Layer — lineage flowchart</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="data_layer/lineage_flowchart.svg"></object>
+    </div>
+    <p class="caption">Raw bars → corporate-action adjustment → adjusted bars → feature pipeline gate → simulation cache.</p>
+  </section>
+
+  <section>
+    <h2>Dataset Layer — folder tree</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="data_layer/hive_partition_tree.svg"></object>
+    </div>
+    <p class="caption">Literal Hive partition path: symbol=AAPL/date=2026-07-14/.</p>
+  </section>
+
+  <section>
+    <h2>Dataset Layer — universe state diagram</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="data_layer/universe_state_diagram.svg"></object>
+    </div>
+    <p class="caption">CANDIDATE → PROPOSED → ACTIVE → RETIRED, real transitions. Third of the matched-style state diagram set.</p>
+  </section>
+
+  <section>
+    <h2>Dataset Layer — three-column separation</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="data_layer/three_column_separation.svg"></object>
+    </div>
+    <p class="caption">Corporate actions / survivorship / ticker lifecycle — no connecting arrows, deliberately.</p>
+  </section>
+
+  <section>
+    <h2>Testing Suite — stat tiles</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="testing/stat_tile_row.svg"></object>
+    </div>
+    <p class="caption">4,080 tests / 362 files / 153 safety tests / near-zero skip debt.</p>
+  </section>
+
+  <section>
+    <h2>Testing Suite — schema-drift two-tier</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="testing/schema_drift_two_tier.svg"></object>
+    </div>
+    <p class="caption">Fast tier (contract ⇄ ORM, 28 pairs) and integration tier (ORM ⇄ live Postgres), 24 documented exclusions.</p>
+  </section>
+
+  <section>
+    <h2>Testing Suite — lane comparison</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="testing/sqlite_vs_postgres_lane.svg"></object>
+    </div>
+    <p class="caption">Local SQLite lane vs CI Postgres lane, converging on the same suite. No interactive toggle, as requested.</p>
+  </section>
+
+  <section>
+    <h2>Observability — real span screenshot</h2>
+    <div class="card" style="border-style:dashed; text-align:center; padding:60px 12px; color:var(--text2); font-size:13px;">
+      DEFERRED — needs a real Grafana/Tempo instance with live trace data showing ratp.* attributes.<br>Drop the screenshot in when available; do not fake a mockup.
+    </div>
+  </section>
+
+  <section>
+    <h2>Observability — instrument breakdown</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="observability/instrument_breakdown.svg"></object>
+    </div>
+    <p class="caption">261 instruments: 129 histograms / 126 counters / 4 gauges / 2 up-down counters, counted directly from metrics.py.</p>
+  </section>
+
+  <section>
+    <h2>Observability — stamping chain</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="observability/stamping_chain.svg"></object>
+    </div>
+    <p class="caption">RuntimeContext → tracing.py → ratp.* span attributes → Grafana, using the real attribute names from tracing.py.</p>
+  </section>
+
+  <section>
+    <h2>Observability — config-freeze timeline</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="observability/config_freeze_timeline.svg"></object>
+    </div>
+    <p class="caption">Config snapshot at t=0, frozen across the bar loop, a live edit attempt marked with an ✗.</p>
+  </section>
+
+  <section>
+    <h2>Observability — chaos matrix</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="observability/failure_injection_matrix.svg"></object>
+    </div>
+    <p class="caption">9×6 literal heatmap from the real failure_injection.py functions and section headers — no exercised-vs-theoretical shading.</p>
+  </section>
+
+  <section>
+    <h2>Backtesting — hero</h2>
+    <div class="card" style="border-style:dashed; text-align:center; padding:60px 12px; color:var(--text2); font-size:13px;">
+      DEFERRED — will pull real equity-curve data through the existing visualization/charts/equity_curve.py pipeline off the two-year checkpoint, re-skinned to match the site. Waiting on your call for partial vs. completed-run data.
+    </div>
+  </section>
+
+  <section>
+    <h2>Backtesting — cash buckets</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="backtesting/cash_buckets_stacked_area.svg"></object>
+    </div>
+    <p class="caption">Schematic stacked-area: settled / unsettled / reserved cash shifting over time.</p>
+  </section>
+
+  <section>
+    <h2>Backtesting — order latency</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="backtesting/order_latency_timeline.svg"></object>
+    </div>
+    <p class="caption">Two-row before/after: signal bar close vs. execution bar open, latency as deferred execution.</p>
+  </section>
+
+  <section>
+    <h2>Backtesting — sim/live parity</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="backtesting/sim_live_parity.svg"></object>
+    </div>
+    <p class="caption">Live: one order + metadata blob. Sim: N discrete child fills. Shared slicer classes, divergent routing.</p>
+  </section>
+
+  <section>
+    <h2>Backtesting — slippage clamp</h2>
+    <div class="card">
+      <object type="image/svg+xml" data="backtesting/slippage_clamp_gauge.svg"></object>
+    </div>
+    <p class="caption">Number-line gauge: below 30 fill samples → fallback defaults; at/above → calibrated impact coefficient.</p>
+  </section>
+</body>
+</html>

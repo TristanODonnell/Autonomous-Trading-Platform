@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 340" font-family="'JetBrains Mono', 'SF Mono', Consolas, monospace">
+  <style>
+    .bg { fill: #070B0F; }
+    .title { fill: #C9D1D9; font-size: 14px; font-weight: 700; }
+    .illustrative { fill: #E8A838; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; }
+    .axis { stroke: #1C2532; stroke-width: 1; }
+    .axis-label { fill: #FFFFFF; font-size: 10px; }
+    .alpha-line { stroke: #9B72FF; stroke-width: 2; fill: none; }
+    .score-line { stroke: #00E5A0; stroke-width: 2; fill: none; }
+    .legend-text { fill: #8B949E; font-size: 11px; }
+  </style>
+  <rect class="bg" x="0" y="0" width="640" height="340"/>
+  <text class="title" x="24" y="30">Blended quality score — alpha × live + (1−alpha) × backtest</text>
+  <rect x="24" y="42" width="90" height="20" fill="#E8A83814" stroke="#E8A838" rx="4"/>
+  <text class="illustrative" x="32" y="56">ILLUSTRATIVE</text>
+
+  <line class="axis" x1="60" y1="280" x2="600" y2="280"/>
+  <line class="axis" x1="60" y1="90"  x2="60"  y2="280"/>
+  <text class="axis-label" x="60" y="298">strategy goes live</text>
+  <text class="axis-label" x="540" y="298">time →</text>
+  <text class="axis-label" x="20" y="94" transform="rotate(-90 20 94)">weight</text>
+
+  <!-- alpha rising as live track record accumulates -->
+  <path class="alpha-line" d="M60,260 C200,255 320,190 600,110"/>
+  <text fill="#9B72FF" font-size="11" font-weight="700" x="420" y="150">alpha (live weight)</text>
+
+  <!-- blended score, smoother, converging toward live-informed value -->
+  <path class="score-line" d="M60,180 C220,175 360,150 600,120"/>
+  <text fill="#00E5A0" font-size="11" font-weight="700" x="420" y="200">blended quality score</text>
+
+  <text class="legend-text" x="24" y="322">schematic shape only — not plotted from real strategy data</text>
+</svg>
