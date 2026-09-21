@@ -1,0 +1,52 @@
+# Virtual environments
+.venv/
+.venv-*/
+env/
+venv/
+ENV/
+
+# Git
+.git/
+.gitignore
+
+# Python cache/build artifacts
+__pycache__/
+**/__pycache__/
+*.pyc
+*.py[codz]
+*.egg-info/
+build/
+dist/
+
+# Test/lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Logs and runtime artifacts (this is what broke your build)
+orchestration/logs/
+data/
+artifacts/
+.task_progress.json
+.runtime/
+.tmp/
+
+# Secrets — never send these into a build context
+.env*
+!.env.example
+infra/.env
+
+# Editor/IDE
+.idea/
+.vscode/
+
+# Misc
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+*.dump
+private-notes/
+.claude/
