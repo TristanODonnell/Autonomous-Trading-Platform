@@ -143,7 +143,9 @@ class UniverseCandidateBuilder:
             if outcome is None:
                 rejected.append((symbol, "no_market_data", None, None))
                 logger.info(
-                    "universe candidate rejected",
+                    "universe candidate rejected: %s (%s)",
+                    symbol,
+                    "no_market_data",
                     extra={
                         **base_log,
                         "step": "rejection_reason",
@@ -156,7 +158,9 @@ class UniverseCandidateBuilder:
             if rejection_reason is not None:
                 rejected.append((symbol, rejection_reason, metrics.liquidity, metrics.quality))
                 logger.info(
-                    "universe candidate rejected",
+                    "universe candidate rejected: %s (%s)",
+                    symbol,
+                    rejection_reason,
                     extra={
                         **base_log,
                         "step": "rejection_reason",

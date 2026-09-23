@@ -539,23 +539,43 @@ class PlatformBacktestRunner:
                         _candidate_ok = False
                         if _screener_records:
                             try:
-                                _run_cg(
+                                _cg_result = _run_cg(
                                     as_of=_bootstrap_ts,
                                     config=_CGConfig(
                                         as_of=_bootstrap_ts, lookback_days=20, max_symbols=500
                                     ),
                                     rebalance_reason="backtest_bootstrap",
                                 )
-                                _run_ur(
-                                    candidate_version_id=None,
-                                    config=_URConfig(),
-                                    rotation_reason="backtest_bootstrap",
-                                    force_rotation=True,
-                                    as_of=_bootstrap_ts,
-                                    skip_cadence_check=True,
-                                    session=session,
-                                )
-                                _candidate_ok = True
+                                if not _cg_result.included_members:
+                                    # Rotating an empty candidate would let the rotation
+                                    # service pick some other (possibly future-dated)
+                                    # candidate — use the fallback universe instead.
+                                    _rejection_summary = _cg_result.diagnostics.get(
+                                        "rejection_summary", {}
+                                    )
+                                    all_warnings.append(
+                                        "universe_candidate_empty: no candidates accepted "
+                                        f"(rejections: {_rejection_summary})"
+                                    )
+                                else:
+                                    # Pin rotation to the candidate just built, so it
+                                    # cannot resolve a stale or future-dated one.
+                                    _run_ur(
+                                        candidate_version_id=_cg_result.version.universe_version_id,
+                                        config=_URConfig(),
+                                        rotation_reason="backtest_bootstrap",
+                                        force_rotation=True,
+                                        as_of=_bootstrap_ts,
+                                        skip_cadence_check=True,
+                                        session=session,
+                                    )
+                                    if _UVRepo(session).get_active_version(_bootstrap_ts):
+                                        _candidate_ok = True
+                                    else:
+                                        all_warnings.append(
+                                            "universe_candidate_rotation_inactive: rotation did "
+                                            f"not activate a universe at {_bootstrap_ts.isoformat()}"
+                                        )
                             except Exception as _exc:
                                 all_warnings.append(f"universe_candidate_rotation_failed: {_exc}")
 
@@ -876,6 +896,8 @@ class PlatformBacktestRunner:
                             broker_client=day_broker_client,
                             backtest_dataset_version_id=backtest_dataset_version_id,
                         )
+                        if bar_result.errors:
+                            tick.errors.extend(bar_result.errors)
                         total_orders += bar_result.orders_submitted
                         total_fills += bar_result.fills_received
                         last_trading_result = bar_result
