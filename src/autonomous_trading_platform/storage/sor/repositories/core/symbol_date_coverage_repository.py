@@ -1,7 +1,8 @@
+from collections.abc import Iterable
 from datetime import date
 from typing import cast
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from autonomous_trading_platform.storage.sor.models.symbol_date_coverage import (
     SymbolDateCoverage,
@@ -70,3 +71,39 @@ class SymbolDateCoverageRepository(BaseRepository):
             .distinct()
         )
         return list(self.session.scalars(stmt).all())
+
+    def find_dataset_version_with_widest_coverage(
+        self,
+        *,
+        symbols: Iterable[str],
+        start_date: date,
+        end_date: date,
+    ) -> str | None:
+        """Return the dataset_version covering the most distinct symbols
+        (from `symbols`) with complete data in [start_date, end_date].
+
+        Used to resolve which Parquet dataset_version actually holds
+        already-ingested historical bars for a given symbol/date window,
+        since coverage is tracked per dataset_version rather than globally.
+        Returns None if no dataset_version has any complete coverage.
+        """
+        symbol_list = list({s for s in symbols if s})
+        if not symbol_list:
+            return None
+
+        stmt = (
+            select(
+                SymbolDateCoverage.dataset_version,
+                func.count(func.distinct(SymbolDateCoverage.symbol)),
+            )
+            .where(
+                SymbolDateCoverage.symbol.in_(symbol_list),
+                SymbolDateCoverage.date >= start_date,
+                SymbolDateCoverage.date <= end_date,
+                SymbolDateCoverage.completeness_status == "complete",
+            )
+            .group_by(SymbolDateCoverage.dataset_version)
+            .order_by(func.count(func.distinct(SymbolDateCoverage.symbol)).desc())
+        )
+        row = self.session.execute(stmt).first()
+        return cast(str | None, row[0]) if row is not None else None

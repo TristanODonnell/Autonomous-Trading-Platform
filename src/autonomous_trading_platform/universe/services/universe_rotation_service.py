@@ -267,6 +267,15 @@ class UniverseRotationService:
         self._version_repo.activate_version(proposed.universe_version_id)
         logger.info("universe rotation step", extra={**base_log, "step": "version_activated"})
 
+        # Flush the retire/activate status changes so callers querying this
+        # session (e.g. get_active_version) see the new active version
+        # immediately — autoflush=False means these mutations otherwise stay
+        # invisible to raw SELECTs until some later, unrelated flush/commit,
+        # which can make a caller wrongly conclude rotation didn't activate
+        # anything and fall through to a second, conflicting bootstrap path.
+        if (_session := getattr(self, "_session", None)) is not None:
+            _session.flush()
+
         rotation_record = self._build_rotation_record(
             rotation_type="scheduled",
             previous_version=retired,

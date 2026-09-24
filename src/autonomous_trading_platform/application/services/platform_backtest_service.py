@@ -503,6 +503,9 @@ class PlatformBacktestRunner:
                         from autonomous_trading_platform.storage.sor.repositories.core.raw_market_pool_repository import (
                             RawMarketPoolRepository as _RMPRepo,
                         )
+                        from autonomous_trading_platform.storage.sor.repositories.core.symbol_date_coverage_repository import (
+                            SymbolDateCoverageRepository as _SDCRepo,
+                        )
                         from autonomous_trading_platform.universe.jobs.run_candidate_generation import (
                             run_candidate_generation as _run_cg,
                         )
@@ -536,15 +539,47 @@ class PlatformBacktestRunner:
                         except Exception as _exc:
                             all_warnings.append(f"universe_screener_failed: {_exc}")
 
+                        # Historical bars live in versioned Parquet datasets, not the
+                        # SQL market_bars table, so candidate scoring must be pointed
+                        # at whichever dataset_version actually has ingested coverage
+                        # for this symbol/date window — otherwise every candidate is
+                        # rejected as no_market_data even when Parquet data exists.
+                        _cg_lookback_days = 20
+                        _cg_dataset_version_id: str | None = None
+                        try:
+                            _cg_dataset_version_id = _SDCRepo(
+                                session
+                            ).find_dataset_version_with_widest_coverage(
+                                symbols=inputs.symbols,
+                                start_date=(
+                                    _bootstrap_ts - timedelta(days=_cg_lookback_days * 3)
+                                ).date(),
+                                end_date=_bootstrap_ts.date(),
+                            )
+                        except Exception as _exc:
+                            all_warnings.append(
+                                f"universe_candidate_dataset_version_lookup_failed: {_exc}"
+                            )
+                        if _cg_dataset_version_id is None:
+                            all_warnings.append(
+                                "universe_candidate_dataset_version_unresolved: "
+                                "no symbol_date_coverages match for bootstrap window; "
+                                "candidate scoring will fall back to the SQL market_bars "
+                                "table and likely reject every candidate"
+                            )
+
                         _candidate_ok = False
                         if _screener_records:
                             try:
                                 _cg_result = _run_cg(
                                     as_of=_bootstrap_ts,
                                     config=_CGConfig(
-                                        as_of=_bootstrap_ts, lookback_days=20, max_symbols=500
+                                        as_of=_bootstrap_ts,
+                                        lookback_days=_cg_lookback_days,
+                                        max_symbols=500,
                                     ),
                                     rebalance_reason="backtest_bootstrap",
+                                    dataset_version_id=_cg_dataset_version_id,
                                 )
                                 if not _cg_result.included_members:
                                     # Rotating an empty candidate would let the rotation
