@@ -107,3 +107,46 @@ class SymbolDateCoverageRepository(BaseRepository):
         )
         row = self.session.execute(stmt).first()
         return cast(str | None, row[0]) if row is not None else None
+
+    def last_dates_with_bars(
+        self,
+        *,
+        dataset_version: str,
+        symbols: Iterable[str],
+    ) -> dict[str, date]:
+        """Latest date each symbol had at least one bar in dataset_version.
+
+        Symbols that never had a bar are absent from the result.
+        """
+        symbol_list = list({s for s in symbols if s})
+        if not symbol_list:
+            return {}
+        stmt = (
+            select(SymbolDateCoverage.symbol, func.max(SymbolDateCoverage.date))
+            .where(
+                SymbolDateCoverage.dataset_version == dataset_version,
+                SymbolDateCoverage.symbol.in_(symbol_list),
+                SymbolDateCoverage.actual_bar_count > 0,
+            )
+            .group_by(SymbolDateCoverage.symbol)
+        )
+        return {symbol: last for symbol, last in self.session.execute(stmt).all()}
+
+    def dates_with_any_bars(
+        self,
+        *,
+        dataset_version: str,
+        since: date,
+    ) -> list[date]:
+        """Sorted dates after `since` on which any symbol had a bar (market-open days)."""
+        stmt = (
+            select(SymbolDateCoverage.date)
+            .where(
+                SymbolDateCoverage.dataset_version == dataset_version,
+                SymbolDateCoverage.date > since,
+                SymbolDateCoverage.actual_bar_count > 0,
+            )
+            .distinct()
+            .order_by(SymbolDateCoverage.date.asc())
+        )
+        return list(self.session.scalars(stmt).all())

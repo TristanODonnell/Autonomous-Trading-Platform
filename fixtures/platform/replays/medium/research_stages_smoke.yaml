@@ -1,0 +1,87 @@
+# scenario:
+#   name: research_stages_smoke
+#   purpose: >
+#     Cheapest replay that exercises every research pipeline stage end to end:
+#     quality filter → walk-forward → Monte Carlo → regime → stress → overfitting.
+#     Use it to verify research-stage changes before committing to the
+#     two_year_full.yaml run.
+#   expected_behavior: >
+#     ~66 daily ticks (cadence_minutes 390 = one trading-cycle tick per day).
+#     Research fires on the first tick of Feb, Mar and Apr. Feb/Mar have < 75 days
+#     of data, so only stage 1 runs. The Apr 1 tick has ~90 days → the full
+#     6-stage pipeline runs once. Check the Apr research summary's `stage_funnel`
+#     (entered/passed per stage) and `research_profile: smoke`.
+#   cost_notes: >
+#     research profile "smoke": 2 candidates per strategy family (10 total vs 36),
+#     Monte Carlo n_runs 3 (vs 5), one cost-stress multiplier (2x) instead of two.
+#     Regime and overfitting stages add no simulations.
+#   recommended_use: research stage verification, pre-full-run check
+
+# Command:
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/medium/research_stages_smoke.yaml \
+#     --output artifacts/platform/backtests/research_stages_smoke.json
+
+platform_replay:
+  name: research_stages_smoke
+  mode: historical_backtest
+  cadence_minutes: 390
+
+  symbols:
+    - SPY
+    - QQQ
+    - AAPL
+    - MSFT
+    - TLT
+
+  start: 2024-01-02
+  end: 2024-04-05
+  starting_cash: 100000
+  random_seed: 2024
+
+initial_state:
+
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: true
+    rebalance_frequency: weekly
+    portfolio_drawdown_action: warn_only
+    portfolio_drawdown_recovery_mode: auto_resume
+    portfolio_max_drawdown_pct: "0.15"
+
+  governance:
+    - strategy_id: momentum_v1
+      state: approved_for_paper_trading
+    - strategy_id: mean_reversion_v1
+      state: approved_for_paper_trading
+
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "0.50"
+    - strategy_id: mean_reversion_v1
+      allocation_pct: "0.50"
+
+scheduled_jobs:
+  ingestion:          { cadence: daily,           enabled: true }
+  corporate_actions:  { cadence: daily,           enabled: true }
+  features:           { cadence: after_ingestion, enabled: true }
+  trading_cycle:      { cadence: daily,           enabled: true }
+  risk:               { cadence: daily,           enabled: true }
+  governance:         { cadence: daily,           enabled: true }
+  portfolio_snapshot: { cadence: daily,           enabled: true }
+  operations_health:  { cadence: daily,           enabled: true }
+  universe:           { cadence: monthly,         enabled: true }
+  research:
+    cadence: monthly
+    enabled: true
+    options:
+      profile: smoke
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: true
+  write_failure_report: false
+  write_dashboard_snapshot: true

@@ -1,6 +1,7 @@
 """Validated Pydantic models for pipeline stage configuration.
 
-Each stage type (simulation, walk_forward, monte_carlo) has a corresponding
+Each stage type (simulation, walk_forward, monte_carlo, regime, stress,
+overfitting) has a corresponding
 Pydantic model that validates the raw YAML dict before the stage dataclass
 is constructed. Validation failures are raised before execution begins.
 
@@ -334,3 +335,122 @@ class MonteCarloStageConfigModel(ParallelStageConfigMixin):
                 f"start_date ({self.start_date}) must be strictly before end_date ({self.end_date})"
             )
         return self
+
+
+# ---------------------------------------------------------------------------
+# Robustness gate stages (regime / stress / overfitting)
+# ---------------------------------------------------------------------------
+
+
+class _GateWindowConfigMixin(ParallelStageConfigMixin):
+    name: str
+    symbols: list[str]
+    start_date: date
+    end_date: date
+
+    @field_validator("name")
+    @classmethod
+    def _name_non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("stage name must not be empty")
+        return v
+
+    @field_validator("symbols")
+    @classmethod
+    def _symbols_non_empty(cls, v: list[str]) -> list[str]:
+        normalized = [s.strip().upper() for s in v if s.strip()]
+        if not normalized:
+            raise ValueError("symbols must contain at least one non-empty symbol")
+        return normalized
+
+    @model_validator(mode="after")
+    def _validate_dates(self) -> _GateWindowConfigMixin:
+        if self.start_date >= self.end_date:
+            raise ValueError(
+                f"start_date ({self.start_date}) must be strictly before end_date ({self.end_date})"
+            )
+        return self
+
+
+class RegimeClassifierWindowsModel(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    trend_short_window: int = 10
+    trend_long_window: int = 20
+    vol_window: int = 10
+    liquidity_avg_window: int = 10
+    zscore_window: int = 10
+    high_percentile: float = 80.0
+    low_percentile: float = 20.0
+
+
+class RegimeStageConfigModel(_GateWindowConfigMixin):
+    """Validated YAML input for RegimeStage (auto-classified regimes)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    dimensions: list[str] = ["trend", "volatility"]
+    min_bars_per_regime: int = 20
+    min_evaluable_regimes: int = 2
+    min_regime_sharpe: float = -0.5
+    max_regime_drawdown: float = -0.25
+    min_positive_regime_fraction: float = 0.5
+    on_insufficient_coverage: str = "pass"
+    classifier_windows: RegimeClassifierWindowsModel = RegimeClassifierWindowsModel()
+    label_warmup_calendar_days: int = 45
+
+    @field_validator("on_insufficient_coverage")
+    @classmethod
+    def _policy_valid(cls, v: str) -> str:
+        if v not in {"pass", "fail"}:
+            raise ValueError("on_insufficient_coverage must be 'pass' or 'fail'")
+        return v
+
+    @field_validator("label_warmup_calendar_days")
+    @classmethod
+    def _warmup_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("label_warmup_calendar_days must be >= 0")
+        return v
+
+
+class StressStageConfigModel(_GateWindowConfigMixin):
+    """Validated YAML input for StressStage."""
+
+    model_config = ConfigDict(frozen=True)
+
+    shock_scenarios: list[str] | None = None  # None = every built-in scenario
+    min_shock_sharpe: float = 0.0
+    max_shock_drawdown: float = -0.40
+    min_shock_survival_rate: float = 0.5
+    cost_multipliers: list[float] = [2.0, 3.0]
+    min_cost_sharpe: float = 0.0
+    max_cost_drawdown: float = -0.40
+    min_cost_survival_rate: float = 0.5
+
+
+class OverfittingStageConfigModel(BaseModel):
+    """Validated YAML input for OverfittingStage (runs no simulations)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    max_overfitting_probability: float = 0.6
+    min_core_indicators: int = 2
+    min_trade_count: int = 30
+    on_insufficient_evidence: str = "pass"
+    indicator_weights: dict[str, float] | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _name_non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("stage name must not be empty")
+        return v
+
+    @field_validator("on_insufficient_evidence")
+    @classmethod
+    def _policy_valid(cls, v: str) -> str:
+        if v not in {"pass", "fail"}:
+            raise ValueError("on_insufficient_evidence must be 'pass' or 'fail'")
+        return v

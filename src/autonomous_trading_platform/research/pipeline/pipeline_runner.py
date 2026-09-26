@@ -110,6 +110,8 @@ class PipelineRunner:
                 )
                 break
 
+            stage.bind_prior_results(list(result.stage_results))
+
             t0 = time.perf_counter()
             record_step_started(
                 logger=logger,

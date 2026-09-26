@@ -48,15 +48,26 @@ class SimulatedExecutionService:
         # Monotonic counter reset at the start of each run; used as part of the
         # deterministic key for fill_id / broker_order_id generation (P-01).
         self._fill_counter: int = 0
+        # Execution-cost stress multiplier (1 = normal costs). Reset every run.
+        self._cost_multiplier: Decimal = Decimal("1")
 
-    def reset_for_run(self, rng: random.Random | None = None) -> None:
+    def reset_for_run(
+        self,
+        rng: random.Random | None = None,
+        cost_multiplier: float = 1.0,
+    ) -> None:
         """Reset per-run mutable state before each simulation run.
 
         Must be called by SimulationRunner at the start of every run to guarantee:
           - deterministic fill ID generation (fill counter reset to 0)
           - isolated, seeded RNG (no cross-run state leakage)
+          - cost multiplier from this run's request, never carried over from a
+            previous stress run
         """
+        if cost_multiplier < 0:
+            raise ValueError(f"cost_multiplier must be >= 0, got {cost_multiplier}")
         self._fill_counter = 0
+        self._cost_multiplier = Decimal(str(cost_multiplier))
         if rng is not None:
             self._rng = rng
 
@@ -366,11 +377,17 @@ class SimulatedExecutionService:
                 Decimal(str(bar.close)) if getattr(bar, "close", None) is not None else None
             ),
         )
+        # Only stress runs pass cost_multiplier, so cost models that predate it
+        # (and test doubles) keep working for normal simulations.
+        stress_kwargs: dict[str, Any] = (
+            {"cost_multiplier": self._cost_multiplier} if self._cost_multiplier != 1 else {}
+        )
         costs = self.simulation_cost_model_service.apply_costs(
             side=intent.side,
             reference_price=reference_price,
             quantity=qty,
             context=context,
+            **stress_kwargs,
         )
 
         self._fill_counter += 1

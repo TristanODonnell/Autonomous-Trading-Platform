@@ -29,6 +29,7 @@ from autonomous_trading_platform.storage.parquet.metadata import (
 from autonomous_trading_platform.storage.parquet.paths import partition_file_path
 from autonomous_trading_platform.storage.parquet.schemas import BAR_SCHEMA
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from tests.utilities.universe_seeding import seed_universe_version
 
 # ---------------------------------------------------------------------------
 # Test constants
@@ -156,6 +157,14 @@ def research_smoke_data_root(tmp_path: Path, db_session, monkeypatch) -> Path:
     )
     db_session.add(row)
     db_session.flush()
+
+    # Research resolves its universe point-in-time at the window start and the
+    # survivorship guard refuses to run without one.
+    seed_universe_version(
+        db_session,
+        symbols=_SYMBOLS,
+        effective_from=datetime.combine(_START_DATE, datetime.min.time(), tzinfo=UTC),
+    )
 
     # Patch parquet paths to point at tmp_path
     from autonomous_trading_platform.storage.parquet import paths as parquet_paths

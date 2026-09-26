@@ -7,7 +7,12 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from autonomous_trading_platform.cli.formatters import print_error, print_header, print_json
+from autonomous_trading_platform.cli.formatters import (
+    print_error,
+    print_header,
+    print_json,
+    print_success,
+)
 
 
 def register(subparsers) -> None:
@@ -354,6 +359,20 @@ def handle_backtest_run(args: argparse.Namespace) -> int:
         return 1
 
     dry_run: bool = getattr(args, "dry_run", False)
+    if params.symbol_pool is not None and not dry_run:
+        from autonomous_trading_platform.platform.replay.platform_replay_config import (
+            resolve_symbol_pool,
+        )
+
+        try:
+            params.symbols = resolve_symbol_pool(params)
+        except ValueError as exc:
+            print_error(str(exc))
+            return 1
+        print_success(
+            f"symbol_pool {params.symbol_pool.source}: {len(params.symbols)} symbols "
+            f"as of {params.start_date}"
+        )
     actor: str = getattr(args, "actor", "platform-backtest")
     inject_failures: bool = getattr(args, "inject_failures", False)
     output: Path | None = getattr(args, "output", None)
@@ -397,8 +416,9 @@ def handle_backtest_run(args: argparse.Namespace) -> int:
         inject_failures=inject_failures,
         failure_injection_schedule=params.failure_injections,
         fixture_name=fixture.platform_replay.name if fixture else None,
+        universe_screener_source=params.screener_source,
         scheduled_jobs_config={
-            name: {"cadence": cfg.cadence, "enabled": cfg.enabled}
+            name: {"cadence": cfg.cadence, "enabled": cfg.enabled, "options": cfg.options}
             for name, cfg in params.scheduled_jobs.items()
         },
         initial_state=fixture.initial_state if fixture else None,

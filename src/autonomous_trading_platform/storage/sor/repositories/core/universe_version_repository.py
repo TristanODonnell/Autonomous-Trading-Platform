@@ -37,6 +37,27 @@ class UniverseVersionRepository(BaseRepository):
         )
         return cast(UniverseVersion | None, self.session.execute(stmt).scalar_one_or_none())
 
+    def get_version_effective_at(self, as_of: datetime) -> UniverseVersion | None:
+        """Point-in-time lookup: the version that was in effect at ``as_of``.
+
+        Unlike get_active_version (which only matches the *currently* ACTIVE
+        version), this also matches RETIRED versions whose
+        [effective_from, effective_to) covers as_of — rotation retires the
+        previous version, so historical dates are only answerable this way.
+        If leftover rows from earlier runs overlap, the most recently created
+        version wins.
+        """
+        stmt = (
+            select(UniverseVersion)
+            .where(
+                UniverseVersion.status.in_([UniverseStatus.ACTIVE, UniverseStatus.RETIRED]),
+                UniverseVersion.effective_from <= as_of,
+                (UniverseVersion.effective_to.is_(None)) | (UniverseVersion.effective_to > as_of),
+            )
+            .order_by(UniverseVersion.created_at.desc(), UniverseVersion.effective_from.desc())
+        )
+        return cast(UniverseVersion | None, self.session.execute(stmt).scalars().first())
+
     def get_previous_version_before(self, as_of: datetime) -> UniverseVersion | None:
         stmt = (
             select(UniverseVersion)

@@ -129,6 +129,9 @@ class PlatformBacktestInputs:
     # Checkpoint path: if set, write a checkpoint after every committed tick and
     # resume from it on restart. Set to None to disable (default).
     checkpoint_path: Path | None = None
+    # Universe screener source for bootstrap + rotations: "alpaca_active"
+    # (today's active assets) or "sp500_point_in_time" (survivorship-safe).
+    universe_screener_source: str = "alpaca_active"
 
 
 @dataclass
@@ -207,6 +210,13 @@ def _intraday_bar_timestamps(tick_date: date, cadence_minutes: int) -> list[date
 # ---------------------------------------------------------------------------
 # Cadence scheduler
 # ---------------------------------------------------------------------------
+
+
+def _job_options(scheduled_jobs: dict[str, Any], job: str) -> dict[str, Any]:
+    """Job-specific options from the fixture (scheduled_jobs.<job>.options)."""
+    cfg = scheduled_jobs.get(job, {})
+    options = cfg.get("options") if isinstance(cfg, dict) else getattr(cfg, "options", None)
+    return dict(options or {})
 
 
 class _CadenceScheduler:
@@ -512,8 +522,8 @@ class PlatformBacktestRunner:
                         from autonomous_trading_platform.universe.jobs.run_universe_rotation import (
                             run_universe_rotation as _run_ur,
                         )
-                        from autonomous_trading_platform.universe.providers.alpaca_screener_provider import (
-                            AlpacaScreenerProvider as _Screener,
+                        from autonomous_trading_platform.universe.providers.point_in_time_index_provider import (
+                            build_universe_screener as _build_screener,
                         )
                         from autonomous_trading_platform.universe.services.raw_market_pool_refresh_service import (
                             RawMarketPoolRefreshService as _RMPSvc,
@@ -530,7 +540,11 @@ class PlatformBacktestRunner:
 
                         _screener_records: list | None = None
                         try:
-                            _screener = _Screener(as_of=inputs.start_date, top_n=500)
+                            _screener = _build_screener(
+                                inputs.universe_screener_source,
+                                as_of=inputs.start_date,
+                                top_n=500,
+                            )
                             _screener_records = _screener.fetch_symbols()
                             _pool_repo = _RMPRepo(session)
                             _refresh_svc = _RMPSvc(_pool_repo, _screener)
@@ -817,6 +831,30 @@ class PlatformBacktestRunner:
                     all_warnings.extend(ing_result.warnings)
                     cadence.record("ingestion", tick_date)
 
+                    # Symbols whose bars have stopped are delisted: recorded as
+                    # lifecycle events so the trading universe drops them and the
+                    # simulated broker can exit open positions at the last close.
+                    if backtest_dataset_version_id and ingestion_ran:
+                        from autonomous_trading_platform.application.services.platform_replay.ingestion_hooks import (
+                            detect_delistings_at_timestamp,
+                        )
+
+                        delisted = detect_delistings_at_timestamp(
+                            session=session,
+                            tick_date=tick_date,
+                            symbols=inputs.symbols,
+                            dataset_version_id=backtest_dataset_version_id,
+                        )
+                        if delisted:
+                            tick.ingestion = {
+                                **(tick.ingestion or {}),
+                                "delistings_detected": delisted,
+                            }
+                            all_warnings.extend(
+                                f"delisting_detected: {d['symbol']} (last bar {d['last_bar_date']})"
+                                for d in delisted
+                            )
+
                 # ── Corporate actions (daily — after ingestion) ─────────────
                 if cadence.should_run("corporate_actions", tick_date, ingestion_ran=ingestion_ran):
                     from autonomous_trading_platform.application.services.platform_replay.ingestion_hooks import (
@@ -866,6 +904,7 @@ class PlatformBacktestRunner:
                         timestamp=tick_ts,
                         replay_context=tick_ctx,
                         skip_cadence_check=True,
+                        screener_source=inputs.universe_screener_source,
                     )
                     tick.universe = uni_result.summary
                     cadence.record("universe", tick_date)
@@ -994,6 +1033,7 @@ class PlatformBacktestRunner:
                         timestamp=tick_ts,
                         replay_context=tick_ctx,
                         dataset_version_id=backtest_dataset_version_id,
+                        research_options=_job_options(inputs.scheduled_jobs_config, "research"),
                     )
                     tick.research = res_result.summary
                     if res_result.errors:

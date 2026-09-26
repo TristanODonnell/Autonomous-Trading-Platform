@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 from datetime import UTC, date, datetime
 from datetime import time as dt_time
 from typing import Any
@@ -26,6 +27,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.missing_bar_incid
 
 _MARKET_OPEN_UTC = dt_time(14, 30)  # 09:30 ET = 14:30 UTC (EST, no DST adjustment)
 _MARKET_CLOSE_UTC = dt_time(21, 0)  # 16:00 ET = 21:00 UTC
+
+
+logger = logging.getLogger(__name__)
 
 
 def _compact_day_partitions(
@@ -308,3 +312,46 @@ def build_ingestion_summary(*, session: Session) -> IngestionSummary:
         corporate_actions_ingested=corp_count,
         date_range=date_range,
     )
+
+
+def detect_delistings_at_timestamp(
+    *,
+    session: Session,
+    tick_date: date,
+    symbols: list[str],
+    dataset_version_id: str,
+) -> list[dict[str, Any]]:
+    """Record DELISTING lifecycle events for replay symbols whose bars stopped.
+
+    Returns the newly detected delistings (empty on repeat calls). Never raises:
+    detection failure must not abort the replay tick.
+    """
+    try:
+        from autonomous_trading_platform.storage.sor.repositories.core.symbol_date_coverage_repository import (
+            SymbolDateCoverageRepository,
+        )
+        from autonomous_trading_platform.storage.sor.repositories.core.ticker_lifecycle_repository import (
+            TickerLifecycleRepository,
+        )
+        from autonomous_trading_platform.universe.services.delisting_detection_service import (
+            DelistingDetectionService,
+        )
+
+        service = DelistingDetectionService(
+            coverage_repository=SymbolDateCoverageRepository(session),
+            lifecycle_repository=TickerLifecycleRepository(session),
+        )
+        found = service.detect_and_record(
+            dataset_version=dataset_version_id, symbols=symbols, today=tick_date
+        )
+    except Exception:
+        logger.warning("delisting detection failed at %s", tick_date, exc_info=True)
+        return []
+    return [
+        {
+            "symbol": d.symbol,
+            "last_bar_date": d.last_bar_date.isoformat(),
+            "missing_market_days": d.missing_market_days,
+        }
+        for d in found
+    ]

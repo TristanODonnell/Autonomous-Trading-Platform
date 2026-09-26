@@ -241,13 +241,17 @@ class OverfittingAnalyzer:
             ]
             positive_regime_fractions: list[float] = []
             for dim_summary in dims:
-                buckets = dim_summary.metrics_by_label
-                if not buckets:
+                # Only regimes the strategy actually traded through count: an
+                # empty bucket (no bars → sharpe None) says nothing about
+                # concentration, and counting it as "not positive" would flag
+                # every short window as regime-concentrated.
+                sharpes = [
+                    m.sharpe for m in dim_summary.metrics_by_label.values() if m.sharpe is not None
+                ]
+                if not sharpes:
                     continue
-                n_positive = sum(
-                    1 for m in buckets.values() if m.sharpe is not None and m.sharpe > 0
-                )
-                positive_regime_fractions.append(n_positive / len(buckets))
+                n_positive = sum(1 for s in sharpes if s > 0)
+                positive_regime_fractions.append(n_positive / len(sharpes))
             if positive_regime_fractions:
                 rc = statistics.mean(positive_regime_fractions)
                 if rc < 0.4:

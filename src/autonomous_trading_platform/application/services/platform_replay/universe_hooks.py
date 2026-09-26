@@ -35,11 +35,16 @@ def run_universe_at_timestamp(
     skip_cadence_check: bool = True,
     force_rotation: bool = False,
     dry_run: bool = False,
+    screener_source: str = "alpaca_active",
 ) -> UniverseReplayResult:
     """Run universe selection/rotation at timestamp T.
 
     Uses skip_cadence_check=True by default so the replay clock drives
     scheduling rather than wall-clock cadences.
+
+    screener_source picks the candidate pool: "alpaca_active" ranks today's
+    active assets (misses since-delisted names); "sp500_point_in_time" ranks
+    index members as of T (survivorship-safe).
     """
     base = dict(
         domain="universe",
@@ -62,20 +67,20 @@ def run_universe_at_timestamp(
     warnings: list[str] = []
 
     # ── Step 1: refresh raw market pool via screener ─────────────────────────
-    # Point-in-time correct: ranks all active US equities by dollar volume as
-    # of this rotation date, so the candidate pool reflects that month's market.
+    # Ranking is by dollar volume as of this rotation date; membership is
+    # point-in-time only with screener_source="sp500_point_in_time".
     try:
         from autonomous_trading_platform.storage.sor.repositories.core.raw_market_pool_repository import (
             RawMarketPoolRepository,
         )
-        from autonomous_trading_platform.universe.providers.alpaca_screener_provider import (
-            AlpacaScreenerProvider,
+        from autonomous_trading_platform.universe.providers.point_in_time_index_provider import (
+            build_universe_screener,
         )
         from autonomous_trading_platform.universe.services.raw_market_pool_refresh_service import (
             RawMarketPoolRefreshService,
         )
 
-        screener = AlpacaScreenerProvider(as_of=timestamp.date(), top_n=500)
+        screener = build_universe_screener(screener_source, as_of=timestamp.date(), top_n=500)
         pool_repo = RawMarketPoolRepository(session)
         refresh_svc = RawMarketPoolRefreshService(pool_repo, screener)
         refresh_svc.refresh(cadence="monthly", captured_at=timestamp)

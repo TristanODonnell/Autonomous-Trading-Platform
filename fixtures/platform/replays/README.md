@@ -94,6 +94,7 @@ Each config tests one event category in isolation and is sized to answer:
 |--------|----------|-------------|--------|-----------------|
 | `medium/two_month_healthy.yaml` | 2024-01-02 → 2024-02-29 | 43 | 0 | integration |
 | `medium/two_month_with_events.yaml` | 2024-01-02 → 2024-02-29 | 43 | 8 | integration |
+| `medium/research_stages_smoke.yaml` | 2024-01-02 → 2024-04-05 | ~66 | 0 | research stage verification — one full 6-stage research tick (Apr 1), `research.options.profile: smoke` |
 
 ### Long
 

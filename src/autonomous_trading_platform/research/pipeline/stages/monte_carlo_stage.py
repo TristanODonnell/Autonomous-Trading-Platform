@@ -84,7 +84,7 @@ from autonomous_trading_platform.research.simulation.simulation_runner import (
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
 from ..aggregation.monte_carlo_aggregator import MonteCarloAggregation, MonteCarloAggregator
-from .base_stage import BaseStage, StageResult
+from .base_stage import BaseStage, StageDiagnostics, StageResult
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +261,7 @@ class MonteCarloStage(BaseStage):
         all_sim_results: list[SimulationRunResult] = []
         all_filter_outputs: list[FilterScoreOutput] = []
         final_survivors: list[StrategyConfig] = []
+        diagnostics: dict[str, StageDiagnostics] = {}
 
         for config in survivors:
             aggregation = self._run_monte_carlo(
@@ -284,6 +285,10 @@ class MonteCarloStage(BaseStage):
             # stages. The pass/fail verdict comes from the aggregation, not the
             # individual run filter.
             representative_result = self._pick_representative_run(aggregation)
+            diagnostics[config.strategy_id] = StageDiagnostics(
+                mc_aggregation=aggregation,
+                reference_result=representative_result,
+            )
             filter_outputs, _ = self._filter_score_service.filter_and_rank(
                 [
                     FilterScoreInput(
@@ -339,6 +344,7 @@ class MonteCarloStage(BaseStage):
             simulation_results=all_sim_results,
             filter_outputs=all_filter_outputs,
             survivors=final_survivors,
+            diagnostics=diagnostics,
         )
 
     # ------------------------------------------------------------------

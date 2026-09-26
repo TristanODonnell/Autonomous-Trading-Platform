@@ -103,6 +103,8 @@ class SimulationRunRequest:
     window_role: str | None = None
     stage_name: str | None = None
     resample_to_daily: bool = False
+    # Scales slippage + commission for execution-cost stress runs. 1.0 = normal.
+    cost_multiplier: float = 1.0
 
 
 @dataclass(slots=True)
@@ -186,7 +188,9 @@ class SimulationRunner:
         # decisions within this run are reproducible and isolated from other runs.
         py_rng = self._init_rng(request.random_seed)
         if hasattr(self.simulated_execution_service, "reset_for_run"):
-            self.simulated_execution_service.reset_for_run(rng=py_rng)
+            self.simulated_execution_service.reset_for_run(
+                rng=py_rng, cost_multiplier=request.cost_multiplier
+            )
 
         artifact_identity = SimulationArtifactIdentity(
             run_id=str(run_id),
@@ -653,6 +657,9 @@ class SimulationRunner:
                 request.window_role or "",
             ]
         )
+        # Only non-default multipliers extend the key so existing run_ids stay stable.
+        if request.cost_multiplier != 1.0:
+            key += f":cost_x{request.cost_multiplier}"
         return uuid5(_RUN_NS, key)
 
     def _init_rng(self, seed: int) -> random.Random:

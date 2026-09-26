@@ -18,7 +18,7 @@ class UniverseTimelineEntry(NamedTuple):
 
 
 class UniverseHistoryVersionReader(Protocol):
-    def get_active_version(self, as_of: datetime) -> UniverseVersion | None: ...
+    def get_version_effective_at(self, as_of: datetime) -> UniverseVersion | None: ...
 
     def get_included_symbols(self, version_id: str) -> list[str]: ...
 
@@ -48,12 +48,12 @@ class UniverseHistoryService:
         self._rotations = rotation_repo
 
     def get_active_as_of(self, as_of: datetime) -> UniverseVersion | None:
-        """Return the universe version that was active at ``as_of``."""
-        return self._versions.get_active_version(as_of)
+        """Return the universe version that was active at ``as_of`` (even if since retired)."""
+        return self._versions.get_version_effective_at(as_of)
 
     def get_included_symbols_as_of(self, as_of: datetime) -> list[str]:
         """Return included symbol strings for the universe active at ``as_of``."""
-        version = self._versions.get_active_version(as_of)
+        version = self._versions.get_version_effective_at(as_of)
         if version is None:
             return []
         return self._versions.get_included_symbols(version.universe_version_id)

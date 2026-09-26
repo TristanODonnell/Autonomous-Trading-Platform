@@ -9,7 +9,7 @@ Returns Alpaca-format response dicts so the existing order pipeline is unchanged
 from __future__ import annotations
 
 import dataclasses
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
@@ -304,8 +304,63 @@ class SimulatedBrokerClient:
         if symbol in self._bar_cache:
             return self._bar_cache[symbol]
         bar = self._fetch_bar_from_parquet(symbol)
+        if bar is None and self._dataset_version_id is not None:
+            bar = self._delisting_exit_bar(symbol)
         self._bar_cache[symbol] = bar
         return bar
+
+    # Calendar days searched back from the delisting for the last traded bar.
+    _DELISTING_LOOKBACK_DAYS = 21
+
+    def _delisting_exit_bar(self, symbol: str) -> _BarProxy | None:
+        """Last traded bar of a symbol delisted as of this tick, re-stamped to now.
+
+        Without it a delisted holding has no price, the exit order is skipped
+        and the position sits at a stale mark forever. With it, the normal
+        exit-delta path sells at the last exchange close (optimistic for
+        bankruptcies — see universe/services/delisting_detection_service.py).
+        """
+        try:
+            from autonomous_trading_platform.storage.parquet.reader import (
+                HistoricalBarDatasetReader,
+            )
+            from autonomous_trading_platform.storage.sor.repositories.core.ticker_lifecycle_repository import (
+                TickerLifecycleRepository,
+            )
+            from autonomous_trading_platform.universe.services.ticker_lifecycle_service import (
+                TickerLifecycleService,
+            )
+
+            lifecycle = TickerLifecycleService(TickerLifecycleRepository(self._session))
+            if not lifecycle.is_delisted(symbol, self._timestamp):
+                return None
+            event = lifecycle.repository.get_latest_event_for_symbol_as_of(symbol, self._timestamp)
+            if event is None:
+                return None
+            last_day = (event.effective_at - timedelta(days=1)).date()
+            table = HistoricalBarDatasetReader(
+                session=self._session, base_path=self._base_path
+            ).read_with_pyarrow(
+                dataset=RAW_BARS_DATASET,
+                dataset_version=str(self._dataset_version_id),
+                symbol=symbol,
+                start_date=last_day - timedelta(days=self._DELISTING_LOOKBACK_DAYS),
+                end_date=last_day,
+            )
+            if table.num_rows == 0:
+                return None
+            d = table.to_pydict()
+            idx = table.num_rows - 1
+            return _BarProxy(
+                open=Decimal(str(d["close"][idx])),
+                high=Decimal(str(d["close"][idx])),
+                low=Decimal(str(d["close"][idx])),
+                close=Decimal(str(d["close"][idx])),
+                volume=Decimal(str(d["volume"][idx])),
+                timestamp=self._timestamp,
+            )
+        except Exception:
+            return None
 
     def _fetch_bar_from_parquet(self, symbol: str) -> _BarProxy | None:
         """Load the latest validated bar for this tick's date from Parquet.

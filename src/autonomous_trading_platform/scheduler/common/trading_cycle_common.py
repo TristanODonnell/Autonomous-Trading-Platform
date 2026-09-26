@@ -373,13 +373,37 @@ def resolve_trading_universe(
     resolution_service = UniverseResolutionService(UniverseVersionRepository(session))
     resolution_service.assert_active_universe_exists(now_utc)
     active_version = resolution_service.resolve_active(now_utc)
-    members = resolution_service.resolve_active_members(now_utc)
+    members = _drop_delisted(session, resolution_service.resolve_active_members(now_utc), now_utc)
     return (
         set(members),
         active_version.universe_version_id,
         active_version.source,
         len(members),
     )
+
+
+def _drop_delisted(session, members: list[str], now_utc: datetime) -> list[str]:
+    """Remove members with a DELISTING lifecycle event effective by now_utc.
+
+    A universe version is fixed until the next rotation, but a member can stop
+    trading in between; without this the strategy keeps signalling on it.
+    """
+    from autonomous_trading_platform.storage.sor.repositories.core.ticker_lifecycle_repository import (
+        TickerLifecycleRepository,
+    )
+    from autonomous_trading_platform.universe.services.ticker_lifecycle_service import (
+        TickerLifecycleService,
+    )
+
+    lifecycle = TickerLifecycleService(TickerLifecycleRepository(session))
+    kept = [m for m in members if not lifecycle.is_delisted(m, now_utc)]
+    dropped = sorted(set(members) - set(kept))
+    if dropped:
+        logger.info(
+            "trading_universe.delisted_members_dropped",
+            extra={"symbols": dropped, "as_of": now_utc.isoformat()},
+        )
+    return kept
 
 
 def build_trading_base_metadata(
