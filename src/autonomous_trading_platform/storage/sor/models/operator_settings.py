@@ -58,6 +58,11 @@ class OperatorSettingsRow(Base):
         Numeric(8, 4), nullable=True, default=None
     )
 
+    # Active portfolio set (portfolio rotation step 1). Off = legacy single-strategy cycle.
+    portfolio_mode_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    min_active_strategies: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    max_active_strategies: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
+
     # Portfolio drawdown governance (FINDING-16)
     portfolio_max_drawdown_pct: Mapped[float | None] = mapped_column(
         Numeric(6, 4), nullable=True, default=0.15

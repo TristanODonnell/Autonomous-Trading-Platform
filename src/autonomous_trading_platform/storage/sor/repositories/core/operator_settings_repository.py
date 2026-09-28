@@ -47,6 +47,9 @@ class OperatorSettingsRepository:
             slippage_model="fixed",
             transaction_cost_model="per_share",
             max_total_strategy_allocation_pct=1.0,
+            portfolio_mode_enabled=False,
+            min_active_strategies=3,
+            max_active_strategies=6,
         )
         self._session.add(row)
         self._session.flush()

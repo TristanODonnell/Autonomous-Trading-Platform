@@ -28,6 +28,7 @@ from . import optimizer_runs as optimizer_runs
 from . import order_intents as order_intents
 from . import portfolio_construction as portfolio_construction
 from . import portfolio_drawdown_governance_state as portfolio_drawdown_governance_state
+from . import portfolio_memberships as portfolio_memberships
 from . import position_snapshot_items as position_snapshot_items
 from . import position_snapshots as position_snapshots
 from . import promotion_rules as promotion_rules
@@ -51,6 +52,7 @@ from . import strategy_health_transitions as strategy_health_transitions
 from . import strategy_live_performance_snapshots as strategy_live_performance_snapshots
 from . import strategy_quality_score_history as strategy_quality_score_history
 from . import strategy_runtime_states as strategy_runtime_states
+from . import strategy_sleeves as strategy_sleeves
 from . import symbol_date_coverage as symbol_date_coverage
 from . import ticker_lifecycle_event as ticker_lifecycle_events
 from . import tracked_orders as tracked_orders
@@ -72,6 +74,7 @@ __all__ = [
     "order_intents",
     "operator_settings",
     "operational_alerts",
+    "portfolio_memberships",
     "position_snapshot_items",
     "position_snapshots",
     "risk_snapshots",
@@ -81,6 +84,7 @@ __all__ = [
     "universe_versions",
     "raw_market_pool",
     "strategy_runtime_states",
+    "strategy_sleeves",
     "audit_logs",
     "tracked_orders",
     "ticker_lifecycle_events",

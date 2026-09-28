@@ -22,7 +22,8 @@ _STATE_MAP: dict[str, str] = {
     "paper_trading_active": "approved_for_paper_trading",
     "approved_for_paper_trading": "approved_for_paper_trading",
     "approved_paper": "approved_for_paper_trading",
-    "approved_research": "approved_research",
+    "candidate": "candidate",
+    "approved_research": "candidate",  # legacy name
     "approved_live": "approved_for_live_trading",
     "approved_for_live_trading": "approved_for_live_trading",
     "proposed": "proposed",
@@ -153,6 +154,10 @@ def _apply_operator_settings(*, session: Session, patch: dict[str, Any], now: da
         "target_portfolio_volatility": ("target_portfolio_volatility", float),
         "min_rebalance_interval_hours": ("min_rebalance_interval_hours", float),
         "min_allocation_change_pct": ("min_allocation_change_pct", float),
+        "max_total_strategy_allocation_pct": ("max_total_strategy_allocation_pct", float),
+        "portfolio_mode_enabled": ("portfolio_mode_enabled", _to_bool),
+        "min_active_strategies": ("min_active_strategies", int),
+        "max_active_strategies": ("max_active_strategies", int),
         "portfolio_drawdown_action": ("portfolio_drawdown_action", str),
         "portfolio_drawdown_recovery_mode": ("portfolio_drawdown_recovery_mode", str),
         "portfolio_max_drawdown_pct": ("portfolio_max_drawdown_pct", float),
@@ -265,7 +270,7 @@ def _ensure_capital_allocation_policies(
 
     # Seed for all allocatable states. Use short-form enum values (what the DB stores
     # in capital_allocation_policies.approval_status).
-    for status in ("approved_paper", "approved_live", "approved_research"):
+    for status in ("approved_paper", "approved_live", "candidate"):
         if repo.get_active_policy(approval_status=status, performance_tier=None) is not None:
             continue
         repo.insert(

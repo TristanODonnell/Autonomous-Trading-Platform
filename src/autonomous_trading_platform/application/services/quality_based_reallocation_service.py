@@ -14,6 +14,9 @@ from autonomous_trading_platform.application.services.live_performance_metrics_s
     LivePerformanceMetricsService,
     compute_alpha,
 )
+from autonomous_trading_platform.contracts.governance.portfolio_membership import (
+    MembershipStatus,
+)
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.models.allocation_overrides import (
     AllocationOverrides,
@@ -48,6 +51,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_reposi
 )
 from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
     OperatorSettingsRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.portfolio_membership_repository import (
+    PortfolioMembershipRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.strategy_quality_score_repository import (
     StrategyQualityScoreRepository,
@@ -93,6 +99,18 @@ class StrategyQualityInput:
     live_score: Decimal = field(default=Decimal("0"))
     backtest_score: Decimal = field(default=Decimal("0"))
     alpha_weight: Decimal = field(default=Decimal("0"))
+
+
+@dataclass(frozen=True)
+class BlendedQualityScore:
+    strategy_id: str
+    blended_score: Decimal
+    backtest_score: Decimal
+    live_score: Decimal
+    alpha: Decimal
+    days_live: int | None
+    metrics: dict[str, float | int | None]
+    live_metrics: dict[str, float | int | None]
 
 
 @dataclass(frozen=True)
@@ -165,8 +183,10 @@ class QualityBasedReallocationService:
         actor: str = AUTO_REBALANCE_ACTOR,
         enforce_enabled: bool = True,
         trigger_source: str | None = None,
+        now: datetime | None = None,
     ) -> QualityReallocationResult:
-        now = datetime.now(UTC)
+        # `now` is the as-of time (replay tick in backtests); defaults to wall clock.
+        now = now or datetime.now(UTC)
         # Use caller-supplied ID for idempotency; otherwise generate a fresh one.
         rebalance_id = rebalance_run_id or str(uuid4())
         settings = self._operator_settings_repo.get_or_create_default()
@@ -666,6 +686,16 @@ class QualityBasedReallocationService:
                 .order_by(StrategyGovernance.strategy_id.asc())
             ).all()
         )
+        # Once the active portfolio set exists, only its ACTIVE members share capital.
+        # Before the first set is selected, fall back to every approved strategy.
+        active_members = {
+            row.strategy_id
+            for row in PortfolioMembershipRepository(self._session).get_by_statuses(
+                [MembershipStatus.ACTIVE.value]
+            )
+        }
+        if active_members:
+            rows = [row for row in rows if row.strategy_id in active_members]
         policies = self._policies_by_status_and_tier()
         controls = self._controls_by_strategy()
         overrides = self._active_overrides_by_strategy(now=now)
@@ -714,40 +744,17 @@ class QualityBasedReallocationService:
                 # No prior committed allocation: baseline is zero so any quality-
                 # weighted assignment above the threshold is written on first run.
                 current_pct = Decimal("0")
-            metrics = self._latest_metrics(governance.strategy_id)
-            backtest_score = self._quality_score(metrics)
-            live_metrics_obj = self._live_perf_service.compute_for_strategy(governance.strategy_id)
-            live_metrics = {
-                "rolling_sharpe": live_metrics_obj.rolling_sharpe,
-                "realized_return": live_metrics_obj.realized_return,
-                "realized_drawdown": live_metrics_obj.realized_drawdown,
-                "live_win_rate": live_metrics_obj.live_win_rate,
-                "trade_count": live_metrics_obj.trade_count,
-            }
-            live_score = self._live_quality_score(live_metrics)
-            alpha = Decimal(
-                str(
-                    round(
-                        compute_alpha(
-                            days_live=live_metrics_obj.days_live or 0,
-                            trade_count=live_metrics_obj.trade_count or 0,
-                        ),
-                        6,
-                    )
-                )
-            )
-            blended_score = alpha * live_score + (Decimal("1") - alpha) * backtest_score
-            blended_score = max(blended_score, Decimal("0.01"))
+            score = self.blended_quality_score(governance.strategy_id, now=now)
             logger.info(
                 "QUALITY_SCORE_BLENDED",
                 extra={
                     "strategy_id": governance.strategy_id,
-                    "backtest_score": float(backtest_score),
-                    "live_score": float(live_score),
-                    "blended_score": float(blended_score),
-                    "alpha_weight": float(alpha),
-                    "days_live": live_metrics_obj.days_live,
-                    "live_trade_count": live_metrics_obj.trade_count,
+                    "backtest_score": float(score.backtest_score),
+                    "live_score": float(score.live_score),
+                    "blended_score": float(score.blended_score),
+                    "alpha_weight": float(score.alpha),
+                    "days_live": score.days_live,
+                    "live_trade_count": score.live_metrics.get("trade_count"),
                     "rebalance_run_id": rebalance_id,
                 },
             )
@@ -763,16 +770,58 @@ class QualityBasedReallocationService:
                     floor=Decimal("0"),
                     manual_override_pct=manual_override_pct,
                     current_allocation_pct=current_pct,
-                    quality_score=blended_score,
-                    metrics=metrics,
-                    live_metrics=live_metrics,
-                    live_score=live_score,
-                    backtest_score=backtest_score,
-                    alpha_weight=alpha,
+                    quality_score=score.blended_score,
+                    metrics=score.metrics,
+                    live_metrics=score.live_metrics,
+                    live_score=score.live_score,
+                    backtest_score=score.backtest_score,
+                    alpha_weight=score.alpha,
                 )
             )
 
         return inputs
+
+    def blended_quality_score(
+        self, strategy_id: str, *, now: datetime | None = None
+    ) -> BlendedQualityScore:
+        """Blend backtest and live quality: alpha * live + (1 - alpha) * backtest.
+
+        alpha grows with live maturity (days live, trade count), so a new strategy
+        is judged on its backtest and an established one on its realized results.
+        """
+        metrics = self._latest_metrics(strategy_id)
+        backtest_score = self._quality_score(metrics)
+        live_metrics_obj = self._live_perf_service.compute_for_strategy(strategy_id, now=now)
+        live_metrics: dict[str, float | int | None] = {
+            "rolling_sharpe": live_metrics_obj.rolling_sharpe,
+            "realized_return": live_metrics_obj.realized_return,
+            "realized_drawdown": live_metrics_obj.realized_drawdown,
+            "live_win_rate": live_metrics_obj.live_win_rate,
+            "trade_count": live_metrics_obj.trade_count,
+        }
+        live_score = self._live_quality_score(live_metrics)
+        alpha = Decimal(
+            str(
+                round(
+                    compute_alpha(
+                        days_live=live_metrics_obj.days_live or 0,
+                        trade_count=live_metrics_obj.trade_count or 0,
+                    ),
+                    6,
+                )
+            )
+        )
+        blended = alpha * live_score + (Decimal("1") - alpha) * backtest_score
+        return BlendedQualityScore(
+            strategy_id=strategy_id,
+            blended_score=max(blended, Decimal("0.01")),
+            backtest_score=backtest_score,
+            live_score=live_score,
+            alpha=alpha,
+            days_live=live_metrics_obj.days_live,
+            metrics=metrics,
+            live_metrics=live_metrics,
+        )
 
     def _compute_proposals(
         self,
@@ -1236,7 +1285,7 @@ class QualityBasedReallocationService:
             return "approved_live"
         if governance_state == "approved_for_paper_trading":
             return "approved_paper"
-        return "approved_research"
+        return "candidate"
 
     def _decimal_pct(self, value: float | Decimal) -> Decimal:
         return self._quantize(Decimal(str(value)))
