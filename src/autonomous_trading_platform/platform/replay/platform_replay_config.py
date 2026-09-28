@@ -212,6 +212,8 @@ class TimelineEventConfig(BaseModel):
     patch: dict[str, Any] = Field(default_factory=dict)
     # Governance
     to_state: str | None = None
+    # Role the transition is performed as; demotion to candidate needs system_risk/admin.
+    actor_role: str = "operator"
     # Failure injection
     target: str | None = None
     failure: str | None = None
@@ -542,6 +544,7 @@ def build_typed_timeline_events(events: list[TimelineEventConfig], actor: str) -
                     reason=ev.reason,
                     strategy_id=ev.strategy_id,
                     to_state=ev.to_state,
+                    actor_role=ev.actor_role,
                     metadata=ev.metadata,
                     scheduled_date=ev.at,
                 )

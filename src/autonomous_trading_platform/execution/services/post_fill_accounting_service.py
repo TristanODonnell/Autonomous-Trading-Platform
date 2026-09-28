@@ -4,7 +4,6 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from uuid import uuid4
 
 from autonomous_trading_platform.contracts.common.enums import OrderSource
 from autonomous_trading_platform.contracts.trading.fill import Fill
@@ -109,8 +108,16 @@ class PostFillAccountingService:
             Decimal(pos.market_value or Decimal("0")) for pos in updated_positions
         )
 
+        # Deterministic per (run_id, timestamp, source), like the position snapshot above:
+        # every fill in one bar updates the same row. With a random id each fill added a
+        # row sharing the bar's timestamp, get_latest() could return an earlier one, and
+        # the running cash balance forked (overstated cash/equity when several fills
+        # landed in one bar).
         new_cash_snapshot = OrmCashSnapshot(
-            snapshot_id=uuid4(),
+            snapshot_id=uuid.uuid5(
+                _POSITION_SNAPSHOT_NS,
+                f"cash:{fill.run_id}:{now_utc.isoformat()}:{OrderSource.LEDGER.value}",
+            ),
             run_id=fill.run_id,
             timestamp=now_utc,
             currency=currency,
