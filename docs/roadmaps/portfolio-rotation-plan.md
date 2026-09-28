@@ -4,7 +4,7 @@
 truth for the overall design, what is already built, and how to approach each remaining step.
 Step-level detail lives in companion docs (e.g. `portfolio-rotation-step1-multi-strategy.md`).
 
-Last updated: 2026-09-28 (Step 1 complete).
+Last updated: 2026-09-28 (Step 2 complete).
 
 ---
 
@@ -102,8 +102,8 @@ results. It must earn on-deck and build a forward record first.
 | Step | Scope | Status |
 |---|---|---|
 | **1** | Foundation: dynamic active set, multi-strategy trading cycle, per-strategy P&L (sleeves), `candidate` rename | ✅ **Done** 2026-09-28 |
-| **2** | On-deck shadow tracking | ⏳ Next |
-| **3** | Bench management | Planned |
+| **2** | On-deck shadow tracking | ✅ **Done** 2026-09-28 (uncommitted) — `portfolio-rotation-step2-on-deck-shadow.md` |
+| **3** | Bench management | ⏳ Next |
 | **4** | Portfolio review (scorecard, auto decisions) | Planned |
 | **5** | Rotation backtest mode (tune thresholds) | Planned |
 | **6** | Airflow schedules (daily / weekly / monthly) | Planned — **user said not yet** |
@@ -153,7 +153,13 @@ Every step follows the same working agreement (see §6). Start each with a short
 pass, write a step doc `docs/roadmaps/portfolio-rotation-stepN-<name>.md` with sub-steps and
 verification gates, get user sign-off, then implement sub-step by sub-step.
 
-### Step 2 — On-deck shadow tracking
+### Step 2 — On-deck shadow tracking (✅ done — see `portfolio-rotation-step2-on-deck-shadow.md`)
+
+What exists now: `ON_DECK` tier in `ActivePortfolioService.refresh()` (`max_on_deck_strategies`,
+default 10; candidates + unseated approved), shadow sleeves (`shadow_sleeve_*`), shadow
+trading in `scheduler/jobs/on_deck_shadow.py` (same evaluation/sizing/risk/throttle/fill
+model, no broker orders), `ShadowFillService`, shadow metrics in
+`strategy_shadow_performance_snapshots` (`get_latest_shadow`). Original scope notes below.
 
 **Goal:** the ~10–15 most promising candidates run through the *same daily flow* as the
 actives, with simulated fills and no capital, building a forward (post-approval) track record
