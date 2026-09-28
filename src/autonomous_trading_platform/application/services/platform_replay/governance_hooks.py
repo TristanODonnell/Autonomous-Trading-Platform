@@ -12,6 +12,9 @@ from autonomous_trading_platform.application.services.auto_demotion_service impo
 from autonomous_trading_platform.application.services.auto_promotion_service import (
     AutoPromotionService,
 )
+from autonomous_trading_platform.application.services.live_performance_metrics_service import (
+    LivePerformanceMetricsService,
+)
 from autonomous_trading_platform.application.services.strategy_governance_service import (
     StrategyGovernanceService,
 )
@@ -56,11 +59,23 @@ def run_governance_at_timestamp(
 
     run_id_str = str(replay_context.run_id)
 
+    # 0. Per-strategy live metrics as of this tick. The health lifecycle reads the
+    # latest persisted snapshot, and every service below must see replay time, not
+    # the wall clock (otherwise a historical backtest never has "live" data).
+    live_metrics_refreshed = 0
+    try:
+        live_metrics_refreshed = len(
+            LivePerformanceMetricsService(session).refresh_monitored(now=timestamp)
+        )
+    except Exception as exc:
+        warnings.append(f"Live metrics refresh failed: {exc}")
+
     # 1. Auto-promotion
     try:
         promo_result = AutoPromotionService(session=session).run(
             actor=replay_context.actor,
             run_id=run_id_str,
+            now=timestamp,
         )
         promotions_executed = len(promo_result.promotions_executed or [])
     except Exception as exc:
@@ -84,6 +99,7 @@ def run_governance_at_timestamp(
     try:
         health_result = StrategyHealthLifecycleService(session=session).run(
             run_id=run_id_str,
+            now=timestamp,
         )
         strategies_evaluated = health_result.strategies_evaluated or 0
         health_transitions = len(health_result.transitions or [])
@@ -105,6 +121,7 @@ def run_governance_at_timestamp(
             "demotions_executed": demotions_executed,
             "health_transitions": health_transitions,
             "strategies_in_breach": strategies_in_breach,
+            "live_metrics_refreshed": live_metrics_refreshed,
             "timestamp": timestamp.isoformat(),
         },
     )

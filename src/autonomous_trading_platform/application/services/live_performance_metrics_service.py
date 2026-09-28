@@ -26,8 +26,19 @@ from autonomous_trading_platform.observability.metrics import (
 from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
 from autonomous_trading_platform.storage.sor.models.fills import Fill
 from autonomous_trading_platform.storage.sor.models.order_intents import OrderIntents
+from autonomous_trading_platform.storage.sor.models.portfolio_memberships import (
+    PortfolioMembershipRow,
+)
+from autonomous_trading_platform.storage.sor.models.strategy_governance import (
+    StrategyGovernance,
+)
 from autonomous_trading_platform.storage.sor.models.strategy_live_performance_snapshots import (
     StrategyLivePerformanceSnapshot,
+)
+from autonomous_trading_platform.storage.sor.models.strategy_sleeves import (
+    StrategySleeveLedgerRow,
+    StrategySleevePositionRow,
+    StrategySleeveSnapshotRow,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.live_performance_snapshot_repository import (
     LivePerformanceSnapshotRepository,
@@ -80,6 +91,8 @@ def compute_alpha(days_live: int, trade_count: int) -> float:
 
 
 _CALCULATION_VERSION = "1.0"
+_MONITORED_STATES = frozenset({"approved_for_paper_trading", "approved_for_live_trading"})
+_MONITORED_MEMBERSHIP_STATUSES = ("active", "winding_down")
 
 
 class LivePerformanceMetricsService:
@@ -118,9 +131,20 @@ class LivePerformanceMetricsService:
         lookback = timedelta(days=max(window_days, 90) * _LOOKBACK_MULTIPLIER)
         since = now - lookback
 
-        # Fill-based metrics: join fills → order_intents for strategy-level attribution.
-        fills = self._fetch_fills_for_strategy(strategy_id=strategy_id, since=since)
-        all_trades = self._compute_round_trip_trades(fills)
+        # Portfolio mode: the strategy's own sleeve is the source of truth — its
+        # valuation snapshots give a per-strategy equity curve (return on allocated
+        # capital) and its ledger sells give realized trade outcomes, including
+        # internal crosses that never produced a broker fill.
+        sleeve_equity = self._build_sleeve_equity_curve(
+            strategy_id=strategy_id, since=since, until=now
+        )
+        fills: list[Fill] = []
+        if sleeve_equity:
+            all_trades = self._sleeve_trade_pnls(strategy_id=strategy_id, since=since, until=now)
+        else:
+            # Legacy: fills joined to order_intents for strategy-level attribution.
+            fills = self._fetch_fills_for_strategy(strategy_id=strategy_id, since=since)
+            all_trades = self._compute_round_trip_trades(fills)
         windowed_trades = (
             all_trades[-window_trades:] if len(all_trades) > window_trades else all_trades
         )
@@ -128,9 +152,10 @@ class LivePerformanceMetricsService:
         winning_trade_count = sum(1 for pnl in windowed_trades if pnl > 0)
         live_win_rate = winning_trade_count / trade_count if trade_count > 0 else None
 
-        # Equity-curve metrics: require run_id for cash_snapshot lookups.
-        raw_equity: list[tuple[datetime, float]] = []
-        if effective_run_id:
+        # Equity-curve metrics. Legacy path uses the run's account cash snapshots
+        # (portfolio-level); portfolio mode uses the strategy's sleeve curve.
+        raw_equity: list[tuple[datetime, float]] = sleeve_equity
+        if not raw_equity and effective_run_id:
             raw_equity = self._build_equity_curve(run_id=effective_run_id, since=since)
         windowed_equity = self._window_equity_curve(raw_equity, window_days=window_days)
         daily_returns = self._compute_daily_returns(windowed_equity)
@@ -234,6 +259,37 @@ class LivePerformanceMetricsService:
         )
         return metrics
 
+    def monitored_strategy_ids(self) -> list[str]:
+        """Strategies whose live metrics governance needs: approved for paper/live,
+        in the portfolio (active or winding down), or holding a sleeve."""
+        ids: set[str] = set()
+        latest_state: dict[str, str] = {}
+        for row in self._session.scalars(
+            select(StrategyGovernance).order_by(StrategyGovernance.updated_at.desc())
+        ):
+            latest_state.setdefault(row.strategy_id, row.current_state)
+        ids.update(sid for sid, state in latest_state.items() if state in _MONITORED_STATES)
+        ids.update(
+            self._session.scalars(
+                select(PortfolioMembershipRow.strategy_id).where(
+                    PortfolioMembershipRow.status.in_(_MONITORED_MEMBERSHIP_STATUSES)
+                )
+            ).all()
+        )
+        ids.update(self._session.scalars(select(StrategySleevePositionRow.strategy_id)).all())
+        return sorted(ids)
+
+    def refresh_monitored(self, *, now: datetime | None = None) -> list[LivePerformanceMetrics]:
+        """Compute and persist live metrics as of `now` for every monitored strategy.
+
+        The health lifecycle reads the latest persisted snapshot, so this must run
+        before it; in backtests `now` is the replay tick.
+        """
+        return [
+            self.compute_and_persist(strategy_id, now=now)
+            for strategy_id in self.monitored_strategy_ids()
+        ]
+
     def get_latest(self, strategy_id: str) -> LivePerformanceMetrics | None:
         """Return the most-recently persisted snapshot for a strategy, or None."""
         row = self._snapshot_repo.get_latest(strategy_id)
@@ -298,6 +354,66 @@ class LivePerformanceMetricsService:
             .order_by(CashSnapshot.timestamp.asc())
         ).all()
         return [(row.timestamp, float(row.equity)) for row in rows]
+
+    def _build_sleeve_equity_curve(
+        self, *, strategy_id: str, since: datetime, until: datetime
+    ) -> list[tuple[datetime, float]]:
+        """Per-strategy equity curve from sleeve snapshots (last snapshot per day).
+
+        Starts at the first allocated capital and compounds each day's change in
+        cumulative net P&L divided by the capital allocated on the previous day, so
+        strategies with different budgets are comparable. Empty when the strategy
+        has no sleeve snapshots (legacy single-strategy mode).
+        """
+        rows = self._session.scalars(
+            select(StrategySleeveSnapshotRow)
+            .where(
+                StrategySleeveSnapshotRow.strategy_id == strategy_id,
+                StrategySleeveSnapshotRow.timestamp >= since,
+                StrategySleeveSnapshotRow.timestamp <= until,
+            )
+            .order_by(StrategySleeveSnapshotRow.timestamp)
+        ).all()
+        last_per_day: dict[date, StrategySleeveSnapshotRow] = {}
+        for row in rows:
+            last_per_day[row.timestamp.date()] = row
+
+        curve: list[tuple[datetime, float]] = []
+        equity: float | None = None
+        prev_net = 0.0
+        prev_capital: float | None = None
+        for row in last_per_day.values():
+            net = float(row.net_pnl)
+            allocated = float(row.allocated_capital or 0)
+            if equity is None:
+                if allocated <= 0:
+                    continue  # no capital yet: nothing to measure a return against
+                equity = allocated
+            else:
+                capital = prev_capital if prev_capital else allocated
+                if capital > 0:
+                    equity *= 1 + (net - prev_net) / capital
+            curve.append((row.timestamp, equity))
+            prev_net = net
+            if allocated > 0:
+                prev_capital = allocated
+        return curve
+
+    def _sleeve_trade_pnls(
+        self, *, strategy_id: str, since: datetime, until: datetime
+    ) -> list[float]:
+        """Realized P&L of each sell booked against the strategy's sleeve."""
+        rows = self._session.scalars(
+            select(StrategySleeveLedgerRow)
+            .where(
+                StrategySleeveLedgerRow.strategy_id == strategy_id,
+                StrategySleeveLedgerRow.side == Side.SELL.value,
+                StrategySleeveLedgerRow.timestamp >= since,
+                StrategySleeveLedgerRow.timestamp <= until,
+            )
+            .order_by(StrategySleeveLedgerRow.timestamp, StrategySleeveLedgerRow.entry_id)
+        ).all()
+        return [float(row.realized_pnl) for row in rows]
 
     def _fetch_fills_for_strategy(self, *, strategy_id: str, since: datetime) -> list[Fill]:
         """Return fills for a strategy joined through order_intents."""

@@ -1,0 +1,128 @@
+# scenario:
+#   name: portfolio_rotation_pool
+#   purpose: >
+#     Portfolio rotation step 1F. A pool of six paper-approved strategies across four
+#     families runs in portfolio mode with at most five active seats, over ~3 months.
+#     Validates the active set, per-strategy sleeves and budgets, internal crossing,
+#     per-strategy live metrics (as of replay time), and wind-down when a strategy is
+#     demoted mid-run.
+#   expected_behavior: >
+#     Five strategies ACTIVE from the first tick; the sixth eligible but unseated.
+#     Each active strategy trades only its own sleeve and stays within its budget.
+#     Sleeves sum to the account every tick. On 2024-02-15 the research momentum
+#     strategy (holding positions) is demoted to candidate: it winds down (sells only) until flat, then goes
+#     INACTIVE, and the unseated strategy takes the open seat. Per-strategy live
+#     metrics snapshots are persisted at every governance tick with replay-time
+#     timestamps.
+#   recommended_use: validation
+#
+# Run against a clean backtest state (wipes backtest tables in DATABASE_URL):
+#   python scripts/reset_backtest_state.py
+#   rm -f artifacts/platform/backtests/portfolio_rotation_pool.checkpoint.json
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/medium/portfolio_rotation_pool.yaml \
+#     --output artifacts/platform/backtests/portfolio_rotation_pool.json
+
+platform_replay:
+  name: portfolio_rotation_pool
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, GOOGL, META]
+  start: 2024-01-02
+  end: 2024-03-28
+  starting_cash: 250000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: false
+    rebalance_frequency: daily
+    portfolio_mode_enabled: true
+    min_active_strategies: 3
+    max_active_strategies: 5
+    max_total_strategy_allocation_pct: 0.95
+    per_strategy_cap: 0.3
+    portfolio_drawdown_action: warn_only
+    portfolio_drawdown_recovery_mode: auto_resume
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies:
+    - momentum_v1
+    - mean_reversion_v1
+    - macd_crossover_v1
+    - momentum__795c6c46b4620f5f3c31ffbb1e26409857ab8d0cfdb2a3d7a92d07add6f3121c
+    - mean_reversion__1ef80cc62aac2b3f7afdac74dfeda4d381f85d133429b826ffcddd705efcfb52
+    - factor_based__19abece93f5b760d646be3cf9b16d8bbaff468d78c1ebc70a6c041cd2b56df79
+  governance:
+    - strategy_id: momentum_v1
+      state: approved_for_paper_trading
+    - strategy_id: mean_reversion_v1
+      state: approved_for_paper_trading
+    - strategy_id: macd_crossover_v1
+      state: approved_for_paper_trading
+    - strategy_id: momentum__795c6c46b4620f5f3c31ffbb1e26409857ab8d0cfdb2a3d7a92d07add6f3121c
+      state: approved_for_paper_trading
+    - strategy_id: mean_reversion__1ef80cc62aac2b3f7afdac74dfeda4d381f85d133429b826ffcddd705efcfb52
+      state: approved_for_paper_trading
+    - strategy_id: factor_based__19abece93f5b760d646be3cf9b16d8bbaff468d78c1ebc70a6c041cd2b56df79
+      state: approved_for_paper_trading
+  allocations: []
+  universe:
+    selection_mode: fixed
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  universe:
+    cadence: monthly      # fixed selection_mode: same symbols every rotation
+    enabled: true
+  research:
+    cadence: monthly
+    enabled: false        # fixed strategy pool: no new candidates in this run
+  dashboard_snapshot:
+    cadence: daily
+    enabled: false
+
+timeline_events:
+  # Operator demotes an active strategy back to the bench mid-run. Expect it to wind
+  # down (exit-only) and the unseated eligible strategy to take the open seat.
+  - at: 2024-02-15
+    type: governance_manual_transition
+    # Holds ~8 positions going into 2024-02-15, so it must wind down before going inactive.
+    strategy_id: momentum__795c6c46b4620f5f3c31ffbb1e26409857ab8d0cfdb2a3d7a92d07add6f3121c
+    to_state: candidate
+    actor_role: system_risk     # operators may not demote to candidate
+    reason: portfolio rotation 1F — demote to bench to exercise wind-down and seat refill
+
+outputs:
+  write_event_log: true
+  write_equity_curve: true
+  write_portfolio_snapshots: true
+  write_governance_audit: true
+  write_failure_report: false
+  write_dashboard_snapshot: false
