@@ -127,7 +127,8 @@ class TestSelection:
         assert result.active == ["b", "c"]
         assert result.added == ["b", "c"]
         assert not result.below_minimum
-        assert _statuses(db_session) == {"b": "active", "c": "active"}
+        # The unseated eligible strategy is shadow-traded on-deck.
+        assert _statuses(db_session) == {"a": "on_deck", "b": "active", "c": "active"}
 
     def test_reports_below_minimum_without_inventing_members(self, db_session: Session) -> None:
         _settings(db_session, min_active_strategies=3, max_active_strategies=6)
@@ -396,3 +397,263 @@ class TestQualityIntegration:
         result = QualityBasedReallocationService(session=db_session).rebalance(actor="test")
 
         assert set(result.after_allocation) == {"good", "ok"}
+
+
+class TestOnDeck:
+    def _refresh(self, session: Session, scores: dict[str, float], days: int = 0):
+        return _service(session, scores).refresh(now=_T0 + timedelta(days=days))
+
+    def test_unseated_approved_and_candidates_fill_on_deck_by_quality(
+        self, db_session: Session
+    ) -> None:
+        _settings(
+            db_session, min_active_strategies=1, max_active_strategies=1, max_on_deck_strategies=2
+        )
+        _eligible(db_session, "live")
+        _eligible(db_session, "unseated")
+        _eligible(db_session, "cand_hi", state="candidate")
+        _eligible(db_session, "cand_lo", state="candidate")
+        scores = {"live": 9.0, "unseated": 3.0, "cand_hi": 5.0, "cand_lo": 1.0}
+
+        result = self._refresh(db_session, scores)
+
+        assert result.active == ["live"]
+        assert result.on_deck == ["cand_hi", "unseated"]
+        assert result.on_deck_added == ["cand_hi", "unseated"]
+        assert result.max_on_deck == 2
+        assert _statuses(db_session) == {
+            "live": "active",
+            "cand_hi": "on_deck",
+            "unseated": "on_deck",
+        }
+        reasons = {t.strategy_id: t.reason for t in result.transitions}
+        assert reasons["cand_hi"] == "selected_on_deck"
+
+    def test_ineligible_strategies_never_go_on_deck(self, db_session: Session) -> None:
+        _settings(db_session, max_active_strategies=1, max_on_deck_strategies=5)
+        _eligible(db_session, "live")
+        _eligible(db_session, "retired", state="retired")
+        _eligible(db_session, "no_config", state="candidate", with_config=False)
+        _eligible(db_session, "disabled", state="candidate")
+        _eligible(db_session, "suspended", state="candidate")
+        db_session.add(
+            StrategyControlState(
+                strategy_id="disabled", enabled=False, reason="off", updated_at=_T0
+            )
+        )
+        db_session.add(
+            StrategyHealthStateRow(
+                health_id="h1",
+                strategy_id="suspended",
+                health_status="suspended",
+                created_at=_T0,
+                updated_at=_T0,
+            )
+        )
+        db_session.flush()
+
+        result = self._refresh(db_session, {"live": 1.0})
+
+        assert result.on_deck == []
+
+    def test_on_deck_incumbents_keep_their_seat(self, db_session: Session) -> None:
+        _settings(db_session, max_active_strategies=1, max_on_deck_strategies=1)
+        _eligible(db_session, "live")
+        _eligible(db_session, "c1", state="candidate")
+        scores = {"live": 9.0, "c1": 1.0}
+        self._refresh(db_session, scores)
+
+        _eligible(db_session, "star", state="candidate")
+        scores["star"] = 99.0
+        result = self._refresh(db_session, scores, days=1)
+
+        assert result.on_deck == ["c1"]
+        assert result.on_deck_added == [] and result.on_deck_removed == []
+        assert result.transitions == []
+
+    def test_lowering_max_on_deck_drops_the_lowest_scored(self, db_session: Session) -> None:
+        _settings(db_session, max_active_strategies=1, max_on_deck_strategies=3)
+        _eligible(db_session, "live")
+        for sid in ("c1", "c2", "c3"):
+            _eligible(db_session, sid, state="candidate")
+        scores = {"live": 9.0, "c1": 1.0, "c2": 2.0, "c3": 3.0}
+        self._refresh(db_session, scores)
+
+        _settings(db_session, max_on_deck_strategies=1)
+        result = self._refresh(db_session, scores, days=1)
+
+        assert result.on_deck == ["c3"]
+        assert result.on_deck_removed == ["c1", "c2"]
+        assert {t.strategy_id: t.reason for t in result.transitions} == {
+            "c1": "on_deck_over_max",
+            "c2": "on_deck_over_max",
+        }
+        assert _statuses(db_session)["c1"] == MembershipStatus.INACTIVE
+
+    def test_zero_max_on_deck_disables_the_tier(self, db_session: Session) -> None:
+        _settings(db_session, max_active_strategies=1, max_on_deck_strategies=2)
+        _eligible(db_session, "live")
+        _eligible(db_session, "c1", state="candidate")
+        scores = {"live": 9.0, "c1": 1.0}
+        self._refresh(db_session, scores)
+
+        _settings(db_session, max_on_deck_strategies=0)
+        result = self._refresh(db_session, scores, days=1)
+
+        assert result.on_deck == []
+        assert result.on_deck_removed == ["c1"]
+
+    def test_on_deck_member_that_becomes_ineligible_leaves(self, db_session: Session) -> None:
+        _settings(db_session, max_active_strategies=1, max_on_deck_strategies=2)
+        _eligible(db_session, "live")
+        _eligible(db_session, "c1", state="candidate")
+        scores = {"live": 9.0, "c1": 1.0}
+        self._refresh(db_session, scores)
+
+        _set_state(db_session, "c1", "retired")
+        result = self._refresh(db_session, scores, days=1)
+
+        assert result.on_deck_removed == ["c1"]
+        assert [t.reason for t in result.transitions] == ["on_deck_no_longer_eligible"]
+
+    def test_approved_on_deck_member_is_promoted_into_an_open_active_seat(
+        self, db_session: Session
+    ) -> None:
+        _settings(db_session, max_active_strategies=1, max_on_deck_strategies=2)
+        _eligible(db_session, "live")
+        _eligible(db_session, "unseated")
+        _eligible(db_session, "c1", state="candidate")
+        scores = {"live": 9.0, "unseated": 3.0, "c1": 1.0}
+        self._refresh(db_session, scores)
+
+        _set_state(db_session, "live", "retired")
+        result = self._refresh(db_session, scores, days=1)
+
+        assert result.active == ["unseated"]
+        assert result.on_deck == ["c1"]
+        reasons = {t.strategy_id: t.reason for t in result.transitions}
+        assert reasons["unseated"] == "promoted_from_on_deck"
+        history = PortfolioMembershipRepository(db_session).get_transitions("unseated")
+        assert [(t.from_status, t.to_status) for t in history] == [
+            (None, "on_deck"),
+            ("on_deck", "active"),
+        ]
+
+    def test_candidate_never_takes_an_active_seat(self, db_session: Session) -> None:
+        _settings(db_session, max_active_strategies=3, max_on_deck_strategies=2)
+        _eligible(db_session, "c1", state="candidate")
+
+        result = self._refresh(db_session, {"c1": 99.0})
+
+        assert result.active == []
+        assert result.on_deck == ["c1"]
+
+    def test_flat_active_dropped_over_max_moves_straight_to_on_deck(
+        self, db_session: Session
+    ) -> None:
+        _settings(db_session, max_active_strategies=2, max_on_deck_strategies=2)
+        _eligible(db_session, "a")
+        _eligible(db_session, "b")
+        scores = {"a": 1.0, "b": 2.0}
+        self._refresh(db_session, scores)
+
+        _settings(db_session, max_active_strategies=1)
+        result = self._refresh(db_session, scores, days=1)
+
+        assert result.active == ["b"]
+        assert result.on_deck == ["a"]
+        history = PortfolioMembershipRepository(db_session).get_transitions("a")
+        assert [(t.from_status, t.to_status, t.reason) for t in history] == [
+            (None, "active", "selected"),
+            ("active", "on_deck", "over_max_active"),
+        ]
+
+    def test_winding_down_strategy_joins_on_deck_only_once_flat(self, db_session: Session) -> None:
+        _settings(db_session, max_active_strategies=2, max_on_deck_strategies=2)
+        _eligible(db_session, "a")
+        scores = {"a": 1.0}
+        self._refresh(db_session, scores)
+        _hold(db_session, "a")
+        _set_state(db_session, "a", "candidate")
+
+        result = self._refresh(db_session, scores, days=1)
+        assert result.winding_down == ["a"] and result.on_deck == []
+
+        db_session.query(StrategySleevePositionRow).filter_by(strategy_id="a").delete()
+        result = self._refresh(db_session, scores, days=2)
+
+        assert result.wind_down_completed == ["a"]
+        assert result.on_deck == ["a"]
+        history = PortfolioMembershipRepository(db_session).get_transitions("a")
+        assert [(t.from_status, t.to_status, t.reason) for t in history][-1] == (
+            "winding_down",
+            "on_deck",
+            "wind_down_complete",
+        )
+
+    def test_on_deck_members_are_not_trading_members(self, db_session: Session) -> None:
+        _settings(db_session, max_active_strategies=1, max_on_deck_strategies=2)
+        _eligible(db_session, "live")
+        _eligible(db_session, "c1", state="candidate")
+        service = _service(db_session, {"live": 9.0, "c1": 1.0})
+        service.refresh(now=_T0)
+
+        assert [m.strategy_id for m in service.trading_members()] == ["live"]
+        assert [m.strategy_id for m in service.on_deck_members()] == ["c1"]
+        assert {b.strategy_id for b in service.budgets(now=_T0)} == {"live"}
+
+    def test_live_environment_still_shadow_trades_candidates(self, db_session: Session) -> None:
+        _settings(db_session, max_active_strategies=2, max_on_deck_strategies=2)
+        _eligible(db_session, "live_ok", state="approved_for_live_trading")
+        _eligible(db_session, "paper_only")
+        _eligible(db_session, "c1", state="candidate")
+        scores = {"live_ok": 1.0, "paper_only": 1.0, "c1": 1.0}
+
+        result = _service(db_session, scores, environment=TradingEnvironment.LIVE).refresh(now=_T0)
+
+        assert result.active == ["live_ok"]
+        assert result.on_deck == ["c1", "paper_only"]
+
+
+class TestOnDeckBudget:
+    @pytest.mark.parametrize(
+        ("active", "deployable", "cap", "expected"),
+        [
+            (4, 0.95, 0.5, "0.2375"),  # equal-weight active share
+            (2, 1.0, 0.25, "0.25"),  # clamped by per_strategy_cap
+            (0, 0.9, 1.0, "0.3"),  # nothing active: share of max_active (3)
+        ],
+    )
+    def test_equal_weight_active_share(
+        self, db_session: Session, active: int, deployable: float, cap: float, expected: str
+    ) -> None:
+        ids = [f"s{i}" for i in range(active)]
+        _settings(
+            db_session,
+            min_active_strategies=1,
+            max_active_strategies=3 if active == 0 else 6,
+            max_total_strategy_allocation_pct=deployable,
+            per_strategy_cap=cap,
+        )
+        for sid in ids:
+            _eligible(db_session, sid)
+        service = _service(db_session, dict.fromkeys(ids, 1.0))
+        service.refresh(now=_T0)
+
+        assert service.on_deck_budget_pct() == Decimal(expected)
+
+    def test_ignores_active_overrides(self, db_session: Session) -> None:
+        _settings(
+            db_session,
+            min_active_strategies=1,
+            max_active_strategies=2,
+            max_total_strategy_allocation_pct=1.0,
+            per_strategy_cap=1.0,
+        )
+        for sid in ("a", "b"):
+            _eligible(db_session, sid)
+        service = _service(db_session, {"a": 1.0, "b": 1.0})
+        service.refresh(now=_T0)
+        TestBudgets()._override(db_session, "a", 0.8)
+
+        assert service.on_deck_budget_pct() == Decimal("0.5")

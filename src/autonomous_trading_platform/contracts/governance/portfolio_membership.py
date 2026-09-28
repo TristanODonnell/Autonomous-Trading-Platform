@@ -21,7 +21,8 @@ class MembershipStatus(enum.StrEnum):
     ACTIVE = "active"
     # Left the active set but its sleeve still holds positions; trades only to exit.
     WINDING_DOWN = "winding_down"
-    # Reserved for the on-deck shadow tier (portfolio rotation step 2).
+    # On-deck shadow tier: runs every cycle with simulated fills in a shadow sleeve,
+    # building a forward record with no capital and no broker orders.
     ON_DECK = "on_deck"
     # Reserved for the managed bench (portfolio rotation step 3).
     BENCH = "bench"
@@ -77,6 +78,10 @@ class ActiveSetRefreshResult(BaseModel):
     min_active: int
     max_active: int
     transitions: list[MembershipTransition]
+    on_deck: list[str] = []
+    on_deck_added: list[str] = []
+    on_deck_removed: list[str] = []
+    max_on_deck: int = 0
 
     @property
     def below_minimum(self) -> bool:

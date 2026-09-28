@@ -50,6 +50,7 @@ class OperatorSettingsRepository:
             portfolio_mode_enabled=False,
             min_active_strategies=3,
             max_active_strategies=6,
+            max_on_deck_strategies=10,
         )
         self._session.add(row)
         self._session.flush()

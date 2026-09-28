@@ -62,6 +62,8 @@ class OperatorSettingsRow(Base):
     portfolio_mode_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     min_active_strategies: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     max_active_strategies: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
+    # On-deck shadow tier (portfolio rotation step 2). 0 disables on-deck.
+    max_on_deck_strategies: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
 
     # Portfolio drawdown governance (FINDING-16)
     portfolio_max_drawdown_pct: Mapped[float | None] = mapped_column(

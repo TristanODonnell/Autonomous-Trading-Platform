@@ -535,6 +535,7 @@ def _row_to_payload(row) -> dict[str, Any]:
         "portfolio_mode_enabled",
         "min_active_strategies",
         "max_active_strategies",
+        "max_on_deck_strategies",
         "portfolio_max_drawdown_pct",
         "portfolio_drawdown_action",
         "portfolio_drawdown_recovery_mode",

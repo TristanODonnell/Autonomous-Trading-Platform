@@ -158,6 +158,7 @@ def _apply_operator_settings(*, session: Session, patch: dict[str, Any], now: da
         "portfolio_mode_enabled": ("portfolio_mode_enabled", _to_bool),
         "min_active_strategies": ("min_active_strategies", int),
         "max_active_strategies": ("max_active_strategies", int),
+        "max_on_deck_strategies": ("max_on_deck_strategies", int),
         "portfolio_drawdown_action": ("portfolio_drawdown_action", str),
         "portfolio_drawdown_recovery_mode": ("portfolio_drawdown_recovery_mode", str),
         "portfolio_max_drawdown_pct": ("portfolio_max_drawdown_pct", float),

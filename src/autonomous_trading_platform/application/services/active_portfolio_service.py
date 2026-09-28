@@ -6,10 +6,15 @@ membership: a dynamic set of ACTIVE strategies bounded by the operator's
 min/max, plus WINDING_DOWN strategies that left the set but still hold
 positions and must trade out of them.
 
+It also maintains the ON_DECK shadow tier (rotation step 2): up to
+max_on_deck_strategies candidate or unseated approved strategies that the cycle
+shadow-trades (simulated fills, no capital) to build a forward track record.
+
 Selection here is a deliberately simple placeholder until the portfolio review
-(rotation step 4): eligible incumbents keep their seat, open seats go to the
-highest blended-quality eligible strategies. It never swaps a healthy incumbent
-out for a better challenger — that decision belongs to the review.
+(rotation step 4), for both tiers: eligible incumbents keep their seat, open
+seats go to the highest blended-quality eligible strategies. It never swaps a
+healthy incumbent out for a better challenger — that decision belongs to the
+review.
 """
 
 from __future__ import annotations
@@ -66,6 +71,7 @@ logger = get_logger(__name__)
 ACTIVE_PORTFOLIO_ACTOR = "active_portfolio"
 _PAPER_DB_STATE = "approved_for_paper_trading"
 _LIVE_DB_STATE = "approved_for_live_trading"
+_CANDIDATE_DB_STATE = "candidate"
 _PCT_QUANT = Decimal("0.000001")
 
 
@@ -103,6 +109,19 @@ class ActivePortfolioService:
             if self._trading_environment is TradingEnvironment.LIVE
             else {_PAPER_DB_STATE, _LIVE_DB_STATE}
         )
+        return self._eligible_in_states(allowed)
+
+    def on_deck_eligible_strategy_ids(self) -> list[str]:
+        """Strategies that may be shadow-traded on-deck, in id order.
+
+        Governance `candidate` or approved for paper/live (in any environment:
+        shadow trading uses no capital), with the same config / operator-enabled /
+        not-SUSPENDED filters as active eligibility. Membership filters (not
+        ACTIVE, not WINDING_DOWN) are applied by refresh().
+        """
+        return self._eligible_in_states({_CANDIDATE_DB_STATE, _PAPER_DB_STATE, _LIVE_DB_STATE})
+
+    def _eligible_in_states(self, allowed: set[str]) -> list[str]:
         latest_state: dict[str, str] = {}
         for row in self._session.scalars(
             select(StrategyGovernance).order_by(
@@ -137,66 +156,114 @@ class ActivePortfolioService:
     def refresh(
         self, *, now: datetime | None = None, actor: str = ACTIVE_PORTFOLIO_ACTOR
     ) -> ActiveSetRefreshResult:
-        """Recompute the active set and record every membership change."""
+        """Recompute the active set and the on-deck tier; record every membership change.
+
+        Target statuses for both tiers are decided first and written once, so a
+        strategy leaving the active set moves straight to on-deck (one transition).
+        """
         now = now or datetime.now(UTC)
         self._as_of = now
         min_active, max_active = self._limits()
+        max_on_deck = self._max_on_deck()
         members = {row.strategy_id: row for row in self._memberships.get_all()}
+        prior = {sid: MembershipStatus(row.status) for sid, row in members.items()}
         eligible = self.eligible_strategy_ids()
-        scores = {strategy_id: self._quality_score_fn(strategy_id) for strategy_id in eligible}
+        eligible_set = set(eligible)
+        scores: dict[str, Decimal] = {}
+
+        def score(strategy_id: str) -> Decimal:
+            if strategy_id not in scores:
+                scores[strategy_id] = self._quality_score_fn(strategy_id)
+            return scores[strategy_id]
 
         def rank(ids: list[str]) -> list[str]:
-            return sorted(ids, key=lambda sid: (-scores[sid], sid))
+            return sorted(ids, key=lambda sid: (-score(sid), sid))
 
-        incumbents = [sid for sid, row in members.items() if row.status == MembershipStatus.ACTIVE]
-        keep = rank([sid for sid in incumbents if sid in scores])
+        # (status, reason) per strategy whose membership may change this refresh.
+        target: dict[str, tuple[MembershipStatus, str]] = {}
+
+        # 1. Active set.
+        incumbents = [sid for sid, status in prior.items() if status == MembershipStatus.ACTIVE]
+        keep = rank([sid for sid in incumbents if sid in eligible_set])
         keep, over_max = keep[:max_active], keep[max_active:]
-        challengers = rank([sid for sid in eligible if sid not in keep])
-        added = challengers[: max_active - len(keep)]
+        added = rank([sid for sid in eligible if sid not in keep])[: max_active - len(keep)]
         new_active = keep + added
 
-        transitions: list[MembershipTransition] = []
-        removed: list[str] = []
-        wind_down_completed: list[str] = []
-
         for sid in added:
-            prior = members.get(sid)
-            reason = (
-                "reactivated"
-                if prior is not None and prior.status == MembershipStatus.WINDING_DOWN
-                else "selected"
-            )
-            transitions.append(
-                self._set_status(sid, MembershipStatus.ACTIVE, reason, actor, now, scores[sid])
-            )
+            previous = prior.get(sid)
+            if previous == MembershipStatus.WINDING_DOWN:
+                reason = "reactivated"
+            elif previous == MembershipStatus.ON_DECK:
+                reason = "promoted_from_on_deck"
+            else:
+                reason = "selected"
+            target[sid] = (MembershipStatus.ACTIVE, reason)
 
-        for sid in keep:
-            row = members[sid]
-            row.quality_score = float(scores[sid])
-            row.updated_at = now
-
+        removed: list[str] = []
         for sid in incumbents:
             if sid in new_active:
                 continue
             reason = "over_max_active" if sid in over_max else "no_longer_eligible"
-            target = (
+            status = (
                 MembershipStatus.WINDING_DOWN
                 if self._sleeves.get_positions(sid)
                 else MembershipStatus.INACTIVE
             )
-            transitions.append(self._set_status(sid, target, reason, actor, now, scores.get(sid)))
+            target[sid] = (status, reason)
             removed.append(sid)
 
-        for sid, row in members.items():
-            if row.status != MembershipStatus.WINDING_DOWN or sid in new_active:
+        wind_down_completed: list[str] = []
+        for sid, status in prior.items():
+            if status != MembershipStatus.WINDING_DOWN or sid in new_active:
                 continue
             if not self._sleeves.get_positions(sid):
-                transitions.append(
-                    self._set_status(
-                        sid, MembershipStatus.INACTIVE, "wind_down_complete", actor, now, None
-                    )
-                )
+                target[sid] = (MembershipStatus.INACTIVE, "wind_down_complete")
                 wind_down_completed.append(sid)
+
+        # 2. On-deck tier, from strategies neither active nor still winding down.
+        def status_after(sid: str) -> MembershipStatus | None:
+            return target[sid][0] if sid in target else prior.get(sid)
+
+        pool = [
+            sid
+            for sid in self.on_deck_eligible_strategy_ids()
+            if status_after(sid) not in (MembershipStatus.ACTIVE, MembershipStatus.WINDING_DOWN)
+        ]
+        pool_set = set(pool)
+        on_deck_incumbents = [
+            sid
+            for sid, status in prior.items()
+            if status == MembershipStatus.ON_DECK and sid not in new_active
+        ]
+        on_deck_keep = rank([sid for sid in on_deck_incumbents if sid in pool_set])
+        on_deck_keep, on_deck_over = on_deck_keep[:max_on_deck], on_deck_keep[max_on_deck:]
+        open_on_deck = max(max_on_deck - len(on_deck_keep), 0)
+        on_deck_added = rank([sid for sid in pool if sid not in on_deck_incumbents])[:open_on_deck]
+
+        for sid in on_deck_added:
+            # Keep the reason it left its previous tier (e.g. over_max_active).
+            reason = target[sid][1] if sid in target else "selected_on_deck"
+            target[sid] = (MembershipStatus.ON_DECK, reason)
+
+        on_deck_removed: list[str] = []
+        for sid in on_deck_incumbents:
+            if sid in on_deck_keep:
+                continue
+            reason = "on_deck_over_max" if sid in on_deck_over else "on_deck_no_longer_eligible"
+            target[sid] = (MembershipStatus.INACTIVE, reason)
+            on_deck_removed.append(sid)
+
+        # 3. Persist.
+        transitions: list[MembershipTransition] = []
+        for sid, (status, reason) in target.items():
+            if prior.get(sid) == status:
+                continue
+            transitions.append(self._set_status(sid, status, reason, actor, now, scores.get(sid)))
+
+        for sid in keep + on_deck_keep:
+            row = members[sid]
+            row.quality_score = float(scores[sid])
+            row.updated_at = now
 
         self._session.flush()
         winding_down = sorted(
@@ -214,6 +281,10 @@ class ActivePortfolioService:
             min_active=min_active,
             max_active=max_active,
             transitions=transitions,
+            on_deck=sorted(on_deck_keep + on_deck_added),
+            on_deck_added=sorted(on_deck_added),
+            on_deck_removed=sorted(on_deck_removed),
+            max_on_deck=max_on_deck,
         )
         if result.below_minimum:
             logger.warning(
@@ -231,6 +302,9 @@ class ActivePortfolioService:
                 "added": result.added,
                 "removed": result.removed,
                 "winding_down": result.winding_down,
+                "on_deck": result.on_deck,
+                "on_deck_added": result.on_deck_added,
+                "on_deck_removed": result.on_deck_removed,
             },
         )
         return result
@@ -242,9 +316,35 @@ class ActivePortfolioService:
             for row in self._memberships.get_by_statuses([s.value for s in TRADING_STATUSES])
         ]
 
+    def on_deck_members(self) -> list[PortfolioMember]:
+        """Members the cycle shadow-trades (simulated fills, no capital)."""
+        return [
+            _member_contract(row)
+            for row in self._memberships.get_by_statuses([MembershipStatus.ON_DECK.value])
+        ]
+
     # ------------------------------------------------------------------
     # Budgets
     # ------------------------------------------------------------------
+
+    def on_deck_budget_pct(self) -> Decimal:
+        """Notional share of total capital each on-deck strategy is sized against.
+
+        The share an equal-weight active seat gets (deployable / active count, or /
+        max_active when nothing is active), capped by per_strategy_cap, so shadow
+        results are comparable with the actives and sizing matches promotion. No
+        capital is reserved: shadow sleeves never trade.
+        """
+        settings = self._settings_repo.get_or_create_default()
+        deployable = _pct(settings.max_total_strategy_allocation_pct) or Decimal("1")
+        per_strategy_cap = _pct(settings.per_strategy_cap)
+        active_count = len(
+            self._memberships.get_by_statuses([MembershipStatus.ACTIVE.value])
+        ) or max(int(settings.max_active_strategies or 0), 1)
+        share = deployable / active_count
+        if per_strategy_cap is not None and per_strategy_cap > 0:
+            share = min(share, per_strategy_cap)
+        return max(share, Decimal("0")).quantize(_PCT_QUANT, rounding=ROUND_DOWN)
 
     def budgets(self, *, now: datetime | None = None) -> list[StrategyBudget]:
         """Per-member share of total capital.
@@ -314,6 +414,10 @@ class ActivePortfolioService:
             )
             min_active = max_active
         return min_active, max_active
+
+    def _max_on_deck(self) -> int:
+        settings = self._settings_repo.get_or_create_default()
+        return max(int(settings.max_on_deck_strategies or 0), 0)
 
     def _set_status(
         self,
