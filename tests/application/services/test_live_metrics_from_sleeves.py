@@ -15,11 +15,19 @@ from autonomous_trading_platform.application.services.auto_promotion_service imp
 from autonomous_trading_platform.application.services.live_performance_metrics_service import (
     LivePerformanceMetricsService,
 )
+from autonomous_trading_platform.contracts.accounting.strategy_sleeve import SleeveBook
+from autonomous_trading_platform.contracts.runtime.metric_lineage import MetricLineageType
 from autonomous_trading_platform.storage.sor.models.portfolio_memberships import (
     PortfolioMembershipRow,
 )
 from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
+from autonomous_trading_platform.storage.sor.models.strategy_live_performance_snapshots import (
+    StrategyLivePerformanceSnapshot,
+    StrategyShadowPerformanceSnapshot,
+)
 from autonomous_trading_platform.storage.sor.models.strategy_sleeves import (
+    ShadowSleeveLedgerRow,
+    ShadowSleeveSnapshotRow,
     StrategySleeveLedgerRow,
     StrategySleevePositionRow,
     StrategySleeveSnapshotRow,
@@ -212,3 +220,123 @@ def test_auto_promotion_evaluates_live_metrics_as_of_the_given_time(
     AutoPromotionService(session=db_session).run(actor="test", enforce_enabled=False, now=as_of)
 
     assert seen and all(value == as_of for value in seen)
+
+
+# ---------------------------------------------------------------------------
+# On-deck shadow metrics (rotation step 2D)
+# ---------------------------------------------------------------------------
+
+
+def _shadow_snapshots(
+    session: Session, strategy_id: str, net_pnls: list[float], alloc: float
+) -> None:
+    for i, net in enumerate(net_pnls):
+        session.add(
+            ShadowSleeveSnapshotRow(
+                snapshot_id=uuid4(),
+                strategy_id=strategy_id,
+                run_id=None,
+                timestamp=_DAY0 + timedelta(days=i),
+                allocated_capital=Decimal(str(alloc)),
+                market_value=Decimal("0"),
+                cost_basis=Decimal("0"),
+                realized_pnl=Decimal(str(net)),
+                unrealized_pnl=Decimal("0"),
+                fees=Decimal("0"),
+                net_pnl=Decimal(str(net)),
+                position_count=0,
+                blocked_order_count=0,
+            )
+        )
+    session.flush()
+
+
+def _on_deck(session: Session, *strategy_ids: str) -> None:
+    for strategy_id in strategy_ids:
+        session.add(
+            PortfolioMembershipRow(
+                strategy_id=strategy_id,
+                status="on_deck",
+                since=_DAY0,
+                updated_by="test",
+                updated_at=_DAY0,
+            )
+        )
+    session.flush()
+
+
+def test_shadow_metrics_come_from_the_shadow_sleeve_only(db_session: Session) -> None:
+    _shadow_snapshots(db_session, "ondeck", [0, 100, 200, 150, 300, 420], alloc=10_000)
+    db_session.add(
+        ShadowSleeveLedgerRow(
+            entry_id=uuid4().hex,
+            strategy_id="ondeck",
+            symbol="AAPL",
+            side="sell",
+            quantity=Decimal("1"),
+            price=Decimal("100"),
+            fees=Decimal("0"),
+            realized_pnl=Decimal("25"),
+            source="shadow_fill",
+            timestamp=_DAY0 + timedelta(days=2),
+        )
+    )
+    db_session.flush()
+    service = LivePerformanceMetricsService(db_session)
+    now = _DAY0 + timedelta(days=6)
+
+    shadow = service.compute_for_strategy("ondeck", now=now, book=SleeveBook.SHADOW)
+    live = service.compute_for_strategy("ondeck", now=now)
+
+    assert shadow.metric_lineage_type == MetricLineageType.SHADOW
+    assert shadow.realized_return == pytest.approx(0.042, abs=1e-3)
+    assert shadow.trade_count == 1 and shadow.winning_trade_count == 1
+    assert shadow.days_live == 6
+    # The real book knows nothing about it.
+    assert live.metric_lineage_type == MetricLineageType.LIVE
+    assert live.realized_return is None and live.trade_count == 0
+
+
+def test_shadow_snapshots_are_never_returned_as_live(db_session: Session) -> None:
+    _shadow_snapshots(db_session, "ondeck", [0, 100, 200], alloc=10_000)
+    service = LivePerformanceMetricsService(db_session)
+
+    service.compute_and_persist("ondeck", now=_DAY0 + timedelta(days=3), book=SleeveBook.SHADOW)
+
+    assert service.get_latest("ondeck") is None
+    assert db_session.query(StrategyLivePerformanceSnapshot).count() == 0
+    latest_shadow = service.get_latest_shadow("ondeck")
+    assert latest_shadow is not None
+    assert latest_shadow.metric_lineage_type == MetricLineageType.SHADOW
+
+
+def test_refresh_monitored_also_refreshes_on_deck_shadow_metrics(db_session: Session) -> None:
+    now = _DAY0 + timedelta(days=3)
+    _on_deck(db_session, "od_up", "od_down")
+    _shadow_snapshots(db_session, "od_up", [0, 100, 200], alloc=10_000)
+    _shadow_snapshots(db_session, "od_down", [0, -100, -300], alloc=10_000)
+    service = LivePerformanceMetricsService(db_session)
+
+    live = service.refresh_monitored(now=now)
+
+    assert [m.strategy_id for m in live] == []  # on-deck strategies have no live record
+    up = service.get_latest_shadow("od_up")
+    down = service.get_latest_shadow("od_down")
+    assert up is not None and down is not None
+    assert up.computed_at == now and down.computed_at == now
+    assert up.realized_return is not None and up.realized_return > 0
+    assert down.realized_return is not None and down.realized_return < 0
+    rows = db_session.query(StrategyShadowPerformanceSnapshot).all()
+    assert {row.metric_lineage_type for row in rows} == {"shadow"}
+
+
+def test_shadow_metrics_do_not_feed_correlation_or_risk_budgeting(db_session: Session) -> None:
+    # Both read the live snapshot table directly; shadow rows live elsewhere.
+    _on_deck(db_session, "ondeck")
+    _shadow_snapshots(db_session, "ondeck", [0, 100, 200], alloc=10_000)
+    service = LivePerformanceMetricsService(db_session)
+
+    service.refresh_shadow(now=_DAY0 + timedelta(days=3))
+
+    assert db_session.query(StrategyShadowPerformanceSnapshot).count() == 1
+    assert db_session.query(StrategyLivePerformanceSnapshot).count() == 0

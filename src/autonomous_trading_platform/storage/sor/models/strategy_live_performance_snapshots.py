@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Float, Integer, String
+from sqlalchemy import Float, Index, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,8 +12,10 @@ from .base import Base
 from .helpers.sa_types import UTCDateTimeType
 
 
-class StrategyLivePerformanceSnapshot(Base):
-    __tablename__ = "strategy_live_performance_snapshots"
+class PerformanceSnapshotBase(Base):
+    """Per-strategy realized performance metrics, computed from its sleeve or fills."""
+
+    __abstract__ = True
 
     snapshot_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     strategy_id: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -39,3 +41,16 @@ class StrategyLivePerformanceSnapshot(Base):
     metric_lineage_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     environment: Mapped[str | None] = mapped_column(String(64), nullable=True)
     calculation_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
+class StrategyLivePerformanceSnapshot(PerformanceSnapshotBase):
+    """Live metrics: real fills / real sleeves. Read by health, allocation, risk."""
+
+    __tablename__ = "strategy_live_performance_snapshots"
+
+
+class StrategyShadowPerformanceSnapshot(PerformanceSnapshotBase):
+    """On-deck shadow metrics (simulated fills). Never read as live evidence."""
+
+    __tablename__ = "strategy_shadow_performance_snapshots"
+    __table_args__ = (Index("ix_shps_strategy_computed_at", "strategy_id", "computed_at"),)

@@ -38,6 +38,7 @@ candidates = [
     "strategy_health_transitions",
     "strategy_quality_score_history",
     "strategy_live_performance_snapshots",
+    "strategy_shadow_performance_snapshots",
     "strategy_runtime_states",
     "strategy_control_states",
     "strategy_factor_exposures",
@@ -52,6 +53,9 @@ candidates = [
     "strategy_sleeve_ledger",
     "strategy_sleeve_snapshots",
     "strategy_sleeve_positions",
+    "shadow_sleeve_ledger",
+    "shadow_sleeve_snapshots",
+    "shadow_sleeve_positions",
     "portfolio_membership_transitions",
     "portfolio_memberships",
     # Core state tables
