@@ -150,3 +150,4 @@ Canonical architecture docs live in `docs/`. Key references:
 - `docs/architecture/invariants.md` — hard invariants that must not be violated
 - `docs/backend/storage-lineage/` — Parquet dataset versioning, Postgres SoR design
 - `docs/archived-docs/architecture/v1-boundaries.md` — historical v1-only system boundaries (superseded by multi-strategy/portfolio-governance work; kept for context only)
+- `docs/roadmaps/portfolio-rotation-plan.md` — **active multi-phase plan** (multi-strategy portfolio, on-deck shadow tier, bench management, portfolio review, rotation backtest). Read before working on portfolio rotation / governance / allocation; it records what is done, what is next, and how the user wants each step run and verified.
