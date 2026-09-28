@@ -191,7 +191,7 @@ class TestPortfolioConstructionService:
                 strategy_id=strategy_id,
                 bar_timestamp=bar_timestamp,
                 now=now,
-                approval_status=GovernanceState.APPROVED_RESEARCH,
+                approval_status=GovernanceState.CANDIDATE,
             )
         )
 
@@ -225,7 +225,7 @@ class TestPortfolioConstructionService:
                 strategy_id=strategy_id,
                 bar_timestamp=bar_timestamp,
                 now=now,
-                approval_status=GovernanceState.APPROVED_RESEARCH,
+                approval_status=GovernanceState.CANDIDATE,
             )
         )
 
@@ -262,7 +262,7 @@ class TestPortfolioConstructionService:
                 strategy_id=strategy_id,
                 bar_timestamp=bar_timestamp,
                 now=now,
-                approval_status=GovernanceState.APPROVED_RESEARCH,
+                approval_status=GovernanceState.CANDIDATE,
             )
         )
 
@@ -293,7 +293,7 @@ class TestPortfolioConstructionService:
                 strategy_id=strategy_id,
                 bar_timestamp=bar_timestamp,
                 now=now,
-                approval_status=GovernanceState.APPROVED_RESEARCH,
+                approval_status=GovernanceState.CANDIDATE,
             )
         )
 
@@ -323,7 +323,7 @@ class TestPortfolioConstructionService:
                 strategy_id=strategy_id,
                 bar_timestamp=bar_timestamp,
                 now=now,
-                approval_status=GovernanceState.APPROVED_RESEARCH,
+                approval_status=GovernanceState.CANDIDATE,
             )
         )
 
@@ -370,7 +370,7 @@ class TestDrawdownScalingIntegration:
                 strategy_id=strategy_id,
                 bar_timestamp=bar_timestamp,
                 now=now,
-                approval_status=GovernanceState.APPROVED_RESEARCH,
+                approval_status=GovernanceState.CANDIDATE,
                 realized_drawdown=0.04,
             )
         )
@@ -399,7 +399,7 @@ class TestDrawdownScalingIntegration:
                 strategy_id=strategy_id,
                 bar_timestamp=bar_timestamp,
                 now=now,
-                approval_status=GovernanceState.APPROVED_RESEARCH,
+                approval_status=GovernanceState.CANDIDATE,
             )
         )
 
@@ -427,7 +427,7 @@ class TestDrawdownScalingIntegration:
                 strategy_id=strategy_id,
                 bar_timestamp=bar_timestamp,
                 now=now,
-                approval_status=GovernanceState.APPROVED_RESEARCH,
+                approval_status=GovernanceState.CANDIDATE,
                 realized_drawdown=0.04,
             )
         )

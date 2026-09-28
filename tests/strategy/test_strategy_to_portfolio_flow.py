@@ -170,7 +170,7 @@ def test_strategy_evaluation_result_flows_into_portfolio_construction() -> None:
             strategy_id=evaluation_result.strategy_id,
             bar_timestamp=bar_timestamp,
             now=evaluation_timestamp,
-            approval_status=GovernanceState.APPROVED_RESEARCH,
+            approval_status=GovernanceState.CANDIDATE,
         )
     )
 

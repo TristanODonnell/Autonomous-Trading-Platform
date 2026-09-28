@@ -298,7 +298,7 @@ def run_feature_pipeline_cycle(
             python_version=platform.python_version(),
             notes="Feature engineering pipeline cycle",
             price_basis=price_basis,
-            governance_state=GovernanceState.APPROVED_RESEARCH,
+            governance_state=GovernanceState.CANDIDATE,
         )
         manifest_service.save(manifest)
 

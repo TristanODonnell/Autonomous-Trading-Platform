@@ -28,7 +28,7 @@ strategies:
   - type: mean_reversion
     display_name: "Mean Reversion (Z-Score)"
     enabled: false
-    governance_state: approved_research           # shows in Pending Promotion card
+    governance_state: candidate           # shows in Pending Promotion card
     allocation_pct: null
     parameters:
       window: 20

@@ -121,7 +121,7 @@ def _seed_paper_rule(
     session.add(
         PromotionRules(
             rule_id="research_to_paper",
-            from_status="approved_research",
+            from_status="candidate",
             to_status="approved_paper",
             min_sharpe=min_sharpe,
             max_drawdown=max_drawdown,
@@ -386,7 +386,7 @@ def test_valid_fully_configured_rule_rejects_promotion_when_metrics_fail(
 
 
 def test_promotion_to_paper_raises_when_no_rule_exists(db_session: Session) -> None:
-    _seed_strategy(db_session, "s1", state="approved_research")
+    _seed_strategy(db_session, "s1", state="candidate")
 
     with pytest.raises(PromotionRulesMissingError):
         _service(db_session).transition(
@@ -405,7 +405,7 @@ def test_promotion_to_paper_raises_when_no_rule_exists(db_session: Session) -> N
 
 
 def test_promotion_to_paper_without_source_run_id_raises(db_session: Session) -> None:
-    _seed_strategy(db_session, "s1", state="approved_research")
+    _seed_strategy(db_session, "s1", state="candidate")
     _seed_paper_rule(db_session)
 
     with pytest.raises(MissingSourceRunError) as exc_info:
@@ -460,7 +460,7 @@ def test_missing_source_run_emits_audit_event(db_session: Session) -> None:
 
 
 def test_promotion_to_paper_with_source_run_id_uses_specified_run(db_session: Session) -> None:
-    _seed_strategy(db_session, "s1", state="approved_research", sharpe=2.0, days=45, trades=20)
+    _seed_strategy(db_session, "s1", state="candidate", sharpe=2.0, days=45, trades=20)
     _seed_paper_rule(db_session)
 
     result = _service(db_session).transition(

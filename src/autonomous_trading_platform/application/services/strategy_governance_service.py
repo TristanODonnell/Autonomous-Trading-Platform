@@ -41,9 +41,10 @@ from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_r
 logger = get_logger(__name__)
 
 _STATE_ALIASES = {
-    "research": "approved_research",
-    "approved_research": "approved_research",
-    "approved_for_research": "approved_research",
+    "research": "candidate",
+    "candidate": "candidate",
+    "approved_for_research": "candidate",
+    "approved_research": "candidate",  # legacy name
     "paper": "approved_for_paper_trading",
     "paper_trading_active": "approved_for_paper_trading",
     "approved_paper": "approved_for_paper_trading",
@@ -55,20 +56,20 @@ _STATE_ALIASES = {
 }
 
 _RULE_STATE_ALIASES = {
-    "approved_research": "approved_research",
+    "candidate": "candidate",
     "approved_for_paper_trading": "approved_paper",
     "approved_for_live_trading": "approved_live",
     "retired": "retired",
 }
 
 _ALLOWED_TRANSITIONS = {
-    "approved_research": {"approved_for_paper_trading"},
-    "approved_for_paper_trading": {"approved_for_live_trading", "approved_research"},
+    "candidate": {"approved_for_paper_trading"},
+    "approved_for_paper_trading": {"approved_for_live_trading", "candidate"},
     "approved_for_live_trading": {"approved_for_paper_trading", "retired"},
 }
 
 _TARGET_STATE_ROLES = {
-    "approved_research": {"researcher", "system_risk", "admin"},
+    "candidate": {"researcher", "system_risk", "admin"},
     "approved_for_paper_trading": {"risk_manager", "system_risk", "admin"},
     "approved_for_live_trading": {"admin"},
     "retired": {"operator", "risk_manager", "admin"},
@@ -80,7 +81,7 @@ _PROMOTION_TARGET_STATES = {"approved_for_paper_trading", "approved_for_live_tra
 # Encode the policy here rather than scattering conditionals across the service.
 _SOURCE_RUN_REQUIRED_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("approved_research", "approved_for_paper_trading"),
+        ("candidate", "approved_for_paper_trading"),
         ("approved_for_paper_trading", "approved_for_live_trading"),
     }
 )
@@ -93,7 +94,7 @@ _REQUIRED_CRITERIA_BY_TRANSITION: dict[tuple[str, str], frozenset[str]] = {
     ("approved_paper", "approved_live"): frozenset(
         {"min_sharpe", "min_days_tested", "min_trade_count"}
     ),
-    ("approved_research", "approved_paper"): frozenset(),
+    ("candidate", "approved_paper"): frozenset(),
 }
 
 
@@ -302,9 +303,7 @@ class StrategyGovernanceService:
         return bool(settings.notify_strategy_promotion_events)
 
     def _is_promotion_transition(self, *, from_state: str, target_state: str) -> bool:
-        return (
-            from_state == "approved_research" and target_state == "approved_for_paper_trading"
-        ) or (
+        return (from_state == "candidate" and target_state == "approved_for_paper_trading") or (
             from_state == "approved_for_paper_trading"
             and target_state == "approved_for_live_trading"
         )

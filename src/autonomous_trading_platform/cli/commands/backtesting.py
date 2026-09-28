@@ -272,7 +272,7 @@ def handle_seed_fixture(args: argparse.Namespace) -> int:
         params = strat_def.get("parameters", {})
         display_name = strat_def.get("display_name", strategy_type)
         enabled = bool(strat_def.get("enabled", True))
-        governance_state = strat_def.get("governance_state", "approved_research")
+        governance_state = strat_def.get("governance_state", "candidate")
         allocation_pct = strat_def.get("allocation_pct")
 
         config = make_config(strategy_type, params)
@@ -315,7 +315,7 @@ def handle_seed_fixture(args: argparse.Namespace) -> int:
             params = strat_def.get("parameters", {})
             display_name = strat_def.get("display_name", strategy_type)
             enabled = bool(strat_def.get("enabled", True))
-            governance_state_str = strat_def.get("governance_state", "approved_research")
+            governance_state_str = strat_def.get("governance_state", "candidate")
             allocation_pct = strat_def.get("allocation_pct")
 
             config = make_config(strategy_type, params)
@@ -837,7 +837,7 @@ def _controls_section_for_governance(state: str) -> str:
         "approved_live",
     }:
         return "strategy_toggles"
-    if state in {"approved_research", "proposed"}:
+    if state in {"candidate", "proposed"}:
         return "pending_promotion"
     return "other"
 
@@ -1588,7 +1588,7 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
 
             _promo_rule = session_promo.scalars(
                 _select(_PromotionRulesModel).where(
-                    _PromotionRulesModel.from_status == "approved_research",
+                    _PromotionRulesModel.from_status == "candidate",
                     _PromotionRulesModel.to_status == "approved_paper",
                     _PromotionRulesModel.is_active.is_(True),
                 )
@@ -1616,7 +1616,7 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
                 StrategyGovernance(
                     strategy_id=true_strategy_id,
                     config_hash=f"{true_strategy_id}_hash",
-                    current_state="approved_research",
+                    current_state="candidate",
                     experiment_id="verify_notification_events",
                     source_run_id=_verify_source_run_id,
                     submitted_at=now,
@@ -1642,7 +1642,7 @@ def handle_verify_notification_events(args: argparse.Namespace) -> int:
                 StrategyGovernance(
                     strategy_id=false_strategy_id,
                     config_hash=f"{false_strategy_id}_hash",
-                    current_state="approved_research",
+                    current_state="candidate",
                     experiment_id="verify_notification_events",
                     source_run_id=_verify_source_run_id,
                     submitted_at=now,
@@ -1878,7 +1878,7 @@ def _notify_print_table(results: list[dict[str, Any]]) -> None:
 _GOVERNANCE_AUDIT_TIER = "audit_verify"
 
 _GOVERNANCE_TO_PORTFOLIO_STATE = {
-    "approved_research": GovernanceState.APPROVED_RESEARCH,
+    "candidate": GovernanceState.CANDIDATE,
     "approved_for_paper_trading": GovernanceState.APPROVED_PAPER,
     "approved_paper": GovernanceState.APPROVED_PAPER,
     "approved_for_live_trading": GovernanceState.APPROVED_LIVE,
@@ -2080,7 +2080,7 @@ def handle_verify_governance_allocation(args: argparse.Namespace) -> int:
         transition_probes = _governance_audit_transition_probes(
             session=session,
             governance_service=StrategyGovernanceService(session=session),
-            research_rule=rule_results["rules"].get("approved_research_to_approved_paper"),
+            research_rule=rule_results["rules"].get("candidate_to_approved_paper"),
         )
 
         active_policies = [
@@ -2644,7 +2644,7 @@ def _auto_promotion_audit_seed(*, session: Any) -> dict[str, Any]:
 
     for row in session.scalars(
         sa_select(PromotionRules).where(
-            PromotionRules.from_status.in_(["approved_research", "approved_paper"]),
+            PromotionRules.from_status.in_(["candidate", "approved_paper"]),
             PromotionRules.to_status.in_(["approved_paper", "approved_live"]),
             PromotionRules.is_active.is_(True),
         )
@@ -2653,7 +2653,7 @@ def _auto_promotion_audit_seed(*, session: Any) -> dict[str, Any]:
 
     rule = PromotionRules(
         rule_id=f"{prefix}_research_to_paper",
-        from_status="approved_research",
+        from_status="candidate",
         to_status="approved_paper",
         min_sharpe=1.5,
         max_drawdown=0.15,
@@ -2693,7 +2693,7 @@ def _auto_promotion_audit_seed(*, session: Any) -> dict[str, Any]:
     specs = [
         (
             eligible_strategy_id,
-            "approved_research",
+            "candidate",
             {
                 "sharpe": 2.0,
                 "max_drawdown": 0.05,
@@ -2707,7 +2707,7 @@ def _auto_promotion_audit_seed(*, session: Any) -> dict[str, Any]:
         ),
         (
             ineligible_strategy_id,
-            "approved_research",
+            "candidate",
             {
                 "sharpe": 0.5,
                 "max_drawdown": 0.30,
@@ -3109,7 +3109,7 @@ def _governance_audit_seed_allocation_policies(
     per_strategy_cap = float(settings_row.per_strategy_cap)
     max_strategy_drawdown = float(settings_row.max_strategy_drawdown)
     specs = [
-        ("approved_research", min(0.05, per_strategy_cap)),
+        ("candidate", min(0.05, per_strategy_cap)),
         ("approved_paper", min(0.20, per_strategy_cap)),
         ("approved_live", per_strategy_cap),
     ]
@@ -3161,7 +3161,7 @@ def _governance_audit_seed_promotion_rules(
 
     now = datetime.now(UTC)
     specs = [
-        ("approved_research", "approved_paper"),
+        ("candidate", "approved_paper"),
         ("approved_paper", "approved_live"),
     ]
     rules: dict[str, PromotionRules | None] = {}
@@ -3317,7 +3317,7 @@ def _governance_audit_transition_probes(
         return {
             "overall_status": "SKIPPED",
             "threshold_source": "promotion_rules",
-            "reason": "No single active approved_research -> approved_paper rule was available.",
+            "reason": "No single active candidate -> approved_paper rule was available.",
             "passing_probe": {"status": "SKIPPED"},
             "failing_probe": {"status": "SKIPPED"},
         }
@@ -3420,7 +3420,7 @@ def _governance_audit_transition_probes(
             StrategyGovernance(
                 strategy_id=strategy_id,
                 config_hash=config_hash,
-                current_state="approved_research",
+                current_state="candidate",
                 experiment_id="governance_audit",
                 source_run_id=run_id,
                 submitted_at=now,
@@ -3621,7 +3621,7 @@ def _validate_fixture(
         tag = f"strategies[{i}]"
         if "type" not in strat:
             errors.append(f"{tag}: 'type' is required")
-        gov = strat.get("governance_state", "approved_research")
+        gov = strat.get("governance_state", "candidate")
         if gov not in _VALID_GOVERNANCE_STATES:
             errors.append(
                 f"{tag}: invalid governance_state '{gov}'. Valid: {sorted(_VALID_GOVERNANCE_STATES)}"

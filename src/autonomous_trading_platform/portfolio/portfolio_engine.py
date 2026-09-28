@@ -29,7 +29,7 @@ from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_r
 # PROPOSED, REJECTED, RETIRED are all blocked.
 _ALLOCATABLE_STATES: frozenset[GovernanceState] = frozenset(
     {
-        GovernanceState.APPROVED_RESEARCH,
+        GovernanceState.CANDIDATE,
         GovernanceState.APPROVED_PAPER,
         GovernanceState.APPROVED_LIVE,
     }
@@ -56,6 +56,17 @@ class PortfolioEngine:
         self._cash_snapshot_as_of = cash_snapshot_as_of
         self._snapshot_age_seconds = snapshot_age_seconds
         self._capital_source = capital_source
+        # Active-set budgets for this cycle (strategy_id -> fraction of capital).
+        self._cycle_budgets: dict[str, float] = {}
+
+    def set_cycle_budgets(self, budgets: dict[str, float]) -> None:
+        """Pin each active strategy's max_pct_of_capital for this trading cycle.
+
+        Budgets come from the active portfolio set, which already folded in
+        allocation overrides and the portfolio-wide caps, so they take precedence
+        over the policy/override percentage. Other policy fields still apply.
+        """
+        self._cycle_budgets = dict(budgets)
 
     def get_allocation(
         self,
@@ -104,6 +115,8 @@ class PortfolioEngine:
             if override is not None and override.max_pct_of_capital is not None
             else policy.max_pct_of_capital
         )
+        if strategy_id in self._cycle_budgets:
+            max_pct = self._cycle_budgets[strategy_id]
         max_position_size_usd = (
             override.max_position_size_usd
             if override is not None and override.max_position_size_usd is not None

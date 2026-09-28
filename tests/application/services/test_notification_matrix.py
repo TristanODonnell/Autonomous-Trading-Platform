@@ -316,7 +316,7 @@ def _seed_research_to_paper_rule(session: Session) -> None:
     session.add(
         PromotionRules(
             rule_id="research_to_paper_notif",
-            from_status="approved_research",
+            from_status="candidate",
             to_status="approved_paper",
             min_sharpe=None,
             max_drawdown=None,
@@ -340,7 +340,7 @@ def test_promotion_notification_suppressed_when_flag_disabled(db_session: Sessio
         StrategyGovernance(
             strategy_id="promo1",
             config_hash="promo1_hash",
-            current_state="approved_research",
+            current_state="candidate",
             experiment_id="test",
             source_run_id=None,
             submitted_at=now,
@@ -375,7 +375,7 @@ def test_promotion_notification_emitted_when_flag_enabled(db_session: Session) -
         StrategyGovernance(
             strategy_id="promo2",
             config_hash="promo2_hash",
-            current_state="approved_research",
+            current_state="candidate",
             experiment_id="test",
             source_run_id=None,
             submitted_at=now,

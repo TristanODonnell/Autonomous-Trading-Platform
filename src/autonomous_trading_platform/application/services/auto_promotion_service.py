@@ -47,19 +47,19 @@ AUTO_PROMOTION_ACTOR = "auto_promotion"
 logger = get_logger(__name__)
 
 _CANDIDATE_STATES = {
-    "approved_research",
+    "candidate",
     "approved_for_paper_trading",
     "approved_paper",
 }
 
 _RULE_FROM_STATUS = {
-    "approved_research": "approved_research",
+    "candidate": "candidate",
     "approved_for_paper_trading": "approved_paper",
     "approved_paper": "approved_paper",
 }
 
 _TARGET_STATE = {
-    "approved_research": "paper",
+    "candidate": "paper",
     "approved_for_paper_trading": "live",
     "approved_paper": "live",
 }
@@ -79,7 +79,7 @@ _SERVICE_TO_STATE = {
 # If a strategy is in one of these transitions and has no source_run_id, it is skipped.
 _CAPITAL_BEARING_AUTO_PROMOTION_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("approved_research", "approved_paper"),
+        ("candidate", "approved_paper"),
         ("approved_paper", "approved_live"),
     }
 )
@@ -154,10 +154,10 @@ class AutoPromotionService:
             repo=GovernanceAuditRepository(session),
         )
 
-    def scan(self) -> list[PromotionEligibilityResult]:
+    def scan(self, *, now: datetime | None = None) -> list[PromotionEligibilityResult]:
         rules = self._active_rules_by_transition()
         candidates = self._candidate_rows()
-        return [self._evaluate_candidate(row, rules=rules) for row in candidates]
+        return [self._evaluate_candidate(row, rules=rules, now=now) for row in candidates]
 
     def run(
         self,
@@ -165,10 +165,12 @@ class AutoPromotionService:
         run_id: str | None = None,
         actor: str = AUTO_PROMOTION_ACTOR,
         enforce_enabled: bool = True,
+        now: datetime | None = None,
     ) -> AutoPromotionRunResult:
-        now = datetime.now(UTC)
+        # `now` is the as-of time (replay tick in backtests); defaults to wall clock.
+        now = now or datetime.now(UTC)
         settings = self._operator_settings_repo.get_or_create_default()
-        candidates = self.scan()
+        candidates = self.scan(now=now)
         if enforce_enabled and not bool(settings.auto_promote_enabled):
             result = AutoPromotionRunResult(
                 run_id=run_id,
@@ -286,16 +288,19 @@ class AutoPromotionService:
         governance: StrategyGovernance,
         *,
         rules: dict[tuple[str, str], PromotionRules],
+        now: datetime | None = None,
     ) -> PromotionEligibilityResult:
         from_status = _RULE_FROM_STATUS[governance.current_state]
-        to_status = "approved_paper" if from_status == "approved_research" else "approved_live"
+        to_status = "approved_paper" if from_status == "candidate" else "approved_live"
         to_state = _TARGET_STATE[governance.current_state]
         rule = rules.get((from_status, to_status))
         is_capital_bearing = (from_status, to_status) in _CAPITAL_BEARING_AUTO_PROMOTION_TRANSITIONS
 
         # Fetch live metrics once for transparency across all return paths.
         # Advisory only — does not affect promotion eligibility.
-        live_metrics_obj = self._live_perf_service.compute_for_strategy(governance.strategy_id)
+        live_metrics_obj = self._live_perf_service.compute_for_strategy(
+            governance.strategy_id, now=now
+        )
         live_metrics: dict[str, float | int | None] = {
             "rolling_sharpe": live_metrics_obj.rolling_sharpe,
             "realized_return": live_metrics_obj.realized_return,

@@ -40,7 +40,7 @@ export function governanceBadgeVariant(state: GovernanceState): BadgeVariant {
   const map: Record<GovernanceState, BadgeVariant> = {
     live:     'green',
     paper:    'blue',
-    research: 'purple',
+    candidate: 'purple',
     proposed: 'gray',
     rejected: 'red',
     retired:  'gray',

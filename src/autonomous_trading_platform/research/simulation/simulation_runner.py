@@ -519,7 +519,7 @@ class SimulationRunner:
                         "resolved_feature_dataset_ids": resolved_feature_dataset_ids,
                     },
                 },
-                governance_state=GovernanceState.APPROVED_RESEARCH,
+                governance_state=GovernanceState.CANDIDATE,
             )
 
             self.manifest_service.upsert(manifest)

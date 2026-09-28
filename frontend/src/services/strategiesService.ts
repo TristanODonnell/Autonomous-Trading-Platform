@@ -4,7 +4,7 @@ export interface ApiStrategyListItem {
   strategy_id: string
   display_name: string
   strategy_type: string
-  status: 'live' | 'paper' | 'research' | 'off'
+  status: 'live' | 'paper' | 'candidate' | 'off'
   current_return: number
   sharpe_ratio: number
   max_drawdown: number

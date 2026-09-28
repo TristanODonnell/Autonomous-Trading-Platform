@@ -1002,7 +1002,7 @@ class TestRunManifestDividendFields:
             price_basis=PriceBasis.ADJUSTED,
             universe_version="v1",
             git_commit="abc123",
-            governance_state=GovernanceState.APPROVED_RESEARCH,
+            governance_state=GovernanceState.CANDIDATE,
         )
         assert manifest.settlement_days is None
         assert manifest.dividend_events_count is None

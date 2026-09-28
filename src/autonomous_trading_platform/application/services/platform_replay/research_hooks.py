@@ -788,7 +788,7 @@ def _seed_research_governance_from_intelligence(
                 StrategyGovernance(
                     strategy_id=strategy_id,
                     config_hash=config_hash,
-                    current_state="approved_research",
+                    current_state="candidate",
                     experiment_id=experiment_id,
                     source_run_id=source_run_id,
                     submitted_at=now_utc,
@@ -815,7 +815,7 @@ def _seed_research_governance(
     experiment_id: str,
     now_utc: datetime,
 ) -> None:
-    """Upsert StrategyGovernance rows for research survivors in approved_research state."""
+    """Upsert StrategyGovernance rows for research survivors in candidate state."""
     from autonomous_trading_platform.storage.sor.models.strategy_governance import (
         StrategyGovernance,
     )
@@ -829,7 +829,7 @@ def _seed_research_governance(
                 StrategyGovernance(
                     strategy_id=strategy_id,
                     config_hash=config_hash,
-                    current_state="approved_research",
+                    current_state="candidate",
                     experiment_id=experiment_id,
                     source_run_id=None,
                     submitted_at=now_utc,

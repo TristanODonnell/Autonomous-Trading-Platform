@@ -177,7 +177,7 @@ def run_market_backfill_cycle(
             run_id=run_id,
             run_type=RunType.BACKFILL,
             dataset_version=str(dataset_version_id),
-            governance_state=GovernanceState.APPROVED_RESEARCH,
+            governance_state=GovernanceState.CANDIDATE,
             created_at=end,
             environment="local",
             broker="alpaca",

@@ -24,7 +24,7 @@ class CapitalAllocationPolicies(Base):
     )
 
     policy_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    # Values: "approved_research" | "approved_paper" | "approved_live"
+    # Values: "candidate" | "approved_paper" | "approved_live"
     approval_status: Mapped[str] = mapped_column(String(64), nullable=False)
     performance_tier: Mapped[str | None] = mapped_column(String(32), nullable=True)
     max_pct_of_capital: Mapped[float] = mapped_column(Float, nullable=False)

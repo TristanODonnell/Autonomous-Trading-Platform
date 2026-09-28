@@ -79,7 +79,7 @@ def test_controls_state_returns_global_controls_and_strategy_enabled_snapshot(
     seed_strategy_governance(
         db_session,
         strategy_id="research_only_v1",
-        state="approved_research",
+        state="candidate",
     )
     db_session.add(
         StrategyControlState(

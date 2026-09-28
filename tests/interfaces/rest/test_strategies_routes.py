@@ -570,14 +570,14 @@ def test_strategy_governance_transition_promotes_research_to_paper_and_audits(
     governance = seed_strategy_governance(
         db_session,
         strategy_id="momentum_v1",
-        state="approved_research",
+        state="candidate",
     )
     governance.source_run_id = source_run_id
     db_session.add_all(
         [
             PromotionRules(
                 rule_id="research-to-paper",
-                from_status="approved_research",
+                from_status="candidate",
                 to_status="approved_paper",
                 min_sharpe=1.0,
                 max_drawdown=None,
@@ -615,7 +615,7 @@ def test_strategy_governance_transition_promotes_research_to_paper_and_audits(
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["strategy_id"] == "momentum_v1"
-    assert data["from_state"] == "approved_research"
+    assert data["from_state"] == "candidate"
     assert data["to_state"] == "approved_for_paper_trading"
     assert data["reason"] == "research passed validation"
     assert data["updated_by"] == "test-user"
@@ -634,7 +634,7 @@ def test_strategy_governance_transition_promotes_research_to_paper_and_audits(
     assert audit_log.event_metadata["actor"] == "test-user"
     assert audit_log.event_metadata["reason"] == "research passed validation"
     assert audit_log.event_metadata["strategy_id"] == "momentum_v1"
-    assert audit_log.event_metadata["from_state"] == "approved_research"
+    assert audit_log.event_metadata["from_state"] == "candidate"
     assert audit_log.event_metadata["to_state"] == "approved_for_paper_trading"
 
     promotion_event = (
@@ -646,7 +646,7 @@ def test_strategy_governance_transition_promotes_research_to_paper_and_audits(
     assert promotion_event.event_metadata is not None
     assert promotion_event.event_metadata["channel"] == "notify_strategy_promotion_events"
     assert promotion_event.event_metadata["strategy_id"] == "momentum_v1"
-    assert promotion_event.event_metadata["from_state"] == "approved_research"
+    assert promotion_event.event_metadata["from_state"] == "candidate"
     assert promotion_event.event_metadata["to_state"] == "approved_for_paper_trading"
 
 
@@ -661,13 +661,13 @@ def test_strategy_promotion_notification_flag_false_suppresses_notification_even
     governance = seed_strategy_governance(
         db_session,
         strategy_id="paper_candidate_v1",
-        state="approved_research",
+        state="candidate",
     )
     # A rule row is required for promotion (fail-closed). research->paper has no required criteria.
     db_session.add(
         PromotionRules(
             rule_id="research_to_paper_notif_false",
-            from_status="approved_research",
+            from_status="candidate",
             to_status="approved_paper",
             min_sharpe=None,
             max_drawdown=None,
@@ -880,7 +880,7 @@ def test_strategy_list_returns_status_values_and_supports_filter(
     _seed_story57_strategy(
         db_session,
         strategy_id="research_v1",
-        state="approved_research",
+        state="candidate",
     )
     _seed_story57_strategy(
         db_session,
@@ -896,7 +896,7 @@ def test_strategy_list_returns_status_values_and_supports_filter(
     statuses = {strategy["strategy_id"]: strategy["status"] for strategy in strategies}
     assert statuses["live_v1"] == "live"
     assert statuses["paper_v1"] == "paper"
-    assert statuses["research_v1"] == "research"
+    assert statuses["research_v1"] == "candidate"
     assert statuses["disabled_v1"] == "off"
 
     filtered_response = client.get(

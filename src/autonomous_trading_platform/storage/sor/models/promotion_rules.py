@@ -20,7 +20,7 @@ class PromotionRules(Base):
 
     rule_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     # State transition this rule governs
-    # from_status e.g. "approved_research" | "approved_paper"
+    # from_status e.g. "candidate" | "approved_paper"
     # to_status   e.g. "approved_paper"    | "approved_live"
     from_status: Mapped[str] = mapped_column(String(64), nullable=False)
     to_status: Mapped[str] = mapped_column(String(64), nullable=False)

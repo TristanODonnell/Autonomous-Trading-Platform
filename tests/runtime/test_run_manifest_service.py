@@ -73,7 +73,7 @@ def make_run_manifest(
     current_step: str | None = None,
     last_successful_step: str | None = None,
     error_message: str | None = None,
-    governance_state: GovernanceState = GovernanceState.APPROVED_RESEARCH,
+    governance_state: GovernanceState = GovernanceState.CANDIDATE,
 ) -> RunManifest:
     return RunManifest(
         run_id=run_id,
@@ -263,13 +263,13 @@ class TestRunManifestServiceTodoBehavior:
             run_id=run_id,
             created_at=datetime(2025, 1, 1, 15, 30, tzinfo=UTC),
             environment="paper",
-            governance_state=GovernanceState.APPROVED_RESEARCH,
+            governance_state=GovernanceState.CANDIDATE,
         )
         manifest_two = make_run_manifest(
             run_id=run_id,
             created_at=datetime(2025, 1, 1, 15, 30, tzinfo=UTC),
             environment="paper",
-            governance_state=GovernanceState.APPROVED_RESEARCH,
+            governance_state=GovernanceState.CANDIDATE,
         )
 
         service = RunManifestService(session=db_session)
@@ -327,7 +327,7 @@ class TestRunManifestServiceTodoBehavior:
             make_run_manifest(
                 run_id=UUID(f"00000000-0000-0000-0000-00000000052{i}"),
                 environment=f"paper-{i}",
-                governance_state=GovernanceState.APPROVED_RESEARCH,
+                governance_state=GovernanceState.CANDIDATE,
             )
             for i in range(3)
         ]

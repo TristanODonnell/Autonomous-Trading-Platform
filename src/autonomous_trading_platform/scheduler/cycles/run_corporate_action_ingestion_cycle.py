@@ -177,7 +177,7 @@ def run_corporate_action_ingestion_cycle(
             capital_bucket=Decimal("10000.00"),
             interval=BarInterval.ONE_DAY,
             price_basis=PriceBasis.RAW,
-            governance_state=GovernanceState.APPROVED_RESEARCH,
+            governance_state=GovernanceState.CANDIDATE,
             start_date=cycle_start.date(),
             end_date=cycle_end.date(),
             dataset_version=str(dataset_version_id),

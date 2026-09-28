@@ -26,8 +26,9 @@ _STATUS_BY_GOVERNANCE = {
     "approved_live": "live",
     "approved_for_paper_trading": "paper",
     "approved_paper": "paper",
-    "approved_research": "research",
-    "research": "research",
+    "candidate": "candidate",
+    "approved_research": "candidate",  # legacy name
+    "research": "candidate",
 }
 
 

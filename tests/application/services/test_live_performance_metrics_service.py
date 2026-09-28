@@ -745,7 +745,7 @@ def test_promotion_eligibility_result_contains_live_metrics(db_session: Session)
         StrategyGovernance(
             strategy_id="promo_strat",
             config_hash="promo_hash",
-            current_state="approved_research",
+            current_state="candidate",
             experiment_id="test",
             source_run_id=None,
             submitted_at=now,
@@ -786,7 +786,7 @@ def test_promotion_eligibility_live_metrics_in_serialized_output(db_session: Ses
         StrategyGovernance(
             strategy_id="ser_strat",
             config_hash="ser_hash",
-            current_state="approved_research",
+            current_state="candidate",
             experiment_id="test",
             source_run_id=None,
             submitted_at=now,

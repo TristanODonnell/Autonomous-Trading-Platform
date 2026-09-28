@@ -10,12 +10,12 @@ type ApiStatus = ApiStrategyListItem['status']
 // ── Value colour helpers ──────────────────────────────────────────────────────
 
 function sharpeColor(v: number, status: ApiStatus): string {
-  if (status === 'research' || status === 'off') return 'var(--text2)'
+  if (status === 'candidate' || status === 'off') return 'var(--text2)'
   return v >= 1.5 ? 'var(--accent)' : 'var(--yellow)'
 }
 
 function returnColor(v: number, status: ApiStatus): string {
-  if (status === 'research' || status === 'off') return 'var(--text2)'
+  if (status === 'candidate' || status === 'off') return 'var(--text2)'
   return v >= 0.15 ? 'var(--accent)' : 'var(--yellow)'
 }
 
@@ -41,7 +41,7 @@ function headerBadge(s: ApiStrategyListItem): { variant: BadgeVariant; label: st
   }
   const MAP: Record<ApiStatus, { variant: BadgeVariant; label: string }> = {
     paper:    { variant: 'blue',   label: 'Paper'    },
-    research: { variant: 'purple', label: 'Research' },
+    candidate: { variant: 'purple', label: 'Candidate' },
     off:      { variant: 'gray',   label: 'Off'      },
     live:     { variant: 'green',  label: 'Live'     },
   }
@@ -51,7 +51,7 @@ function headerBadge(s: ApiStrategyListItem): { variant: BadgeVariant; label: st
 function sparklineHex(s: ApiStrategyListItem): string {
   if (s.status === 'live')     return isUnderperforming(s) ? '#E8A838' : '#00E5A0'
   if (s.status === 'paper')    return '#3B9EFF'
-  if (s.status === 'research') return '#9B72FF'
+  if (s.status === 'candidate') return '#9B72FF'
   return '#4A5568'
 }
 
@@ -63,7 +63,7 @@ function bottomBadge(s: ApiStrategyListItem): { variant: BadgeVariant; label: st
       : { variant: 'green',  label: 'Live Approved' }
   }
   if (s.status === 'paper')    return { variant: 'blue',   label: 'Paper / 30d req.' }
-  if (s.status === 'research') return { variant: 'purple', label: 'Simulation only'  }
+  if (s.status === 'candidate') return { variant: 'purple', label: 'Simulation only'  }
   return { variant: 'gray', label: 'Off' }
 }
 
@@ -77,7 +77,7 @@ function actionButtons(s: ApiStrategyListItem): { label: string; style: BtnStyle
       : [detail, { label: 'Pause',   style: 'ghost'   }]
   }
   if (s.status === 'paper')    return [detail, { label: 'Promote', style: 'primary' }]
-  if (s.status === 'research') return [detail, { label: 'Reject',  style: 'ghost'   }]
+  if (s.status === 'candidate') return [detail, { label: 'Reject',  style: 'ghost'   }]
   return [detail]
 }
 
@@ -146,7 +146,7 @@ function StrategyCard({
   const hb   = headerBadge(s)
   const bb   = bottomBadge(s)
   const btns = actionButtons(s)
-  const isResearch = s.status === 'research'
+  const isCandidate = s.status === 'candidate'
 
   const returnPct  = Number(s.current_return) * 100
   const maxDDPct   = Math.abs(Number(s.max_drawdown)) * 100
@@ -170,7 +170,7 @@ function StrategyCard({
     },
   ]
 
-  const row2 = isResearch
+  const row2 = isCandidate
     ? [
         // TODO: no simulation stage field on GET /strategies
         { label: 'Stage',   value: '—'                    },
@@ -231,7 +231,7 @@ function StrategyCard({
             <div className="font-mono text-[9px] text-[var(--text3)] uppercase tracking-[0.1em]">{label}</div>
             <div
               className="font-mono font-medium mt-0.5 text-[var(--text)]"
-              style={{ fontSize: isResearch ? 12 : 14 }}
+              style={{ fontSize: isCandidate ? 12 : 14 }}
             >
               {value}
             </div>
@@ -298,7 +298,7 @@ function govLabel(s: ApiStrategyListItem): { variant: BadgeVariant; label: strin
       : { variant: 'green',  label: 'Live Approved'  }
   }
   if (s.status === 'paper')    return { variant: 'blue',   label: 'Paper Approved' }
-  if (s.status === 'research') return { variant: 'purple', label: 'Research'       }
+  if (s.status === 'candidate') return { variant: 'purple', label: 'Candidate'      }
   return { variant: 'gray', label: 'Off' }
 }
 
@@ -473,7 +473,7 @@ const FILTERS: { key: FilterKey; label: string; variant: BadgeVariant; dot?: boo
   { key: 'all',      label: 'All',      variant: 'gray'             },
   { key: 'live',     label: 'Live',     variant: 'green', dot: true },
   { key: 'paper',    label: 'Paper',    variant: 'blue'             },
-  { key: 'research', label: 'Research', variant: 'purple'           },
+  { key: 'candidate', label: 'Candidate', variant: 'purple'         },
   { key: 'off',      label: 'Off',      variant: 'gray'             },
 ]
 

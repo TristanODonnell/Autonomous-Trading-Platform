@@ -5,20 +5,31 @@ import enum
 
 class GovernanceState(enum.StrEnum):
     PROPOSED = "proposed"
-    APPROVED_RESEARCH = "approved_research"
+    # Passed research; sits on the bench until promoted to paper. Formerly "approved_research".
+    CANDIDATE = "candidate"
     APPROVED_PAPER = "approved_paper"
     APPROVED_LIVE = "approved_live"
     REJECTED = "rejected"
     RETIRED = "retired"
 
+    @classmethod
+    def _missing_(cls, value: object) -> GovernanceState | None:
+        # Accept the pre-rename value from older artifacts, fixtures and API clients.
+        if isinstance(value, str) and value.lower() == LEGACY_CANDIDATE_STATE:
+            return cls.CANDIDATE
+        return None
+
+
+LEGACY_CANDIDATE_STATE = "approved_research"
+
 
 # Valid transitions: from_state -> set of allowed to_states
 ALLOWED_TRANSITIONS: dict[GovernanceState, set[GovernanceState]] = {
     GovernanceState.PROPOSED: {
-        GovernanceState.APPROVED_RESEARCH,
+        GovernanceState.CANDIDATE,
         GovernanceState.REJECTED,
     },
-    GovernanceState.APPROVED_RESEARCH: {
+    GovernanceState.CANDIDATE: {
         GovernanceState.APPROVED_PAPER,
         GovernanceState.REJECTED,
         GovernanceState.RETIRED,

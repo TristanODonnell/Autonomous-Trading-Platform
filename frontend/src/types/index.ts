@@ -1,4 +1,4 @@
-export type GovernanceState = 'proposed' | 'research' | 'paper' | 'live' | 'rejected' | 'retired'
+export type GovernanceState = 'proposed' | 'candidate' | 'paper' | 'live' | 'rejected' | 'retired'
 export type ExperimentType = 'backtest' | 'parameter_sweep' | 'ab_comparison' | 'rolling_window'
 export type ExperimentStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
 

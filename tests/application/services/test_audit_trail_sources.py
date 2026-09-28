@@ -109,7 +109,7 @@ def _seed_promotable_strategy(session: Session, strategy_id: str) -> None:
         StrategyGovernance(
             strategy_id=strategy_id,
             config_hash=f"{strategy_id}_hash",
-            current_state="approved_research",
+            current_state="candidate",
             experiment_id="test",
             source_run_id=None,
             submitted_at=now,
@@ -135,7 +135,7 @@ def _seed_promotable_strategy(session: Session, strategy_id: str) -> None:
     session.add(
         PromotionRules(
             rule_id="rule_research_paper",
-            from_status="approved_research",
+            from_status="candidate",
             to_status="approved_paper",
             min_sharpe=1.0,
             max_drawdown=0.15,
@@ -357,7 +357,7 @@ def test_manual_transition_records_operator_user_id(db_session: Session) -> None
     db_session.add(
         PromotionRules(
             rule_id="research_to_paper_audit",
-            from_status="approved_research",
+            from_status="candidate",
             to_status="approved_paper",
             min_sharpe=None,
             max_drawdown=None,
@@ -374,7 +374,7 @@ def test_manual_transition_records_operator_user_id(db_session: Session) -> None
         StrategyGovernance(
             strategy_id="op1",
             config_hash="op1_hash",
-            current_state="approved_research",
+            current_state="candidate",
             experiment_id="test",
             source_run_id=None,
             submitted_at=now,

@@ -11,7 +11,7 @@ strategies:
   - type: moving_average_crossover
     display_name: "MA Crossover (10/50)"
     enabled: true
-    governance_state: approved_live   # proposed | approved_research | approved_paper | approved_live
+    governance_state: approved_live   # proposed | candidate | approved_paper | approved_live
     allocation_pct: 0.60              # fraction of total portfolio capital (0.0–1.0)
     parameters:
       fast_period: 10

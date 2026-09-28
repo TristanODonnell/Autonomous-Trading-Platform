@@ -23,7 +23,7 @@ def test_promotion_decision_persists_complete_machine_readable_evidence(
     now = datetime.now(UTC)
     row = GovernanceAuditService(session=db_session).record_promotion_decision(
         strategy_id="strategy-a",
-        from_state="approved_research",
+        from_state="candidate",
         to_state="approved_for_paper_trading",
         actor="operator-1",
         trigger_source=TriggerSource.OPERATOR_MANUAL,
@@ -61,7 +61,7 @@ def test_promotion_decision_persists_complete_machine_readable_evidence(
     assert stored.criteria_evaluated[0]["criterion"] == "min_sharpe"
     assert stored.criteria_evaluated[0]["threshold"] == 1.5
     assert stored.metrics_lineage["source_run_id"] == "sim-run-1"
-    assert stored.state_snapshot_before["governance_state"] == "approved_research"
+    assert stored.state_snapshot_before["governance_state"] == "candidate"
     assert stored.state_snapshot_after["governance_state"] == "approved_for_paper_trading"
     assert "Decision: APPROVED" in stored.decision_rationale
 
@@ -92,7 +92,7 @@ def test_supersession_chain_preserves_amendment_link(db_session: Session) -> Non
     amendment = service.record_demotion_decision(
         strategy_id="strategy-b",
         from_state="approved_for_paper_trading",
-        to_state="approved_research",
+        to_state="candidate",
         actor="operator-1",
         trigger_source=TriggerSource.OPERATOR_MANUAL,
         breach=True,
