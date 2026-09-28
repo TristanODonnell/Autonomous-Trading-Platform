@@ -1,4 +1,13 @@
 # autonomous_trading_platform/storage/sor/models/strategy_sleeves.py
+"""
+Strategy sleeve tables.
+
+Two books with identical columns:
+  strategy_sleeve_*  real sleeves — broker fills; must sum to the broker account.
+  shadow_sleeve_*    on-deck shadow sleeves — simulated fills, no capital. Kept in
+                     separate tables so they can never enter the sleeve/account
+                     invariant, internal crossing or adoption.
+"""
 
 from __future__ import annotations
 
@@ -14,10 +23,10 @@ from .base import Base
 from .helpers.sa_types import UUID_PK, MoneyType, QuantityType, UTCDateTimeType
 
 
-class StrategySleevePositionRow(Base):
+class SleevePositionBase(Base):
     """Current holding of one symbol in one strategy's sleeve. Deleted when flat."""
 
-    __tablename__ = "strategy_sleeve_positions"
+    __abstract__ = True
 
     strategy_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     symbol: Mapped[str] = mapped_column(String(32), primary_key=True)
@@ -25,10 +34,8 @@ class StrategySleevePositionRow(Base):
     avg_cost: Mapped[Money] = mapped_column(MoneyType(), nullable=False)
     updated_at: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
 
-    __table_args__ = (Index("ix_ssp_symbol", "symbol"),)
 
-
-class StrategySleeveLedgerRow(Base):
+class SleeveLedgerBase(Base):
     """
     Append-only accounting events against a sleeve.
 
@@ -36,7 +43,7 @@ class StrategySleeveLedgerRow(Base):
     fill or cross is a no-op.
     """
 
-    __tablename__ = "strategy_sleeve_ledger"
+    __abstract__ = True
 
     entry_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     strategy_id: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -53,16 +60,11 @@ class StrategySleeveLedgerRow(Base):
     run_id: Mapped[UUID | None] = mapped_column(UUID_PK, nullable=True)
     timestamp: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
 
-    __table_args__ = (
-        Index("ix_ssl_strategy_timestamp", "strategy_id", "timestamp"),
-        Index("ix_ssl_fill_id", "fill_id"),
-    )
 
-
-class StrategySleeveSnapshotRow(Base):
+class SleeveSnapshotBase(Base):
     """Point-in-time valuation of a sleeve (cumulative P&L since inception)."""
 
-    __tablename__ = "strategy_sleeve_snapshots"
+    __abstract__ = True
 
     snapshot_id: Mapped[UUID] = mapped_column(UUID_PK, primary_key=True)
     strategy_id: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -78,4 +80,48 @@ class StrategySleeveSnapshotRow(Base):
     position_count: Mapped[int] = mapped_column(Integer, nullable=False)
     unpriced_symbols: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
 
+
+# ---------------------------------------------------------------------------
+# Real book
+# ---------------------------------------------------------------------------
+
+
+class StrategySleevePositionRow(SleevePositionBase):
+    __tablename__ = "strategy_sleeve_positions"
+    __table_args__ = (Index("ix_ssp_symbol", "symbol"),)
+
+
+class StrategySleeveLedgerRow(SleeveLedgerBase):
+    __tablename__ = "strategy_sleeve_ledger"
+    __table_args__ = (
+        Index("ix_ssl_strategy_timestamp", "strategy_id", "timestamp"),
+        Index("ix_ssl_fill_id", "fill_id"),
+    )
+
+
+class StrategySleeveSnapshotRow(SleeveSnapshotBase):
+    __tablename__ = "strategy_sleeve_snapshots"
     __table_args__ = (Index("ix_sss_strategy_timestamp", "strategy_id", "timestamp"),)
+
+
+# ---------------------------------------------------------------------------
+# Shadow book (on-deck)
+# ---------------------------------------------------------------------------
+
+
+class ShadowSleevePositionRow(SleevePositionBase):
+    __tablename__ = "shadow_sleeve_positions"
+    __table_args__ = (Index("ix_shsp_symbol", "symbol"),)
+
+
+class ShadowSleeveLedgerRow(SleeveLedgerBase):
+    __tablename__ = "shadow_sleeve_ledger"
+    __table_args__ = (Index("ix_shsl_strategy_timestamp", "strategy_id", "timestamp"),)
+
+
+class ShadowSleeveSnapshotRow(SleeveSnapshotBase):
+    __tablename__ = "shadow_sleeve_snapshots"
+    __table_args__ = (Index("ix_shss_strategy_timestamp", "strategy_id", "timestamp"),)
+
+    # Shadow orders dropped by the pre-trade risk check or the order throttle this cycle.
+    blocked_order_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

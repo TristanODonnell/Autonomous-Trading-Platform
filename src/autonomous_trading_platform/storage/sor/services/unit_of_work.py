@@ -76,6 +76,7 @@ from autonomous_trading_platform.storage.sor.repositories.core.strategy_runtime_
     StrategyRuntimeStateRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.strategy_sleeve_repository import (
+    ShadowSleeveRepository,
     StrategySleeveRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.symbol_date_coverage_repository import (
@@ -119,6 +120,7 @@ class SorUnitOfWork:
         self.strategy_control_states = StrategyControlStateRepository(session)
         self.strategy_runtime_states = StrategyRuntimeStateRepository(session)
         self.strategy_sleeves = StrategySleeveRepository(session)
+        self.shadow_sleeves = ShadowSleeveRepository(session)
         self.ticker_lifecycles = TickerLifecycleRepository(session)
         self.dataset_versions = DatasetVersionsRepository(session)
         self.missing_bar_incidents = MissingBarIncidentsRepository(session)

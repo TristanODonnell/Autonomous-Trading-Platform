@@ -9,6 +9,10 @@ broker orders.
 
 Average-cost and realized-P&L math is delegated to PositionLedgerService so the
 sleeve books and the account book use identical accounting.
+
+The same service runs the shadow book (on-deck strategies, simulated fills) over
+separate tables. Crossing, adoption and reconciliation are real-book only: shadow
+sleeves have no account to reconcile against.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from autonomous_trading_platform.contracts.accounting.position_snapshot import Position
 from autonomous_trading_platform.contracts.accounting.strategy_sleeve import (
     UNATTRIBUTED_SLEEVE_ID,
+    SleeveBook,
     SleeveEntrySource,
     SleeveLedgerEntry,
     SleeveMismatch,
@@ -36,9 +41,12 @@ from autonomous_trading_platform.execution.services.position_ledger_service impo
     PositionLedgerService,
 )
 from autonomous_trading_platform.storage.sor.models.strategy_sleeves import (
-    StrategySleeveLedgerRow,
-    StrategySleevePositionRow,
-    StrategySleeveSnapshotRow,
+    ShadowSleeveSnapshotRow,
+    SleeveLedgerBase,
+    SleevePositionBase,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_sleeve_repository import (
+    StrategySleeveRepository,
 )
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
@@ -52,8 +60,21 @@ class SleeveAccountingError(ValueError):
 
 
 class StrategySleeveLedgerService:
-    def __init__(self, position_ledger_service: PositionLedgerService | None = None) -> None:
+    def __init__(
+        self,
+        position_ledger_service: PositionLedgerService | None = None,
+        *,
+        book: SleeveBook = SleeveBook.REAL,
+    ) -> None:
         self._ledger = position_ledger_service or PositionLedgerService()
+        self.book = book
+
+    def _repo(self, uow: SorUnitOfWork) -> StrategySleeveRepository:
+        return uow.shadow_sleeves if self.book is SleeveBook.SHADOW else uow.strategy_sleeves
+
+    def _require_real(self, operation: str) -> None:
+        if self.book is not SleeveBook.REAL:
+            raise SleeveAccountingError(f"{operation} is only valid for the real sleeve book")
 
     # ------------------------------------------------------------------
     # Events
@@ -66,13 +87,15 @@ class StrategySleeveLedgerService:
         fill: Fill,
         strategy_id: str,
     ) -> SleeveLedgerEntry | None:
-        """Apply a broker fill to the owning strategy's sleeve.
+        """Apply a fill to the owning strategy's sleeve.
 
+        Real book: a broker fill. Shadow book: a simulated fill for an on-deck order.
         Returns None when this fill was already applied (idempotent replay).
         Raises SleeveAccountingError when the fill sells more than the sleeve holds.
         """
         entry_id = _entry_id("fill", fill.fill_id, strategy_id)
-        if uow.strategy_sleeves.has_entry(entry_id):
+        repo = self._repo(uow)
+        if repo.has_entry(entry_id):
             return None
 
         result = self._compute(uow, strategy_id=strategy_id, fill=fill)
@@ -88,13 +111,17 @@ class StrategySleeveLedgerService:
             price=Decimal(fill.price),
             fees=Decimal(fill.fees) if fill.fees is not None else ZERO,
             realized_pnl=result.realized_pnl,
-            source=SleeveEntrySource.BROKER_FILL,
+            source=(
+                SleeveEntrySource.SHADOW_FILL
+                if self.book is SleeveBook.SHADOW
+                else SleeveEntrySource.BROKER_FILL
+            ),
             fill_id=fill.fill_id,
             intent_id=fill.intent_id,
             run_id=fill.run_id,
             timestamp=fill.timestamp,
         )
-        uow.strategy_sleeves.insert_entry(_entry_row(entry))
+        repo.insert_entry(_entry_row(repo, entry))
         return entry
 
     def apply_internal_cross(
@@ -115,6 +142,7 @@ class StrategySleeveLedgerService:
         Both legs are validated before either is written. Returns None when the
         cross was already applied.
         """
+        self._require_real("internal cross")
         if buyer_strategy_id == seller_strategy_id:
             raise SleeveAccountingError("internal cross requires two different strategies")
 
@@ -154,7 +182,7 @@ class StrategySleeveLedgerService:
                 run_id=run_id,
                 timestamp=timestamp,
             )
-            uow.strategy_sleeves.insert_entry(_entry_row(entry))
+            uow.strategy_sleeves.insert_entry(_entry_row(uow.strategy_sleeves, entry))
             legs.append(entry)
         return legs[0], legs[1]
 
@@ -169,6 +197,7 @@ class StrategySleeveLedgerService:
         timestamp: datetime,
     ) -> SleeveLedgerEntry:
         """Assign account holdings to a sleeve without a fill (cutover / reconciliation)."""
+        self._require_real("adoption")
         fill = _synthetic_fill(symbol, Side.BUY, quantity, avg_cost, timestamp)
         result = self._compute(uow, strategy_id=strategy_id, fill=fill)
         self._persist_position(
@@ -186,8 +215,54 @@ class StrategySleeveLedgerService:
             source=SleeveEntrySource.ADOPTION,
             timestamp=timestamp,
         )
-        uow.strategy_sleeves.insert_entry(_entry_row(entry))
+        uow.strategy_sleeves.insert_entry(_entry_row(uow.strategy_sleeves, entry))
         return entry
+
+    def liquidate(
+        self,
+        uow: SorUnitOfWork,
+        *,
+        strategy_id: str,
+        prices: Mapping[str, Decimal | float],
+        timestamp: datetime,
+        run_id: UUID | None = None,
+    ) -> list[SleeveLedgerEntry]:
+        """Close every shadow position at the mark (avg cost when unpriced).
+
+        Used when a strategy leaves on-deck, so a later return starts flat rather
+        than with stale positions. Shadow book only: real positions leave through
+        broker orders (wind-down).
+        """
+        if self.book is not SleeveBook.SHADOW:
+            raise SleeveAccountingError("liquidate is only valid for the shadow sleeve book")
+        repo = self._repo(uow)
+        entries: list[SleeveLedgerEntry] = []
+        for row in repo.get_positions(strategy_id):
+            symbol = row.symbol
+            quantity = Decimal(row.quantity)
+            price = prices.get(symbol)
+            mark = Decimal(str(price)) if price is not None else Decimal(row.avg_cost)
+            fill = _synthetic_fill(symbol, Side.SELL, quantity, mark, timestamp)
+            result = self._compute(uow, strategy_id=strategy_id, fill=fill)
+            self._persist_position(
+                uow, strategy_id=strategy_id, symbol=symbol, result=result, at=timestamp
+            )
+            entry = SleeveLedgerEntry(
+                entry_id=_entry_id("tier_exit", f"{symbol}:{timestamp.isoformat()}", strategy_id),
+                strategy_id=strategy_id,
+                symbol=symbol,
+                side=Side.SELL,
+                quantity=quantity,
+                price=mark,
+                fees=ZERO,
+                realized_pnl=result.realized_pnl,
+                source=SleeveEntrySource.TIER_EXIT,
+                run_id=run_id,
+                timestamp=timestamp,
+            )
+            repo.insert_entry(_entry_row(repo, entry))
+            entries.append(entry)
+        return entries
 
     # ------------------------------------------------------------------
     # Reads
@@ -196,19 +271,19 @@ class StrategySleeveLedgerService:
     def positions(self, uow: SorUnitOfWork, strategy_id: str) -> dict[str, SleevePosition]:
         return {
             row.symbol: _position_contract(row)
-            for row in uow.strategy_sleeves.get_positions(strategy_id)
+            for row in self._repo(uow).get_positions(strategy_id)
         }
 
     def all_positions(self, uow: SorUnitOfWork) -> dict[str, dict[str, SleevePosition]]:
         by_strategy: dict[str, dict[str, SleevePosition]] = defaultdict(dict)
-        for row in uow.strategy_sleeves.get_all_positions():
+        for row in self._repo(uow).get_all_positions():
             by_strategy[row.strategy_id][row.symbol] = _position_contract(row)
         return dict(by_strategy)
 
     def aggregate_quantities(self, uow: SorUnitOfWork) -> dict[str, Decimal]:
         """Sleeve quantities summed across all strategies, per symbol."""
         totals: dict[str, Decimal] = defaultdict(lambda: ZERO)
-        for row in uow.strategy_sleeves.get_all_positions():
+        for row in self._repo(uow).get_all_positions():
             totals[row.symbol] += Decimal(row.quantity)
         return dict(totals)
 
@@ -225,15 +300,18 @@ class StrategySleeveLedgerService:
         timestamp: datetime,
         run_id: UUID | None = None,
         allocated_capital: Decimal | None = None,
+        blocked_order_count: int = 0,
     ) -> SleeveSnapshot:
         """Value a sleeve at the given prices and persist the snapshot.
 
         Symbols without a price are valued at cost and listed in unpriced_symbols.
+        blocked_order_count is recorded on shadow snapshots only.
         """
+        repo = self._repo(uow)
         market_value = ZERO
         cost_basis = ZERO
         unpriced: list[str] = []
-        positions = uow.strategy_sleeves.get_positions(strategy_id)
+        positions = repo.get_positions(strategy_id)
         for row in positions:
             quantity = Decimal(row.quantity)
             avg_cost = Decimal(row.avg_cost)
@@ -245,7 +323,7 @@ class StrategySleeveLedgerService:
             else:
                 market_value += quantity * Decimal(str(price))
 
-        realized, fees = uow.strategy_sleeves.realized_totals(strategy_id)
+        realized, fees = repo.realized_totals(strategy_id)
         unrealized = market_value - cost_basis
         snapshot = SleeveSnapshot(
             snapshot_id=uuid4(),
@@ -261,9 +339,15 @@ class StrategySleeveLedgerService:
             net_pnl=realized + unrealized - fees,
             position_count=len(positions),
             unpriced_symbols=unpriced,
+            blocked_order_count=blocked_order_count if self.book is SleeveBook.SHADOW else 0,
         )
-        uow.strategy_sleeves.insert_snapshot(
-            StrategySleeveSnapshotRow(
+        shadow_fields = (
+            {"blocked_order_count": snapshot.blocked_order_count}
+            if repo.snapshot_model is ShadowSleeveSnapshotRow
+            else {}
+        )
+        repo.insert_snapshot(
+            repo.snapshot_model(
                 snapshot_id=snapshot.snapshot_id,
                 strategy_id=strategy_id,
                 run_id=run_id,
@@ -277,6 +361,7 @@ class StrategySleeveLedgerService:
                 net_pnl=snapshot.net_pnl,
                 position_count=snapshot.position_count,
                 unpriced_symbols=unpriced or None,
+                **shadow_fields,
             )
         )
         return snapshot
@@ -295,6 +380,7 @@ class StrategySleeveLedgerService:
         unattributed sleeve at the account's average cost. Over-claims (sleeves
         holding more than the account) are always reported, never auto-fixed.
         """
+        self._require_real("reconciliation")
         sleeve_totals = self.aggregate_quantities(uow)
         mismatches: list[SleeveMismatch] = []
         adopted: list[str] = []
@@ -335,7 +421,7 @@ class StrategySleeveLedgerService:
     # ------------------------------------------------------------------
 
     def _compute(self, uow: SorUnitOfWork, *, strategy_id: str, fill: Fill) -> PositionLedgerResult:
-        row = uow.strategy_sleeves.get_position(strategy_id, fill.symbol)
+        row = self._repo(uow).get_position(strategy_id, fill.symbol)
         existing = (
             Position(symbol=row.symbol, quantity=row.quantity, avg_cost=row.avg_cost)
             if row is not None
@@ -348,8 +434,8 @@ class StrategySleeveLedgerService:
             )
         return self._ledger.apply_fill(existing, fill)
 
-    @staticmethod
     def _persist_position(
+        self,
         uow: SorUnitOfWork,
         *,
         strategy_id: str,
@@ -357,13 +443,14 @@ class StrategySleeveLedgerService:
         result: PositionLedgerResult,
         at: datetime,
     ) -> None:
+        repo = self._repo(uow)
         updated = result.updated_position
         if updated is None or Decimal(updated.quantity) == ZERO:
-            uow.strategy_sleeves.delete_position(strategy_id, symbol)
+            repo.delete_position(strategy_id, symbol)
             return
         assert updated.avg_cost is not None
-        uow.strategy_sleeves.save_position(
-            StrategySleevePositionRow(
+        repo.save_position(
+            repo.position_model(
                 strategy_id=strategy_id,
                 symbol=symbol,
                 quantity=Decimal(updated.quantity),
@@ -393,7 +480,7 @@ def _synthetic_fill(
     )
 
 
-def _position_contract(row: StrategySleevePositionRow) -> SleevePosition:
+def _position_contract(row: SleevePositionBase) -> SleevePosition:
     return SleevePosition(
         strategy_id=row.strategy_id,
         symbol=row.symbol,
@@ -403,8 +490,8 @@ def _position_contract(row: StrategySleevePositionRow) -> SleevePosition:
     )
 
 
-def _entry_row(entry: SleeveLedgerEntry) -> StrategySleeveLedgerRow:
-    return StrategySleeveLedgerRow(
+def _entry_row(repo: StrategySleeveRepository, entry: SleeveLedgerEntry) -> SleeveLedgerBase:
+    return repo.ledger_model(
         entry_id=entry.entry_id,
         strategy_id=entry.strategy_id,
         symbol=entry.symbol,

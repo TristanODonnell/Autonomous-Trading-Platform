@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from autonomous_trading_platform.contracts.accounting.position_snapshot import Position
 from autonomous_trading_platform.contracts.accounting.strategy_sleeve import (
     UNATTRIBUTED_SLEEVE_ID,
+    SleeveBook,
     SleeveEntrySource,
 )
 from autonomous_trading_platform.contracts.common.enums import Side
@@ -292,3 +293,136 @@ class TestReconcile:
         assert [m.difference for m in report.mismatches] == [Decimal("-2")]
         assert report.adopted_symbols == []
         assert service.positions(uow, UNATTRIBUTED_SLEEVE_ID) == {}
+
+
+@pytest.fixture
+def shadow() -> StrategySleeveLedgerService:
+    return StrategySleeveLedgerService(book=SleeveBook.SHADOW)
+
+
+class TestShadowBook:
+    def test_shadow_fill_is_booked_only_in_the_shadow_tables(self, uow, service, shadow) -> None:
+        entry = shadow.apply_fill(
+            uow, fill=_fill("s1", Side.BUY, "10", "100"), strategy_id="ondeck"
+        )
+
+        assert entry is not None
+        assert entry.source == SleeveEntrySource.SHADOW_FILL
+        assert shadow.positions(uow, "ondeck")["AAPL"].quantity == Decimal("10")
+        assert service.positions(uow, "ondeck") == {}
+        assert service.all_positions(uow) == {}
+        assert not uow.strategy_sleeves.has_any_entries()
+
+    def test_shadow_positions_never_enter_the_real_reconciliation(
+        self, uow, service, shadow
+    ) -> None:
+        service.apply_fill(uow, fill=_fill("f1", Side.BUY, "10", "100"), strategy_id="A")
+        shadow.apply_fill(uow, fill=_fill("s1", Side.BUY, "50", "100"), strategy_id="ondeck")
+
+        report = service.reconcile(uow, account_positions={"AAPL": Decimal("10")}, timestamp=_T0)
+
+        assert report.is_balanced
+        assert service.aggregate_quantities(uow) == {"AAPL": Decimal("10")}
+        assert shadow.aggregate_quantities(uow) == {"AAPL": Decimal("50")}
+
+    def test_same_strategy_can_hold_real_and_shadow_sleeves(self, uow, service, shadow) -> None:
+        service.apply_fill(uow, fill=_fill("f1", Side.BUY, "10", "100"), strategy_id="A")
+        shadow.apply_fill(uow, fill=_fill("s1", Side.BUY, "3", "90"), strategy_id="A")
+
+        assert service.positions(uow, "A")["AAPL"].quantity == Decimal("10")
+        assert shadow.positions(uow, "A")["AAPL"].avg_cost == Decimal("90")
+
+    def test_shadow_fill_is_idempotent_and_long_only(self, uow, shadow) -> None:
+        fill = _fill("s1", Side.BUY, "10", "100")
+        shadow.apply_fill(uow, fill=fill, strategy_id="ondeck")
+
+        assert shadow.apply_fill(uow, fill=fill, strategy_id="ondeck") is None
+        with pytest.raises(SleeveAccountingError):
+            shadow.apply_fill(
+                uow, fill=_fill("s2", Side.SELL, "11", "100", minutes=1), strategy_id="ondeck"
+            )
+
+    def test_shadow_snapshot_records_blocked_orders_and_pnl(self, uow, service, shadow) -> None:
+        shadow.apply_fill(uow, fill=_fill("s1", Side.BUY, "10", "100"), strategy_id="ondeck")
+        shadow.apply_fill(
+            uow, fill=_fill("s2", Side.SELL, "4", "110", minutes=1), strategy_id="ondeck"
+        )
+
+        snap = shadow.snapshot(
+            uow,
+            strategy_id="ondeck",
+            prices={"AAPL": 120.0},
+            timestamp=_T0 + timedelta(minutes=2),
+            allocated_capital=Decimal("5000"),
+            blocked_order_count=2,
+        )
+
+        assert snap.net_pnl == Decimal("160")  # 40 realized + 6 * 20 unrealized
+        assert snap.blocked_order_count == 2
+        row = uow.shadow_sleeves.get_latest_snapshot("ondeck")
+        assert row is not None and row.blocked_order_count == 2
+        assert uow.strategy_sleeves.get_latest_snapshot("ondeck") is None
+
+    def test_real_snapshot_ignores_blocked_order_count(self, uow, service) -> None:
+        snap = service.snapshot(
+            uow, strategy_id="A", prices={}, timestamp=_T0, blocked_order_count=5
+        )
+
+        assert snap.blocked_order_count == 0
+
+    def test_liquidate_closes_every_position_at_the_mark(self, uow, shadow) -> None:
+        shadow.apply_fill(uow, fill=_fill("s1", Side.BUY, "10", "100"), strategy_id="ondeck")
+        shadow.apply_fill(
+            uow, fill=_fill("s2", Side.BUY, "5", "50", symbol="MSFT"), strategy_id="ondeck"
+        )
+
+        entries = shadow.liquidate(
+            uow,
+            strategy_id="ondeck",
+            prices={"AAPL": 110.0},  # MSFT unpriced: closed at cost
+            timestamp=_T0 + timedelta(days=1),
+        )
+
+        assert {e.symbol: e.realized_pnl for e in entries} == {
+            "AAPL": Decimal("100"),
+            "MSFT": Decimal("0"),
+        }
+        assert all(e.source == SleeveEntrySource.TIER_EXIT for e in entries)
+        assert shadow.positions(uow, "ondeck") == {}
+        realized, _ = uow.shadow_sleeves.realized_totals("ondeck")
+        assert realized == Decimal("100")
+
+    @pytest.mark.parametrize(
+        "operation",
+        [
+            lambda svc, uow: svc.reconcile(uow, account_positions={}, timestamp=_T0),
+            lambda svc, uow: svc.adopt(
+                uow,
+                strategy_id="A",
+                symbol="AAPL",
+                quantity=Decimal("1"),
+                avg_cost=Decimal("1"),
+                timestamp=_T0,
+            ),
+            lambda svc, uow: svc.apply_internal_cross(
+                uow,
+                cross_id="c1",
+                symbol="AAPL",
+                quantity=Decimal("1"),
+                price=Decimal("1"),
+                buyer_strategy_id="A",
+                seller_strategy_id="B",
+                timestamp=_T0,
+            ),
+        ],
+        ids=["reconcile", "adopt", "internal_cross"],
+    )
+    def test_account_operations_are_rejected_on_the_shadow_book(
+        self, uow, shadow, operation
+    ) -> None:
+        with pytest.raises(SleeveAccountingError, match="real sleeve book"):
+            operation(shadow, uow)
+
+    def test_liquidate_is_rejected_on_the_real_book(self, uow, service) -> None:
+        with pytest.raises(SleeveAccountingError, match="shadow sleeve book"):
+            service.liquidate(uow, strategy_id="A", prices={}, timestamp=_T0)
