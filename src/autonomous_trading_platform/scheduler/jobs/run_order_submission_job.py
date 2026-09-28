@@ -20,6 +20,10 @@ from autonomous_trading_platform.contracts.execution.execution_policy_config imp
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.execution.errors import OrderNotAllowedForSubmissionError
 from autonomous_trading_platform.execution.policy.errors import ExecutionPolicyError
+from autonomous_trading_platform.execution.services.strategy_sleeve_ledger_service import (
+    SleeveAccountingError,
+    StrategySleeveLedgerService,
+)
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
     JobMetricSet,
@@ -38,6 +42,7 @@ from autonomous_trading_platform.observability.metrics import (
 )
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
+    PORTFOLIO_STRATEGY_ID,
     TradingCycleDependencies,
 )
 from autonomous_trading_platform.storage.sor.models.order_intents import OrderIntents
@@ -100,6 +105,10 @@ def run_order_submission_job(
             job_span.set_attribute("ratp.now_utc", now_utc.isoformat())
 
             order_intents_created = False
+            # Portfolio mode: intents come from several strategies, each with its own
+            # runtime state and sleeve. Legacy mode: one strategy, manifest.strategy_id.
+            portfolio_mode = manifest.strategy_id == PORTFOLIO_STRATEGY_ID
+            strategies_with_intents: set[str] = set()
 
             with SorUnitOfWork(session) as uow:
                 if not uow.strategy_control_states.is_enabled(manifest.strategy_id):
@@ -125,7 +134,18 @@ def run_order_submission_job(
                     return
 
             for intent in generated_intents:
-                if not order_intents_created:
+                if portfolio_mode:
+                    if intent.strategy_id not in strategies_with_intents:
+                        strategies_with_intents.add(intent.strategy_id)
+                        _apply_state_event_best_effort(
+                            session=session,
+                            execution_context=execution_context,
+                            strategy_id=intent.strategy_id,
+                            event=StrategyEvent.ORDER_INTENTS_CREATED,
+                            now_utc=now_utc,
+                        )
+                    order_intents_created = True
+                elif not order_intents_created:
                     with SorUnitOfWork(session) as uow:
                         execution_context.strategy_runtime_state_service.apply_event(
                             uow=uow,
@@ -408,7 +428,7 @@ def run_order_submission_job(
                             intent=submit_intent,
                             broker_order=broker_order,
                             run_id=run_id,
-                            strategy_id=manifest.strategy_id,
+                            strategy_id=submit_intent.strategy_id,
                             account_id=manifest.broker_account_id,
                             now_utc=now_utc,
                         )
@@ -443,6 +463,12 @@ def run_order_submission_job(
                                             "fill_id": fill_result.fill.fill_id,
                                             "error": str(_fill_acc_exc),
                                         },
+                                    )
+                                if portfolio_mode:
+                                    apply_fill_to_sleeve(
+                                        uow=uow,
+                                        fill=fill_result.fill,
+                                        strategy_id=submit_intent.strategy_id,
                                     )
 
                     if policy_result is not None and policy_config.record_fill_quality:
@@ -505,7 +531,7 @@ def run_order_submission_job(
                             uow=uow,
                             intent=intent,
                             run_id=run_id,
-                            strategy_id=manifest.strategy_id,
+                            strategy_id=intent.strategy_id,
                             account_id=manifest.broker_account_id,
                             now_utc=now_utc,
                         )
@@ -515,7 +541,7 @@ def run_order_submission_job(
         # If the signal fired but no intents were generated (e.g. holiday gap, missing
         # prices, or allocation denied for all symbols), reset the strategy state to IDLE
         # so the next tick can re-signal cleanly from IDLE.
-        if not order_intents_created:
+        if not order_intents_created and manifest.strategy_id != PORTFOLIO_STRATEGY_ID:
             try:
                 with SorUnitOfWork(session) as uow:
                     execution_context.strategy_runtime_state_service.apply_event(
@@ -577,3 +603,38 @@ def _seconds_between(start: datetime | None, end: datetime | None) -> float | No
     if start is None or end is None:
         return None
     return max(0.0, (end - start).total_seconds())
+
+
+def apply_fill_to_sleeve(*, uow: SorUnitOfWork, fill, strategy_id: str) -> None:
+    """Attribute a fill to the owning strategy's sleeve.
+
+    Never fails the fill: an unapplied fill shows up in the next sleeve
+    reconciliation as a mismatch instead.
+    """
+    try:
+        StrategySleeveLedgerService().apply_fill(uow, fill=fill, strategy_id=strategy_id)
+    except SleeveAccountingError as exc:
+        logger.error(
+            "sleeve_ledger.fill_not_applied",
+            extra={"fill_id": fill.fill_id, "strategy_id": strategy_id, "error": str(exc)},
+        )
+    except Exception:
+        logger.exception(
+            "sleeve_ledger.fill_apply_failed",
+            extra={"fill_id": fill.fill_id, "strategy_id": strategy_id},
+        )
+
+
+def _apply_state_event_best_effort(
+    *, session, execution_context, strategy_id: str, event: StrategyEvent, now_utc: datetime
+) -> None:
+    try:
+        with SorUnitOfWork(session) as uow:
+            execution_context.strategy_runtime_state_service.apply_event(
+                uow=uow, strategy_id=strategy_id, event=event, now_utc=now_utc
+            )
+    except Exception as exc:
+        logger.warning(
+            "order_submission_job.strategy_state_event_skipped",
+            extra={"strategy_id": strategy_id, "event": str(event), "error": str(exc)},
+        )

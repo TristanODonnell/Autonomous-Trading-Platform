@@ -32,6 +32,9 @@ from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     TradingCycleDependencies,
 )
+from autonomous_trading_platform.scheduler.jobs.portfolio_evaluation import (
+    run_portfolio_evaluation,
+)
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 from autonomous_trading_platform.strategy.jobs.evaluate_strategy_job import EvaluateStrategyJob
 
@@ -189,7 +192,28 @@ def run_trading_evaluation_job(
                         },
                     )
 
-            # Strategy evaluation
+            if trading_cycle_dependencies.strategy_runtimes is not None:
+                portfolio_result, portfolio_intents = run_portfolio_evaluation(
+                    now_utc=now_utc,
+                    deps=trading_cycle_dependencies,
+                    manifest=manifest,
+                    fetch_positions=_fetch_positions,
+                    fetch_prices=_fetch_prices,
+                    fetch_recent_closes=_fetch_recent_closes,
+                    vol_lookback_bars=_VOL_LOOKBACK_BARS,
+                    job_span=job_span,
+                )
+                record_job_completed(
+                    logger=logger,
+                    metrics=TRADING_EVALUATION_JOB_METRICS,
+                    job=job,
+                    component=component,
+                    run_id=str(manifest.run_id),
+                    duration_seconds=perf_counter() - job_start,
+                )
+                return portfolio_result, iter(portfolio_intents)
+
+            # Strategy evaluation (legacy single-strategy path)
             evaluate_strategy_job = EvaluateStrategyJob(
                 readiness_service=strategy_context.strategy_bar_readiness_service,
                 evaluation_service=strategy_context.strategy_evaluation_service,

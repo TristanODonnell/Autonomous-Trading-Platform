@@ -307,3 +307,43 @@ def test_order_throttle_prevents_race_condition_for_shared_concurrent_submission
             now=shared_bar,
             bar_timestamp=shared_bar,
         )
+
+
+def test_order_throttle_blocks_same_strategy_repeating_symbol_side_in_bar() -> None:
+    bar_timestamp = datetime(2025, 1, 1, 15, 30, tzinfo=UTC)
+    service = OrderThrottleService(
+        settings=_settings(block_repeat_orders_same_bar=True, max_orders_per_bar=5),
+        order_activity_reader=FakeOrderActivityReader(),
+    )
+    intent = make_order_intent(strategy_id="alpha", bar_timestamp=bar_timestamp)
+
+    service.assert_order_allowed_for_submission(
+        order_intent=intent, now=bar_timestamp, bar_timestamp=bar_timestamp
+    )
+    with pytest.raises(RepeatedOrderInBarError):
+        service.assert_order_allowed_for_submission(
+            order_intent=make_order_intent(
+                strategy_id="alpha", idempotency_key="other", bar_timestamp=bar_timestamp
+            ),
+            now=bar_timestamp,
+            bar_timestamp=bar_timestamp,
+        )
+
+
+def test_order_throttle_allows_different_strategies_same_symbol_side_in_bar() -> None:
+    bar_timestamp = datetime(2025, 1, 1, 15, 30, tzinfo=UTC)
+    service = OrderThrottleService(
+        settings=_settings(block_repeat_orders_same_bar=True, max_orders_per_bar=5),
+        order_activity_reader=FakeOrderActivityReader(),
+    )
+
+    for strategy_id in ("alpha", "beta"):
+        service.assert_order_allowed_for_submission(
+            order_intent=make_order_intent(
+                strategy_id=strategy_id,
+                idempotency_key=f"key-{strategy_id}",
+                bar_timestamp=bar_timestamp,
+            ),
+            now=bar_timestamp,
+            bar_timestamp=bar_timestamp,
+        )

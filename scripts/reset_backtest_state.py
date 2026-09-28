@@ -48,6 +48,12 @@ candidates = [
     "governance_audit_events",
     "audit_logs",
     "fill_quality_metrics",
+    # Portfolio mode: per-strategy sleeves and active-set membership
+    "strategy_sleeve_ledger",
+    "strategy_sleeve_snapshots",
+    "strategy_sleeve_positions",
+    "portfolio_membership_transitions",
+    "portfolio_memberships",
     # Core state tables
     "fills",
     "signals",

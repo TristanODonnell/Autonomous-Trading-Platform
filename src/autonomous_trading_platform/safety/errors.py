@@ -114,3 +114,15 @@ class SectorConcentrationLimitExceededError(SafetyError):
             f"(symbol={symbol}, strategy={strategy_id}): "
             f"projected {projected_sector_exposure_pct:.2%} > limit {configured_limit_pct:.2%}."
         )
+
+
+# Limit breaches scoped to a single order. In portfolio mode these reject only the
+# offending order; every other SafetyError (kill switch, trading gates, throttles,
+# duplicate keys) still fails the whole cycle closed.
+ORDER_LIMIT_ERRORS: tuple[type[SafetyError], ...] = (
+    GrossExposureLimitExceededError,
+    SymbolExposureLimitExceededError,
+    DailyNotionalLimitExceededError,
+    PortfolioSymbolExposureLimitExceededError,
+    SectorConcentrationLimitExceededError,
+)

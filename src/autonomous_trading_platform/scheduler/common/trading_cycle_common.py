@@ -10,9 +10,15 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.active_portfolio_service import (
+    ActivePortfolioService,
+)
 from autonomous_trading_platform.config.enums import TradingEnvironment
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
+from autonomous_trading_platform.contracts.governance.portfolio_membership import (
+    MembershipStatus,
+)
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.execution.contexts.build_execution_context import (
@@ -31,7 +37,9 @@ from autonomous_trading_platform.safety.contexts.build_safety_context import (
 )
 from autonomous_trading_platform.safety.environment_policy import EnvironmentSafetyPolicy
 from autonomous_trading_platform.safety.readers.order_activity_reader import StubOrderActivityReader
-from autonomous_trading_platform.safety.readers.risk_state_reader import StubRiskStateReader
+from autonomous_trading_platform.safety.readers.risk_state_reader import (
+    PositionAwareRiskStateReader,
+)
 from autonomous_trading_platform.storage.sor.models.strategy_configs import StrategyConfigs
 from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
 from autonomous_trading_platform.storage.sor.repositories.core.allocation_overrides_repository import (
@@ -42,6 +50,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.audit_logs_reposi
 )
 from autonomous_trading_platform.storage.sor.repositories.core.capital_allocation_policies_repository import (
     CapitalAllocationPoliciesRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
+    OperatorSettingsRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_repository import (
     PromotionRulesRepository,
@@ -79,6 +90,22 @@ class TradingCycleWindow:
 
 
 @dataclass(slots=True)
+class StrategyRuntime:
+    """One strategy the trading cycle runs in portfolio mode."""
+
+    strategy_id: str
+    status: MembershipStatus
+    governance_state: GovernanceState
+    # Fraction of total capital; 0 for WINDING_DOWN (exit-only) runtimes.
+    budget_pct: Decimal
+    # None for WINDING_DOWN runtimes, which never evaluate signals.
+    strategy_context: StrategyRuntimeContext | None = None
+
+
+PORTFOLIO_STRATEGY_ID = "portfolio"
+
+
+@dataclass(slots=True)
 class TradingCycleDependencies:
     session: Session
     settings: Settings
@@ -90,6 +117,9 @@ class TradingCycleDependencies:
     portfolio_engine: IAllocationProvider
     active_strategy_id: str
     active_governance_state: GovernanceState
+    # Portfolio mode: one runtime per active / winding-down strategy. None means the
+    # legacy single-strategy path (no active set yet) driven by the fields above.
+    strategy_runtimes: list[StrategyRuntime] | None = None
 
 
 def floor_to_five_minutes(timestamp: datetime) -> datetime:
@@ -253,10 +283,119 @@ def _resolve_active_strategy(
     return StubStrategy(), "baseline_strategy", GovernanceState.APPROVED_PAPER, 1
 
 
+def _instantiate_strategy(session: Session, strategy_id: str) -> tuple[BaseStrategy, int]:
+    """Build a strategy instance from its config via the StrategyRegistry.
+
+    Falls back to a StubStrategy carrying the real strategy_id (so runtime state and
+    attribution stay consistent) when the config or registry entry is missing.
+    """
+    from autonomous_trading_platform.strategy.registry import get_registry
+
+    config_row = session.get(StrategyConfigs, strategy_id)
+    if config_row is None:
+        logger.warning("trading_cycle.strategy_config_missing", extra={"strategy_id": strategy_id})
+        return StubStrategy(strategy_id=strategy_id), 1
+    try:
+        defn = get_registry().get_definition(config_row.strategy_type)
+        params = {**(defn.default_parameters or {}), **(config_row.config_json or {})}
+        return defn.builder(strategy_id=strategy_id, params=params), defn.warmup_bars_fn(params)
+    except Exception as exc:
+        logger.warning(
+            "trading_cycle.strategy_instantiation_failed_using_stub",
+            extra={
+                "strategy_id": strategy_id,
+                "strategy_type": config_row.strategy_type,
+                "error": str(exc),
+            },
+        )
+        return StubStrategy(strategy_id=strategy_id), 1
+
+
+def _latest_governance_state(session: Session, strategy_id: str) -> GovernanceState:
+    from sqlalchemy import select as _sa_select
+
+    row = session.scalars(
+        _sa_select(StrategyGovernance)
+        .where(StrategyGovernance.strategy_id == strategy_id)
+        .order_by(StrategyGovernance.updated_at.desc())
+        .limit(1)
+    ).one_or_none()
+    # Winding-down members may already be demoted; they only sell, so paper is safe.
+    if row is None:
+        return GovernanceState.APPROVED_PAPER
+    return _DB_STATE_TO_GOVERNANCE.get(row.current_state, GovernanceState.APPROVED_PAPER)
+
+
+def resolve_strategy_runtimes(
+    *,
+    session: Session,
+    settings: Settings,
+    dataset_version_id_override: str | None = None,
+    now_utc: datetime | None = None,
+) -> list[StrategyRuntime] | None:
+    """Refresh the active portfolio set and build a runtime per trading member.
+
+    Returns None — keeping the legacy single-strategy path — when portfolio mode is
+    off (operator_settings.portfolio_mode_enabled) or the active set is empty.
+    """
+    operator_settings = OperatorSettingsRepository(session).get_or_create_default()
+    if not operator_settings.portfolio_mode_enabled:
+        return None
+    service = ActivePortfolioService(session, trading_environment=settings.trading_environment)
+    service.refresh(now=now_utc)
+    members = service.trading_members()
+    if not members:
+        return None
+
+    budgets = {budget.strategy_id: budget.pct_of_capital for budget in service.budgets(now=now_utc)}
+    use_raw = dataset_version_id_override is not None and dataset_version_id_override.startswith(
+        "raw_bars_"
+    )
+    runtimes: list[StrategyRuntime] = []
+    for member in members:
+        context = None
+        if member.status == MembershipStatus.ACTIVE:
+            strategy, warmup_bars = _instantiate_strategy(session, member.strategy_id)
+            context = build_strategy_runtime_context(
+                session=session,
+                strategy=strategy,
+                dataset_version=dataset_version_id_override or "v1",
+                use_raw_bars=use_raw,
+                lookback_bars=warmup_bars,
+            )
+        runtimes.append(
+            StrategyRuntime(
+                strategy_id=member.strategy_id,
+                status=member.status,
+                governance_state=_latest_governance_state(session, member.strategy_id),
+                budget_pct=budgets.get(member.strategy_id, Decimal("0")),
+                strategy_context=context,
+            )
+        )
+    logger.info(
+        "trading_cycle.portfolio_runtimes_resolved",
+        extra={
+            "active": [r.strategy_id for r in runtimes if r.status == MembershipStatus.ACTIVE],
+            "winding_down": [
+                r.strategy_id for r in runtimes if r.status == MembershipStatus.WINDING_DOWN
+            ],
+            "budgets": {r.strategy_id: str(r.budget_pct) for r in runtimes},
+        },
+    )
+    return runtimes
+
+
 def build_trading_cycle_dependencies(
     broker_client: object | None = None,
     dataset_version_id_override: str | None = None,
+    resolve_strategies: bool = True,
+    now_utc: datetime | None = None,
 ) -> TradingCycleDependencies:
+    """Build everything a trading cycle needs.
+
+    resolve_strategies=False skips the active-set refresh and strategy construction
+    for callers that only need the execution context (e.g. order reconciliation).
+    """
     settings = Settings()
     session = get_session()
     audit_logger = AuditLoggingService(session)
@@ -265,13 +404,43 @@ def build_trading_cycle_dependencies(
 
     environment_safety_policy = EnvironmentSafetyPolicy(settings=settings)
 
-    active_strategy, active_strategy_id, active_governance_state, warmup_bars = (
-        _resolve_active_strategy(session=session, settings=settings)
-    )
     use_raw = dataset_version_id_override is not None and dataset_version_id_override.startswith(
         "raw_bars_"
     )
-    strategy_context = build_strategy_runtime_context(
+    strategy_runtimes: list[StrategyRuntime] | None = None
+    if resolve_strategies:
+        strategy_runtimes = resolve_strategy_runtimes(
+            session=session,
+            settings=settings,
+            dataset_version_id_override=dataset_version_id_override,
+            now_utc=now_utc,
+        )
+
+    active_strategy: BaseStrategy
+    if not resolve_strategies:
+        active_strategy = StubStrategy()
+        active_strategy_id = "baseline_strategy"
+        active_governance_state = GovernanceState.APPROVED_PAPER
+        warmup_bars = 1
+    elif strategy_runtimes is None:
+        active_strategy, active_strategy_id, active_governance_state, warmup_bars = (
+            _resolve_active_strategy(session=session, settings=settings)
+        )
+    else:
+        active_strategy = StubStrategy(strategy_id=PORTFOLIO_STRATEGY_ID)
+        active_strategy_id = PORTFOLIO_STRATEGY_ID
+        active_governance_state = (
+            GovernanceState.APPROVED_LIVE
+            if settings.trading_environment is TradingEnvironment.LIVE
+            else GovernanceState.APPROVED_PAPER
+        )
+        warmup_bars = 1
+
+    first_active_context = next(
+        (r.strategy_context for r in strategy_runtimes or [] if r.strategy_context is not None),
+        None,
+    )
+    strategy_context = first_active_context or build_strategy_runtime_context(
         session=session,
         strategy=active_strategy,
         dataset_version=dataset_version_id_override or "v1",
@@ -279,7 +448,9 @@ def build_trading_cycle_dependencies(
         lookback_bars=warmup_bars,
     )
 
-    risk_state_reader = StubRiskStateReader()
+    # Real symbol-level state (positions/exposure) so risk-reducing sells pass and the
+    # per-symbol cap reflects actual holdings; aggregate limits keep per-order semantics.
+    risk_state_reader = PositionAwareRiskStateReader.from_session(session)
     order_activity_reader = StubOrderActivityReader()
 
     safety_context = build_safety_context(
@@ -292,6 +463,10 @@ def build_trading_cycle_dependencies(
     )
 
     portfolio_engine = _build_portfolio_engine(session=session, settings=settings)
+    if strategy_runtimes is not None:
+        portfolio_engine.set_cycle_budgets(
+            {runtime.strategy_id: float(runtime.budget_pct) for runtime in strategy_runtimes}
+        )
 
     execution_context = build_execution_context(
         pre_trade_risk_service=safety_context.pre_trade_risk_service,
@@ -313,6 +488,7 @@ def build_trading_cycle_dependencies(
         portfolio_engine=portfolio_engine,
         active_strategy_id=active_strategy_id,
         active_governance_state=active_governance_state,
+        strategy_runtimes=strategy_runtimes,
     )
 
 
