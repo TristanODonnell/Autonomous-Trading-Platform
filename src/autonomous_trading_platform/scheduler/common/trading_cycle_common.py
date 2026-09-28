@@ -91,12 +91,18 @@ class TradingCycleWindow:
 
 @dataclass(slots=True)
 class StrategyRuntime:
-    """One strategy the trading cycle runs in portfolio mode."""
+    """One strategy the trading cycle runs in portfolio mode.
+
+    ACTIVE and WINDING_DOWN trade real sleeves; ON_DECK is shadow-traded only.
+    """
 
     strategy_id: str
     status: MembershipStatus
+    # Governance state used for sizing. ON_DECK runtimes are sized under the
+    # approval they would trade with if promoted (paper, or live in live mode).
     governance_state: GovernanceState
-    # Fraction of total capital; 0 for WINDING_DOWN (exit-only) runtimes.
+    # Fraction of total capital; 0 for WINDING_DOWN (exit-only) runtimes, and a
+    # notional share (no capital reserved) for ON_DECK runtimes.
     budget_pct: Decimal
     # None for WINDING_DOWN runtimes, which never evaluate signals.
     strategy_context: StrategyRuntimeContext | None = None
@@ -336,7 +342,8 @@ def resolve_strategy_runtimes(
     """Refresh the active portfolio set and build a runtime per trading member.
 
     Returns None — keeping the legacy single-strategy path — when portfolio mode is
-    off (operator_settings.portfolio_mode_enabled) or the active set is empty.
+    off (operator_settings.portfolio_mode_enabled) or there are no trading or
+    on-deck members. ON_DECK runtimes come after the trading ones.
     """
     operator_settings = OperatorSettingsRepository(session).get_or_create_default()
     if not operator_settings.portfolio_mode_enabled:
@@ -344,7 +351,8 @@ def resolve_strategy_runtimes(
     service = ActivePortfolioService(session, trading_environment=settings.trading_environment)
     service.refresh(now=now_utc)
     members = service.trading_members()
-    if not members:
+    on_deck = service.on_deck_members()
+    if not members and not on_deck:
         return None
 
     budgets = {budget.strategy_id: budget.pct_of_capital for budget in service.budgets(now=now_utc)}
@@ -372,6 +380,31 @@ def resolve_strategy_runtimes(
                 strategy_context=context,
             )
         )
+
+    if on_deck:
+        on_deck_budget = service.on_deck_budget_pct()
+        sizing_state = (
+            GovernanceState.APPROVED_LIVE
+            if settings.trading_environment is TradingEnvironment.LIVE
+            else GovernanceState.APPROVED_PAPER
+        )
+        for member in on_deck:
+            strategy, warmup_bars = _instantiate_strategy(session, member.strategy_id)
+            runtimes.append(
+                StrategyRuntime(
+                    strategy_id=member.strategy_id,
+                    status=MembershipStatus.ON_DECK,
+                    governance_state=sizing_state,
+                    budget_pct=on_deck_budget,
+                    strategy_context=build_strategy_runtime_context(
+                        session=session,
+                        strategy=strategy,
+                        dataset_version=dataset_version_id_override or "v1",
+                        use_raw_bars=use_raw,
+                        lookback_bars=warmup_bars,
+                    ),
+                )
+            )
     logger.info(
         "trading_cycle.portfolio_runtimes_resolved",
         extra={
@@ -379,6 +412,7 @@ def resolve_strategy_runtimes(
             "winding_down": [
                 r.strategy_id for r in runtimes if r.status == MembershipStatus.WINDING_DOWN
             ],
+            "on_deck": [r.strategy_id for r in runtimes if r.status == MembershipStatus.ON_DECK],
             "budgets": {r.strategy_id: str(r.budget_pct) for r in runtimes},
         },
     )
@@ -437,7 +471,11 @@ def build_trading_cycle_dependencies(
         warmup_bars = 1
 
     first_active_context = next(
-        (r.strategy_context for r in strategy_runtimes or [] if r.strategy_context is not None),
+        (
+            r.strategy_context
+            for r in strategy_runtimes or []
+            if r.strategy_context is not None and r.status == MembershipStatus.ACTIVE
+        ),
         None,
     )
     strategy_context = first_active_context or build_strategy_runtime_context(

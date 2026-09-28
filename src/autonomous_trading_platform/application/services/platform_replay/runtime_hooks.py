@@ -132,39 +132,13 @@ def _build_simulated_broker_client(
 
     from autonomous_trading_platform.execution.clients.simulated_broker_client import (
         SimulatedBrokerClient,
-    )
-    from autonomous_trading_platform.research.simulation.models.fill_model import (
-        SimulatedFillModelConfig,
-    )
-    from autonomous_trading_platform.research.simulation.models.volume_share_slippage_model import (
-        VolumeShareSlippageModel,
-    )
-    from autonomous_trading_platform.research.simulation.services.simulated_execution_service import (
-        SimulatedExecutionService,
-    )
-    from autonomous_trading_platform.research.simulation.services.simulation_cost_model_service import (
-        SimulationCostModelConfig,
-        SimulationCostModelService,
-    )
-
-    cost_model_service = SimulationCostModelService(
-        config=SimulationCostModelConfig(
-            commission_per_share=Decimal("0.0000"),
-            min_commission=Decimal("0.00"),
-        ),
-        slippage_model=VolumeShareSlippageModel(),
-    )
-    execution_service = SimulatedExecutionService(
-        simulation_cost_model_service=cost_model_service,
-        fill_model_config=SimulatedFillModelConfig(
-            max_volume_participation_rate=0.05,
-        ),
+        build_platform_execution_service,
     )
 
     return SimulatedBrokerClient(
         session=session,
         timestamp=timestamp,
-        simulated_execution_service=execution_service,
+        simulated_execution_service=build_platform_execution_service(),
         dataset_version_id=dataset_version_id,
         starting_cash=starting_cash,
     )

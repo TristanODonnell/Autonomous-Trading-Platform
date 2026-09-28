@@ -12,6 +12,8 @@ Flow per cycle:
      orphan sleeves only exit.
   4. Cross opposing orders between sleeves internally; send only residuals.
   5. Never let sells for a symbol exceed what the account actually holds.
+  6. Shadow-trade ON_DECK strategies (simulated fills into shadow sleeves; no
+     broker orders). Isolated: a shadow failure never affects the real cycle.
 """
 
 from __future__ import annotations
@@ -73,6 +75,8 @@ class PortfolioEvaluationResult:
     crosses: list[PlannedCross] = field(default_factory=list)
     adoption: SleeveReconciliationReport | None = None
     clamped_sells: dict[str, Decimal] = field(default_factory=dict)
+    # On-deck shadow trading; None when there is no on-deck tier or it failed.
+    shadow: Any | None = None
 
     @property
     def evaluated(self) -> bool:
@@ -117,7 +121,12 @@ def run_portfolio_evaluation(
                     extra={"symbols": adoption.adopted_symbols, "run_id": str(manifest.run_id)},
                 )
         sleeves = ledger.all_positions(uow)
-        runtimes = list(deps.strategy_runtimes or [])
+        # ON_DECK runtimes never touch real sleeves; they are shadow-traded in step 6.
+        runtimes = [
+            runtime
+            for runtime in deps.strategy_runtimes or []
+            if runtime.status != MembershipStatus.ON_DECK
+        ]
         known = {runtime.strategy_id for runtime in runtimes}
         for orphan in sorted(set(sleeves) - known):
             runtimes.append(
@@ -312,6 +321,36 @@ def run_portfolio_evaluation(
             extra={"clamped": {k: str(v) for k, v in clamped.items()}},
         )
 
+    # 6. On-deck shadow trading. Runs after the real intents are final and never
+    # adds to them. Also runs with no on-deck members while shadow positions remain,
+    # so sleeves of strategies that left on-deck are closed.
+    shadow = None
+    with SorUnitOfWork(session) as uow:
+        has_shadow_positions = bool(uow.shadow_sleeves.get_all_positions())
+    if has_shadow_positions or any(
+        r.status == MembershipStatus.ON_DECK for r in deps.strategy_runtimes or []
+    ):
+        from autonomous_trading_platform.scheduler.jobs.on_deck_shadow import (
+            run_on_deck_shadow,
+        )
+
+        try:
+            shadow = run_on_deck_shadow(
+                now_utc=now_utc,
+                deps=deps,
+                manifest=manifest,
+                fetch_prices=fetch_prices,
+                fetch_recent_closes=fetch_recent_closes,
+                vol_lookback_bars=vol_lookback_bars,
+            )
+            job_span.set_attribute("ratp.portfolio.shadow_blocked_orders", shadow.blocked_count)
+        except Exception:
+            session.rollback()
+            logger.exception(
+                "portfolio_evaluation.on_deck_shadow_failed",
+                extra={"run_id": str(manifest.run_id)},
+            )
+
     job_span.set_attribute("ratp.portfolio.strategy_count", len(runtimes))
     job_span.set_attribute("ratp.portfolio.internal_crosses", len(crosses))
     job_span.set_attribute("ratp.portfolio.intent_count", len(intents))
@@ -326,7 +365,11 @@ def run_portfolio_evaluation(
     )
     return (
         PortfolioEvaluationResult(
-            outcomes=outcomes, crosses=crosses, adoption=adoption, clamped_sells=clamped
+            outcomes=outcomes,
+            crosses=crosses,
+            adoption=adoption,
+            clamped_sells=clamped,
+            shadow=shadow,
         ),
         intents,
     )

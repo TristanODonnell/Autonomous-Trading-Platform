@@ -5,6 +5,9 @@ End-of-cycle sleeve bookkeeping (portfolio mode only).
 Values every sleeve at current prices (per-strategy P&L history) and checks the
 attribution invariant: sleeves summed per symbol must equal the broker account.
 Report-only — mismatches are logged, never auto-corrected here.
+
+On-deck shadow sleeves are valued by the shadow step itself (on_deck_shadow),
+never here: they are not part of the account.
 """
 
 from __future__ import annotations
@@ -15,6 +18,9 @@ from uuid import UUID
 
 from autonomous_trading_platform.contracts.accounting.strategy_sleeve import (
     SleeveReconciliationReport,
+)
+from autonomous_trading_platform.contracts.governance.portfolio_membership import (
+    MembershipStatus,
 )
 from autonomous_trading_platform.execution.services.strategy_sleeve_ledger_service import (
     StrategySleeveLedgerService,
@@ -44,7 +50,11 @@ def run_sleeve_snapshot_job(
 
     broker_client = deps.execution_context.broker_client
     ledger = StrategySleeveLedgerService()
-    budgets = {runtime.strategy_id: runtime.budget_pct for runtime in deps.strategy_runtimes}
+    budgets = {
+        runtime.strategy_id: runtime.budget_pct
+        for runtime in deps.strategy_runtimes
+        if runtime.status != MembershipStatus.ON_DECK
+    }
     total_capital = Decimal(str(deps.portfolio_engine.total_capital))
     account_positions = _fetch_positions(broker_client)
 

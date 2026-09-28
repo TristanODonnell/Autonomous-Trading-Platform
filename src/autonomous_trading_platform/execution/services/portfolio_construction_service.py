@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -115,6 +115,8 @@ class PortfolioConstructionService:
         recent_closes: dict[str, list[float]] | None = None,
         realized_drawdown: float | None = None,
         skip_order_limit_breaches: bool = False,
+        pre_trade_risk_service: PreTradeRiskService | None = None,
+        on_order_rejected: Callable[[OrderIntent, Exception], None] | None = None,
     ):
         """Yield risk-checked order intents for one strategy.
 
@@ -122,7 +124,12 @@ class PortfolioConstructionService:
         limit (ORDER_LIMIT_ERRORS) is dropped and logged instead of raising, so one
         strategy's order cannot halt every strategy's cycle. Global safety errors
         always raise.
+
+        pre_trade_risk_service overrides the account-level risk check for this call
+        (on-deck shadow orders are checked against their shadow sleeve);
+        on_order_rejected is told about every order dropped by a limit breach.
         """
+        risk_service = pre_trade_risk_service or self.pre_trade_risk_service
         signals_by_symbol = {signal.symbol: signal for signal in signals}
         target_positions, per_symbol_metadata = self._compute_target_positions(
             signals=signals,
@@ -163,10 +170,12 @@ class PortfolioConstructionService:
             if combined_metadata:
                 order_intent.metadata = {**(order_intent.metadata or {}), **combined_metadata}
             try:
-                self.pre_trade_risk_service.assert_order_allowed(order_intent, now=now)
+                risk_service.assert_order_allowed(order_intent, now=now)
             except ORDER_LIMIT_ERRORS as exc:
                 if not skip_order_limit_breaches:
                     raise
+                if on_order_rejected is not None:
+                    on_order_rejected(order_intent, exc)
                 logger.warning(
                     "order_intent.rejected_by_order_limit",
                     extra={

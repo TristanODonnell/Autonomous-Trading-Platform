@@ -23,6 +23,42 @@ from autonomous_trading_platform.storage.parquet.datasets import (
 )
 
 
+def build_platform_execution_service(
+    *, max_volume_participation_rate: float | None = 0.05
+) -> SimulatedExecutionService:
+    """The fill model for platform replay: real (simulated) orders and on-deck shadow orders.
+
+    One factory so both sides always fill identically: current-bar close, 5% volume
+    participation cap, volume-share slippage, zero commission, and no stochastic
+    partial fills or rejections. The participation cap is only lifted for shadow
+    fills priced without a bar (no volume to cap against).
+    """
+    from autonomous_trading_platform.research.simulation.models.fill_model import (
+        SimulatedFillModelConfig,
+    )
+    from autonomous_trading_platform.research.simulation.models.volume_share_slippage_model import (
+        VolumeShareSlippageModel,
+    )
+    from autonomous_trading_platform.research.simulation.services.simulation_cost_model_service import (
+        SimulationCostModelConfig,
+        SimulationCostModelService,
+    )
+
+    cost_model_service = SimulationCostModelService(
+        config=SimulationCostModelConfig(
+            commission_per_share=Decimal("0.0000"),
+            min_commission=Decimal("0.00"),
+        ),
+        slippage_model=VolumeShareSlippageModel(),
+    )
+    return SimulatedExecutionService(
+        simulation_cost_model_service=cost_model_service,
+        fill_model_config=SimulatedFillModelConfig(
+            max_volume_participation_rate=max_volume_participation_rate,
+        ),
+    )
+
+
 @dataclasses.dataclass
 class _BarProxy:
     """Minimal bar object compatible with SimulatedExecutionService.fill()."""
@@ -297,8 +333,15 @@ class SimulatedBrokerClient:
         pass
 
     # ------------------------------------------------------------------
-    # Internal bar loading
+    # Bar loading
     # ------------------------------------------------------------------
+
+    def bar_for(self, symbol: str) -> _BarProxy | None:
+        """The bar orders for this symbol fill against at the current tick.
+
+        Public so on-deck shadow orders fill against exactly the same bar.
+        """
+        return self._load_bar(symbol)
 
     def _load_bar(self, symbol: str) -> _BarProxy | None:
         if symbol in self._bar_cache:
