@@ -185,6 +185,14 @@ class ResearchReplayResult(DomainReplayResult):
     passed_filters: int = 0
 
 
+class BenchReplayResult(DomainReplayResult):
+    review_id: str | None = None
+    reviewed: int = 0
+    admitted: list[str] = Field(default_factory=list)
+    retired: list[str] = Field(default_factory=list)
+    bench_size: int = 0
+
+
 class DiagnosticsReplayResult(DomainReplayResult):
     sections_captured: list[str] = Field(default_factory=list)
     snapshot_path: str | None = None

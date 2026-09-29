@@ -29,6 +29,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 ALLOWED_JOB_NAMES = frozenset(
     {
         "research",
+        # Bench review (portfolio rotation step 3); also runs right after research.
+        "bench",
         "universe",
         "ingestion",
         "corporate_actions",

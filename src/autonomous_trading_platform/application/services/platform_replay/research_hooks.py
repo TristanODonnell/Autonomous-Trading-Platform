@@ -7,6 +7,7 @@ import logging
 import os
 from datetime import date, datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.application.services.strategy_catalog_service import (
@@ -17,6 +18,7 @@ from autonomous_trading_platform.contracts.runtime.platform_replay import (
     ResearchReplayResult,
     ResearchSummary,
 )
+from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
 
 logger = logging.getLogger(__name__)
 
@@ -782,7 +784,7 @@ def _seed_research_governance_from_intelligence(
         )
         sim_result = sim_by_id.get(strategy_id)
         source_run_id = str(sim_result.run_id) if sim_result is not None else None
-        existing = session.get(StrategyGovernance, (strategy_id, config_hash))
+        existing = _latest_governance_row(session, strategy_id)
         if existing is None:
             session.add(
                 StrategyGovernance(
@@ -796,7 +798,11 @@ def _seed_research_governance_from_intelligence(
                     submitted_by="system",
                 )
             )
-        elif existing.source_run_id is None and source_run_id is not None:
+        elif (
+            existing.current_state == "candidate"
+            and existing.source_run_id is None
+            and source_run_id is not None
+        ):
             # Back-fill source_run_id on rows seeded by a previous run that lacked it.
             existing.source_run_id = source_run_id
             existing.updated_at = now_utc
@@ -806,6 +812,23 @@ def _seed_research_governance_from_intelligence(
         logger.exception("_seed_strategy_promotions: flush failed — rolling back")
         session.rollback()
         raise
+
+
+def _latest_governance_row(session: Session, strategy_id: str) -> StrategyGovernance | None:
+    """Latest governance row for a strategy, whatever config_hash it was seeded with.
+
+    Strategy ids are content hashes, so an existing row means research already
+    produced this exact config. Keying on strategy_id alone (not (id, config_hash),
+    which different seeders hash differently) keeps research from re-seeding a
+    strategy as a fresh candidate — in particular one the bench review retired.
+    """
+    row: StrategyGovernance | None = session.scalars(
+        select(StrategyGovernance)
+        .where(StrategyGovernance.strategy_id == strategy_id)
+        .order_by(StrategyGovernance.updated_at.desc())
+        .limit(1)
+    ).first()
+    return row
 
 
 def _seed_research_governance(
@@ -823,8 +846,7 @@ def _seed_research_governance(
     for output in survivors:
         strategy_id = output.strategy_id
         config_hash = hashlib.sha256(strategy_id.encode()).hexdigest()[:16]
-        existing = session.get(StrategyGovernance, (strategy_id, config_hash))
-        if existing is None:
+        if _latest_governance_row(session, strategy_id) is None:
             session.add(
                 StrategyGovernance(
                     strategy_id=strategy_id,

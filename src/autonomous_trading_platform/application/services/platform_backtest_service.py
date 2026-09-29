@@ -147,6 +147,7 @@ class TickResult:
     governance: dict[str, Any] | None = None
     portfolio: dict[str, Any] | None = None
     research: dict[str, Any] | None = None
+    bench: dict[str, Any] | None = None
     operations: dict[str, Any] | None = None
     timeline_events: list[dict[str, Any]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -217,6 +218,12 @@ def _job_options(scheduled_jobs: dict[str, Any], job: str) -> dict[str, Any]:
     cfg = scheduled_jobs.get(job, {})
     options = cfg.get("options") if isinstance(cfg, dict) else getattr(cfg, "options", None)
     return dict(options or {})
+
+
+def _job_enabled(scheduled_jobs: dict[str, Any], job: str) -> bool:
+    cfg = scheduled_jobs.get(job, {})
+    enabled = cfg.get("enabled", True) if isinstance(cfg, dict) else getattr(cfg, "enabled", True)
+    return bool(enabled)
 
 
 class _CadenceScheduler:
@@ -1039,6 +1046,31 @@ class PlatformBacktestRunner:
                     if res_result.errors:
                         tick.errors.extend(res_result.errors)
                     cadence.record("research", tick_date)
+                    research_ran = res_result.status == "ok"
+                else:
+                    research_ran = False
+
+                # ── Bench review (weekly, and right after a research run) ────
+                # Only when the fixture declares the job: a job missing from
+                # scheduled_jobs would otherwise default to daily.
+                if "bench" in inputs.scheduled_jobs_config and (
+                    cadence.should_run("bench", tick_date)
+                    or (research_ran and _job_enabled(inputs.scheduled_jobs_config, "bench"))
+                ):
+                    from autonomous_trading_platform.application.services.platform_replay.bench_hooks import (
+                        run_bench_review_at_timestamp,
+                    )
+
+                    bench_result = run_bench_review_at_timestamp(
+                        session=session,
+                        timestamp=tick_ts,
+                        replay_context=tick_ctx,
+                        dataset_version_id=backtest_dataset_version_id,
+                    )
+                    tick.bench = bench_result.summary
+                    if bench_result.errors:
+                        tick.errors.extend(bench_result.errors)
+                    cadence.record("bench", tick_date)
 
                 # ── Operations health (daily) ────────────────────────────────
                 if cadence.should_run("operations_health", tick_date):
