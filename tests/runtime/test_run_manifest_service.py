@@ -6,8 +6,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 import pytest
-from sqlalchemy import text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import (
     BarInterval,
@@ -15,31 +14,12 @@ from autonomous_trading_platform.contracts.common.enums import (
     RunType,
 )
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
-from autonomous_trading_platform.db import get_engine
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.runtime.services.run_manifest_service import (
     RunManifestService,
 )
-from autonomous_trading_platform.storage.sor.models.base import Base
 
 DEFAULT_RUN_ID = UUID("00000000-0000-0000-0000-000000000402")
-
-
-@pytest.fixture
-def db_session() -> Session:
-    engine = get_engine()
-    Base.metadata.create_all(engine)
-
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    session = SessionLocal()
-
-    session.execute(text("TRUNCATE TABLE run_manifests CASCADE"))
-    session.commit()
-
-    try:
-        yield session
-    finally:
-        session.close()
 
 
 def make_run_manifest(

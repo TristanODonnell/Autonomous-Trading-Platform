@@ -8,41 +8,19 @@ from typing import Any, Literal, cast
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.common.enums import (
     CorporateActionType,
     MarketSession,
     PriceBasis,
 )
-from autonomous_trading_platform.db import get_engine
 from autonomous_trading_platform.ingestion.corporate_actions.services.corporate_action_ingestion_service import (
     CorporateActionIngestionService,
 )
-from autonomous_trading_platform.storage.sor.models.base import Base
 from autonomous_trading_platform.storage.sor.models.corporate_actions import CorporateAction
 from autonomous_trading_platform.storage.sor.models.market_bars import MarketBar
 from tests.utilities.factories import make_minute_bar
-
-
-@pytest.fixture
-def db_session():
-    engine = get_engine()
-    Base.metadata.create_all(engine)
-
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    session = SessionLocal()
-
-    # CLEAN TABLES
-    session.execute(text("TRUNCATE TABLE market_bars CASCADE"))
-    session.execute(text("TRUNCATE TABLE corporate_actions CASCADE"))
-    session.commit()
-
-    try:
-        yield session
-    finally:
-        session.close()
 
 
 @dataclass
