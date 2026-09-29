@@ -58,6 +58,17 @@ class OperatorSettingsRepository:
             bench_score_floor=1.0,
             bench_floor_strikes=3,
             bench_max_idle_days=120,
+            portfolio_review_mode="off",
+            review_swap_margin=0.10,
+            review_swap_consecutive=3,
+            review_min_tenure_days=30,
+            review_max_swaps_per_review=1,
+            review_swap_interval_days=28,
+            review_turnover_cost_bps=20,
+            review_min_shadow_days=20,
+            review_min_shadow_trades=10,
+            review_score_floor=1.0,
+            review_on_deck_min_tenure_days=21,
         )
         self._session.add(row)
         self._session.flush()

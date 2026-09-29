@@ -71,15 +71,18 @@ _ALLOWED_TRANSITIONS = {
 
 _TARGET_STATE_ROLES = {
     "candidate": {"researcher", "system_risk", "admin"},
-    "approved_for_paper_trading": {"risk_manager", "system_risk", "admin"},
+    "approved_for_paper_trading": {"risk_manager", "system_risk", "admin", "system_portfolio"},
     "approved_for_live_trading": {"admin"},
     "retired": {"operator", "risk_manager", "admin", "system_bench"},
 }
 
 # System roles restricted to specific source states. system_bench (automatic bench
 # management) may only retire candidates — never an approved or live strategy.
+# system_portfolio (portfolio review) may only promote to paper a candidate that won a
+# swap; promotion rules still apply, and live approval stays human-only.
 _ROLE_SOURCE_STATES = {
     "system_bench": {"candidate"},
+    "system_portfolio": {"candidate"},
 }
 
 _PROMOTION_TARGET_STATES = {"approved_for_paper_trading", "approved_for_live_trading"}

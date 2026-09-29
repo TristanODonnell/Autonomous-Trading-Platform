@@ -591,3 +591,76 @@ def test_operator_can_retire_a_candidate(db_session: Session) -> None:
     )
 
     assert _latest_state(db_session, "s1") == "retired"
+
+
+# ---------------------------------------------------------------------------
+# portfolio review promotion (portfolio rotation step 4)
+# ---------------------------------------------------------------------------
+
+
+def test_system_portfolio_can_promote_a_candidate_to_paper(db_session: Session) -> None:
+    _seed_strategy(db_session, "s1", state="candidate", sharpe=2.0, days=45, trades=20)
+    _seed_paper_rule(db_session)
+    as_of = datetime(2024, 3, 4, 21, 0, tzinfo=UTC)
+
+    result = _service(db_session).transition(
+        strategy_id="s1",
+        to_state="approved_for_paper_trading",
+        reason="portfolio_review_swap",
+        updated_by="portfolio_review",
+        actor_role="system_portfolio",
+        source_run_id="run_s1",
+        now=as_of,
+    )
+
+    assert result.to_state == "approved_for_paper_trading"
+    assert result.updated_at == as_of
+    assert _latest_state(db_session, "s1") == "approved_for_paper_trading"
+
+
+def test_system_portfolio_promotion_still_enforces_promotion_rules(db_session: Session) -> None:
+    _seed_strategy(db_session, "s1", state="candidate", sharpe=0.2, days=45, trades=20)
+    _seed_paper_rule(db_session, min_sharpe=1.0)
+
+    with pytest.raises(ValueError, match="promotion criteria"):
+        _service(db_session).transition(
+            strategy_id="s1",
+            to_state="approved_for_paper_trading",
+            reason="portfolio_review_swap",
+            updated_by="portfolio_review",
+            actor_role="system_portfolio",
+            source_run_id="run_s1",
+        )
+
+    assert _latest_state(db_session, "s1") == "candidate"
+
+
+def test_system_portfolio_cannot_promote_to_live(db_session: Session) -> None:
+    _seed_strategy(db_session, "s1", state="approved_for_paper_trading")
+    _seed_live_rule(db_session, min_sharpe=1.0, min_days_tested=30, min_trade_count=10)
+
+    with pytest.raises(PermissionError):
+        _service(db_session).transition(
+            strategy_id="s1",
+            to_state="approved_for_live_trading",
+            reason="nope",
+            updated_by="portfolio_review",
+            actor_role="system_portfolio",
+            source_run_id="run_s1",
+        )
+
+    assert _latest_state(db_session, "s1") == "approved_for_paper_trading"
+
+
+@pytest.mark.parametrize("to_state", ["retired", "candidate"])
+def test_system_portfolio_cannot_retire_or_demote(db_session: Session, to_state: str) -> None:
+    _seed_strategy(db_session, "s1", state="approved_for_paper_trading")
+
+    with pytest.raises(PermissionError):
+        _service(db_session).transition(
+            strategy_id="s1",
+            to_state=to_state,
+            reason="nope",
+            updated_by="portfolio_review",
+            actor_role="system_portfolio",
+        )

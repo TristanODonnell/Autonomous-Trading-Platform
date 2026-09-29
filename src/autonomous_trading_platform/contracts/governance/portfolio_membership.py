@@ -53,6 +53,7 @@ class MembershipTransition(BaseModel):
     reason: str
     triggered_by: str
     quality_score: float | None = None
+    review_id: str | None = None
     created_at: UTCDateTime
 
 

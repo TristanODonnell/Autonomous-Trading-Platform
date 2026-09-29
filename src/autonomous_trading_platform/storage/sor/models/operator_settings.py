@@ -76,6 +76,26 @@ class OperatorSettingsRow(Base):
     bench_score_floor: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False, default=1.0)
     bench_floor_strikes: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     bench_max_idle_days: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
+    # Portfolio review (portfolio rotation step 4): off / advisory / auto.
+    portfolio_review_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="off")
+    # Relative score edge a challenger needs over an incumbent (after turnover cost).
+    review_swap_margin: Mapped[float] = mapped_column(Numeric(6, 4), nullable=False, default=0.10)
+    # Consecutive weekly reviews the edge must hold before a swap.
+    review_swap_consecutive: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    review_min_tenure_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    review_max_swaps_per_review: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # Days between swap-eligible (monthly) reviews.
+    review_swap_interval_days: Mapped[int] = mapped_column(Integer, nullable=False, default=28)
+    # Round-trip cost of moving an incumbent's sleeve, charged against the challenger's edge.
+    review_turnover_cost_bps: Mapped[float] = mapped_column(
+        Numeric(8, 2), nullable=False, default=20
+    )
+    # Shadow record a candidate needs before the review may promote it to paper.
+    review_min_shadow_days: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
+    review_min_shadow_trades: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    # Absolute score floor for taking an open seat / keeping one above min (1.0 = flat).
+    review_score_floor: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False, default=1.0)
+    review_on_deck_min_tenure_days: Mapped[int] = mapped_column(Integer, nullable=False, default=21)
 
     # Portfolio drawdown governance (FINDING-16)
     portfolio_max_drawdown_pct: Mapped[float | None] = mapped_column(

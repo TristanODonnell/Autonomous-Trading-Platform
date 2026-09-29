@@ -39,6 +39,8 @@ class PortfolioMembershipTransitionRow(Base):
     reason: Mapped[str] = mapped_column(String(512), nullable=False)
     triggered_by: Mapped[str] = mapped_column(String(128), nullable=False)
     quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Portfolio review whose decision caused this change (rotation step 4).
+    review_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[UTCDateTime] = mapped_column(UTCDateTimeType(), nullable=False)
 
     __table_args__ = (Index("ix_pmt_strategy_created", "strategy_id", "created_at"),)

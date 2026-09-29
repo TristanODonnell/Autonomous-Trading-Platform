@@ -473,9 +473,12 @@ class ActivePortfolioService:
         actor: str,
         now: datetime,
         quality_score: Decimal | None = None,
+        review_id: str | None = None,
     ) -> MembershipTransition:
-        """Record a membership change decided elsewhere (e.g. bench admission)."""
-        return self._set_status(strategy_id, status, reason, actor, now, quality_score)
+        """Record a membership change decided elsewhere (bench admission, portfolio review)."""
+        return self._set_status(
+            strategy_id, status, reason, actor, now, quality_score, review_id=review_id
+        )
 
     def _bench_enabled(self) -> bool:
         settings = self._settings_repo.get_or_create_default()
@@ -493,6 +496,8 @@ class ActivePortfolioService:
         actor: str,
         now: datetime,
         quality_score: Decimal | None,
+        *,
+        review_id: str | None = None,
     ) -> MembershipTransition:
         existing = self._memberships.get(strategy_id)
         from_status = MembershipStatus(existing.status) if existing is not None else None
@@ -516,6 +521,7 @@ class ActivePortfolioService:
             reason=reason,
             triggered_by=actor,
             quality_score=score,
+            review_id=review_id,
             created_at=now,
         )
         self._memberships.insert_transition(
@@ -527,6 +533,7 @@ class ActivePortfolioService:
                 reason=reason,
                 triggered_by=actor,
                 quality_score=score,
+                review_id=review_id,
                 created_at=now,
             )
         )

@@ -30,6 +30,7 @@ from . import order_intents as order_intents
 from . import portfolio_construction as portfolio_construction
 from . import portfolio_drawdown_governance_state as portfolio_drawdown_governance_state
 from . import portfolio_memberships as portfolio_memberships
+from . import portfolio_reviews as portfolio_reviews
 from . import position_snapshot_items as position_snapshot_items
 from . import position_snapshots as position_snapshots
 from . import promotion_rules as promotion_rules
@@ -76,6 +77,7 @@ __all__ = [
     "operator_settings",
     "operational_alerts",
     "portfolio_memberships",
+    "portfolio_reviews",
     "position_snapshot_items",
     "position_snapshots",
     "risk_snapshots",
