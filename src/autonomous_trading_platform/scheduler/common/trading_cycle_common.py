@@ -60,6 +60,7 @@ from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_r
 from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
     UniverseVersionRepository,
 )
+from autonomous_trading_platform.strategy.configs.stored_config import stored_config_parameters
 from autonomous_trading_platform.strategy.contexts.build_strategy_runtime_context import (
     StrategyRuntimeContext,
     build_strategy_runtime_context,
@@ -292,8 +293,13 @@ def _resolve_active_strategy(
 def _instantiate_strategy(session: Session, strategy_id: str) -> tuple[BaseStrategy, int]:
     """Build a strategy instance from its config via the StrategyRegistry.
 
+    Research stores configs wrapped as {type, parameters, strategy_id}; hand-seeded
+    configs are the bare parameter dict. Either way the parameters are validated and
+    default-filled exactly as the research StrategyFactory does, so a strategy trades
+    with the parameters it was researched (and approved) with.
+
     Falls back to a StubStrategy carrying the real strategy_id (so runtime state and
-    attribution stay consistent) when the config or registry entry is missing.
+    attribution stay consistent) when the config or registry entry is missing or invalid.
     """
     from autonomous_trading_platform.strategy.registry import get_registry
 
@@ -303,7 +309,7 @@ def _instantiate_strategy(session: Session, strategy_id: str) -> tuple[BaseStrat
         return StubStrategy(strategy_id=strategy_id), 1
     try:
         defn = get_registry().get_definition(config_row.strategy_type)
-        params = {**(defn.default_parameters or {}), **(config_row.config_json or {})}
+        params = defn.normalize_parameters(stored_config_parameters(config_row.config_json))
         return defn.builder(strategy_id=strategy_id, params=params), defn.warmup_bars_fn(params)
     except Exception as exc:
         logger.warning(
