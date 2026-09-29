@@ -855,6 +855,13 @@ class QualityBasedReallocationService:
             live_metrics=live_metrics,
         )
 
+    def backtest_quality_score(self, strategy_id: str) -> Decimal | None:
+        """Approval-backtest quality score (bench re-sims excluded); None without metrics."""
+        metrics = self._latest_metrics(strategy_id)
+        if all(value is None for value in metrics.values()):
+            return None
+        return self._quality_score(metrics)
+
     def _compute_proposals(
         self,
         inputs: list[StrategyQualityInput],
