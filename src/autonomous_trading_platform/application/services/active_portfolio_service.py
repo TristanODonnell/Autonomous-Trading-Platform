@@ -10,6 +10,11 @@ It also maintains the ON_DECK shadow tier (rotation step 2): up to
 max_on_deck_strategies candidate or unseated approved strategies that the cycle
 shadow-trades (simulated fills, no capital) to build a forward track record.
 
+With bench management on (rotation step 3) candidates reach on-deck only from
+the BENCH (admitted by the bench review), and a candidate leaving the active set
+or on-deck returns to the bench instead of going inactive. Admission to and
+retirement from the bench belong to BenchReviewService, not this refresh.
+
 Selection here is a deliberately simple placeholder until the portfolio review
 (rotation step 4), for both tiers: eligible incumbents keep their seat, open
 seats go to the highest blended-quality eligible strategies. It never swaps a
@@ -121,7 +126,8 @@ class ActivePortfolioService:
         """
         return self._eligible_in_states({_CANDIDATE_DB_STATE, _PAPER_DB_STATE, _LIVE_DB_STATE})
 
-    def _eligible_in_states(self, allowed: set[str]) -> list[str]:
+    def latest_governance_states(self) -> dict[str, str]:
+        """Latest governance state (DB string) per strategy."""
         latest_state: dict[str, str] = {}
         for row in self._session.scalars(
             select(StrategyGovernance).order_by(
@@ -129,6 +135,10 @@ class ActivePortfolioService:
             )
         ):
             latest_state.setdefault(row.strategy_id, row.current_state)
+        return latest_state
+
+    def _eligible_in_states(self, allowed: set[str]) -> list[str]:
+        latest_state = self.latest_governance_states()
 
         controls = StrategyControlStateRepository(self._session)
         health = StrategyHealthStateRepository(self._session)
@@ -220,14 +230,36 @@ class ActivePortfolioService:
                 target[sid] = (MembershipStatus.INACTIVE, "wind_down_complete")
                 wind_down_completed.append(sid)
 
+        # Bench management: candidates leaving a tier return to the bench, and only
+        # bench members (plus unseated approved strategies) may go on-deck.
+        bench_enabled = self._bench_enabled()
+        on_deck_eligible = self.on_deck_eligible_strategy_ids()
+        approved = set(self._eligible_in_states({_PAPER_DB_STATE, _LIVE_DB_STATE}))
+        bench_eligible = {sid for sid in on_deck_eligible if sid not in approved}
+
+        def settle(sid: str) -> MembershipStatus:
+            """Where a strategy leaving its tier goes."""
+            if bench_enabled and sid in bench_eligible:
+                return MembershipStatus.BENCH
+            return MembershipStatus.INACTIVE
+
+        for sid, (status, reason) in list(target.items()):
+            if status == MembershipStatus.INACTIVE:
+                target[sid] = (settle(sid), reason)
+
         # 2. On-deck tier, from strategies neither active nor still winding down.
         def status_after(sid: str) -> MembershipStatus | None:
             return target[sid][0] if sid in target else prior.get(sid)
 
         pool = [
             sid
-            for sid in self.on_deck_eligible_strategy_ids()
+            for sid in on_deck_eligible
             if status_after(sid) not in (MembershipStatus.ACTIVE, MembershipStatus.WINDING_DOWN)
+            and (
+                not bench_enabled
+                or sid in approved
+                or status_after(sid) in (MembershipStatus.BENCH, MembershipStatus.ON_DECK)
+            )
         ]
         pool_set = set(pool)
         on_deck_incumbents = [
@@ -250,8 +282,17 @@ class ActivePortfolioService:
             if sid in on_deck_keep:
                 continue
             reason = "on_deck_over_max" if sid in on_deck_over else "on_deck_no_longer_eligible"
-            target[sid] = (MembershipStatus.INACTIVE, reason)
+            target[sid] = (settle(sid), reason)
             on_deck_removed.append(sid)
+
+        # Bench members whose governance state moved off `candidate` (retired,
+        # rejected, or approved and not placed above) leave the bench.
+        governance_states = self.latest_governance_states()
+        for sid, status in prior.items():
+            if status != MembershipStatus.BENCH or sid in target:
+                continue
+            if governance_states.get(sid) != _CANDIDATE_DB_STATE:
+                target[sid] = (MembershipStatus.INACTIVE, "bench_no_longer_eligible")
 
         # 3. Persist.
         transitions: list[MembershipTransition] = []
@@ -285,6 +326,7 @@ class ActivePortfolioService:
             on_deck_added=sorted(on_deck_added),
             on_deck_removed=sorted(on_deck_removed),
             max_on_deck=max_on_deck,
+            bench=sorted(m.strategy_id for m in self.bench_members()),
         )
         if result.below_minimum:
             logger.warning(
@@ -314,6 +356,13 @@ class ActivePortfolioService:
         return [
             _member_contract(row)
             for row in self._memberships.get_by_statuses([s.value for s in TRADING_STATUSES])
+        ]
+
+    def bench_members(self) -> list[PortfolioMember]:
+        """Admitted bench candidates (bench management, rotation step 3)."""
+        return [
+            _member_contract(row)
+            for row in self._memberships.get_by_statuses([MembershipStatus.BENCH.value])
         ]
 
     def on_deck_members(self) -> list[PortfolioMember]:
@@ -414,6 +463,23 @@ class ActivePortfolioService:
             )
             min_active = max_active
         return min_active, max_active
+
+    def set_status(
+        self,
+        strategy_id: str,
+        status: MembershipStatus,
+        reason: str,
+        *,
+        actor: str,
+        now: datetime,
+        quality_score: Decimal | None = None,
+    ) -> MembershipTransition:
+        """Record a membership change decided elsewhere (e.g. bench admission)."""
+        return self._set_status(strategy_id, status, reason, actor, now, quality_score)
+
+    def _bench_enabled(self) -> bool:
+        settings = self._settings_repo.get_or_create_default()
+        return bool(settings.bench_management_enabled)
 
     def _max_on_deck(self) -> int:
         settings = self._settings_repo.get_or_create_default()

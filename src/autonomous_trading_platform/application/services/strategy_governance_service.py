@@ -63,7 +63,8 @@ _RULE_STATE_ALIASES = {
 }
 
 _ALLOWED_TRANSITIONS = {
-    "candidate": {"approved_for_paper_trading"},
+    # candidate -> retired: bench management prunes redundant / stale candidates.
+    "candidate": {"approved_for_paper_trading", "retired"},
     "approved_for_paper_trading": {"approved_for_live_trading", "candidate"},
     "approved_for_live_trading": {"approved_for_paper_trading", "retired"},
 }
@@ -72,7 +73,13 @@ _TARGET_STATE_ROLES = {
     "candidate": {"researcher", "system_risk", "admin"},
     "approved_for_paper_trading": {"risk_manager", "system_risk", "admin"},
     "approved_for_live_trading": {"admin"},
-    "retired": {"operator", "risk_manager", "admin"},
+    "retired": {"operator", "risk_manager", "admin", "system_bench"},
+}
+
+# System roles restricted to specific source states. system_bench (automatic bench
+# management) may only retire candidates — never an approved or live strategy.
+_ROLE_SOURCE_STATES = {
+    "system_bench": {"candidate"},
 }
 
 _PROMOTION_TARGET_STATES = {"approved_for_paper_trading", "approved_for_live_trading"}
@@ -130,7 +137,13 @@ class StrategyGovernanceService:
         actor_role: str,
         source_run_id: str | None = None,
         record_governance_audit: bool = True,
+        now: datetime | None = None,
     ) -> StrategyGovernanceTransitionResult:
+        """Transition a strategy's governance state.
+
+        now is the as-of time recorded on the transition (defaults to the wall
+        clock); backtests pass the replay tick.
+        """
         governance = self._latest_governance(strategy_id)
         if governance is None:
             raise LookupError(f"Strategy not found: {strategy_id}")
@@ -144,6 +157,7 @@ class StrategyGovernanceService:
         )
 
         self._assert_role_allowed(target_state=target_state, actor_role=actor_role)
+        self._assert_role_source_allowed(from_state=from_state, actor_role=actor_role)
         self._assert_transition_allowed(from_state=from_state, target_state=target_state)
         criteria_summary: dict[str, object] = {}
         if self._is_promotion_transition(from_state=from_state, target_state=target_state):
@@ -154,7 +168,7 @@ class StrategyGovernanceService:
                 target_state=target_state,
             )
 
-        now = datetime.now(UTC)
+        now = now or datetime.now(UTC)
         previous_state = governance.current_state
         governance.current_state = target_state
         governance.updated_at = now
@@ -315,6 +329,14 @@ class StrategyGovernanceService:
             raise PermissionError(
                 f"Role '{actor_role}' cannot transition strategies to {target_state}. "
                 f"Required role: {allowed}."
+            )
+
+    def _assert_role_source_allowed(self, *, from_state: str, actor_role: str) -> None:
+        allowed_sources = _ROLE_SOURCE_STATES.get(actor_role)
+        if allowed_sources is not None and from_state not in allowed_sources:
+            raise PermissionError(
+                f"Role '{actor_role}' can only transition strategies from "
+                f"{', '.join(sorted(allowed_sources))}; strategy is {from_state}."
             )
 
     def _assert_transition_allowed(self, *, from_state: str, target_state: str) -> None:

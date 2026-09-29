@@ -51,6 +51,13 @@ class OperatorSettingsRepository:
             min_active_strategies=3,
             max_active_strategies=6,
             max_on_deck_strategies=10,
+            bench_management_enabled=False,
+            max_bench_strategies=25,
+            bench_correlation_threshold=0.85,
+            bench_resim_window_days=63,
+            bench_score_floor=1.0,
+            bench_floor_strikes=3,
+            bench_max_idle_days=120,
         )
         self._session.add(row)
         self._session.flush()

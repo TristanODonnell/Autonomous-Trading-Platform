@@ -518,3 +518,76 @@ def test_latest_run_fallback_not_used_for_capital_bearing_promotion(db_session: 
             actor_role="admin",
             source_run_id="nonexistent_run_id",  # valid source_run_id but no matching metrics
         )
+
+
+# ---------------------------------------------------------------------------
+# bench management retirement (portfolio rotation step 3)
+# ---------------------------------------------------------------------------
+
+
+def _latest_state(session: Session, strategy_id: str) -> str:
+    row = session.query(StrategyGovernance).filter_by(strategy_id=strategy_id).one()
+    return str(row.current_state)
+
+
+def test_system_bench_can_retire_a_candidate_as_of_the_given_time(db_session: Session) -> None:
+    _seed_strategy(db_session, "s1", state="candidate")
+    as_of = datetime(2024, 2, 5, 21, 0, tzinfo=UTC)
+
+    result = _service(db_session).transition(
+        strategy_id="s1",
+        to_state="retired",
+        reason="bench_redundant",
+        updated_by="bench_manager",
+        actor_role="system_bench",
+        now=as_of,
+    )
+
+    assert result.from_state == "candidate"
+    assert result.to_state == "retired"
+    assert result.updated_at == as_of
+    assert _latest_state(db_session, "s1") == "retired"
+
+
+@pytest.mark.parametrize("state", ["approved_for_paper_trading", "approved_for_live_trading"])
+def test_system_bench_cannot_retire_an_approved_strategy(db_session: Session, state: str) -> None:
+    _seed_strategy(db_session, "s1", state=state)
+
+    with pytest.raises(PermissionError, match="system_bench"):
+        _service(db_session).transition(
+            strategy_id="s1",
+            to_state="retired",
+            reason="bench_redundant",
+            updated_by="bench_manager",
+            actor_role="system_bench",
+        )
+
+    assert _latest_state(db_session, "s1") == state
+
+
+def test_system_bench_cannot_promote(db_session: Session) -> None:
+    _seed_strategy(db_session, "s1", state="candidate")
+
+    with pytest.raises(PermissionError):
+        _service(db_session).transition(
+            strategy_id="s1",
+            to_state="approved_for_paper_trading",
+            reason="nope",
+            updated_by="bench_manager",
+            actor_role="system_bench",
+            source_run_id="run_s1",
+        )
+
+
+def test_operator_can_retire_a_candidate(db_session: Session) -> None:
+    _seed_strategy(db_session, "s1", state="candidate")
+
+    _service(db_session).transition(
+        strategy_id="s1",
+        to_state="retired",
+        reason="manual cleanup",
+        updated_by="ops",
+        actor_role="operator",
+    )
+
+    assert _latest_state(db_session, "s1") == "retired"

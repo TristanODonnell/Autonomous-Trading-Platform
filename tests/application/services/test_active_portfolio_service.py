@@ -19,6 +19,9 @@ from autonomous_trading_platform.contracts.governance.portfolio_membership impor
 from autonomous_trading_platform.storage.sor.models.allocation_overrides import (
     AllocationOverrides,
 )
+from autonomous_trading_platform.storage.sor.models.portfolio_memberships import (
+    PortfolioMembershipRow,
+)
 from autonomous_trading_platform.storage.sor.models.strategy_configs import StrategyConfigs
 from autonomous_trading_platform.storage.sor.models.strategy_control_states import (
     StrategyControlState,
@@ -657,3 +660,133 @@ class TestOnDeckBudget:
         TestBudgets()._override(db_session, "a", 0.8)
 
         assert service.on_deck_budget_pct() == Decimal("0.5")
+
+
+class TestBenchTier:
+    """Bench management on: candidates reach on-deck only from the bench."""
+
+    def _bench(self, session: Session, *strategy_ids: str) -> None:
+        repo = PortfolioMembershipRepository(session)
+        for sid in strategy_ids:
+            repo.save(
+                PortfolioMembershipRow(
+                    strategy_id=sid,
+                    status=MembershipStatus.BENCH.value,
+                    since=_T0,
+                    reason="admit",
+                    updated_by="test",
+                    updated_at=_T0,
+                )
+            )
+
+    def _settings_on(self, session: Session, **extra: object) -> None:
+        values: dict[str, object] = {
+            "bench_management_enabled": True,
+            "min_active_strategies": 1,
+            "max_active_strategies": 1,
+            "max_on_deck_strategies": 3,
+        }
+        _settings(session, **{**values, **extra})
+
+    def test_only_bench_members_and_unseated_approved_go_on_deck(self, db_session: Session) -> None:
+        self._settings_on(db_session)
+        _eligible(db_session, "live")
+        _eligible(db_session, "unseated")
+        _eligible(db_session, "benched", state="candidate")
+        _eligible(db_session, "pending", state="candidate")  # never admitted
+        self._bench(db_session, "benched")
+        scores = {"live": 9.0, "unseated": 1.0, "benched": 1.0, "pending": 99.0}
+
+        result = _service(db_session, scores).refresh(now=_T0)
+
+        assert result.active == ["live"]
+        assert result.on_deck == ["benched", "unseated"]
+        assert "pending" not in _statuses(db_session)
+        assert result.bench == []
+
+    def test_candidate_dropped_from_on_deck_returns_to_the_bench(self, db_session: Session) -> None:
+        self._settings_on(db_session)
+        _eligible(db_session, "live")
+        for sid in ("c1", "c2"):
+            _eligible(db_session, sid, state="candidate")
+        self._bench(db_session, "c1", "c2")
+        scores = {"live": 9.0, "c1": 1.0, "c2": 2.0}
+        _service(db_session, scores).refresh(now=_T0)
+
+        _settings(db_session, max_on_deck_strategies=1)
+        result = _service(db_session, scores).refresh(now=_T0 + timedelta(days=1))
+
+        assert result.on_deck == ["c2"]
+        assert result.bench == ["c1"]
+        history = PortfolioMembershipRepository(db_session).get_transitions("c1")
+        assert (history[-1].from_status, history[-1].to_status, history[-1].reason) == (
+            "on_deck",
+            "bench",
+            "on_deck_over_max",
+        )
+
+    def test_approved_strategy_dropped_from_on_deck_goes_inactive(
+        self, db_session: Session
+    ) -> None:
+        self._settings_on(db_session)
+        _eligible(db_session, "live")
+        _eligible(db_session, "unseated")
+        scores = {"live": 9.0, "unseated": 1.0}
+        _service(db_session, scores).refresh(now=_T0)
+
+        _settings(db_session, max_on_deck_strategies=0)
+        result = _service(db_session, scores).refresh(now=_T0 + timedelta(days=1))
+
+        assert result.bench == []
+        assert _statuses(db_session)["unseated"] == MembershipStatus.INACTIVE
+
+    def test_demoted_flat_active_returns_to_the_bench_when_on_deck_is_full(
+        self, db_session: Session
+    ) -> None:
+        self._settings_on(db_session, max_on_deck_strategies=1)
+        _eligible(db_session, "a")
+        _eligible(db_session, "c1", state="candidate")
+        self._bench(db_session, "c1")
+        scores = {"a": 1.0, "c1": 5.0}
+        _service(db_session, scores).refresh(now=_T0)
+
+        _set_state(db_session, "a", "candidate")
+        result = _service(db_session, scores).refresh(now=_T0 + timedelta(days=1))
+
+        assert result.active == []
+        assert result.on_deck == ["c1"]
+        assert result.bench == ["a"]
+        history = PortfolioMembershipRepository(db_session).get_transitions("a")
+        assert (history[-1].from_status, history[-1].to_status, history[-1].reason) == (
+            "active",
+            "bench",
+            "no_longer_eligible",
+        )
+
+    def test_retired_bench_member_leaves_the_bench(self, db_session: Session) -> None:
+        self._settings_on(db_session)
+        _eligible(db_session, "live")
+        _eligible(db_session, "c1", state="candidate")
+        _eligible(db_session, "c2", state="candidate")
+        self._bench(db_session, "c1", "c2")
+        _settings(db_session, max_on_deck_strategies=1)
+        scores = {"live": 9.0, "c1": 1.0, "c2": 2.0}
+        _service(db_session, scores).refresh(now=_T0)
+        assert _statuses(db_session)["c1"] == MembershipStatus.BENCH
+
+        _set_state(db_session, "c1", "retired")
+        result = _service(db_session, scores).refresh(now=_T0 + timedelta(days=1))
+
+        assert result.bench == []
+        assert _statuses(db_session)["c1"] == MembershipStatus.INACTIVE
+        history = PortfolioMembershipRepository(db_session).get_transitions("c1")
+        assert history[-1].reason == "bench_no_longer_eligible"
+
+    def test_bench_off_keeps_step_two_behaviour(self, db_session: Session) -> None:
+        _settings(db_session, max_active_strategies=1, max_on_deck_strategies=3)
+        _eligible(db_session, "live")
+        _eligible(db_session, "pending", state="candidate")
+
+        result = _service(db_session, {"live": 9.0, "pending": 1.0}).refresh(now=_T0)
+
+        assert result.on_deck == ["pending"]

@@ -56,6 +56,7 @@ candidates = [
     "shadow_sleeve_ledger",
     "shadow_sleeve_snapshots",
     "shadow_sleeve_positions",
+    "bench_evaluations",
     "portfolio_membership_transitions",
     "portfolio_memberships",
     # Core state tables

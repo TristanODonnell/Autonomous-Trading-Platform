@@ -24,7 +24,8 @@ class MembershipStatus(enum.StrEnum):
     # On-deck shadow tier: runs every cycle with simulated fills in a shadow sleeve,
     # building a forward record with no capital and no broker orders.
     ON_DECK = "on_deck"
-    # Reserved for the managed bench (portfolio rotation step 3).
+    # Managed bench (rotation step 3): admitted candidates, re-simulated weekly;
+    # the only candidates that may go on-deck when bench management is on.
     BENCH = "bench"
     # No longer tracked by the portfolio; sleeve is flat.
     INACTIVE = "inactive"
@@ -82,6 +83,7 @@ class ActiveSetRefreshResult(BaseModel):
     on_deck_added: list[str] = []
     on_deck_removed: list[str] = []
     max_on_deck: int = 0
+    bench: list[str] = []
 
     @property
     def below_minimum(self) -> bool:

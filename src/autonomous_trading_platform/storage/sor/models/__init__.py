@@ -1,6 +1,7 @@
 from . import allocation_overrides as allocation_overrides
 from . import allocation_rebalance_history as allocation_rebalance_history
 from . import audit_logs as audit_logs
+from . import bench_evaluations as bench_evaluations
 from . import black_litterman_research_runs as black_litterman_research_runs
 from . import blended_metrics_snapshots as blended_metrics_snapshots
 from . import broker_account_snapshots as broker_account_snapshots
@@ -85,6 +86,7 @@ __all__ = [
     "raw_market_pool",
     "strategy_runtime_states",
     "strategy_sleeves",
+    "bench_evaluations",
     "audit_logs",
     "tracked_orders",
     "ticker_lifecycle_events",

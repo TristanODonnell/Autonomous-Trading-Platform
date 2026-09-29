@@ -64,6 +64,18 @@ class OperatorSettingsRow(Base):
     max_active_strategies: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
     # On-deck shadow tier (portfolio rotation step 2). 0 disables on-deck.
     max_on_deck_strategies: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    # Bench management (portfolio rotation step 3). Off = every candidate may go on-deck.
+    bench_management_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    max_bench_strategies: Mapped[int] = mapped_column(Integer, nullable=False, default=25)
+    # Daily re-sim return correlation at or above which two strategies are redundant.
+    bench_correlation_threshold: Mapped[float] = mapped_column(
+        Numeric(6, 4), nullable=False, default=0.85
+    )
+    bench_resim_window_days: Mapped[int] = mapped_column(Integer, nullable=False, default=63)
+    # Re-sim quality score below which a review counts as a strike (1.0 = flat).
+    bench_score_floor: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False, default=1.0)
+    bench_floor_strikes: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    bench_max_idle_days: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
 
     # Portfolio drawdown governance (FINDING-16)
     portfolio_max_drawdown_pct: Mapped[float | None] = mapped_column(
