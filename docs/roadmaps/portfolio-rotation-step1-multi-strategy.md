@@ -206,8 +206,8 @@ single-strategy cycle is unchanged.
   last fill price, not the current close; sleeve snapshots mark to market.
 - Per-symbol caps are checked per order against start-of-cycle state; several
   strategies buying the same symbol in one cycle are not aggregated intra-cycle.
-- 1F surfaced duplicate strategies (e.g. `mean_reversion_v1` vs a research
-  `mean_reversion__…` with identical P&L) — input for step 3 bench de-duplication.
+- ~~1F surfaced duplicate strategies~~ — not real: research strategies ran with their
+  family's default parameters in the trading cycle (fixed in Step 3A).
 - Quality-score history is only written by the reallocation service, which the replay
   does not run; the health lifecycle's quality-decline signal is therefore thin in
   backtests.

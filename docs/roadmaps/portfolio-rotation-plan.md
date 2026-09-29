@@ -4,7 +4,7 @@
 truth for the overall design, what is already built, and how to approach each remaining step.
 Step-level detail lives in companion docs (e.g. `portfolio-rotation-step1-multi-strategy.md`).
 
-Last updated: 2026-09-28 (Step 2 complete).
+Last updated: 2026-09-28 (Step 3 complete).
 
 ---
 
@@ -103,8 +103,8 @@ results. It must earn on-deck and build a forward record first.
 |---|---|---|
 | **1** | Foundation: dynamic active set, multi-strategy trading cycle, per-strategy P&L (sleeves), `candidate` rename | ✅ **Done** 2026-09-28 |
 | **2** | On-deck shadow tracking | ✅ **Done** 2026-09-28 (uncommitted) — `portfolio-rotation-step2-on-deck-shadow.md` |
-| **3** | Bench management | ⏳ Next |
-| **4** | Portfolio review (scorecard, auto decisions) | Planned |
+| **3** | Bench management | ✅ **Done** 2026-09-28 — `portfolio-rotation-step3-bench-management.md` |
+| **4** | Portfolio review (scorecard, auto decisions) | ⏳ Next |
 | **5** | Rotation backtest mode (tune thresholds) | Planned |
 | **6** | Airflow schedules (daily / weekly / monthly) | Planned — **user said not yet** |
 
@@ -196,7 +196,13 @@ that is directly comparable to the actives' real results.
 sleeves accrue P&L; zero broker orders from on-deck; real sleeve/account invariant unaffected;
 on-deck live metrics differ per strategy and are persisted at replay time.
 
-### Step 3 — Bench management
+### Step 3 — Bench management (✅ done — see `portfolio-rotation-step3-bench-management.md`)
+
+What exists now: `bench_management_enabled` (default off); BENCH tier; `BenchReviewService`
+(weekly + after research: re-sim on a shared trailing window, correlation groups, one
+champion, admission gate, floor strikes, idle expiry, cap; retirement = governance
+`retired` by `system_bench`); `bench_evaluations`; `metrics_quality_score()`. Also fixed:
+research strategies now trade with their researched parameters (3A). Original scope below.
 
 **Goal:** the candidate pool stays small, diverse and current.
 
@@ -219,9 +225,11 @@ on-deck live metrics differ per strategy and are persisted at replay time.
   for smoke runs — a starting point. Tag results with a re-test lineage so they are distinct
   from research metrics (`MetricLineageService` exists).
 
-**Evidence from Step 1F:** `mean_reversion_v1` and research `mean_reversion__1ef8…` produced
-identical P&L; `momentum_v1` and `momentum__795c…` produced identical positions. The duplicate
-problem is real and visible in the current pool.
+**Correction (Step 3A):** the "identical" pairs seen in Steps 1F/2E (`mean_reversion_v1` vs
+`mean_reversion__1ef8…`, `momentum_v1` vs `momentum__795c…`) were not duplicates: the trading
+cycle built every research strategy with its family's default parameters (wrapped config not
+unwrapped). Fixed in 3A; with real parameters the pairs trade differently. Redundancy must be
+measured on correctly-parameterised re-sims.
 
 ### Step 4 — Portfolio review
 

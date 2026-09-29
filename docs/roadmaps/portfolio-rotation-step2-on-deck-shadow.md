@@ -195,5 +195,6 @@ Not committed (awaiting the user).
 - On-deck ranking is still the Step 1 placeholder (blended quality, which ignores shadow
   evidence); weighting shadow evidence is Step 4.
 - Each on-deck strategy adds a full evaluation per cycle (backtest time grows accordingly).
-- 2E again showed duplicate strategies (`momentum_v1` and `momentum__795c…` had identical
-  first-day shadow books) — input for Step 3 de-duplication.
+- ~~2E showed duplicate strategies~~ — not real: research strategies were running with
+  default parameters (fixed in Step 3A, see the Step 3 doc). The composite_rule gap above
+  is fixed by the same change.
