@@ -4,7 +4,7 @@
 truth for the overall design, what is already built, and how to approach each remaining step.
 Step-level detail lives in companion docs (e.g. `portfolio-rotation-step1-multi-strategy.md`).
 
-Last updated: 2026-09-28 (Step 3 complete).
+Last updated: 2026-09-29 (Step 4 complete).
 
 ---
 
@@ -104,8 +104,8 @@ results. It must earn on-deck and build a forward record first.
 | **1** | Foundation: dynamic active set, multi-strategy trading cycle, per-strategy P&L (sleeves), `candidate` rename | ✅ **Done** 2026-09-28 |
 | **2** | On-deck shadow tracking | ✅ **Done** 2026-09-28 (uncommitted) — `portfolio-rotation-step2-on-deck-shadow.md` |
 | **3** | Bench management | ✅ **Done** 2026-09-28 — `portfolio-rotation-step3-bench-management.md` |
-| **4** | Portfolio review (scorecard, auto decisions) | ⏳ Next |
-| **5** | Rotation backtest mode (tune thresholds) | Planned |
+| **4** | Portfolio review (scorecard, auto decisions) | ✅ **Done** 2026-09-29 — `portfolio-rotation-step4-portfolio-review.md` |
+| **5** | Rotation backtest mode (tune thresholds) | ⏳ Next |
 | **6** | Airflow schedules (daily / weekly / monthly) | Planned — **user said not yet** |
 
 ---
@@ -231,7 +231,18 @@ cycle built every research strategy with its family's default parameters (wrappe
 unwrapped). Fixed in 3A; with real parameters the pairs trade differently. Redundancy must be
 measured on correctly-parameterised re-sims.
 
-### Step 4 — Portfolio review
+### Step 4 — Portfolio review (✅ done — see `portfolio-rotation-step4-portfolio-review.md`)
+
+What exists now: `portfolio_review_mode` off/advisory/auto (default off) + 10 review
+settings; `PortfolioScorecardService` (maturity-blended evidence, decay / health /
+correlation / blocked penalties, regime recorded); pure `portfolio_review_decisions.decide`
+(challenges, swaps on monthly reviews behind margin / weekly streak / tenure / shadow /
+cap / turnover guardrails, open seats and drops, bench <-> on-deck);
+`PortfolioReviewService` (runs after the bench review; auto applies: `system_portfolio`
+promotes a winning candidate to paper — promotion rules still apply — membership with
+review_id, re-weight via `rebalance()`); tables `portfolio_reviews`,
+`portfolio_scorecards`, `portfolio_review_decisions`. In auto mode `refresh()` no longer
+selects once a review exists. Fixtures can seed `promotion_rules`. Original scope below.
 
 **Goal:** one ranking across ACTIVE + ON-DECK + BENCH using the four-lens scorecard and the
 evidence weighting; automatic decisions with guardrails.
@@ -255,6 +266,10 @@ prunes sensibly; tune thresholds (review cadence, challenger margin, tenure, cap
 **Starting point:** `fixtures/platform/replays/medium/portfolio_rotation_pool.yaml` (6
 strategies, 5 seats, ~3 months, mid-run demotion) — extend with on-deck/bench pools and research
 enabled. Compare objectives (portfolio Sharpe vs return vs drawdown-constrained) on the same pool.
+`portfolio_review_auto.yaml` (Step 4E) is the closest existing fixture: review, bench and
+research all on, ~11 weeks. Step 4 follow-ups to tune/exercise: penalty weights, floor,
+margin, streak length; market-excess correlation; add/drop seat and bench exchange paths
+that the 4E run did not hit; scoring the regime lens.
 
 ### Step 6 — Airflow schedules (user: not yet)
 
