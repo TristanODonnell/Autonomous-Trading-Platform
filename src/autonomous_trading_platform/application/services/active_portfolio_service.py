@@ -15,11 +15,16 @@ the BENCH (admitted by the bench review), and a candidate leaving the active set
 or on-deck returns to the bench instead of going inactive. Admission to and
 retirement from the bench belong to BenchReviewService, not this refresh.
 
-Selection here is a deliberately simple placeholder until the portfolio review
-(rotation step 4), for both tiers: eligible incumbents keep their seat, open
-seats go to the highest blended-quality eligible strategies. It never swaps a
-healthy incumbent out for a better challenger — that decision belongs to the
-review.
+Selection here is a deliberately simple placeholder, for both tiers: eligible
+incumbents keep their seat, open seats go to the highest blended-quality eligible
+strategies. It never swaps a healthy incumbent out for a better challenger.
+
+With the portfolio review in auto mode (rotation step 4) and at least one review
+run, selection belongs to PortfolioReviewService: refresh then only applies
+protective exits (ineligible, suspended, wind-down), fills seats those exits vacate
+from the latest scorecards (approved strategies only), and returns strategies whose
+wind-down completes to on-deck. The review owns swaps, open seats, the on-deck cap
+and bench promotions.
 """
 
 from __future__ import annotations
@@ -60,6 +65,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.operator_settings
 )
 from autonomous_trading_platform.storage.sor.repositories.core.portfolio_membership_repository import (
     PortfolioMembershipRepository,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.portfolio_review_repository import (
+    PortfolioReviewRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.strategy_control_state_repository import (
     StrategyControlStateRepository,
@@ -192,11 +200,22 @@ class ActivePortfolioService:
         # (status, reason) per strategy whose membership may change this refresh.
         target: dict[str, tuple[MembershipStatus, str]] = {}
 
+        # With the portfolio review in auto mode (rotation step 4), selection belongs to
+        # the review: refresh only applies protective exits and fills seats vacated by
+        # them, from the latest scorecards. Before the first review it bootstraps as usual.
+        review_scores = self._review_scores()
+
         # 1. Active set.
         incumbents = [sid for sid, status in prior.items() if status == MembershipStatus.ACTIVE]
         keep = rank([sid for sid in incumbents if sid in eligible_set])
         keep, over_max = keep[:max_active], keep[max_active:]
-        added = rank([sid for sid in eligible if sid not in keep])[: max_active - len(keep)]
+        if review_scores is None:
+            added = rank([sid for sid in eligible if sid not in keep])[: max_active - len(keep)]
+        else:
+            vacancies = len([sid for sid in incumbents if sid not in eligible_set])
+            fill = [sid for sid in eligible if sid not in keep and sid in review_scores]
+            fill.sort(key=lambda sid: (-review_scores[sid], sid))
+            added = fill[: min(vacancies, max_active - len(keep))]
         new_active = keep + added
 
         for sid in added:
@@ -246,6 +265,12 @@ class ActivePortfolioService:
         for sid, (status, reason) in list(target.items()):
             if status == MembershipStatus.INACTIVE:
                 target[sid] = (settle(sid), reason)
+        if review_scores is not None:
+            # A strategy the review took out of the active set is still tracked on-deck.
+            on_deck_ok = set(on_deck_eligible)
+            for sid in wind_down_completed:
+                if sid in on_deck_ok:
+                    target[sid] = (MembershipStatus.ON_DECK, "wind_down_complete")
 
         # 2. On-deck tier, from strategies neither active nor still winding down.
         def status_after(sid: str) -> MembershipStatus | None:
@@ -268,9 +293,21 @@ class ActivePortfolioService:
             if status == MembershipStatus.ON_DECK and sid not in new_active
         ]
         on_deck_keep = rank([sid for sid in on_deck_incumbents if sid in pool_set])
-        on_deck_keep, on_deck_over = on_deck_keep[:max_on_deck], on_deck_keep[max_on_deck:]
-        open_on_deck = max(max_on_deck - len(on_deck_keep), 0)
-        on_deck_added = rank([sid for sid in pool if sid not in on_deck_incumbents])[:open_on_deck]
+        if review_scores is None:
+            on_deck_keep, on_deck_over = on_deck_keep[:max_on_deck], on_deck_keep[max_on_deck:]
+            open_on_deck = max(max_on_deck - len(on_deck_keep), 0)
+            on_deck_added = rank([sid for sid in pool if sid not in on_deck_incumbents])[
+                :open_on_deck
+            ]
+        else:
+            # The review owns the on-deck cap and promotions from the bench.
+            on_deck_over = []
+            on_deck_added = sorted(
+                sid
+                for sid in pool
+                if sid not in on_deck_incumbents
+                and target.get(sid, (None, ""))[0] == MembershipStatus.ON_DECK
+            )
 
         for sid in on_deck_added:
             # Keep the reason it left its previous tier (e.g. over_max_active).
@@ -479,6 +516,20 @@ class ActivePortfolioService:
         return self._set_status(
             strategy_id, status, reason, actor, now, quality_score, review_id=review_id
         )
+
+    def _review_scores(self) -> dict[str, Decimal] | None:
+        """Latest review scores when the portfolio review drives selection, else None.
+
+        None (placeholder selection) unless portfolio_review_mode is auto and at
+        least one review has run.
+        """
+        settings = self._settings_repo.get_or_create_default()
+        if str(settings.portfolio_review_mode or "off") != "auto":
+            return None
+        cards = PortfolioReviewRepository(self._session).latest_scorecards()
+        if not cards:
+            return None
+        return {c.strategy_id: Decimal(str(c.score)) for c in cards if c.score is not None}
 
     def _bench_enabled(self) -> bool:
         settings = self._settings_repo.get_or_create_default()
