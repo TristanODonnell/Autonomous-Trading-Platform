@@ -263,6 +263,9 @@ class InitialStateConfig(BaseModel):
     strategies: list[Any] = Field(default_factory=list)
     governance: list[Any] = Field(default_factory=list)
     allocations: list[Any] = Field(default_factory=list)
+    # Governance promotion rules (e.g. candidate -> approved_paper thresholds on the
+    # source run's metrics), upserted by rule_id.
+    promotion_rules: list[dict[str, Any]] = Field(default_factory=list)
     universe: dict[str, Any] = Field(default_factory=dict)
     datasets: dict[str, Any] = Field(default_factory=dict)
 

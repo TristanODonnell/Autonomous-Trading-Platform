@@ -419,7 +419,8 @@ class QualityBasedReallocationService:
             self._rebalance_history_repo.update_status(
                 rebalance_id=rebalance_id,
                 status=final_status,
-                completed_at=datetime.now(UTC),
+                # As-of time, like started_at: the interval guard compares against it.
+                completed_at=now,
                 strategies_evaluated=len(inputs),
                 allocation_changes_count=changes_count,
                 total_allocation_delta_pct=float(total_delta),
@@ -632,7 +633,7 @@ class QualityBasedReallocationService:
                 status="failed",
                 skipped_reason=type(exc).__name__,
                 started_at=now,
-                completed_at=datetime.now(UTC),
+                completed_at=now,
                 result_summary_json={"original_rebalance_id": rebalance_id},
             )
             self._rebalance_history_repo.insert(failed_row)

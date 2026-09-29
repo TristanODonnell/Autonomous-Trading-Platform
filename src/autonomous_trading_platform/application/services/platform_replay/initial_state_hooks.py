@@ -118,6 +118,15 @@ def apply_initial_state(
         except Exception as exc:
             summary["errors"].append(f"allocation[{strategy_id}]: {exc}")
 
+    # 4b. Governance promotion rules
+    for entry in getattr(initial_state, "promotion_rules", []) or []:
+        try:
+            _upsert_promotion_rule(session=session, entry=dict(entry), now=now)
+            summary.setdefault("promotion_rules_upserted", 0)
+            summary["promotion_rules_upserted"] += 1
+        except Exception as exc:
+            summary["errors"].append(f"promotion_rule[{entry.get('rule_id')}]: {exc}")
+
     # 5. Ensure base capital allocation policies exist so PortfolioEngine.get_allocation()
     #    can size positions. Per-strategy overrides set specific percentages; this base
     #    policy is the required fallback that must exist for NoPolicyFoundError not to fire.
@@ -225,6 +234,42 @@ def _upsert_strategy_governance(
         submitted_by=actor,
     )
     session.add(row)
+
+
+_PROMOTION_RULE_FIELDS = (
+    "from_status",
+    "to_status",
+    "min_sharpe",
+    "max_drawdown",
+    "min_days_tested",
+    "min_trade_count",
+    "min_cagr",
+    "min_win_rate",
+    "lookback_window_bars",
+    "lookback_window_trades",
+    "maintenance_min_sharpe",
+    "maintenance_min_win_rate",
+    "maintenance_max_drawdown",
+    "is_active",
+    "notes",
+)
+
+
+def _upsert_promotion_rule(*, session: Session, entry: dict[str, Any], now: datetime) -> None:
+    from autonomous_trading_platform.storage.sor.models.promotion_rules import PromotionRules
+
+    rule_id = str(entry["rule_id"])
+    values = {f: entry[f] for f in _PROMOTION_RULE_FIELDS if f in entry}
+    if "from_status" not in values or "to_status" not in values:
+        raise ValueError("promotion rule needs from_status and to_status")
+    existing = session.get(PromotionRules, rule_id)
+    if existing is not None:
+        for field_name, value in values.items():
+            setattr(existing, field_name, value)
+        return
+    values.setdefault("is_active", True)
+    values.setdefault("notes", "initial state seeding from fixture")
+    session.add(PromotionRules(rule_id=rule_id, created_at=now, **values))
 
 
 def _upsert_allocation_override(

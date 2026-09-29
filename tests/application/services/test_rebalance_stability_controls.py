@@ -170,6 +170,30 @@ def test_rebalance_executes_after_interval_expires(db_session: Session) -> None:
     }
 
 
+def test_interval_guard_uses_the_as_of_time_of_the_previous_rebalance(
+    db_session: Session,
+) -> None:
+    """Backtests pass the replay tick as now: completed_at must be that tick, not the
+    wall clock, or every later replay rebalance is blocked by the interval guard."""
+    _seed_policy(db_session)
+    _seed_strategy(db_session, "s1")
+    _enable_rebalance(db_session, min_rebalance_interval_hours=24.0)
+    first_tick = datetime(2024, 1, 22, 21, 0, tzinfo=UTC)
+    service = QualityBasedReallocationService(session=db_session)
+
+    service.rebalance(actor="test", now=first_tick)
+    second = service.rebalance(actor="test", now=first_tick + timedelta(days=7))
+
+    completed = (
+        db_session.query(AllocationRebalanceHistory)
+        .filter(AllocationRebalanceHistory.status.in_(["completed", "noop"]))
+        .order_by(AllocationRebalanceHistory.started_at)
+        .all()
+    )
+    assert second.skipped_reason != "interval_guard"
+    assert completed[0].completed_at == first_tick
+
+
 def test_rebalance_executes_when_no_prior_history(db_session: Session) -> None:
     _seed_policy(db_session)
     _seed_strategy(db_session, "s1")

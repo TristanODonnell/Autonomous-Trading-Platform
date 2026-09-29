@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import math
 from datetime import date, datetime, timedelta
+from typing import Any
 
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.application.services.bench_resimulation_service import (
     BenchResimulationService,
     BenchWindow,
+    ResimOutcome,
 )
 from autonomous_trading_platform.application.services.bench_review_service import (
     BenchReviewService,
@@ -77,15 +79,39 @@ def run_bench_review_at_timestamp(
         simulation_context = build_simulation_context(
             session=session, universe_size=len(window.symbols), lookback_bars=20
         )
-        review = BenchReviewService(
+        bench_service = BenchReviewService(
             session,
             resimulation=BenchResimulationService(session, simulation_context.simulation_runner),
-        ).review(window=window, now=timestamp)
+        )
+        review = bench_service.review(window=window, now=timestamp)
         session.flush()
     except Exception as exc:
         logger.exception("bench_review.replay_failed", extra={"timestamp": timestamp.isoformat()})
         session.rollback()
         return BenchReplayResult(**base, status="failed", errors=[f"bench_review: {exc}"])
+
+    # Portfolio review (rotation step 4) right after, on the same re-sims. The bench
+    # review is committed first (its retirements already commit through governance)
+    # so a failed portfolio review rolls back only itself.
+    session.commit()
+    errors: list[str] = []
+    portfolio_summary: dict[str, Any] | None = None
+    try:
+        portfolio_summary = _run_portfolio_review(
+            session=session,
+            timestamp=timestamp,
+            window=window,
+            bench_review_id=review.review_id,
+            outcomes=bench_service.last_outcomes,
+            simulation_runner=simulation_context.simulation_runner,
+        )
+        session.flush()
+    except Exception as exc:
+        logger.exception(
+            "portfolio_review.replay_failed", extra={"timestamp": timestamp.isoformat()}
+        )
+        session.rollback()
+        errors.append(f"portfolio_review: {exc}")
 
     skipped = [e.strategy_id for e in review.evaluations if e.decision.value == "skipped"]
     return BenchReplayResult(
@@ -107,9 +133,108 @@ def run_bench_review_at_timestamp(
             },
             "bench_size": len(review.bench),
             "skipped": skipped,
+            "portfolio_review": portfolio_summary,
         },
+        errors=errors,
         warnings=[f"re-sim skipped for {len(skipped)} strategies"] if skipped else [],
     )
+
+
+def _run_portfolio_review(
+    *,
+    session: Session,
+    timestamp: datetime,
+    window: BenchWindow,
+    bench_review_id: str,
+    outcomes: dict[str, ResimOutcome],
+    simulation_runner: Any,
+) -> dict[str, Any] | None:
+    """Run the portfolio review when its mode is not off; returns a replay summary."""
+    from autonomous_trading_platform.application.services.portfolio_review_service import (
+        PortfolioReviewService,
+        review_mode,
+    )
+    from autonomous_trading_platform.application.services.portfolio_scorecard_service import (
+        PortfolioScorecardService,
+    )
+    from autonomous_trading_platform.contracts.governance.portfolio_review import (
+        PortfolioReviewMode,
+    )
+
+    if review_mode(session) == PortfolioReviewMode.OFF:
+        return None
+
+    def regime_label(_now: datetime) -> str | None:
+        return current_regime_label(simulation_runner=simulation_runner, window=window)
+
+    result = PortfolioReviewService(
+        session, scorecards=PortfolioScorecardService(session, regime_label_fn=regime_label)
+    ).run(
+        now=timestamp,
+        resim_outcomes=outcomes,
+        bench_review_id=bench_review_id,
+        window_start=window.start_date,
+        window_end=window.end_date,
+    )
+    if result is None:
+        return None
+    return {
+        "review_id": result.review_id,
+        "mode": result.mode.value,
+        "swap_eligible": result.swap_eligible,
+        "regime": result.scorecards[0].regime_label if result.scorecards else None,
+        "ranking": [
+            {"strategy_id": c.strategy_id, "tier": c.tier, "score": _num(c.score)}
+            for c in result.scorecards
+        ],
+        "decisions": [
+            {
+                "type": d.decision_type.value,
+                "strategy_id": d.strategy_id,
+                "counterpart_id": d.counterpart_id,
+                "streak": d.streak,
+                "applied": d.applied,
+                "reason": d.reason,
+            }
+            for d in result.decisions
+        ],
+    }
+
+
+def current_regime_label(*, simulation_runner: Any, window: BenchWindow) -> str | None:
+    """Market regime at the window end ("trend/volatility"), classified on the fly.
+
+    Recorded on scorecards only (the against-the-market lens is scored in step 5).
+    None when the runner exposes no bar reader or the classifier has not warmed up.
+    """
+    from autonomous_trading_platform.research.pipeline.gates.regime_labels import (
+        OnTheFlyRegimeLabelProvider,
+    )
+
+    provider = OnTheFlyRegimeLabelProvider.from_simulation_runner(simulation_runner)
+    if provider is None:
+        return None
+    try:
+        daily = provider.load_daily_regimes(
+            dataset_version=window.dataset_version,
+            price_basis=window.price_basis,
+            symbols=list(window.symbols),
+            start_date=window.start_date,
+            end_date=window.end_date,
+        )
+    except Exception as exc:
+        logger.warning("portfolio_review.regime_label_failed", extra={"error": str(exc)})
+        return None
+    labelled = daily.dropna(subset=["regime_trend"]) if not daily.empty else daily
+    if labelled.empty:
+        return None
+    last = labelled.iloc[-1]
+    parts = [str(last[c]) for c in ("regime_trend", "regime_volatility") if last.get(c)]
+    return "/".join(parts)[:64] or None
+
+
+def _num(value: Any) -> float | None:
+    return float(value) if value is not None else None
 
 
 def resolve_bench_window(

@@ -1,0 +1,139 @@
+# scenario:
+#   name: portfolio_review_advisory
+#   purpose: >
+#     Portfolio rotation step 4E (advisory mode). Weekly portfolio reviews right after the
+#     bench review score every ACTIVE / ON_DECK / BENCH strategy on one scorecard
+#     (live > shadow > re-sim > fading backtest, plus decay / health / correlation /
+#     blocked-order lenses) and decide swaps (monthly review only, 10% margin on 3
+#     consecutive reviews, 30-day tenure, 1 swap per review), open seats (floor 1.0),
+#     drops and bench <-> on-deck exchanges. Research (smoke) adds candidates with
+#     source runs in February / March; a paper promotion rule is seeded so the review
+#     can promote a winning candidate (system_portfolio) only if its research backtest
+#     passes the rule.
+#   expected_behavior: >
+#     Start: macd_crossover_v1 + factor_based__19ab active (min 2, max 3), momentum_v1
+#     (approved) and composite_rule__145e (candidate, no source run) on-deck after the
+#     first bench admission. Reviews start once the re-sim window has >= 15 days.
+#     Every review writes scorecards and decisions (challenge / swap / add_seat /
+#     promote_on_deck ...) with applied=false; the review itself changes no
+#     membership or governance (the Step 3 placeholder keeps selecting).
+#   recommended_use: validation
+#
+# Run against a clean backtest state (wipes backtest tables in DATABASE_URL):
+#   python scripts/reset_backtest_state.py
+#   rm -f artifacts/platform/backtests/portfolio_review_advisory.checkpoint.json
+#   atp platform backtest run #     --fixture fixtures/platform/replays/medium/portfolio_review_advisory.yaml #     --output artifacts/platform/backtests/portfolio_review_advisory.json
+
+platform_replay:
+  name: portfolio_review_advisory
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN]
+  start: 2024-01-02
+  end: 2024-03-22
+  starting_cash: 250000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: false
+    auto_rebalance_enabled: true
+    rebalance_frequency: daily
+    portfolio_mode_enabled: true
+    min_active_strategies: 2
+    max_active_strategies: 3
+    max_on_deck_strategies: 2
+    max_total_strategy_allocation_pct: 0.95
+    per_strategy_cap: 0.5
+    portfolio_drawdown_action: warn_only
+    portfolio_drawdown_recovery_mode: auto_resume
+    bench_management_enabled: true
+    max_bench_strategies: 4
+    bench_correlation_threshold: 0.85
+    bench_resim_window_days: 63
+    bench_score_floor: 1.0
+    bench_floor_strikes: 3
+    bench_max_idle_days: 120
+    portfolio_review_mode: advisory
+    review_swap_margin: 0.10
+    review_swap_consecutive: 3
+    review_min_tenure_days: 30
+    review_max_swaps_per_review: 1
+    review_swap_interval_days: 28
+    review_turnover_cost_bps: 20
+    review_min_shadow_days: 20
+    review_min_shadow_trades: 10
+    review_score_floor: 1.0
+    review_on_deck_min_tenure_days: 21
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies:
+    - factor_based__19abece93f5b760d646be3cf9b16d8bbaff468d78c1ebc70a6c041cd2b56df79
+    - macd_crossover_v1
+    - momentum_v1
+    - composite_rule__145e07f7f272eb46a6120c7f3d620fd281ccf45fc6a8596883e9533e78d45140
+  governance:
+    - strategy_id: factor_based__19abece93f5b760d646be3cf9b16d8bbaff468d78c1ebc70a6c041cd2b56df79
+      state: approved_for_paper_trading
+    - strategy_id: macd_crossover_v1
+      state: approved_for_paper_trading
+    - strategy_id: momentum_v1
+      state: approved_for_paper_trading
+    # Candidate without a source run: governance must refuse to promote it.
+    - strategy_id: composite_rule__145e07f7f272eb46a6120c7f3d620fd281ccf45fc6a8596883e9533e78d45140
+      state: candidate
+  promotion_rules:
+    - rule_id: fixture_candidate_to_paper
+      from_status: candidate
+      to_status: approved_paper
+      min_sharpe: 0.5
+      max_drawdown: 0.25
+      min_trade_count: 10
+  allocations: []
+  universe:
+    selection_mode: fixed
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  universe:
+    cadence: monthly
+    enabled: true
+  research:
+    cadence: monthly
+    enabled: true
+    options:
+      profile: smoke        # cheap: 2 samples per family
+  bench:
+    cadence: weekly         # the portfolio review runs right after each bench review
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: false
+
+timeline_events: []

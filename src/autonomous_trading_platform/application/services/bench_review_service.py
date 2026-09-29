@@ -120,6 +120,8 @@ class BenchReviewService:
         self._governance = governance or StrategyGovernanceService(session=session)
         self._memberships = PortfolioMembershipRepository(session)
         self._evaluations = BenchEvaluationRepository(session)
+        # Re-sim outcomes of the latest review, reused by the portfolio review (step 4).
+        self.last_outcomes: dict[str, ResimOutcome] = {}
 
     # ------------------------------------------------------------------
 
@@ -130,6 +132,7 @@ class BenchReviewService:
         review_id = f"bench_{now:%Y%m%dT%H%M%S}"
         tiers = self._tiers()
         outcomes = self._resim.resimulate(sorted(tiers), window=window, review_id=review_id)
+        self.last_outcomes = outcomes
         members = {row.strategy_id: row for row in self._memberships.get_all()}
 
         evaluations: dict[str, BenchEvaluation] = {}
