@@ -79,6 +79,38 @@ _TERMINAL_STATUSES = frozenset(
 
 logger = get_logger(__name__)
 
+# Simulation runs made by bench re-simulation (rotation step 3). They are recent-window
+# evidence for bench decisions only and must never stand in for approval-backtest
+# metrics in _latest_metrics.
+BENCH_RESIM_EXPERIMENT_PREFIX = "bench_resim_"
+
+
+def metrics_quality_score(
+    *,
+    sharpe: float | None,
+    total_return: float | None,
+    max_drawdown: float | None,
+    win_rate: float | None,
+    trade_count: int | None,
+) -> Decimal:
+    """Quality score shared by backtest, live and bench re-sim metrics.
+
+    1.0 is neutral (no trades, no return, no drawdown); above is better. Floored at 0.01.
+    """
+    score = Decimal("1")
+    score += max(Decimal(str(sharpe or 0)), Decimal("-1")) * Decimal("0.40")
+    score += Decimal(str(total_return or 0)) * Decimal("1.50")
+    score += Decimal(str(win_rate or 0)) * Decimal("0.40")
+    score += min(Decimal(str(trade_count or 0)) / Decimal("100"), Decimal("0.25"))
+    score -= abs(Decimal(str(max_drawdown or 0))) * Decimal("2.00")
+    return max(score, Decimal("0.01"))
+
+
+def _not_bench_resim():  # type: ignore[no-untyped-def]
+    return (SimulationRuns.experiment_id.is_(None)) | (
+        ~SimulationRuns.experiment_id.startswith(BENCH_RESIM_EXPERIMENT_PREFIX)
+    )
+
 
 @dataclass(frozen=True)
 class StrategyQualityInput:
@@ -1082,7 +1114,7 @@ class QualityBasedReallocationService:
         row = self._session.execute(
             select(MetricsSummary, SimulationRuns)
             .join(SimulationRuns, MetricsSummary.run_id == SimulationRuns.run_id)
-            .where(SimulationRuns.strategy_id == strategy_id)
+            .where(SimulationRuns.strategy_id == strategy_id, _not_bench_resim())
             .order_by(MetricsSummary.created_at.desc(), MetricsSummary.metrics_snapshot_id.asc())
             .limit(1)
         ).one_or_none()
@@ -1116,7 +1148,10 @@ class QualityBasedReallocationService:
         strategy_id: str,
     ) -> dict[str, float | int | None] | None:
         rows = self._session.scalars(
-            select(MetricsSummary).order_by(
+            select(MetricsSummary)
+            .outerjoin(SimulationRuns, MetricsSummary.run_id == SimulationRuns.run_id)
+            .where(_not_bench_resim())
+            .order_by(
                 MetricsSummary.created_at.desc(),
                 MetricsSummary.metrics_snapshot_id.asc(),
             )
@@ -1138,25 +1173,14 @@ class QualityBasedReallocationService:
         return None
 
     def _quality_score(self, metrics: dict[str, float | int | None]) -> Decimal:
-        sharpe = Decimal(str(metrics["sharpe_ratio"] if metrics["sharpe_ratio"] is not None else 0))
-        total_return = Decimal(
-            str(metrics["total_return"] if metrics["total_return"] is not None else 0)
+        trade_count = metrics["trade_count"]
+        return metrics_quality_score(
+            sharpe=metrics["sharpe_ratio"],
+            total_return=metrics["total_return"],
+            max_drawdown=metrics["max_drawdown"],
+            win_rate=metrics["win_rate"],
+            trade_count=int(trade_count) if trade_count is not None else None,
         )
-        drawdown = Decimal(
-            str(metrics["max_drawdown"] if metrics["max_drawdown"] is not None else 0)
-        )
-        win_rate = Decimal(str(metrics["win_rate"] if metrics["win_rate"] is not None else 0))
-        trade_count = Decimal(
-            str(metrics["trade_count"] if metrics["trade_count"] is not None else 0)
-        )
-
-        score = Decimal("1")
-        score += max(sharpe, Decimal("-1")) * Decimal("0.40")
-        score += total_return * Decimal("1.50")
-        score += win_rate * Decimal("0.40")
-        score += min(trade_count / Decimal("100"), Decimal("0.25"))
-        score -= abs(drawdown) * Decimal("2.00")
-        return max(score, Decimal("0.01"))
 
     def _live_quality_score(self, live_metrics: dict[str, float | int | None]) -> Decimal:
         """Compute quality score from realized live/runtime metrics.
@@ -1164,19 +1188,14 @@ class QualityBasedReallocationService:
         Uses the same weighting formula as the backtest score so that the two
         are directly comparable when blended.
         """
-        sharpe = Decimal(str(live_metrics.get("rolling_sharpe") or 0))
-        total_return = Decimal(str(live_metrics.get("realized_return") or 0))
-        drawdown = Decimal(str(live_metrics.get("realized_drawdown") or 0))
-        win_rate = Decimal(str(live_metrics.get("live_win_rate") or 0))
-        trade_count = Decimal(str(live_metrics.get("trade_count") or 0))
-
-        score = Decimal("1")
-        score += max(sharpe, Decimal("-1")) * Decimal("0.40")
-        score += total_return * Decimal("1.50")
-        score += win_rate * Decimal("0.40")
-        score += min(trade_count / Decimal("100"), Decimal("0.25"))
-        score -= abs(drawdown) * Decimal("2.00")
-        return max(score, Decimal("0.01"))
+        trade_count = live_metrics.get("trade_count")
+        return metrics_quality_score(
+            sharpe=live_metrics.get("rolling_sharpe"),
+            total_return=live_metrics.get("realized_return"),
+            max_drawdown=live_metrics.get("realized_drawdown"),
+            win_rate=live_metrics.get("live_win_rate"),
+            trade_count=int(trade_count) if trade_count is not None else None,
+        )
 
     def _policies_by_status_and_tier(
         self,
