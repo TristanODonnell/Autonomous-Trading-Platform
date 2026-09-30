@@ -4,7 +4,7 @@
 truth for the overall design, what is already built, and how to approach each remaining step.
 Step-level detail lives in companion docs (e.g. `portfolio-rotation-step1-multi-strategy.md`).
 
-Last updated: 2026-09-29 (Step 4 complete).
+Last updated: 2026-09-30 (Step 5 complete).
 
 ---
 
@@ -105,7 +105,8 @@ results. It must earn on-deck and build a forward record first.
 | **2** | On-deck shadow tracking | ✅ **Done** 2026-09-28 (uncommitted) — `portfolio-rotation-step2-on-deck-shadow.md` |
 | **3** | Bench management | ✅ **Done** 2026-09-28 — `portfolio-rotation-step3-bench-management.md` |
 | **4** | Portfolio review (scorecard, auto decisions) | ✅ **Done** 2026-09-29 — `portfolio-rotation-step4-portfolio-review.md` |
-| **5** | Rotation backtest mode (tune thresholds) | ⏳ Next |
+| **5** | Rotation backtest mode (tune thresholds) | ✅ **Done** 2026-09-30 — `portfolio-rotation-step5-rotation-backtest.md` |
+| **5b** | Align research / bench re-sim cadence with the daily trading cycle, then re-tune | ⏳ Next (found in Step 5) |
 | **6** | Airflow schedules (daily / weekly / monthly) | Planned — **user said not yet** |
 
 ---
@@ -258,7 +259,17 @@ evidence weighting; automatic decisions with guardrails.
   automatic decisions — the user chose automatic swaps, but advisory output is cheap and is
   what Step 5 tunes against.
 
-### Step 5 — Rotation backtest mode
+### Step 5 — Rotation backtest mode (✅ done — see `portfolio-rotation-step5-rotation-backtest.md`)
+
+What exists now: rotation report (artifact `rotation` section + `rotation-report` CLI, SPY
+benchmark), market-excess correlation (bench + scorecard), `export-rotation-dataset` and
+`rotation-sweep` (offline simulator reproducing the real review path; 324-config grid).
+Outcome: no tuned config beat the no-rotation baseline; defaults moved to streak 4 / tenure
+60 d. Fixed on the way: per-symbol cap blocked risk-reducing sells (JPM froze), buys now
+aggregated per symbol in-cycle, review re-weights were frozen after the first write.
+**Next (5b):** research/bench re-sims run on intraday bars while trading is daily, so re-sim
+evidence overstates candidates; align the cadence, then re-record and re-sweep. Original
+scope below.
 
 **Goal:** run months of history with Steps 1–4 active and check the system picks, rotates and
 prunes sensibly; tune thresholds (review cadence, challenger margin, tenure, caps, objective).
@@ -300,7 +311,7 @@ rebalance, health, risk budgeting and the ladder run only inside the backtester.
 
 ```bash
 python scripts/reset_backtest_state.py
-rm -f artifacts/platform/backtests/<name>.checkpoint.json   # otherwise it silently resumes and skips every tick
+rm -f artifacts/platform/backtests/<output stem>.checkpoint.json   # named after --output, not the fixture; otherwise it silently resumes and skips every tick
 atp platform backtest run --fixture <fixture.yaml> --output artifacts/platform/backtests/<name>.json
 ```
 
