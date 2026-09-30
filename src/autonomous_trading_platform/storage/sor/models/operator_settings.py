@@ -81,8 +81,10 @@ class OperatorSettingsRow(Base):
     # Relative score edge a challenger needs over an incumbent (after turnover cost).
     review_swap_margin: Mapped[float] = mapped_column(Numeric(6, 4), nullable=False, default=0.10)
     # Consecutive weekly reviews the edge must hold before a swap.
-    review_swap_consecutive: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
-    review_min_tenure_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    # Rotation step 5 tuning: longer streak and tenure (rotate less) did best on the
+    # 6-month sweep; see docs/roadmaps/portfolio-rotation-step5-rotation-backtest.md.
+    review_swap_consecutive: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
+    review_min_tenure_days: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     review_max_swaps_per_review: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     # Days between swap-eligible (monthly) reviews.
     review_swap_interval_days: Mapped[int] = mapped_column(Integer, nullable=False, default=28)

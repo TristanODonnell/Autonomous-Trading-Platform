@@ -53,8 +53,8 @@ def test_review_settings_defaults(db_session: Session) -> None:
 
     assert row.portfolio_review_mode == "off"
     assert float(row.review_swap_margin) == 0.10
-    assert row.review_swap_consecutive == 3
-    assert row.review_min_tenure_days == 30
+    assert row.review_swap_consecutive == 4
+    assert row.review_min_tenure_days == 60
     assert row.review_max_swaps_per_review == 1
     assert row.review_swap_interval_days == 28
     assert float(row.review_turnover_cost_bps) == 20
