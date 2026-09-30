@@ -268,6 +268,9 @@ def test_auto_swap_moves_both_sides_and_reweights(db_session: Session) -> None:
     assert kinds[ReviewDecisionType.REWEIGHT].applied is True
     assert kinds[ReviewDecisionType.REWEIGHT].reason == "reweighted"
     assert reallocation.calls and reallocation.calls[0]["now"] == T0
+    # Auto-rebalance actor, or the next rebalance treats these overrides as manual.
+    assert reallocation.calls[0]["actor"] == "auto_rebalance"
+    assert reallocation.calls[0]["trigger_source"] == "portfolio_review"
     transitions = PortfolioMembershipRepository(db_session).get_transitions("c")
     assert transitions[-1].review_id == result.review_id
     assert transitions[-1].created_at == T0

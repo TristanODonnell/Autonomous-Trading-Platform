@@ -40,6 +40,7 @@ from autonomous_trading_platform.application.services.portfolio_scorecard_servic
     PortfolioScorecardService,
 )
 from autonomous_trading_platform.application.services.quality_based_reallocation_service import (
+    AUTO_REBALANCE_ACTOR,
     QualityBasedReallocationService,
 )
 from autonomous_trading_platform.application.services.strategy_governance_service import (
@@ -309,7 +310,11 @@ class PortfolioReviewService:
                 session=self._session
             )
             outcome = reallocation.rebalance(
-                actor=REVIEW_ACTOR, trigger_source="portfolio_review", now=now
+                # Written as auto-rebalance overrides: any other actor makes them look
+                # manual, and the next rebalance would never update them again.
+                actor=AUTO_REBALANCE_ACTOR,
+                trigger_source="portfolio_review",
+                now=now,
             )
             applied = outcome.skipped_reason is None
             reason = outcome.skipped_reason or ("reweighted" if outcome.changed else "unchanged")
