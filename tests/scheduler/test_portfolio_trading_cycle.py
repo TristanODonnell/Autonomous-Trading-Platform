@@ -61,8 +61,11 @@ def _intent_strategies(db_session, run_id) -> set[str]:
 
 
 def test_every_active_strategy_trades_its_own_sleeve(
-    seeded_paper_trading_cycle_fixture, db_session
+    seeded_paper_trading_cycle_fixture, db_session, monkeypatch
 ) -> None:
+    # Both strategies buy the same symbol; lift the per-symbol cap so both fit
+    # (the combined-exposure trim has its own test below).
+    monkeypatch.setenv("MAX_SYMBOL_EXPOSURE", "10000000")
     fixture = seeded_paper_trading_cycle_fixture
     _enable_portfolio_mode(db_session)
 
@@ -119,3 +122,27 @@ def test_portfolio_mode_off_keeps_the_single_strategy_cycle(
     assert manifest.strategy_id == "baseline_strategy"
     assert PortfolioMembershipRepository(db_session).get_all() == []
     assert db_session.query(StrategySleeveLedgerRow).count() == 0
+
+
+def test_sleeves_buying_the_same_symbol_share_the_symbol_cap(
+    seeded_paper_trading_cycle_fixture, db_session
+) -> None:
+    """Rotation step 5 finding: each sleeve's buy used to pass the per-symbol cap on
+    its own, so together they pushed the account over it."""
+    fixture = seeded_paper_trading_cycle_fixture
+    _enable_portfolio_mode(db_session)
+
+    run_trading_cycle(now_utc=fixture.now_utc)
+
+    manifest = _latest_manifest(db_session)
+    assert manifest.status == "completed"
+    from autonomous_trading_platform.config.settings import Settings
+    from autonomous_trading_platform.storage.sor.models.order_intents import OrderIntents
+
+    rows = db_session.query(OrderIntents).filter(OrderIntents.run_id == manifest.run_id).all()
+    by_symbol: dict[str, float] = {}
+    for row in rows:
+        if str(row.side).lower().endswith("buy"):
+            by_symbol[row.symbol] = by_symbol.get(row.symbol, 0.0) + float(row.notional or 0)
+    cap = float(Settings().max_symbol_exposure)
+    assert by_symbol and all(total <= cap for total in by_symbol.values())

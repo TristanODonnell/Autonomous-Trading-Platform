@@ -10,6 +10,8 @@ Flow per cycle:
      sleeve, then trim buys so the whole sleeve stays within the budget (the sizer
      sizes each position from the full allocation). WINDING_DOWN strategies and
      orphan sleeves only exit.
+     Then trim buys so several sleeves buying one symbol in the same cycle keep
+     the account under the per-symbol cap.
   4. Cross opposing orders between sleeves internally; send only residuals.
   5. Never let sells for a symbol exceed what the account actually holds.
   6. Shadow-trade ON_DECK strategies (simulated fills into shadow sleeves; no
@@ -286,6 +288,21 @@ def run_portfolio_evaluation(
         if is_active and signals and not generated:
             _apply_state_event(deps, sid, StrategyEvent.RESET, now_utc)
 
+    # 3b. Several sleeves may buy the same symbol in one cycle, each checked against
+    # start-of-cycle holdings; keep the account's combined exposure under the cap.
+    cap_usd = _symbol_cap_usd(construction, deps)
+    intents, symbol_trimmed = _cap_buys_to_symbol_limit(
+        intents, account_positions, cap_usd=cap_usd, construction=construction, prices=prices
+    )
+    if symbol_trimmed:
+        logger.info(
+            "portfolio_evaluation.buys_trimmed_to_symbol_cap",
+            extra={
+                "cap_usd": str(cap_usd),
+                "trimmed_qty": {k: str(v) for k, v in symbol_trimmed.items()},
+            },
+        )
+
     # 4. Internal crossing between sleeves.
     plan = SleeveCrossingService(construction).plan(intents, prices=prices, run_id=manifest.run_id)
     crosses: list[PlannedCross] = []
@@ -439,6 +456,83 @@ def _cap_buys_to_budget(
         elif (new := replaced[intent.intent_id]) is not None:
             result.append(new)
     return result, buys_value - kept_value
+
+
+def _symbol_cap_usd(construction: Any, deps: Any) -> Decimal | None:
+    risk = getattr(construction, "pre_trade_risk_service", None)
+    cap_fn = getattr(risk, "symbol_exposure_cap_usd", None)
+    if cap_fn is None:
+        return None
+    engine = getattr(deps, "portfolio_engine", None)
+    equity = getattr(engine, "total_capital", None)
+    cap = cap_fn(float(equity) if equity is not None else None)
+    return Decimal(str(cap)) if cap is not None else None
+
+
+def _cap_buys_to_symbol_limit(
+    intents: list[OrderIntent],
+    account_positions: dict[str, Position],
+    *,
+    cap_usd: Decimal | None,
+    construction: Any,
+    prices: dict[str, float],
+) -> tuple[list[OrderIntent], dict[str, Decimal]]:
+    """Trim buys so each symbol's account exposure after the cycle stays under cap_usd.
+
+    Projected exposure = account holding - this cycle's sells + buys, at current
+    prices. Sells are never touched and free room first; buys are then filled in
+    (strategy_id, intent_id) order until the cap is reached. A buy is only trimmed,
+    never grown, and a symbol already over the cap gets no new buys. Returns
+    (intents, quantity removed per symbol).
+    """
+    if cap_usd is None:
+        return intents, {}
+    buys_by_symbol: dict[str, list[OrderIntent]] = defaultdict(list)
+    sells_qty: dict[str, Decimal] = defaultdict(Decimal)
+    for intent in intents:
+        if intent.side == Side.BUY:
+            buys_by_symbol[intent.symbol].append(intent)
+        elif intent.side == Side.SELL:
+            sells_qty[intent.symbol] += Decimal(intent.qty or 0)
+
+    replaced: dict[Any, OrderIntent | None] = {}
+    trimmed: dict[str, Decimal] = {}
+    for symbol, buys in buys_by_symbol.items():
+        price = Decimal(str(prices.get(symbol, 0) or 0))
+        if price <= 0:
+            continue
+        held = account_positions.get(symbol)
+        held_qty = Decimal(held.quantity) if held is not None else Decimal("0")
+        projected = max(held_qty - sells_qty[symbol], Decimal("0")) * price
+        room = cap_usd - projected
+        for intent in sorted(buys, key=lambda i: (i.strategy_id, str(i.intent_id))):
+            qty = Decimal(intent.qty or 0)
+            allowed = min(qty, max(Decimal(int(room / price)), Decimal("0")))
+            room -= allowed * price
+            if allowed == qty:
+                continue
+            trimmed[symbol] = trimmed.get(symbol, Decimal("0")) + (qty - allowed)
+            if allowed <= 0:
+                replaced[intent.intent_id] = None
+                continue
+            rebuilt = construction.build_order_intent(
+                delta={"symbol": symbol, "delta_qty": int(allowed)},
+                prices=prices,
+                run_id=intent.run_id,
+                strategy_id=intent.strategy_id,
+                bar_timestamp=intent.bar_timestamp,
+                now=intent.timestamp,
+            )
+            rebuilt.metadata = {**(intent.metadata or {}), "symbol_cap_trimmed_from": str(qty)}
+            replaced[intent.intent_id] = rebuilt
+
+    result: list[OrderIntent] = []
+    for intent in intents:
+        if intent.intent_id not in replaced:
+            result.append(intent)
+        elif (new := replaced[intent.intent_id]) is not None:
+            result.append(new)
+    return result, trimmed
 
 
 def _clamp_sells_to_account(

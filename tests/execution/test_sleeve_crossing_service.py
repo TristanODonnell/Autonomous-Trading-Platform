@@ -17,6 +17,7 @@ from autonomous_trading_platform.execution.services.sleeve_crossing_service impo
 )
 from autonomous_trading_platform.scheduler.jobs.portfolio_evaluation import (
     _cap_buys_to_budget,
+    _cap_buys_to_symbol_limit,
     _clamp_sells_to_account,
 )
 
@@ -326,3 +327,62 @@ class TestOrderLimitRejection:
 
         with pytest.raises(KillSwitchEnabledError):
             self._generate(self._RejectSymbol("AAPL", KillSwitchEnabledError), skip=True)
+
+
+class TestSymbolCapAcrossSleeves:
+    """Portfolio rotation step 5 finding: two sleeves each bought 125 JPM in one cycle,
+    both checked against start-of-cycle holdings, and the account ended far above
+    the per-symbol cap."""
+
+    def test_second_sleeve_is_trimmed_to_the_remaining_room(self, construction) -> None:
+        # Cap 25000; account holds 50 AAPL (5000). A wants 125 (12500), B wants 125.
+        account = {"AAPL": Position(symbol="AAPL", quantity=Decimal("50"), avg_cost=Decimal("100"))}
+        intents = [_intent(construction, "A", "AAPL", 125), _intent(construction, "B", "AAPL", 125)]
+
+        result, trimmed = _cap_buys_to_symbol_limit(
+            intents, account, cap_usd=Decimal("25000"), construction=construction, prices=_PRICES
+        )
+
+        assert _summary(result) == {("A", "AAPL", "buy", 125), ("B", "AAPL", "buy", 75)}
+        assert trimmed == {"AAPL": Decimal("50")}
+        rebuilt = next(i for i in result if i.strategy_id == "B")
+        assert rebuilt.metadata is not None and rebuilt.metadata["symbol_cap_trimmed_from"] == "125"
+
+    def test_sells_in_the_same_cycle_free_room(self, construction) -> None:
+        account = {
+            "AAPL": Position(symbol="AAPL", quantity=Decimal("250"), avg_cost=Decimal("100"))
+        }
+        intents = [
+            _intent(construction, "A", "AAPL", -125),
+            _intent(construction, "B", "AAPL", 100),
+        ]
+
+        result, trimmed = _cap_buys_to_symbol_limit(
+            intents, account, cap_usd=Decimal("25000"), construction=construction, prices=_PRICES
+        )
+
+        # 250 - 125 sold = 125 (12500) + 100 bought (10000) = 22500 <= 25000.
+        assert trimmed == {}
+        assert result == intents
+
+    def test_symbol_over_the_cap_gets_no_new_buys_but_sells_pass(self, construction) -> None:
+        account = {
+            "AAPL": Position(symbol="AAPL", quantity=Decimal("300"), avg_cost=Decimal("100"))
+        }
+        intents = [_intent(construction, "A", "AAPL", -50), _intent(construction, "B", "AAPL", 10)]
+
+        result, trimmed = _cap_buys_to_symbol_limit(
+            intents, account, cap_usd=Decimal("25000"), construction=construction, prices=_PRICES
+        )
+
+        assert _summary(result) == {("A", "AAPL", "sell", 50)}
+        assert trimmed == {"AAPL": Decimal("10")}
+
+    def test_no_cap_leaves_intents_alone(self, construction) -> None:
+        intents = [_intent(construction, "A", "AAPL", 500)]
+
+        result, trimmed = _cap_buys_to_symbol_limit(
+            intents, {}, cap_usd=None, construction=construction, prices=_PRICES
+        )
+
+        assert result == intents and trimmed == {}
