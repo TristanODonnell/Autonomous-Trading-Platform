@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import platform
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
@@ -126,6 +126,8 @@ class SimulationRunResult:
     trade_metrics: TradeMetrics
     stability_metrics: StabilityMetrics
     equity_curve: pd.DataFrame
+    # Fills of the run (one row per fill); used to slice trade metrics by window.
+    trade_logs: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 
 class SimulationRunner:
@@ -344,6 +346,7 @@ class SimulationRunner:
                 trade_metrics=tm,
                 stability_metrics=sm,
                 equity_curve=live_equity_curve,
+                trade_logs=trade_logs,
             )
 
         except Exception as exc:

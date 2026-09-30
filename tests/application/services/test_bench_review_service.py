@@ -20,6 +20,7 @@ from autonomous_trading_platform.application.services.bench_resimulation_service
 from autonomous_trading_platform.application.services.bench_review_service import (
     BenchReviewService,
     correlation,
+    market_excess_returns,
 )
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.contracts.governance.bench import BenchDecision
@@ -121,13 +122,13 @@ def review(db_session: Session, resim: _FakeResim):
         bench_max_idle_days=120,
     )
 
-    def run(now: datetime = _NOW):
+    def run(now: datetime = _NOW, market: pd.Series | None = None):
         service = BenchReviewService(
             db_session,
             resimulation=resim,  # type: ignore[arg-type]
             portfolio=ActivePortfolioService(db_session),
         )
-        return service.review(window=_WINDOW, now=now)
+        return service.review(window=_WINDOW, now=now, market_returns=market)
 
     return run
 
@@ -398,3 +399,65 @@ def test_correlation_needs_enough_shared_days() -> None:
     assert correlation(a, a) == pytest.approx(1.0)
     assert correlation(a.iloc[:5], a.iloc[:5]) is None
     assert correlation(a, pd.Series(0.0, index=_DAYS)) is None  # flat: undefined
+
+
+# ---------------------------------------------------------------------------
+# Market-excess correlation (portfolio rotation step 5B)
+# ---------------------------------------------------------------------------
+
+
+def _market_trackers() -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Two strategies that both ride the market (beta 1) but differ otherwise."""
+    market = pd.Series(np.random.default_rng(7).normal(0, 0.012, len(_DAYS)), index=_DAYS)
+    own_a = _series(11) * 0.4
+    own_b = _series(12) * 0.4
+    return market, market + own_a, market + own_b
+
+
+def test_market_excess_removes_the_shared_market_move() -> None:
+    market, a, b = _market_trackers()
+
+    raw = correlation(a, b)
+    excess = correlation(market_excess_returns(a, market), market_excess_returns(b, market))
+
+    assert raw is not None and raw > 0.85
+    assert excess is not None and abs(excess) < 0.5
+
+
+def test_market_excess_keeps_genuine_duplicates_correlated() -> None:
+    market, a, _ = _market_trackers()
+    copy = _series(3, like=a)
+
+    excess = correlation(market_excess_returns(a, market), market_excess_returns(copy, market))
+
+    assert excess is not None and excess > 0.85
+
+
+def test_market_excess_without_enough_market_data_returns_raw() -> None:
+    _, a, _ = _market_trackers()
+
+    assert market_excess_returns(a, None).equals(a)
+    assert market_excess_returns(a, pd.Series(0.01, index=_DAYS[:3])).equals(a)
+
+
+def test_bench_review_groups_on_market_excess_returns(db_session, resim, review) -> None:
+    market, a, b = _market_trackers()
+    for sid in ("a", "b"):
+        _eligible(db_session, sid, state="candidate")
+    resim.set("a", 1.3, a)
+    resim.set("b", 1.2, b)
+
+    raw_result = review(market=None)
+    assert _decisions(raw_result)["b"] == ("retire", "redundant")
+
+
+def test_bench_review_keeps_market_trackers_apart(db_session, resim, review) -> None:
+    market, a, b = _market_trackers()
+    for sid in ("a", "b"):
+        _eligible(db_session, sid, state="candidate")
+    resim.set("a", 1.3, a)
+    resim.set("b", 1.2, b)
+
+    result = review(market=market)
+
+    assert _decisions(result) == {"a": ("admit", "novel"), "b": ("admit", "novel")}

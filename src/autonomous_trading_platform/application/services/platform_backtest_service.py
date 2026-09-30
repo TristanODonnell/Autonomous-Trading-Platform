@@ -1225,6 +1225,23 @@ class PlatformBacktestRunner:
 
             strategy_catalog_summary = build_strategy_catalog_summary(session=session)
 
+            rotation_summary = None
+            try:
+                from autonomous_trading_platform.application.services.platform_replay.rotation_hooks import (
+                    build_rotation_summary,
+                )
+
+                rotation_summary = build_rotation_summary(
+                    session=session,
+                    start_date=inputs.start_date,
+                    end_date=inputs.end_date,
+                    starting_cash=float(inputs.starting_cash),
+                    dataset_version_id=backtest_dataset_version_id,
+                    symbols=list(ctx.symbols),
+                )
+            except Exception as exc:
+                all_warnings.append(f"rotation_report: {exc}")
+
         finally:
             session.close()
 
@@ -1273,6 +1290,7 @@ class PlatformBacktestRunner:
             research=research_summary,
             diagnostics=diagnostics_summary,
             strategy_catalog=strategy_catalog_summary,
+            rotation=rotation_summary,
             tick_results=tick_results,
             timeline_events_applied=timeline_events_applied,
             warnings=all_warnings,

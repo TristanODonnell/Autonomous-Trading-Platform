@@ -24,6 +24,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from autonomous_trading_platform.contracts.governance.rotation_report import RotationReport
+
 # ---------------------------------------------------------------------------
 # Core context — passed to every domain hook
 # ---------------------------------------------------------------------------
@@ -464,6 +466,8 @@ class PlatformBacktestArtifact:
     research: ResearchSummary | None = None
     diagnostics: DiagnosticsSummary | None = None
     strategy_catalog: StrategyCatalogSummary | None = None
+    # Portfolio-mode runs only (rotation step 5): performance, benchmark, rotation activity.
+    rotation: RotationReport | None = None
 
     # Per-tick domain results
     tick_results: list[dict[str, Any]] = field(default_factory=list)

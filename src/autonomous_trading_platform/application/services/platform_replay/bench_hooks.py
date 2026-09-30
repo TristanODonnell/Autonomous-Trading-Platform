@@ -12,6 +12,7 @@ import math
 from datetime import date, datetime, timedelta
 from typing import Any
 
+import pandas as pd
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.application.services.bench_resimulation_service import (
@@ -83,7 +84,10 @@ def run_bench_review_at_timestamp(
             session,
             resimulation=BenchResimulationService(session, simulation_context.simulation_runner),
         )
-        review = bench_service.review(window=window, now=timestamp)
+        market_returns = market_daily_returns(
+            session=session, window=window, simulation_runner=simulation_context.simulation_runner
+        )
+        review = bench_service.review(window=window, now=timestamp, market_returns=market_returns)
         session.flush()
     except Exception as exc:
         logger.exception("bench_review.replay_failed", extra={"timestamp": timestamp.isoformat()})
@@ -104,6 +108,7 @@ def run_bench_review_at_timestamp(
             bench_review_id=review.review_id,
             outcomes=bench_service.last_outcomes,
             simulation_runner=simulation_context.simulation_runner,
+            market_returns=market_returns,
         )
         session.flush()
     except Exception as exc:
@@ -133,6 +138,7 @@ def run_bench_review_at_timestamp(
             },
             "bench_size": len(review.bench),
             "skipped": skipped,
+            "correlation_basis": "market_excess" if market_returns is not None else "raw",
             "portfolio_review": portfolio_summary,
         },
         errors=errors,
@@ -148,6 +154,7 @@ def _run_portfolio_review(
     bench_review_id: str,
     outcomes: dict[str, ResimOutcome],
     simulation_runner: Any,
+    market_returns: pd.Series | None = None,
 ) -> dict[str, Any] | None:
     """Run the portfolio review when its mode is not off; returns a replay summary."""
     from autonomous_trading_platform.application.services.portfolio_review_service import (
@@ -175,6 +182,7 @@ def _run_portfolio_review(
         bench_review_id=bench_review_id,
         window_start=window.start_date,
         window_end=window.end_date,
+        market_returns=market_returns,
     )
     if result is None:
         return None
@@ -199,6 +207,33 @@ def _run_portfolio_review(
             for d in result.decisions
         ],
     }
+
+
+def market_daily_returns(
+    *, session: Session, window: BenchWindow, simulation_runner: Any
+) -> pd.Series | None:
+    """Daily returns of the market proxy (SPY) over the window, from the re-sim dataset.
+
+    None when the dataset has no bars for it; correlations then use raw returns.
+    """
+    from autonomous_trading_platform.application.services.platform_replay.rotation_hooks import (
+        DEFAULT_BENCHMARK,
+        load_daily_closes,
+    )
+
+    closes = load_daily_closes(
+        session=session,
+        dataset_version=window.dataset_version,
+        symbol=DEFAULT_BENCHMARK,
+        start_date=window.start_date,
+        end_date=window.end_date,
+        price_basis=window.price_basis,
+        simulation_runner=simulation_runner,
+    )
+    if closes is None or len(closes) < 2:
+        logger.warning("bench_review.no_market_returns", extra={"window_end": str(window.end_date)})
+        return None
+    return closes.pct_change().dropna()
 
 
 def current_regime_label(*, simulation_runner: Any, window: BenchWindow) -> str | None:

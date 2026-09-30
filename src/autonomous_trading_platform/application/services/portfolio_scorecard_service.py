@@ -41,7 +41,10 @@ from sqlalchemy.orm import Session
 from autonomous_trading_platform.application.services.bench_resimulation_service import (
     ResimOutcome,
 )
-from autonomous_trading_platform.application.services.bench_review_service import correlation
+from autonomous_trading_platform.application.services.bench_review_service import (
+    correlation,
+    excess_returns_by_strategy,
+)
 from autonomous_trading_platform.application.services.live_performance_metrics_service import (
     LivePerformanceMetricsService,
     compute_alpha,
@@ -202,9 +205,16 @@ def build_scorecards(
     review_id: str,
     now: datetime,
     regime_label: str | None = None,
+    market_returns: pd.Series | None = None,
 ) -> ScorecardSet:
-    """Score and rank every strategy. Pure: no storage access."""
-    returns = {e.strategy_id: e.resim_returns for e in evidence if not e.resim_returns.empty}
+    """Score and rank every strategy. Pure: no storage access.
+
+    With market_returns the correlation lens uses market-excess returns.
+    """
+    returns = excess_returns_by_strategy(
+        {e.strategy_id: e.resim_returns for e in evidence if not e.resim_returns.empty},
+        market_returns,
+    )
     active_ids = sorted(e.strategy_id for e in evidence if e.tier == MembershipStatus.ACTIVE.value)
     cards: dict[str, Scorecard] = {}
 
@@ -316,6 +326,7 @@ class PortfolioScorecardService:
         review_id: str,
         now: datetime,
         resim_outcomes: dict[str, ResimOutcome] | None = None,
+        market_returns: pd.Series | None = None,
     ) -> ScorecardSet:
         outcomes = resim_outcomes or {}
         rows = sorted(
@@ -333,7 +344,13 @@ class PortfolioScorecardService:
             for row in rows
         ]
         regime = self._regime_label_fn(now) if self._regime_label_fn else None
-        return build_scorecards(evidence, review_id=review_id, now=now, regime_label=regime)
+        return build_scorecards(
+            evidence,
+            review_id=review_id,
+            now=now,
+            regime_label=regime,
+            market_returns=market_returns,
+        )
 
     def gather(
         self,

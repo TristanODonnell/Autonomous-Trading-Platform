@@ -245,6 +245,24 @@ def test_correlation_penalty_only_against_other_actives() -> None:
     assert (cards["indep"].rank or 0) < (cards["clone"].rank or 0)
 
 
+def test_correlation_lens_uses_market_excess_returns_when_given() -> None:
+    market = _returns(BASE)
+    a = _returns([m + 0.5 * i for m, i in zip(BASE, INDEPENDENT, strict=True)])
+    b = _returns([m - 0.5 * i for m, i in zip(BASE, INDEPENDENT, strict=True)])
+    evidence = [
+        StrategyEvidence("a", ACTIVE, resim_score=Decimal("1.2"), resim_returns=a),
+        StrategyEvidence("b", ON_DECK, resim_score=Decimal("1.2"), resim_returns=b),
+    ]
+
+    raw = build_scorecards(evidence, review_id="r1", now=T0).cards["b"]
+    excess = build_scorecards(evidence, review_id="r1", now=T0, market_returns=market).cards["b"]
+
+    # Both ride the market; beyond it they move in opposite directions.
+    assert raw.mean_correlation is not None and raw.mean_correlation > 0.3
+    assert excess.mean_correlation is not None and excess.mean_correlation < 0
+    assert excess.correlation_penalty == 0
+
+
 def test_score_for_slot_excludes_the_incumbent_being_replaced() -> None:
     scorecards = build_scorecards(
         [

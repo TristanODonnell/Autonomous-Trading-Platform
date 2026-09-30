@@ -125,7 +125,11 @@ class BenchReviewService:
 
     # ------------------------------------------------------------------
 
-    def review(self, *, window: BenchWindow, now: datetime) -> BenchReviewResult:
+    def review(
+        self, *, window: BenchWindow, now: datetime, market_returns: pd.Series | None = None
+    ) -> BenchReviewResult:
+        """One bench review. market_returns (e.g. SPY daily returns) makes redundancy
+        use market-excess returns; without it raw returns are correlated."""
         settings = BenchSettings.from_row(
             OperatorSettingsRepository(self._session).get_or_create_default()
         )
@@ -142,11 +146,11 @@ class BenchReviewService:
             )
 
         reviewable = [sid for sid in sorted(tiers) if outcomes[sid].ok]
-        groups = _group(
-            {sid: outcomes[sid].daily_returns for sid in reviewable},
-            threshold=settings.correlation_threshold,
+        returns = excess_returns_by_strategy(
+            {sid: outcomes[sid].daily_returns for sid in reviewable}, market_returns
         )
-        correlations = _max_correlations({sid: outcomes[sid].daily_returns for sid in reviewable})
+        groups = _group(returns, threshold=settings.correlation_threshold)
+        correlations = _max_correlations(returns)
 
         for index, group in enumerate(groups):
             group_id = f"{review_id}:g{index:02d}"
@@ -392,6 +396,33 @@ def correlation(a: pd.Series, b: pd.Series) -> float | None:
         return None
     value = float(x.corr(y))
     return None if pd.isna(value) else value
+
+
+def market_excess_returns(returns: pd.Series, market: pd.Series | None) -> pd.Series:
+    """Daily returns with the market component removed: r - beta * market.
+
+    beta is estimated on the shared days. Long-only strategies all move with the
+    market, so raw correlations group them by beta rather than by behaviour; the
+    residuals compare what each strategy does beyond the market. Without enough
+    shared days (or a flat market) the returns are returned unchanged.
+    """
+    if market is None or market.empty or returns.empty:
+        return returns
+    joined = pd.concat([returns, market], axis=1, join="inner").dropna()
+    if len(joined) < MIN_OVERLAP_DAYS:
+        return returns
+    r, m = joined.iloc[:, 0], joined.iloc[:, 1]
+    variance = float(m.var())
+    if variance == 0:
+        return returns
+    beta = float(r.cov(m)) / variance
+    return r - beta * m
+
+
+def excess_returns_by_strategy(
+    returns: dict[str, pd.Series], market: pd.Series | None
+) -> dict[str, pd.Series]:
+    return {sid: market_excess_returns(series, market) for sid, series in returns.items()}
 
 
 def _group(returns: dict[str, pd.Series], *, threshold: float) -> list[list[str]]:

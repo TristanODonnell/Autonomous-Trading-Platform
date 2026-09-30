@@ -56,7 +56,9 @@ class _FakeScorecards:
         # strategy_id -> (tier, score)
         self.scores = scores
 
-    def build(self, *, review_id: str, now: datetime, resim_outcomes: Any = None) -> ScorecardSet:
+    def build(
+        self, *, review_id: str, now: datetime, resim_outcomes: Any = None, **_: Any
+    ) -> ScorecardSet:
         cards = {
             sid: Scorecard(
                 review_id=review_id,
@@ -114,6 +116,8 @@ def _mode(session: Session, mode: PortfolioReviewMode, **extra: object) -> None:
     OperatorSettingsRepository(session).update_current(
         {
             "portfolio_review_mode": mode.value,
+            "review_swap_consecutive": 3,
+            "review_min_tenure_days": 30,
             "min_active_strategies": 1,
             "max_active_strategies": 2,
             **extra,

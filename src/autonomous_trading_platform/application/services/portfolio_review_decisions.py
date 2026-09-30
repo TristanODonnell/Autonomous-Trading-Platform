@@ -122,6 +122,26 @@ def streak(strategy_id: str, prior: list[set[str]]) -> int:
     return count
 
 
+def weekly_review_dates(
+    previous: list[datetime], *, now: datetime, depth: int, min_gap_days: int
+) -> list[datetime]:
+    """Earlier reviews that count toward streaks, most recent first, at most `depth`.
+
+    Streaks count weekly reviews: a review within min_gap_days of the next counted
+    one (e.g. an extra review right after a research tick) neither counts nor breaks.
+    """
+    kept: list[datetime] = []
+    anchor = now
+    for reviewed_at in sorted((d for d in previous if d < now), reverse=True):
+        if (anchor - reviewed_at).days < min_gap_days:
+            continue
+        kept.append(reviewed_at)
+        anchor = reviewed_at
+        if len(kept) >= depth:
+            break
+    return kept
+
+
 def decide(inputs: ReviewInputs, settings: ReviewSettings) -> list[ReviewDecision]:
     engine = _Engine(inputs, settings)
     engine.challenges_and_swaps()

@@ -6,6 +6,7 @@ import sys
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from autonomous_trading_platform.cli.formatters import (
     print_error,
@@ -162,6 +163,54 @@ def register(subparsers) -> None:
     )
     report_parser.add_argument("--json", action="store_true")
     report_parser.set_defaults(func=handle_backtest_report)
+
+    # ── rotation-report ───────────────────────────────────────────────
+    rotation_parser = backtest_sub.add_parser(
+        "rotation-report",
+        help=(
+            "Portfolio-mode rotation report: performance, benchmark, swaps and "
+            "per-strategy contribution. Prints the artifact's rotation section, or "
+            "rebuilds it from the database (only valid right after that run)."
+        ),
+    )
+    rotation_parser.add_argument("--artifact", required=True, type=Path)
+    rotation_parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="Recompute from the current database state and write it into the artifact.",
+    )
+    rotation_parser.add_argument(
+        "--starting-cash", type=float, default=None, help="Required with --rebuild."
+    )
+    rotation_parser.add_argument("--json", action="store_true")
+    rotation_parser.set_defaults(func=handle_backtest_rotation_report)
+
+    # ── export-rotation-dataset / rotation-sweep (rotation step 5) ───
+    export_parser = backtest_sub.add_parser(
+        "export-rotation-dataset",
+        help=(
+            "Right after a recording backtest: re-simulate every strategy that was in the "
+            "pool over the whole run and write the offline rotation dataset."
+        ),
+    )
+    export_parser.add_argument("--artifact", required=True, type=Path)
+    export_parser.add_argument("--starting-cash", required=True, type=float)
+    export_parser.add_argument("--output", required=True, type=Path)
+    export_parser.set_defaults(func=handle_export_rotation_dataset)
+
+    sweep_parser = backtest_sub.add_parser(
+        "rotation-sweep",
+        help=(
+            "Replay the portfolio review offline over a rotation dataset for a grid of "
+            "review settings; rank by Sharpe under drawdown and churn caps."
+        ),
+    )
+    sweep_parser.add_argument("--dataset", required=True, type=Path)
+    sweep_parser.add_argument("--output", type=Path, default=None)
+    sweep_parser.add_argument("--top", type=int, default=10)
+    sweep_parser.add_argument("--max-drawdown", type=float, default=0.15)
+    sweep_parser.add_argument("--max-swaps-per-month", type=float, default=1.0)
+    sweep_parser.set_defaults(func=handle_rotation_sweep)
 
     # ------------------------------------------------------------------
     # fixture seed
@@ -537,6 +586,234 @@ def _find_artifact_by_run_id(run_id: str, artifacts_dir: Path) -> Path | None:
 # ---------------------------------------------------------------------------
 # backtest report
 # ---------------------------------------------------------------------------
+
+
+def handle_backtest_rotation_report(args: argparse.Namespace) -> int:
+    artifact_path: Path = args.artifact
+    if not artifact_path.exists():
+        print_error(f"Artifact not found: {artifact_path}")
+        return 1
+    bundle = json.loads(artifact_path.read_text(encoding="utf-8"))
+
+    if args.rebuild:
+        if args.starting_cash is None:
+            print_error("--rebuild needs --starting-cash")
+            return 1
+        from sqlalchemy import select
+
+        from autonomous_trading_platform.application.services.platform_replay.rotation_hooks import (
+            build_rotation_summary,
+        )
+        from autonomous_trading_platform.db import get_session
+        from autonomous_trading_platform.storage.sor.models.dataset_versions import (
+            DatasetVersions,
+        )
+
+        session = get_session()
+        try:
+            dataset_version = session.scalars(
+                select(DatasetVersions.dataset_version_id)
+                .where(DatasetVersions.dataset_version_id.like("raw_bars_%"))
+                .order_by(DatasetVersions.created_at.desc())
+                .limit(1)
+            ).first()
+            report = build_rotation_summary(
+                session=session,
+                start_date=date.fromisoformat(bundle["start_date"]),
+                end_date=date.fromisoformat(bundle["end_date"]),
+                starting_cash=args.starting_cash,
+                dataset_version_id=dataset_version,
+                symbols=list(bundle.get("symbols") or []),
+            )
+        finally:
+            session.close()
+        if report is None:
+            print_error("Portfolio mode is off: no rotation report.")
+            return 1
+        bundle["rotation"] = report.model_dump(mode="json")
+        artifact_path.write_text(json.dumps(bundle, indent=2, default=str), encoding="utf-8")
+
+    rotation = bundle.get("rotation")
+    if not rotation:
+        print_error("Artifact has no rotation section (portfolio mode off, or use --rebuild).")
+        return 1
+    if args.json:
+        print_json(rotation)
+        return 0
+
+    def fmt(m: dict | None) -> str:
+        if not m:
+            return "n/a"
+        sharpe = m.get("sharpe")
+        return (
+            f"return {m['total_return']:+.2%}  sharpe {sharpe:.2f}  "
+            f"max DD {m['max_drawdown']:.2%}  days {m['trading_days']}"
+            if sharpe is not None
+            else f"return {m['total_return']:+.2%}  max DD {m['max_drawdown']:.2%}"
+        )
+
+    print_header(f"Rotation report {rotation['start_date']} -> {rotation['end_date']}")
+    print(f"  Portfolio : {fmt(rotation.get('portfolio'))}")
+    print(
+        f"  {rotation.get('benchmark_symbol') or 'Benchmark'} B&H : {fmt(rotation.get('benchmark'))}"
+    )
+    print(
+        f"  Swaps {rotation['total_swaps']} ({rotation['swaps_per_month']:.2f}/month)  "
+        f"turnover {rotation.get('turnover')}"
+    )
+    for a in rotation.get("activity", []):
+        moves = {k: v for k, v in a.items() if k != "month" and v}
+        print(f"    {a['month']}: {moves or '-'}")
+    print("  Contribution:")
+    for c in rotation.get("contributions", []):
+        share = f"{c['pnl_share']:.1%}" if c.get("pnl_share") is not None else "n/a"
+        print(
+            f"    {c['strategy_id'][:40]:<40} {c['net_pnl']:>12,.2f} {share:>7}  "
+            f"{c.get('final_tier')}  {c.get('days_by_tier')}"
+        )
+    for w in rotation.get("warnings", []):
+        print(f"  warning: {w}")
+    return 0
+
+
+def handle_export_rotation_dataset(args: argparse.Namespace) -> int:
+    from sqlalchemy import select
+
+    from autonomous_trading_platform.application.services.platform_replay.rotation_hooks import (
+        DEFAULT_BENCHMARK,
+        load_daily_closes,
+    )
+    from autonomous_trading_platform.application.services.rotation_dataset_service import (
+        RotationDatasetService,
+    )
+    from autonomous_trading_platform.db import get_session
+    from autonomous_trading_platform.research.simulation.contexts.build_simulation_context import (
+        build_simulation_context,
+    )
+    from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+
+    bundle = json.loads(args.artifact.read_text(encoding="utf-8"))
+    start, end = date.fromisoformat(bundle["start_date"]), date.fromisoformat(bundle["end_date"])
+    symbols = list(bundle.get("symbols") or [])
+    session = get_session()
+    try:
+        dataset_version = session.scalars(
+            select(DatasetVersions.dataset_version_id)
+            .where(DatasetVersions.dataset_version_id.like("raw_bars_%"))
+            .order_by(DatasetVersions.created_at.desc())
+            .limit(1)
+        ).first()
+        if dataset_version is None:
+            print_error("No raw_bars dataset version found; run the recording backtest first.")
+            return 1
+        runner = build_simulation_context(
+            session=session, universe_size=len(symbols), lookback_bars=20
+        ).simulation_runner
+        market = load_daily_closes(
+            session=session,
+            dataset_version=dataset_version,
+            symbol=DEFAULT_BENCHMARK,
+            start_date=start,
+            end_date=end,
+            simulation_runner=runner,
+        )
+        dataset = RotationDatasetService(session, runner).export(
+            start_date=start,
+            end_date=end,
+            starting_cash=args.starting_cash,
+            dataset_version=dataset_version,
+            symbols=symbols,
+            market_closes=market,
+            market_symbol=DEFAULT_BENCHMARK if market is not None else None,
+            fixture_name=bundle.get("fixture_name"),
+            recorded_rotation=bundle.get("rotation"),
+            progress=print,
+        )
+    finally:
+        session.close()
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(dataset.model_dump_json(), encoding="utf-8")
+    print(
+        f"Rotation dataset saved: {args.output} "
+        f"({len(dataset.strategies)} strategies, {len(dataset.review_dates)} reviews)"
+    )
+    return 0
+
+
+def handle_rotation_sweep(args: argparse.Namespace) -> int:
+    from dataclasses import replace
+
+    from autonomous_trading_platform.application.services.rotation_simulator import (
+        RotationSimulator,
+        SimConfig,
+        grid_configs,
+        rank,
+    )
+    from autonomous_trading_platform.contracts.governance.rotation_dataset import (
+        RotationDataset,
+    )
+
+    dataset = RotationDataset.model_validate_json(args.dataset.read_text(encoding="utf-8"))
+    sim = RotationSimulator(dataset)
+    recorded_config = SimConfig.from_settings(dataset.settings, mode="auto")
+    current = sim.run(recorded_config)
+    baseline = sim.run(replace(recorded_config, mode="off"))
+    configs = grid_configs(recorded_config)
+    results = [sim.run(c) for c in configs]
+    ranked = rank(
+        results, max_drawdown=args.max_drawdown, max_swaps_per_month=args.max_swaps_per_month
+    )
+
+    recorded = dataset.recorded_rotation or {}
+    recorded_swaps = [
+        (d["reviewed_at"][:10], d["strategy_id"], d["counterpart_id"])
+        for d in dataset.recorded_decisions
+        if d["type"] == "swap" and d["applied"]
+    ]
+    simulated_swaps = [
+        (d["at"][:10], d["strategy_id"], d["counterpart_id"])
+        for d in current.decisions
+        if d["type"] == "swap" and d["applied"]
+    ]
+    report: dict[str, Any] = {
+        "dataset": str(args.dataset),
+        "configs": len(configs),
+        "validation": {
+            "recorded_portfolio": recorded.get("portfolio"),
+            "simulated_current_defaults": current.summary(),
+            "recorded_swaps": recorded_swaps,
+            "simulated_swaps": simulated_swaps,
+            "simulated_decisions": current.decisions,
+        },
+        "baseline": baseline.summary(),
+        "current_defaults": current.summary(),
+        "top": [r.summary() for r in ranked[: args.top]],
+        "all": [r.summary() for r in ranked],
+    }
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+        print(f"Sweep saved: {args.output}")
+
+    def line(label: str, row: dict[str, Any]) -> str:
+        sharpe = row.get("sharpe")
+        return (
+            f"  {label:<18} ret {row['total_return'] or 0:+.2%}  "
+            f"sharpe {sharpe if sharpe is None else round(sharpe, 2)}  "
+            f"DD {row['max_drawdown'] or 0:.2%}  swaps/mo {row['swaps_per_month']:.2f}  "
+            f"margin {row['swap_margin']} streak {row['swap_consecutive']} "
+            f"tenure {row['min_tenure_days']} interval {row['swap_interval_days']} "
+            f"floor {row['score_floor']} seats {row['min_active']}-{row['max_active']}"
+        )
+
+    print_header(f"Rotation sweep ({len(configs)} configs)")
+    print(line("baseline (off)", report["baseline"]))
+    print(line("current defaults", report["current_defaults"]))
+    for i, row in enumerate(report["top"], start=1):
+        print(line(f"#{i}", row))
+    print(f"  recorded swaps : {recorded_swaps}")
+    print(f"  simulated swaps: {simulated_swaps}")
+    return 0
 
 
 def handle_backtest_report(args: argparse.Namespace) -> int:

@@ -23,6 +23,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
+import pandas as pd
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.application.services.active_portfolio_service import (
@@ -35,6 +36,7 @@ from autonomous_trading_platform.application.services.portfolio_review_decisions
     ReviewInputs,
     ReviewSettings,
     decide,
+    weekly_review_dates,
 )
 from autonomous_trading_platform.application.services.portfolio_scorecard_service import (
     PortfolioScorecardService,
@@ -124,6 +126,7 @@ class PortfolioReviewService:
         bench_review_id: str | None = None,
         window_start: date | None = None,
         window_end: date | None = None,
+        market_returns: pd.Series | None = None,
     ) -> PortfolioReviewResult | None:
         """Run one review as of `now`. Returns None when the review mode is off."""
         mode = review_mode(self._session)
@@ -135,7 +138,10 @@ class PortfolioReviewService:
         swap_eligible = self._swap_eligible(now=now, interval_days=settings.swap_interval_days)
 
         scorecards = self._scorecards.build(
-            review_id=review_id, now=now, resim_outcomes=resim_outcomes
+            review_id=review_id,
+            now=now,
+            resim_outcomes=resim_outcomes,
+            market_returns=market_returns,
         )
         members = {
             m.strategy_id: (m.status, m.since)
@@ -204,15 +210,16 @@ class PortfolioReviewService:
         Streaks count weekly reviews: an extra review within STREAK_MIN_GAP_DAYS of the
         next counted one (e.g. right after a research tick) neither counts nor breaks.
         """
-        reviews = []
-        anchor = now
-        for review in self._reviews.recent_reviews(before=now, limit=max(depth, 1) * 4):
-            if (anchor - review.reviewed_at).days < STREAK_MIN_GAP_DAYS:
-                continue
-            reviews.append(review)
-            anchor = review.reviewed_at
-            if len(reviews) >= depth:
-                break
+        candidates = self._reviews.recent_reviews(before=now, limit=max(depth, 1) * 4)
+        kept = set(
+            weekly_review_dates(
+                [r.reviewed_at for r in candidates],
+                now=now,
+                depth=depth,
+                min_gap_days=STREAK_MIN_GAP_DAYS,
+            )
+        )
+        reviews = [r for r in candidates if r.reviewed_at in kept]
         rows = self._reviews.decisions_for_reviews([r.review_id for r in reviews])
         challengers: list[set[str]] = []
         below_floor: list[set[str]] = []

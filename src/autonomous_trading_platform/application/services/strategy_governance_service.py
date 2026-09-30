@@ -226,6 +226,39 @@ class StrategyGovernanceService:
             updated_at=now,
         )
 
+    def would_pass_promotion(
+        self, strategy_id: str, to_state: str, *, source_run_id: str | None = None
+    ) -> tuple[bool, str | None]:
+        """Whether a promotion of the strategy to to_state would pass the promotion rules.
+
+        Runs the same checks as transition() (rule present, source run, criteria) without
+        changing anything: audit rows the checks write are rolled back. Returns
+        (passed, reason for failure).
+        """
+        governance = self._latest_governance(strategy_id)
+        if governance is None:
+            return False, "strategy_not_found"
+        from_state = self._normalize_state(governance.current_state)
+        target_state = self._normalize_state(to_state)
+        if not self._is_promotion_transition(from_state=from_state, target_state=target_state):
+            return False, f"not_a_promotion:{from_state}->{target_state}"
+        source_run_id = source_run_id or (
+            str(governance.source_run_id) if governance.source_run_id else None
+        )
+        savepoint = self._session.begin_nested()
+        try:
+            self._assert_promotion_criteria_met(
+                strategy_id=strategy_id,
+                source_run_id=source_run_id,
+                from_state=from_state,
+                target_state=target_state,
+            )
+        except Exception as exc:
+            return False, str(exc) or type(exc).__name__
+        finally:
+            savepoint.rollback()
+        return True, None
+
     def _record_governance_decision(
         self,
         *,
