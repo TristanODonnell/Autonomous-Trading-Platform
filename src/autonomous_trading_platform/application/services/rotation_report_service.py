@@ -18,10 +18,10 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.contracts.governance.portfolio_membership import (
@@ -93,7 +93,9 @@ class RotationReportService:
         report = RotationReport(
             start_date=start_date, end_date=end_date, starting_cash=float(starting_cash)
         )
-        equity, final_pnl = self._equity_curve(starting_cash=float(starting_cash))
+        equity, final_pnl = self._equity_curve(
+            starting_cash=float(starting_cash), end_date=end_date
+        )
         if equity.empty:
             report.warnings.append("no_sleeve_snapshots")
         report.portfolio = performance_metrics(equity)
@@ -118,13 +120,22 @@ class RotationReportService:
 
     # ------------------------------------------------------------------ equity
 
-    def _equity_curve(self, *, starting_cash: float) -> tuple[pd.Series, dict[str, float]]:
+    def _equity_curve(
+        self, *, starting_cash: float, end_date: date | None = None
+    ) -> tuple[pd.Series, dict[str, float]]:
         rows = self._session.execute(
             select(
                 StrategySleeveSnapshotRow.timestamp,
                 StrategySleeveSnapshotRow.strategy_id,
                 StrategySleeveSnapshotRow.net_pnl,
-            ).order_by(StrategySleeveSnapshotRow.timestamp)
+            )
+            .where(
+                StrategySleeveSnapshotRow.timestamp
+                < datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
+                if end_date is not None
+                else true()
+            )
+            .order_by(StrategySleeveSnapshotRow.timestamp)
         ).all()
         if not rows:
             return pd.Series(dtype=float), {}

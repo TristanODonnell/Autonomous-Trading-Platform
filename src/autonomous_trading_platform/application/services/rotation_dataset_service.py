@@ -142,7 +142,9 @@ class RotationDatasetService:
             promotable = promoted
             if not promoted and not info["seeded_approved"] and info["state"] == "candidate":
                 promotable, _ = governance.would_pass_promotion(sid, _PAPER)
-            forward_returns, forward_book, forward_closed = self._forward_record(sid)
+            forward_returns, forward_book, forward_closed = self._forward_record(
+                sid, end_date=end_date
+            )
             score = backtest.backtest_quality_score(sid)
             series.append(
                 RotationStrategySeries(
@@ -174,18 +176,24 @@ class RotationDatasetService:
             end_date=end_date,
             starting_cash=starting_cash,
             re_sim_initial_cash=self._initial_cash,
-            review_dates=list(
-                self._session.scalars(
+            review_dates=[
+                at
+                for at in self._session.scalars(
                     select(PortfolioReviewRow.reviewed_at).order_by(PortfolioReviewRow.reviewed_at)
                 ).all()
-            ),
+                if at.date() <= end_date
+            ],
             market_symbol=market_symbol,
             market_returns=market_returns,
             settings={f: _plain(getattr(settings, f, None)) for f in _SETTINGS_FIELDS},
             initial_active=self._initial_active(),
             strategies=series,
             recorded_rotation=recorded_rotation,
-            recorded_decisions=self._recorded_decisions(),
+            recorded_decisions=[
+                d
+                for d in self._recorded_decisions()
+                if date.fromisoformat(d["reviewed_at"][:10]) <= end_date
+            ],
         )
 
     # ------------------------------------------------------------------ pool
@@ -279,7 +287,7 @@ class RotationDatasetService:
     # ------------------------------------------------------------------ forward
 
     def _forward_record(
-        self, sid: str
+        self, sid: str, *, end_date: date | None = None
     ) -> tuple[dict[date, float], dict[date, str], dict[date, tuple[int, int]]]:
         """Daily return on allocated capital (real sleeve preferred, else shadow) and
         closed-trade counts, i.e. the strategy's forward record at platform cadence."""
@@ -296,6 +304,8 @@ class RotationDatasetService:
             ).all()
             by_day: dict[date, tuple[float, float | None]] = {}
             for ts, net_pnl, allocated in rows:
+                if end_date is not None and ts.date() > end_date:
+                    continue
                 by_day[ts.date()] = (
                     float(net_pnl),
                     float(allocated) if allocated is not None else None,
@@ -314,7 +324,7 @@ class RotationDatasetService:
                     model.strategy_id == sid
                 )
             ).all():
-                if str(side).lower() != "sell":
+                if str(side).lower() != "sell" or (end_date is not None and ts.date() > end_date):
                     continue
                 counts = closed.setdefault(ts.date(), [0, 0])
                 counts[0] += 1

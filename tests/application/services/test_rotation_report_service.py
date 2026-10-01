@@ -267,3 +267,14 @@ def test_no_rotation_summary_outside_portfolio_mode(db_session: Session) -> None
     )
 
     assert report is not None
+
+
+def test_equity_stops_at_the_end_date(db_session: Session) -> None:
+    _seed_run(db_session)
+
+    report = RotationReportService(db_session).build(
+        start_date=D0.date(), end_date=_day(2).date(), starting_cash=1000
+    )
+
+    assert report.portfolio is not None
+    assert report.portfolio.end_value == pytest.approx(1000 + 150 - 40)
