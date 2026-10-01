@@ -106,7 +106,8 @@ results. It must earn on-deck and build a forward record first.
 | **3** | Bench management | ✅ **Done** 2026-09-28 — `portfolio-rotation-step3-bench-management.md` |
 | **4** | Portfolio review (scorecard, auto decisions) | ✅ **Done** 2026-09-29 — `portfolio-rotation-step4-portfolio-review.md` |
 | **5** | Rotation backtest mode (tune thresholds) | ✅ **Done** 2026-09-30 — `portfolio-rotation-step5-rotation-backtest.md` |
-| **5b** | Align research / bench re-sim cadence with the daily trading cycle, then re-tune | ⏳ Next (found in Step 5) |
+| **5b** | Rotation backtest at production cadence (5-min) | ✅ **Done** 2026-10-01 — `portfolio-rotation-step5b-production-cadence.md` |
+| **5c** | Research ↔ trading-cycle parity (re-sims must trade like the platform), churn, intraday backtest speed; then re-tune | ⏳ Next sprint |
 | **6** | Airflow schedules (daily / weekly / monthly) | Planned — **user said not yet** |
 
 ---
@@ -267,9 +268,12 @@ benchmark), market-excess correlation (bench + scorecard), `export-rotation-data
 Outcome: no tuned config beat the no-rotation baseline; defaults moved to streak 4 / tenure
 60 d. Fixed on the way: per-symbol cap blocked risk-reducing sells (JPM froze), buys now
 aggregated per symbol in-cycle, review re-weights were frozen after the first write.
-**Next (5b):** research/bench re-sims run on intraday bars while trading is daily, so re-sim
-evidence overstates candidates; align the cadence, then re-record and re-sweep. Original
-scope below.
+**5b (done):** production and research both run every 5 minutes; the rotation backtests had
+run daily. Re-recorded 4 months at production cadence: re-sims still do not match how
+strategies trade on the platform (gaps of −10 % to +2 %, correlation 0.2–0.6;
+`moving_average_crossover` and `factor_based` make 0 re-sim trades vs hundreds/thousands on the
+platform) — a research-engine vs trading-cycle parity problem, the next sprint's blocker.
+Original scope below.
 
 **Goal:** run months of history with Steps 1–4 active and check the system picks, rotates and
 prunes sensibly; tune thresholds (review cadence, challenger margin, tenure, caps, objective).
@@ -315,7 +319,9 @@ rm -f artifacts/platform/backtests/<output stem>.checkpoint.json   # named after
 atp platform backtest run --fixture <fixture.yaml> --output artifacts/platform/backtests/<name>.json
 ```
 
-- A run is ~30 s per trading day for 8 symbols × 6 strategies.
+- A run is ~30 s per trading day for 8 symbols × 6 strategies at the default daily cadence
+  (`cadence_minutes: 390`, one trading cycle per day). **Production trades every 5 minutes**;
+  `cadence_minutes: 5` matches it but takes ~5 min per trading day (10 symbols, full stack).
 - Check the artifact's `errors` and `timeline_events_applied` — a run can "finish" with
   `completed_with_errors` (e.g. a rejected timeline event).
 - Portfolio-mode fixtures must set `portfolio_mode_enabled: true`, and

@@ -1,7 +1,9 @@
 # scenario:
-#   name: portfolio_rotation_6m
+#   name: portfolio_rotation_6m_intraday
 #   purpose: >
-#     Portfolio rotation step 5 (recording + confirmation runs). Six months, ten symbols,
+#     Portfolio rotation step 5b: the step 5 recording scenario at PRODUCTION cadence
+#     (trading cycle every 5 minutes, as market_trading_dag and research re-sims).
+#     Step 5 (daily cadence) scenario: Six months, ten symbols,
 #     Steps 1-4 all on: four approved seeds (seats 3-5), research (smoke) monthly feeding
 #     a bench of up to 10, on-deck 4, weekly bench + portfolio review with the current
 #     review defaults. portfolio_review_mode is overridden per run: auto with the
@@ -19,19 +21,20 @@
 #   python scripts/reset_backtest_state.py
 #   # The checkpoint is named after --output (<output stem>.checkpoint.json); a stale one
 #   # makes the run silently resume and skip every tick.
-#   rm -f artifacts/platform/backtests/portfolio_rotation_6m_record.checkpoint.json
+#   rm -f artifacts/platform/backtests/portfolio_rotation_6m_intraday_record.checkpoint.json
 #   atp platform backtest run \
-#     --fixture fixtures/platform/replays/medium/portfolio_rotation_6m.yaml \
-#     --output artifacts/platform/backtests/portfolio_rotation_6m_record.json
+#     --fixture fixtures/platform/replays/medium/portfolio_rotation_6m_intraday.yaml \
+#     --output artifacts/platform/backtests/portfolio_rotation_6m_intraday_record.json
 
 platform_replay:
-  name: portfolio_rotation_6m
+  name: portfolio_rotation_6m_intraday
   mode: historical_backtest
   symbols: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, GOOGL, META, JPM, XOM]
   start: 2024-01-02
   end: 2024-06-28
   starting_cash: 250000
   random_seed: 42
+  cadence_minutes: 5   # production cadence: the trading DAG runs every 5 minutes
 
 initial_state:
   settings:

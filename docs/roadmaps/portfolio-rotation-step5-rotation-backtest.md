@@ -233,12 +233,14 @@ objective, and every trend pointed at rotating less.
   confirmation backtest was **skipped** (user decision): the simulator reproduced the real
   run's decisions 10/10, and the damaging Apr 15 swap happens under any guardrail setting
   because the candidate's scorecard really rated it higher.
-- **Why rotation loses here, and the next step:** research and bench re-sims run on intraday
-  bars while the trading cycle evaluates once a day, so re-sim evidence (up to half a
-  newcomer's evidence weight) says little about how a strategy will trade on the platform
-  (`momentum__a14e…`: +18 % re-sim, −$15.9k trading). **Aligning research / bench re-sim
-  cadence with the trading cycle is the next priority, before re-tuning** (then re-record and
-  re-sweep with the same tools).
+- **Why rotation loses here, and the next step:** the rotation backtests ran the trading cycle
+  once a day (backtest default `cadence_minutes: 390`), while research / bench re-sims evaluate
+  every 5-minute bar — so re-sim evidence (up to half a newcomer's evidence weight) said little
+  about how a strategy traded in *these backtests* (`momentum__a14e…`: +18 % re-sim, −$15.9k).
+  **Correction (5b discovery, 2026-09-30):** production trades every 5 minutes too
+  (`market_trading_dag`: `*/5 * * * 1-5`), so research matches production and the *daily
+  backtests* were the unrepresentative part. Step 5b re-records the rotation scenario at
+  production cadence and re-sweeps (`portfolio-rotation-step5b-production-cadence.md`).
 
 ### Verification
 - Full suite after each gate: 4839 → 4850 → 4857 (+1 pyarrow flake that passed in isolation
