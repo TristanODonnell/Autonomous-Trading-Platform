@@ -293,6 +293,9 @@ rebalance, health, risk budgeting and the ladder run only inside the backtester.
 (health, drawdown, live-metrics refresh), weekly (re-sim, scorecards, re-weight) and monthly
 (review, research) DAGs.
 
+_Update 2026-10-01: Airflow is deferred for launch. These schedules go into the soak-loop scheduler
+runner on Box A instead; see `docs/roadmaps/pre-launch-deployment-plan.md` §3.1._
+
 ---
 
 ## 6. Working agreement (how the user wants to work)
