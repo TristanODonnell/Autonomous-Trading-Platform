@@ -388,3 +388,58 @@ def test_market_ingestion_cycle_surfaces_db_write_failure(
 
     with pytest.raises(RuntimeError, match="simulated db write failure"):
         run_market_ingestion_cycle(now_utc=fixture.now_utc)
+
+
+def test_multi_cycle_window_records_no_false_missing_bars(
+    seeded_market_ingestion_cycle_fixture,
+    db_session,
+    monkeypatch,
+):
+    """A backtest ingests a whole day in one fetch. Bars used to be fed symbol by symbol,
+    so every 5-minute cycle was finalized after the first symbol only and every other
+    symbol was recorded missing at every cycle (693 false incidents per backtest day)."""
+    from autonomous_trading_platform.storage.sor.models.missing_bar_incidents import (
+        MissingBarIncidents,
+    )
+    from tests.utilities.market_ingestion_cycle_fixture import (
+        FakeAlpacaBarsResponse,
+        FakeProviderBar,
+    )
+
+    def three_cycles(*, symbols, start, end, **kwargs):
+        data = {}
+        for index, symbol in enumerate(symbols):
+            data[symbol] = [
+                FakeProviderBar(
+                    symbol=symbol,
+                    timestamp=start + timedelta(minutes=minute),
+                    open=100.0 + index,
+                    high=101.0 + index,
+                    low=99.0 + index,
+                    close=100.5 + index,
+                    volume=100,
+                    vwap=100.5 + index,
+                    trade_count=10,
+                )
+                for minute in range(15)
+            ]
+        return FakeAlpacaBarsResponse(data)
+
+    monkeypatch.setattr(
+        "autonomous_trading_platform.ingestion.market_data.clients.alpaca_market_data_client.fetch_minute_bars",
+        three_cycles,
+    )
+    fixture = seeded_market_ingestion_cycle_fixture
+    start = fixture.now_utc.replace(hour=15, minute=0)  # 10:00 ET, regular session
+
+    run_market_ingestion_cycle(
+        now_utc=fixture.now_utc,
+        enforce_lateness=False,
+        cycle_start_override=start,
+        cycle_end_override=start + timedelta(minutes=15),
+    )
+
+    dataset_version = _latest_dataset_version(db_session)
+    bars = _read_raw_bars(fixture.data_root, dataset_version.dataset_version_id)
+    assert len(bars) == 3 * fixture.symbol_count
+    assert db_session.query(MissingBarIncidents).count() == 0
