@@ -359,6 +359,7 @@ _REGISTRY.register(
         parameter_specs=(
             ParameterSpec(
                 name="short_window",
+                is_window=True,
                 parameter_type=ParameterType.INT,
                 default=10,
                 description="Lookback bars for the fast moving average.",
@@ -371,6 +372,7 @@ _REGISTRY.register(
             ),
             ParameterSpec(
                 name="long_window",
+                is_window=True,
                 parameter_type=ParameterType.INT,
                 default=30,
                 description="Lookback bars for the slow moving average.",
@@ -405,6 +407,7 @@ _REGISTRY.register(
         parameter_specs=(
             ParameterSpec(
                 name="lookback",
+                is_window=True,
                 parameter_type=ParameterType.INT,
                 default=5,
                 description="Return lookback period in bars.",
@@ -461,6 +464,7 @@ _REGISTRY.register(
         parameter_specs=(
             ParameterSpec(
                 name="window",
+                is_window=True,
                 parameter_type=ParameterType.INT,
                 default=20,
                 description="Rolling window for mean and standard deviation.",
@@ -528,6 +532,7 @@ _REGISTRY.register(
         parameter_specs=(
             ParameterSpec(
                 name="momentum_lookback",
+                is_window=True,
                 parameter_type=ParameterType.INT,
                 default=5,
                 description="Return lookback period for the momentum factor.",
@@ -540,6 +545,7 @@ _REGISTRY.register(
             ),
             ParameterSpec(
                 name="mean_reversion_window",
+                is_window=True,
                 parameter_type=ParameterType.INT,
                 default=20,
                 description="Rolling window for the z-score mean-reversion factor.",
@@ -552,6 +558,7 @@ _REGISTRY.register(
             ),
             ParameterSpec(
                 name="volatility_window",
+                is_window=True,
                 parameter_type=ParameterType.INT,
                 default=20,
                 description="Rolling window for the volatility factor.",
@@ -564,6 +571,7 @@ _REGISTRY.register(
             ),
             ParameterSpec(
                 name="volume_window",
+                is_window=True,
                 parameter_type=ParameterType.INT,
                 default=20,
                 description="Rolling window for the volume-ratio factor.",

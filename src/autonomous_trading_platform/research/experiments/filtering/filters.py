@@ -131,6 +131,18 @@ def _check_return_variance(sm: StabilityMetrics, cfg: FilterConfig) -> str | Non
     return None
 
 
+def _check_turnover(tm: TradeMetrics, cfg: FilterConfig) -> str | None:
+    # max_daily_turnover == None means disabled
+    if cfg.max_daily_turnover is None:
+        return None
+    if tm.daily_turnover > cfg.max_daily_turnover:
+        return (
+            f"daily_turnover {tm.daily_turnover:.2f}x > max_daily_turnover "
+            f"{cfg.max_daily_turnover}x"
+        )
+    return None
+
+
 def _check_total_return(rm: ReturnMetrics, cfg: FilterConfig) -> str | None:
     if rm.total_return < cfg.min_total_return:
         return f"total_return {rm.total_return:.3f} < min_total_return {cfg.min_total_return}"
@@ -248,6 +260,7 @@ def apply_filters(
         _check_win_rate(tm, config),
         _check_return_variance(sm, config),
         _check_total_return(rm, config),
+        _check_turnover(tm, config),
     ):
         if result is not None:
             core_failures.append(result)

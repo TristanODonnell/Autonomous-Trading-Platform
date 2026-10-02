@@ -12,7 +12,7 @@ BUY fills against SELL fills per symbol.
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import NamedTuple
 
 import pandas as pd
@@ -38,6 +38,9 @@ class TradeMetrics:
     profit_factor: float  # gross_profit / abs(gross_loss); inf if no losses
     largest_win: float  # best single trade pnl ($)
     largest_loss: float  # worst single trade pnl ($)
+    # Notional traded per trading day / mean equity (1.0 = the whole account once a day);
+    # 0.0 when no equity curve was given.
+    daily_turnover: float = 0.0
 
     @property
     def safe_profit_factor(self) -> float:
@@ -175,14 +178,35 @@ def profit_factor(trade_logs: pd.DataFrame) -> float:
     return gp / gl
 
 
-def trade_metrics(trade_logs: pd.DataFrame) -> TradeMetrics:
-    """Compute all trade metrics in one call."""
+def daily_turnover(trade_logs: pd.DataFrame | None, equity_curve: pd.DataFrame | None) -> float:
+    """Notional traded per trading day divided by mean equity.
+
+    One measure for research filters, bench re-sims, the portfolio review and the offline
+    rotation simulator. Trading days are the distinct dates of the equity curve.
+    """
+    if trade_logs is None or trade_logs.empty or equity_curve is None or equity_curve.empty:
+        return 0.0
+    days = int(pd.to_datetime(equity_curve["timestamp"], utc=True).dt.date.nunique())
+    mean_equity = float(equity_curve["equity"].astype(float).mean())
+    if days == 0 or mean_equity <= 0:
+        return 0.0
+    notional = (
+        trade_logs["quantity"].astype(float).abs() * trade_logs["price"].astype(float)
+    ).sum()
+    return float(notional) / days / mean_equity
+
+
+def trade_metrics(
+    trade_logs: pd.DataFrame, equity_curve: pd.DataFrame | None = None
+) -> TradeMetrics:
+    """Compute all trade metrics in one call (turnover needs the equity curve)."""
     if trade_logs is None or trade_logs.empty:
         return _EMPTY
     _validate(trade_logs)
+    turnover = daily_turnover(trade_logs, equity_curve)
     pnls = _all_pnls(trade_logs)
     if not pnls:
-        return _EMPTY
+        return replace(_EMPTY, daily_turnover=turnover)
     wins = [p for p in pnls if p > 0]
     losses = [p for p in pnls if p < 0]
     gp = sum(wins)
@@ -195,4 +219,5 @@ def trade_metrics(trade_logs: pd.DataFrame) -> TradeMetrics:
         profit_factor=(float("inf") if gl == 0 and gp > 0 else (0.0 if gl == 0 else gp / gl)),
         largest_win=max(pnls),
         largest_loss=min(pnls),
+        daily_turnover=turnover,
     )

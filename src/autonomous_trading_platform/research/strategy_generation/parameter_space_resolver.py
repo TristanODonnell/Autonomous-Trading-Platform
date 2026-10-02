@@ -10,6 +10,11 @@ from autonomous_trading_platform.strategy.registry import (
     get_registry,
 )
 
+# Research search floor for window / lookback parameters, in bars (50 minutes at the
+# production 5-minute cadence). Rotation step 5c-G: 1- and 5-bar lookbacks flipped on
+# noise and turned their sleeve over 13-26x a day. Explicit overrides are not floored.
+MIN_RESEARCH_WINDOW_BARS = 10
+
 
 class ParameterSpaceResolver:
     """Derive deterministic, schema-aware parameter value lists from StrategyRegistry."""
@@ -53,12 +58,14 @@ class ParameterSpaceResolver:
         if spec.parameter_type == ParameterType.INT:
             int_low = int(spec.min_value)
             int_high = int(spec.max_value)
+            if spec.is_window and int_high >= MIN_RESEARCH_WINDOW_BARS:
+                int_low = max(int_low, MIN_RESEARCH_WINDOW_BARS)
             step = max(int(spec.step or 1), 1)
             if spec.discrete and int_high - int_low <= 20:
                 values = list(range(int_low, int_high + 1, step))
             else:
                 values = sorted({int_low, int(spec.default), int_high})
-            return values
+            return [v for v in values if v >= int_low]
         if spec.parameter_type == ParameterType.FLOAT:
             float_low = float(spec.min_value)
             float_high = float(spec.max_value)
