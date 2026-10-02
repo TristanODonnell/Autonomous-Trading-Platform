@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import Boolean, Index, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,6 +17,11 @@ from .helpers.sa_types import UUID_PK, MoneyType, QuantityType, UTCDateTimeType
 
 class TrackedOrder(Base):
     __tablename__ = "tracked_orders"
+    # Open / reconcilable orders are listed every tick.
+    __table_args__ = (
+        Index("ix_tracked_orders_is_open", "is_open"),
+        Index("ix_tracked_orders_current_status", "current_status"),
+    )
 
     order_id: Mapped[UUID] = mapped_column(UUID_PK, primary_key=True)
     intent_id: Mapped[UUID] = mapped_column(UUID_PK, nullable=False)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from autonomous_trading_platform.contracts.common.enums import OrderSource
@@ -53,4 +53,6 @@ class PositionSnapshot(Base):
             "source",
             name="uq_position_snapshots_run_ts_source",
         ),
+        # The trading cycle reads the latest snapshot every tick.
+        Index("ix_position_snapshots_timestamp", "timestamp"),
     )

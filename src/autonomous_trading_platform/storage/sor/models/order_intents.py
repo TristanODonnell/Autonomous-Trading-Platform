@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Boolean, String, UniqueConstraint
+from sqlalchemy import Boolean, Index, String, UniqueConstraint
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -52,4 +52,5 @@ class OrderIntents(Base):
             "idempotency_key",
             name="uq_order_intents_run_id_idempotency_key",
         ),
+        Index("ix_order_intents_strategy_timestamp", "strategy_id", "timestamp"),
     )
