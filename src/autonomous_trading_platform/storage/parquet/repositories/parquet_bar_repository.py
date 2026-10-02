@@ -47,7 +47,7 @@ class ParquetBarRepository:
             symbol=symbol,
             start_date=date(1970, 1, 1),
             end_date=cutoff.date(),
-            engine="duckdb",
+            engine="pyarrow",
         )
 
         if table.num_rows == 0:
@@ -129,7 +129,7 @@ class ParquetBarRepository:
         symbol: str,
         start_date: date,
         end_date: date,
-        engine: str = "duckdb",
+        engine: str = "pyarrow",
     ):
         return self.reader.read(
             dataset=dataset,

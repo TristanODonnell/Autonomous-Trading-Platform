@@ -413,7 +413,7 @@ class UniverseCandidateBuilder:
                 symbol=symbol,
                 start_date=window_start.date(),
                 end_date=as_of.date(),
-                engine="duckdb",
+                engine="pyarrow",
             )
             if table.num_rows == 0:
                 return []

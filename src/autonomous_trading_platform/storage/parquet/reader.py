@@ -5,6 +5,7 @@ from pathlib import Path
 
 import duckdb
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.dataset as ds
 from sqlalchemy.orm import Session
 
@@ -112,6 +113,26 @@ def list_partition_files(
     return files
 
 
+def _with_partition_columns(table: pa.Table, symbol: str) -> pa.Table:
+    """Add the hive partition columns (symbol, year, month) a fragment file does not store.
+
+    Compacted ``data.parquet`` files carry them physically; ``part-*.parquet``
+    fragments only have them in their path. Readers must return the same columns
+    either way (DuckDB's parquet_scan adds them from the path).
+    """
+    n = table.num_rows
+    if "symbol" not in table.column_names:
+        table = table.append_column("symbol", pa.array([symbol] * n, type=pa.string()))
+    if "date" in table.column_names:
+        day = table.column("date")
+        if "year" not in table.column_names:
+            table = table.append_column("year", pc.cast(pc.year(day), pa.string()))
+        if "month" not in table.column_names:
+            month = pc.utf8_lpad(pc.cast(pc.month(day), pa.string()), width=2, padding="0")
+            table = table.append_column("month", month)
+    return table
+
+
 class HistoricalBarDatasetReader:
     def __init__(self, session: Session, *, base_path: str | Path = "data") -> None:
         self.session = session
@@ -137,7 +158,7 @@ class HistoricalBarDatasetReader:
         )
 
         if not files:
-            return pa.table([], schema=dataset.schema)
+            return dataset.schema.empty_table()
 
         start_ts, end_ts = self._date_range_to_timestamps(start_date, end_date)
 
@@ -150,7 +171,7 @@ class HistoricalBarDatasetReader:
             ds.field("timestamp") < pa.scalar(end_ts)
         )
 
-        table = dataset_obj.to_table(filter=filter_expr)
+        table = _with_partition_columns(dataset_obj.to_table(filter=filter_expr), symbol)
 
         return table.sort_by([("timestamp", "ascending")]) if table.num_rows > 0 else table
 
@@ -219,7 +240,7 @@ class HistoricalBarDatasetReader:
         symbol: str,
         start_date: date,
         end_date: date,
-        engine: str = "duckdb",
+        engine: str = "pyarrow",
     ) -> pa.Table:
         symbol = symbol.upper()
         if engine == "duckdb":

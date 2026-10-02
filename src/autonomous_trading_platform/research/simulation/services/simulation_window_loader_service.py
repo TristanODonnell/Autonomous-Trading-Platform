@@ -144,7 +144,7 @@ class SimulationWindowLoader:
         start_date: date,
         end_date: date,
         feature_datasets: Iterable[SimulationFeatureDatasetRequest] | None = None,
-        engine: str = "duckdb",
+        engine: str = "pyarrow",
         strict: bool = False,
         warmup_bars: int = 0,
         resample_to_daily: bool = False,
