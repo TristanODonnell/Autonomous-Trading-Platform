@@ -107,7 +107,7 @@ results. It must earn on-deck and build a forward record first.
 | **4** | Portfolio review (scorecard, auto decisions) | ✅ **Done** 2026-09-29 — `portfolio-rotation-step4-portfolio-review.md` |
 | **5** | Rotation backtest mode (tune thresholds) | ✅ **Done** 2026-09-30 — `portfolio-rotation-step5-rotation-backtest.md` |
 | **5b** | Rotation backtest at production cadence (5-min) | ✅ **Done** 2026-10-01 — `portfolio-rotation-step5b-production-cadence.md` |
-| **5c** | Research ↔ trading-cycle parity (re-sims must trade like the platform), churn, intraday backtest speed; then re-tune | ⏳ Next sprint |
+| **5c** | Research ↔ trading-cycle parity (re-sims must trade like the platform), churn, intraday backtest speed; then re-tune | ✅ 2026-10-02 except speed (partial) and F7 splits — re-sim vs platform corr 0.993–0.998; 6-month re-record +10.0 % / Sharpe 2.71; see `portfolio-rotation-step5c-research-parity.md` |
 | **6** | Airflow schedules (daily / weekly / monthly) | Planned — **user said not yet** |
 
 ---

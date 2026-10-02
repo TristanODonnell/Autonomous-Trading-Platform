@@ -1,0 +1,111 @@
+# scenario:
+#   name: parity_2w_intraday
+#   purpose: >
+#     Rotation step 5c-F: research <-> trading-cycle parity on real data. Two weeks at
+#     production cadence (5 minutes), the four step-5 seeds traded as fixed sleeves
+#     (research, bench and portfolio review off, so nothing but the trading cycle moves
+#     the sleeves). Spans the 2024-03-10 switch to daylight saving (step 5c-D).
+#   expected_behavior: >
+#     0 errors; 78 five-minute ticks per day before and after Mar 10; each strategy's
+#     re-sim (export-rotation-dataset) tracks its platform sleeve: daily-return
+#     correlation >= 0.9 and |return gap| <= 1 %, residuals explained.
+#   recommended_use: validation
+#
+# Run against a clean backtest state (wipes backtest tables in DATABASE_URL):
+#   python scripts/reset_backtest_state.py
+#   rm -f artifacts/platform/backtests/parity_2w_intraday.checkpoint.json
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/short/parity_2w_intraday.yaml \
+#     --output artifacts/platform/backtests/parity_2w_intraday.json
+#   atp platform backtest export-rotation-dataset \
+#     --artifact artifacts/platform/backtests/parity_2w_intraday.json \
+#     --starting-cash 250000 --output artifacts/platform/backtests/parity_2w_intraday_dataset.json
+
+platform_replay:
+  name: parity_2w_intraday
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, GOOGL, META, JPM, XOM]
+  start: 2024-03-04
+  end: 2024-03-15
+  starting_cash: 250000
+  random_seed: 42
+  cadence_minutes: 5
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: false
+    auto_rebalance_enabled: true
+    rebalance_frequency: daily
+    portfolio_mode_enabled: true
+    min_active_strategies: 3
+    max_active_strategies: 5
+    max_on_deck_strategies: 0
+    max_total_strategy_allocation_pct: 0.95
+    per_strategy_cap: 0.35
+    portfolio_drawdown_action: warn_only
+    portfolio_drawdown_recovery_mode: auto_resume
+    bench_management_enabled: false
+    portfolio_review_mode: "off"
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies:
+    - factor_based__19abece93f5b760d646be3cf9b16d8bbaff468d78c1ebc70a6c041cd2b56df79
+    - macd_crossover_v1
+    - momentum_v1
+    - mean_reversion_v1
+  governance:
+    - strategy_id: factor_based__19abece93f5b760d646be3cf9b16d8bbaff468d78c1ebc70a6c041cd2b56df79
+      state: approved_for_paper_trading
+    - strategy_id: macd_crossover_v1
+      state: approved_for_paper_trading
+    - strategy_id: momentum_v1
+      state: approved_for_paper_trading
+    - strategy_id: mean_reversion_v1
+      state: approved_for_paper_trading
+  allocations: []
+  universe:
+    selection_mode: fixed
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  universe:
+    cadence: monthly
+    enabled: true
+  research:
+    cadence: monthly
+    enabled: false
+  bench:
+    cadence: weekly
+    enabled: false
+  dashboard_snapshot:
+    cadence: daily
+    enabled: false
+
+timeline_events: []
