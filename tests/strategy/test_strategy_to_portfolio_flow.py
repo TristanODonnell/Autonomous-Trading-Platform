@@ -81,6 +81,7 @@ class FakePositionSizer:
         performance_tier: str | None = None,
         combined_scalar: object | None = None,
         realized_drawdown: float | None = None,
+        symbol_count: int | None = None,
     ) -> SizingResult:
         from decimal import Decimal
 

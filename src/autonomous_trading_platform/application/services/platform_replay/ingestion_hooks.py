@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from datetime import UTC, date, datetime
-from datetime import time as dt_time
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -24,10 +23,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.dataset_versions_
 from autonomous_trading_platform.storage.sor.repositories.core.missing_bar_incidents_repository import (
     MissingBarIncidentsRepository,
 )
-
-_MARKET_OPEN_UTC = dt_time(14, 30)  # 09:30 ET = 14:30 UTC (EST, no DST adjustment)
-_MARKET_CLOSE_UTC = dt_time(21, 0)  # 16:00 ET = 21:00 UTC
-
+from autonomous_trading_platform.universe.services.market_calendar_service import (
+    MarketCalendarService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -139,9 +137,10 @@ def run_ingestion_at_timestamp(
     cycle_start_override: datetime | None = None
     cycle_end_override: datetime | None = None
     if full_day:
-        tick_date = timestamp.date()
-        cycle_start_override = datetime.combine(tick_date, _MARKET_OPEN_UTC).replace(tzinfo=UTC)
-        cycle_end_override = datetime.combine(tick_date, _MARKET_CLOSE_UTC).replace(tzinfo=UTC)
+        # The day's regular session in exchange time (DST and early closes respected).
+        cycle_start_override, cycle_end_override = MarketCalendarService().regular_session_utc(
+            timestamp.date()
+        )
 
     try:
         summary = run_market_ingestion_cycle(

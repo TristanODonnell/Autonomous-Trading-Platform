@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -117,8 +117,20 @@ class PortfolioConstructionService:
         skip_order_limit_breaches: bool = False,
         pre_trade_risk_service: PreTradeRiskService | None = None,
         on_order_rejected: Callable[[OrderIntent, Exception], None] | None = None,
+        symbol_count: int | None = None,
+        hold_symbols: Collection[str] = (),
     ):
         """Yield risk-checked order intents for one strategy.
+
+        hold_symbols: a held position in one of these symbols that got no signal this
+        bar keeps its size — a strategy holds until it signals SELL/FLAT (as research
+        simulations do; entry/exit strategies signal only on the crossing bar). Callers
+        pass the trading universe, so a symbol that left it (or was delisted) still
+        exits. Positions outside hold_symbols without a signal are exited (exit-only
+        sleeves pass nothing).
+
+        symbol_count (portfolio mode): the number of symbols the strategy trades; each
+        position gets an equal split of the allocation (see PositionSizer).
 
         skip_order_limit_breaches (portfolio mode): an order that breaches a per-order
         limit (ORDER_LIMIT_ERRORS) is dropped and logged instead of raising, so one
@@ -139,7 +151,11 @@ class PortfolioConstructionService:
             performance_tier=performance_tier,
             recent_closes=recent_closes,
             realized_drawdown=realized_drawdown,
+            symbol_count=symbol_count,
         )
+        for symbol, held in positions.items():
+            if symbol not in target_positions and symbol in hold_symbols:
+                target_positions[symbol] = int(getattr(held, "quantity", held))
         deltas = self.calculate_deltas(positions, target_positions)
 
         for delta in deltas:
@@ -202,6 +218,7 @@ class PortfolioConstructionService:
         performance_tier: str | None = None,
         recent_closes: dict[str, list[float]] | None = None,
         realized_drawdown: float | None = None,
+        symbol_count: int | None = None,
     ) -> tuple[dict[str, int], dict[str, dict[str, Any]]]:
         """
         Returns (target_positions, per_symbol_sizing_metadata).
@@ -270,6 +287,7 @@ class PortfolioConstructionService:
                     performance_tier=performance_tier,
                     combined_scalar=scalar_result.combined_scalar,
                     realized_drawdown=realized_drawdown,
+                    symbol_count=symbol_count,
                 )
             except (AllocationDeniedError, NoPolicyFoundError, InsufficientCapitalError) as exc:
                 logger.warning(

@@ -607,6 +607,7 @@ def run_trading_cycle(
                             now_utc=now_utc,
                             trading_cycle_dependencies=trading_cycle_dependencies,
                             manifest=manifest,
+                            universe_symbols=expected_symbols,
                         )
                         generated_intents = list(generated_intents)
                     except Exception as exc:

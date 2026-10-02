@@ -78,7 +78,7 @@ def run_bench_review_at_timestamp(
         )
 
         simulation_context = build_simulation_context(
-            session=session, universe_size=len(window.symbols), lookback_bars=20
+            session=session, universe_size=len(window.symbols)
         )
         bench_service = BenchReviewService(
             session,

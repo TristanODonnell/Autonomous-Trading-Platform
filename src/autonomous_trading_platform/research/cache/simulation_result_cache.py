@@ -224,4 +224,6 @@ def _entry_to_key(key_dict: dict[str, Any]) -> SimulationCacheKey:
         commission_per_share=key_dict["commission_per_share"],
         regime_dataset_version=key_dict["regime_dataset_version"],
         feature_versions_hash=key_dict["feature_versions_hash"],
+        sizing_model=key_dict.get("sizing_model", ""),
+        max_volume_participation_rate=key_dict.get("max_volume_participation_rate", ""),
     )

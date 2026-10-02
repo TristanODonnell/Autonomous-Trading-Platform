@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Protocol
+from zoneinfo import ZoneInfo
+
+_EASTERN = ZoneInfo("America/New_York")
 
 # Known NYSE holidays for 2025-2026.
 _NYSE_HOLIDAYS: frozenset[date] = frozenset(
@@ -32,6 +35,9 @@ _NYSE_HOLIDAYS: frozenset[date] = frozenset(
 # NYSE early-close days (market closes at 1 PM ET instead of 4 PM ET).
 _NYSE_EARLY_CLOSES: frozenset[date] = frozenset(
     [
+        date(2024, 7, 3),
+        date(2024, 11, 29),
+        date(2024, 12, 24),
         date(2025, 7, 3),
         date(2025, 11, 28),
         date(2025, 12, 24),
@@ -39,6 +45,11 @@ _NYSE_EARLY_CLOSES: frozenset[date] = frozenset(
         date(2026, 12, 24),
     ]
 )
+
+# Regular NYSE session in exchange time (see MarketCalendarService.regular_session_utc).
+_SESSION_OPEN_ET = time(9, 30)
+_SESSION_CLOSE_ET = time(16, 0)
+_EARLY_CLOSE_ET = time(13, 0)
 
 # UTC equivalents for regular NYSE session (approximations; does not adjust for DST).
 _MARKET_OPEN_UTC = time(14, 30)
@@ -88,6 +99,17 @@ class MarketCalendarService:
 
     def get_trading_days(self, start: date, end: date) -> list[date]:
         return self._provider.get_trading_days(start, end)
+
+    def regular_session_utc(self, d: date) -> tuple[datetime, datetime]:
+        """Regular session open and close for a day as UTC datetimes.
+
+        09:30-16:00 America/New_York (13:00 on early closes), so daylight saving moves
+        the UTC times: 14:30-21:00 UTC in winter, 13:30-20:00 UTC in summer.
+        """
+        close_et = _EARLY_CLOSE_ET if self.is_early_close(d) else _SESSION_CLOSE_ET
+        open_utc = datetime.combine(d, _SESSION_OPEN_ET, tzinfo=_EASTERN).astimezone(UTC)
+        close_utc = datetime.combine(d, close_et, tzinfo=_EASTERN).astimezone(UTC)
+        return open_utc, close_utc
 
     def is_market_open_now(self, as_of: datetime | None = None) -> bool:
         now = _ensure_utc(as_of or datetime.now(UTC))

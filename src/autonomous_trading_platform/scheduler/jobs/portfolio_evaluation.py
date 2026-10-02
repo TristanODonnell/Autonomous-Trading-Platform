@@ -6,9 +6,10 @@ Flow per cycle:
   1. Adopt account shares no sleeve owns into the unattributed sleeve (only when no
      orders are open, so an in-flight fill is never mistaken for an orphan).
   2. Evaluate each ACTIVE strategy; one strategy failing does not stop the others.
-  3. Size each strategy against its own budget and diff targets against its own
-     sleeve, then trim buys so the whole sleeve stays within the budget (the sizer
-     sizes each position from the full allocation). WINDING_DOWN strategies and
+  3. Size each strategy against its own budget (an equal split across the traded
+     universe, as research re-sims size) and diff targets against its own sleeve,
+     then trim buys so the whole sleeve stays within the budget (holdings that rose
+     in value can still push it over). WINDING_DOWN strategies and
      orphan sleeves only exit.
      Then trim buys so several sleeves buying one symbol in the same cycle keep
      the account under the per-symbol cap.
@@ -21,6 +22,7 @@ Flow per cycle:
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -95,6 +97,7 @@ def run_portfolio_evaluation(
     fetch_recent_closes: Any,
     vol_lookback_bars: int,
     job_span: Any,
+    universe_symbols: Collection[str] = (),
 ) -> tuple[PortfolioEvaluationResult, list[OrderIntent]]:
     session = deps.session
     execution_context = deps.execution_context
@@ -255,6 +258,12 @@ def run_portfolio_evaluation(
                 now=now_utc,
                 recent_closes=recent_closes,
                 skip_order_limit_breaches=True,
+                # Equal split of the sleeve across the traded universe, the rule research
+                # re-sims use (execution/services/sleeve_sizing.py).
+                symbol_count=manifest.universe_member_count,
+                # ACTIVE strategies hold until they signal an exit; WINDING_DOWN and
+                # orphan sleeves only exit.
+                hold_symbols=universe_symbols if is_active else (),
             )
         )
         budget_usd = Decimal(str(runtime.budget_pct)) * Decimal(
@@ -359,6 +368,7 @@ def run_portfolio_evaluation(
                 fetch_prices=fetch_prices,
                 fetch_recent_closes=fetch_recent_closes,
                 vol_lookback_bars=vol_lookback_bars,
+                universe_symbols=universe_symbols,
             )
             job_span.set_attribute("ratp.portfolio.shadow_blocked_orders", shadow.blocked_count)
         except Exception:

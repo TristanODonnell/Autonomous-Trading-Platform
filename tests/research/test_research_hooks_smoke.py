@@ -179,8 +179,8 @@ def research_smoke_data_root(tmp_path: Path, db_session, monkeypatch) -> Path:
 
     _orig_build = ctx_mod.build_simulation_context
 
-    def _patched_build(*, session, universe_size=None, lookback_bars=50):
-        ctx = _orig_build(session=session, universe_size=universe_size, lookback_bars=lookback_bars)
+    def _patched_build(*, session, universe_size=None):
+        ctx = _orig_build(session=session, universe_size=universe_size)
         # Replace bar_reader and dataset_resolver with tmp_path-rooted versions
         ctx.bar_reader.base_path = tmp_path
         ctx.dataset_resolver.base_path = tmp_path

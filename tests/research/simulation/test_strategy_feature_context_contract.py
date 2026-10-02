@@ -167,3 +167,41 @@ def test_strategy_context_features_defaults_to_empty_when_absent() -> None:
 
     assert context is not None
     assert context.features == {}
+
+
+def test_with_lookback_returns_a_gated_copy() -> None:
+    """Research runs hand each strategy its registry warmup (rotation step 5c) through
+    a copy, so a shared builder is never changed for the next run."""
+    ts0 = datetime(2024, 1, 2, 14, 30, tzinfo=UTC)
+    timeline = [ts0 + timedelta(minutes=5 * i) for i in range(4)]
+    bars = [_bar(ts, 100.0 + i) for i, ts in enumerate(timeline)]
+    window = SimulationWindowData(
+        start_date=date(2024, 1, 2),
+        end_date=date(2024, 1, 2),
+        dataset_version="bars-v1",
+        symbols=["AAPL"],
+        timeline=timeline,
+        bars_by_symbol={"AAPL": bars},
+        bars_by_timestamp={bar.timestamp: {"AAPL": bar} for bar in bars},
+        feature_tables_by_symbol={},
+    )
+    shared = StrategyContextBuilder(
+        market_bar_reader=cast(HistoricalBarDatasetReader, _UnusedReader()),
+        bars_dataset=RAW_BARS_DATASET,
+        lookback_bars=300,
+    )
+
+    gated = shared.with_lookback(2)
+    context = gated.build_from_window(
+        run_id=uuid4(),
+        strategy_id="strategy-1",
+        symbol="AAPL",
+        timestamp=timeline[3],
+        window=window,
+        positions={},
+        state={},
+    )
+
+    assert shared.lookback_bars == 300
+    assert context is not None
+    assert [bar.timestamp for bar in context.bars] == timeline[1:3]

@@ -9,7 +9,7 @@ Returns Alpaca-format response dicts so the existing order pipeline is unchanged
 from __future__ import annotations
 
 import dataclasses
-from datetime import datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
@@ -104,12 +104,30 @@ class _IntentProxy:
         self.intent_id: str = broker_order_id
 
 
+def _bar_index_at(timestamps: list[datetime], tick: datetime) -> int | None:
+    """Index of the latest bar stamped at or before ``tick``; None when every bar is later.
+
+    A decision at tick T (made from bars before T) fills at the close of the bar
+    stamped T, as research fills do. A bar stamped after the tick is never used:
+    its prices are not known yet at decision time.
+    """
+    tick_utc = tick if tick.tzinfo is not None else tick.replace(tzinfo=UTC)
+    idx: int | None = None
+    for i, ts in enumerate(timestamps):
+        ts_utc = ts if ts.tzinfo is not None else ts.replace(tzinfo=UTC)
+        if ts_utc > tick_utc:
+            break
+        idx = i
+    return idx
+
+
 class SimulatedBrokerClient:
     """Simulated broker for platform backtest replay.
 
     Replaces AlpacaBrokerClient when running historical simulations.
-    Orders are filled synchronously against the current tick's bar on submit;
-    the reconciliation job finds no open orders and is effectively a no-op.
+    Orders are filled synchronously against the current tick's bar on submit
+    (the latest bar stamped at or before the tick); the reconciliation job finds
+    no open orders and is effectively a no-op.
     """
 
     def __init__(
@@ -134,6 +152,10 @@ class SimulatedBrokerClient:
         self._by_client_order_id: dict[str, str] = {}
         # per-tick bar cache to avoid redundant Parquet reads
         self._bar_cache: dict[str, _BarProxy | None] = {}
+        # Per-symbol bars of the tick's date (backtest dataset only), kept across the
+        # intraday ticks of one day so each symbol is read once per day.
+        self._day_bars: dict[str, dict[str, list[Any]] | None] = {}
+        self._day_bars_date: date | None = None
 
     # ------------------------------------------------------------------
     # Orders
@@ -222,11 +244,14 @@ class SimulatedBrokerClient:
 
             latest = CashSnapshotRepository(self._session).get_latest()
             if latest is not None:
+                equity = self._marked_equity(latest.cash)
+                if equity is None:
+                    equity = latest.equity
                 return {
-                    "equity": str(latest.equity),
+                    "equity": str(equity),
                     "cash": str(latest.cash),
                     "buying_power": str(latest.buying_power),
-                    "portfolio_value": str(latest.equity),
+                    "portfolio_value": str(equity),
                 }
         except Exception:
             pass
@@ -236,6 +261,55 @@ class SimulatedBrokerClient:
             "buying_power": str(self._cash),
             "portfolio_value": str(self._cash),
         }
+
+    # Calendar days searched back for the last bar before the first tick of a day.
+    _MARK_LOOKBACK_DAYS = 7
+
+    def _marked_equity(self, cash: Decimal) -> Decimal | None:
+        """Cash plus open positions at the last close known at the tick (backtest only).
+
+        A broker reports equity at current prices. The cash snapshot's equity is only
+        rewritten when something fills, so between fills it is stale; sizing from it
+        (the cycle syncs total capital to broker equity) drifts from research, which
+        marks every bar. Positions are marked at the close of the last bar stamped
+        before the tick — what was known when the decision is made.
+        """
+        if self._dataset_version_id is None:
+            return None
+        equity = Decimal(cash)
+        for position in self.get_positions():
+            mark = self._close_before_tick(position["symbol"])
+            if mark is None:
+                mark = Decimal(position["current_price"])
+            equity += Decimal(position["qty"]) * mark
+        return equity
+
+    def _close_before_tick(self, symbol: str) -> Decimal | None:
+        self._load_bar(symbol)  # fills the day cache for the tick's date
+        day = self._day_bars.get(symbol)
+        if day is not None:
+            idx = _bar_index_at(day["timestamp"], self._timestamp - timedelta(microseconds=1))
+            if idx is not None:
+                return Decimal(str(day["close"][idx]))
+        # First tick of the day: the previous session's last close.
+        from autonomous_trading_platform.storage.parquet.reader import HistoricalBarDatasetReader
+
+        try:
+            tick_date = self._timestamp.date()
+            table = HistoricalBarDatasetReader(
+                session=self._session, base_path=self._base_path
+            ).read_with_pyarrow(
+                dataset=RAW_BARS_DATASET,
+                dataset_version=str(self._dataset_version_id),
+                symbol=symbol,
+                start_date=tick_date - timedelta(days=self._MARK_LOOKBACK_DAYS),
+                end_date=tick_date - timedelta(days=1),
+            )
+        except Exception:
+            return None
+        if table.num_rows == 0:
+            return None
+        return Decimal(str(table.column("close")[table.num_rows - 1].as_py()))
 
     def get_positions(self) -> list[dict[str, Any]]:
         # Read open positions from the DB so the portfolio engine can see what
@@ -316,6 +390,9 @@ class SimulatedBrokerClient:
         """
         self._timestamp = timestamp
         self._bar_cache.clear()
+        if self._day_bars_date != timestamp.date():
+            self._day_bars.clear()
+            self._day_bars_date = None
 
     @property
     def orders_submitted_count(self) -> int:
@@ -406,7 +483,7 @@ class SimulatedBrokerClient:
             return None
 
     def _fetch_bar_from_parquet(self, symbol: str) -> _BarProxy | None:
-        """Load the latest validated bar for this tick's date from Parquet.
+        """Load this tick's bar (latest at or before the tick) for the tick's date from Parquet.
 
         When dataset_version_id is set (backtest mode), reads directly from
         that dataset. Otherwise queries the SOR for the best validated dataset.
@@ -419,28 +496,23 @@ class SimulatedBrokerClient:
         reader = HistoricalBarDatasetReader(session=self._session, base_path=self._base_path)
 
         if self._dataset_version_id is not None:
-            try:
-                table = reader.read_with_pyarrow(
-                    dataset=RAW_BARS_DATASET,
-                    dataset_version=self._dataset_version_id,
-                    symbol=symbol,
-                    start_date=tick_date,
-                    end_date=tick_date,
-                )
-                if table.num_rows > 0:
-                    d = table.to_pydict()
-                    idx = table.num_rows - 1
-                    return _BarProxy(
-                        open=Decimal(str(d["open"][idx])),
-                        high=Decimal(str(d["high"][idx])),
-                        low=Decimal(str(d["low"][idx])),
-                        close=Decimal(str(d["close"][idx])),
-                        volume=Decimal(str(d["volume"][idx])),
-                        timestamp=self._timestamp,
+            if self._day_bars_date != tick_date:
+                self._day_bars.clear()
+                self._day_bars_date = tick_date
+            if symbol not in self._day_bars:
+                try:
+                    table = reader.read_with_pyarrow(
+                        dataset=RAW_BARS_DATASET,
+                        dataset_version=self._dataset_version_id,
+                        symbol=symbol,
+                        start_date=tick_date,
+                        end_date=tick_date,
                     )
-            except Exception:
-                pass
-            return None
+                    self._day_bars[symbol] = table.to_pydict() if table.num_rows > 0 else None
+                except Exception:
+                    self._day_bars[symbol] = None
+            day = self._day_bars[symbol]
+            return self._bar_at_tick(day) if day is not None else None
 
         for dataset_name, dataset_obj in (
             ("adjusted_bars", ADJUSTED_BARS_DATASET),
@@ -469,17 +541,25 @@ class SimulatedBrokerClient:
                 if table.num_rows == 0:
                     continue
 
-                d = table.to_pydict()
-                idx = table.num_rows - 1  # last bar of the day
-                return _BarProxy(
-                    open=Decimal(str(d["open"][idx])),
-                    high=Decimal(str(d["high"][idx])),
-                    low=Decimal(str(d["low"][idx])),
-                    close=Decimal(str(d["close"][idx])),
-                    volume=Decimal(str(d["volume"][idx])),
-                    timestamp=self._timestamp,
-                )
+                bar = self._bar_at_tick(table.to_pydict())
+                if bar is None:
+                    continue
+                return bar
             except Exception:
                 continue
 
         return None
+
+    def _bar_at_tick(self, day: dict[str, list[Any]]) -> _BarProxy | None:
+        """The latest bar of ``day`` stamped at or before this tick, re-stamped to the tick."""
+        idx = _bar_index_at(day["timestamp"], self._timestamp)
+        if idx is None:
+            return None
+        return _BarProxy(
+            open=Decimal(str(day["open"][idx])),
+            high=Decimal(str(day["high"][idx])),
+            low=Decimal(str(day["low"][idx])),
+            close=Decimal(str(day["close"][idx])),
+            volume=Decimal(str(day["volume"][idx])),
+            timestamp=self._timestamp,
+        )

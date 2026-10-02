@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -27,6 +27,7 @@ from autonomous_trading_platform.execution.services.cash_ledger_service import C
 from autonomous_trading_platform.execution.services.position_ledger_service import (
     PositionLedgerService,
 )
+from autonomous_trading_platform.execution.services.sleeve_sizing import VOL_LOOKBACK_BARS
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
     LookaheadGuardService,
@@ -135,9 +136,20 @@ class SimulationExecutionEngine:
         # Execution scheduler: maps target_bar_index → orders to execute on that bar.
         scheduled: dict[int, list[OrderIntent]] = {}
 
+        # Closes of the bars before the current one (warmup included) for the sizer's
+        # volatility scalar — the trading cycle reads the same closes from Parquet.
+        close_history: dict[str, deque[float]] = defaultdict(
+            lambda: deque(maxlen=VOL_LOOKBACK_BARS)
+        )
+        previous_bars: dict[str, Any] | None = None
+
         for bar_index, timestamp in enumerate(timeline):
             bars_at_timestamp = window.bars_by_timestamp[timestamp]
             is_warmup = window.is_warmup(timestamp)
+            if previous_bars is not None:
+                for symbol, close in self._extract_prices(previous_bars).items():
+                    close_history[symbol].append(close)
+            previous_bars = bars_at_timestamp
 
             # Mature pending settlements before processing this bar's fills.
             # Settlement matures when bar_index >= settlement_bar_index so proceeds
@@ -231,6 +243,14 @@ class SimulationExecutionEngine:
                 run_id=run_id,
                 strategy_id=strategy.strategy_id,
                 timestamp=timestamp,
+                recent_closes=close_history,
+                # Size from equity marked at the previous bar, as the trading cycle
+                # sizes from the account equity of its last snapshot.
+                capital_scale=(
+                    Decimal(str(equity_rows[-1]["equity"])) / Decimal(str(initial_cash))
+                    if equity_rows
+                    else Decimal("1")
+                ),
             )
 
             child_pairs = self._plan_child_orders(
@@ -632,8 +652,17 @@ class SimulationExecutionEngine:
         run_id: UUID,
         strategy_id: str,
         timestamp: datetime,
+        recent_closes: dict[str, deque[float]] | None = None,
+        capital_scale: Decimal = Decimal("1"),
     ) -> list[OrderIntent]:
-        targets = self.position_sizer.compute_targets(signals=signals, prices=prices)
+        closes = (
+            {s.symbol: list(recent_closes.get(s.symbol, ())) for s in signals}
+            if recent_closes is not None
+            else None
+        )
+        targets = self.position_sizer.compute_targets(
+            signals=signals, prices=prices, recent_closes=closes, capital_scale=capital_scale
+        )
         order_intents: list[OrderIntent] = []
 
         for symbol, target_qty in targets.items():

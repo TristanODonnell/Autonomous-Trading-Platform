@@ -42,6 +42,7 @@ class FakePositionSizer:
         performance_tier: str | None = None,
         combined_scalar: Decimal | None = None,
         realized_drawdown: float | None = None,
+        symbol_count: int | None = None,
     ) -> SizingResult:
         self.last_combined_scalar = combined_scalar
         self.last_realized_drawdown = realized_drawdown
@@ -329,6 +330,79 @@ class TestPortfolioConstructionService:
 
         assert intents == []
         assert risk_service.checked_intents == []
+
+
+class TestHoldUntilExitSignal:
+    """Step 5c (F6): a strategy holds a position until it signals SELL/FLAT. Entry/exit
+    strategies (crossovers, mean reversion) signal only on the crossing bar; before the
+    fix the next bar's silence liquidated every position after five minutes."""
+
+    def _intents(self, service, *, signals, positions, hold_symbols, run_id, bar_timestamp, now):
+        return list(
+            service.generate_order_intents(
+                signals=signals,
+                positions=positions,
+                prices={"AAPL": 100.0, "MSFT": 400.0},
+                run_id=run_id,
+                strategy_id="test-strategy",
+                bar_timestamp=bar_timestamp,
+                now=now,
+                approval_status=GovernanceState.APPROVED_PAPER,
+                hold_symbols=hold_symbols,
+            )
+        )
+
+    def test_unsignalled_position_in_the_universe_is_held(
+        self, service, run_id, bar_timestamp, now
+    ) -> None:
+        intents = self._intents(
+            service,
+            signals=[],
+            positions={"AAPL": 10},
+            hold_symbols={"AAPL", "MSFT"},
+            run_id=run_id,
+            bar_timestamp=bar_timestamp,
+            now=now,
+        )
+        assert intents == []
+
+    def test_exit_signal_still_closes_a_held_position(
+        self, service, run_id, bar_timestamp, now
+    ) -> None:
+        intents = self._intents(
+            service,
+            signals=[make_signal(symbol="AAPL", direction="sell")],
+            positions={"AAPL": 10},
+            hold_symbols={"AAPL"},
+            run_id=run_id,
+            bar_timestamp=bar_timestamp,
+            now=now,
+        )
+        assert [(i.symbol, i.side, i.qty) for i in intents] == [("AAPL", Side.SELL, 10)]
+
+    def test_position_outside_the_universe_exits(self, service, run_id, bar_timestamp, now) -> None:
+        intents = self._intents(
+            service,
+            signals=[],
+            positions={"AAPL": 10, "MSFT": 3},
+            hold_symbols={"AAPL"},  # MSFT left the universe (or was delisted)
+            run_id=run_id,
+            bar_timestamp=bar_timestamp,
+            now=now,
+        )
+        assert [(i.symbol, i.side, i.qty) for i in intents] == [("MSFT", Side.SELL, 3)]
+
+    def test_exit_only_sleeves_close_everything(self, service, run_id, bar_timestamp, now) -> None:
+        intents = self._intents(
+            service,
+            signals=[],
+            positions={"AAPL": 10},
+            hold_symbols=(),
+            run_id=run_id,
+            bar_timestamp=bar_timestamp,
+            now=now,
+        )
+        assert [(i.symbol, i.side) for i in intents] == [("AAPL", Side.SELL)]
 
 
 class TestDrawdownScalingIntegration:

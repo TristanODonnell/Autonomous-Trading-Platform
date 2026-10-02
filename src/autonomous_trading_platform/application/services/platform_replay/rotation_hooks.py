@@ -82,7 +82,7 @@ def load_daily_closes(
             )
 
             simulation_runner = build_simulation_context(
-                session=session, universe_size=1, lookback_bars=20
+                session=session, universe_size=1
             ).simulation_runner
         reader = getattr(getattr(simulation_runner, "window_loader", None), "bar_reader", None)
         resolver = getattr(simulation_runner, "dataset_resolver", None)

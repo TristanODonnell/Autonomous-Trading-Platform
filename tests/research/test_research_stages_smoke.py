@@ -154,8 +154,8 @@ def smoke_data_root(tmp_path: Path, db_session, monkeypatch) -> Path:
 
     orig_build = ctx_mod.build_simulation_context
 
-    def _patched_build(*, session, universe_size=None, lookback_bars=50):
-        ctx = orig_build(session=session, universe_size=universe_size, lookback_bars=lookback_bars)
+    def _patched_build(*, session, universe_size=None):
+        ctx = orig_build(session=session, universe_size=universe_size)
         ctx.bar_reader.base_path = tmp_path
         ctx.dataset_resolver.base_path = tmp_path
         ctx.window_loader.bar_reader.base_path = tmp_path
@@ -186,9 +186,7 @@ def replay_context() -> PlatformReplayContext:
 def _build_context(db_session):
     import autonomous_trading_platform.research.simulation.contexts.build_simulation_context as ctx_mod
 
-    return ctx_mod.build_simulation_context(
-        session=db_session, universe_size=len(_SYMBOLS), lookback_bars=20
-    )
+    return ctx_mod.build_simulation_context(session=db_session, universe_size=len(_SYMBOLS))
 
 
 def _replay_experiment(db_session, replay_context, simulation_runner, profile: str = "smoke"):

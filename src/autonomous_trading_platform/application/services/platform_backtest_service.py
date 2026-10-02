@@ -48,6 +48,9 @@ from autonomous_trading_platform.contracts.runtime.platform_replay import (
     SettingsTimelineEvent,
 )
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.universe.services.market_calendar_service import (
+    MarketCalendarService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -170,35 +173,28 @@ def _emit_progress(
 # Market timing
 # ---------------------------------------------------------------------------
 
-# Each replay tick is stamped at 4:00 PM ET ≈ 21:00 UTC (standard time / EST).
-# This puts ingestion, features, governance, and risk in the correct after-close
+# Each replay tick is stamped at the regular-session close (4:00 PM ET, 1:00 PM on early
+# closes) in exchange time, so daylight saving moves it: 21:00 UTC in winter, 20:00 UTC in
+# summer. This puts ingestion, features, governance, and risk in the correct after-close
 # window and gives the trading cycle a realistic same-day reference timestamp.
-_MARKET_CLOSE_UTC_HOUR = 21
-# Market open: 9:30 AM ET = 14:30 UTC (EST = UTC-5; ignores DST for simplicity).
-_MARKET_OPEN_UTC_HOUR = 14
-_MARKET_OPEN_UTC_MINUTE = 30
 
 
 def _market_close_ts(tick_date: date) -> datetime:
-    """Return the market-close UTC timestamp for a given trading date (21:00 UTC = 4 PM EST)."""
-    return datetime.combine(tick_date, dt_time(_MARKET_CLOSE_UTC_HOUR, 0)).replace(tzinfo=UTC)
+    """Return the regular-session close for a trading date as a UTC timestamp."""
+    return MarketCalendarService().regular_session_utc(tick_date)[1]
 
 
 def _intraday_bar_timestamps(tick_date: date, cadence_minutes: int) -> list[datetime]:
     """Return bar timestamps for one trading day.
 
     For cadence_minutes >= 390 (daily), returns a single EOD timestamp.
-    For intraday cadence, returns timestamps from 9:30 AM ET to the last bar
-    before 4:00 PM ET, spaced cadence_minutes apart.
+    For intraday cadence, returns timestamps from the 9:30 AM ET open to the last bar
+    before the close, spaced cadence_minutes apart (78 five-minute bars on a full day).
     """
     if cadence_minutes >= 390:
         return [_market_close_ts(tick_date)]
 
-    market_open = datetime.combine(
-        tick_date,
-        dt_time(_MARKET_OPEN_UTC_HOUR, _MARKET_OPEN_UTC_MINUTE),
-    ).replace(tzinfo=UTC)
-    market_close = _market_close_ts(tick_date)
+    market_open, market_close = MarketCalendarService().regular_session_utc(tick_date)
 
     bars: list[datetime] = []
     ts = market_open

@@ -23,6 +23,13 @@ from autonomous_trading_platform.storage.sor.models.strategy_governance import S
 logger = logging.getLogger(__name__)
 
 
+# Research rejects candidates that trade more than this many times their capital per day
+# (rotation step 5c-G: 5-minute noise traders turned over 13-26x a day; the strategies
+# that held positions ran ~2x). Slippage is already in research returns; this cap is a
+# backstop for edges too thin to survive live costs.
+RESEARCH_MAX_DAILY_TURNOVER = 10.0
+
+
 def run_research_at_timestamp(
     *,
     session: Session,
@@ -126,9 +133,7 @@ def run_scheduled_research_at_timestamp(
             build_simulation_context,
         )
 
-        simulation_context = build_simulation_context(
-            session=session, universe_size=_universe_size, lookback_bars=20
-        )
+        simulation_context = build_simulation_context(session=session, universe_size=_universe_size)
     except Exception as exc:
         return ResearchReplayResult(**base, status="failed", errors=[str(exc)])
 
@@ -547,6 +552,7 @@ def _build_replay_experiment_definition(
         min_trades=5,
         min_consistency_score=0.3,
         min_total_return=-0.05,
+        max_daily_turnover=RESEARCH_MAX_DAILY_TURNOVER,
     )
 
     # Stage 1 — always runs (just needs start_date < end_date)
@@ -562,6 +568,7 @@ def _build_replay_experiment_definition(
                 min_trades=10,
                 min_consistency_score=0.4,
                 min_total_return=0.0,
+                max_daily_turnover=RESEARCH_MAX_DAILY_TURNOVER,
             ),
             scoring_weights=default_weights,
             max_workers=1,

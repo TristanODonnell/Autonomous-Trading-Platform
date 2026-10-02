@@ -707,7 +707,7 @@ def handle_export_rotation_dataset(args: argparse.Namespace) -> int:
             print_error("No raw_bars dataset version found; run the recording backtest first.")
             return 1
         runner = build_simulation_context(
-            session=session, universe_size=len(symbols), lookback_bars=20
+            session=session, universe_size=len(symbols)
         ).simulation_runner
         market = load_daily_closes(
             session=session,

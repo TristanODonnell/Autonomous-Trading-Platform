@@ -185,6 +185,8 @@ class TestSimulationCacheKey:
             "regime_dataset_version",
             "feature_versions_hash",
             "settlement_days",
+            "sizing_model",
+            "max_volume_participation_rate",
         }
         assert set(d.keys()) == expected_fields
 

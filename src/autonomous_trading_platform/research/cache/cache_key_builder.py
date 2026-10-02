@@ -12,6 +12,10 @@ import json
 from typing import Any
 
 from autonomous_trading_platform.contracts.simulation.dividend_event import DividendEvent
+from autonomous_trading_platform.execution.clients.simulated_broker_client import (
+    build_platform_execution_service,
+)
+from autonomous_trading_platform.execution.services.sleeve_sizing import SIZING_MODEL
 from autonomous_trading_platform.research.cache.cache_identity import (
     SimulationCacheKey,
     StrategyGenerationCacheKey,
@@ -28,7 +32,8 @@ from autonomous_trading_platform.research.simulation.services.simulation_cost_mo
 )
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
-_DEFAULT_FILL = SimulatedFillModelConfig()
+# Research simulations fill with the platform's fill model (step 5c-E).
+_DEFAULT_FILL = build_platform_execution_service().fill_model_config
 _DEFAULT_SLIPPAGE_MODEL: Any = VolumeShareSlippageModel()
 _DEFAULT_COST = SimulationCostModelConfig()
 
@@ -65,7 +70,7 @@ def build_simulation_cache_key(
     run_config:
         Validated simulation run configuration.
     fill_model:
-        Fill policy; defaults to ``SimulatedFillModelConfig()`` when omitted.
+        Fill policy; defaults to the platform fill model (build_platform_execution_service).
     slippage_model:
         Slippage model instance (SlippageModel, VolumeShareSlippageModel,
         SpreadAwareSlippageModel, or any object with model_type and config_summary()).
@@ -128,6 +133,8 @@ def build_simulation_cache_key(
         adverse_threshold_bps=adverse_threshold_bps,
         settlement_days=effective_settlement_days,
         dividend_events_hash=_hash_dividend_events(effective_dividend_events),
+        sizing_model=SIZING_MODEL,
+        max_volume_participation_rate=str(fill.max_volume_participation_rate),
     )
 
 

@@ -7,12 +7,14 @@ replaced by StrategyDefinition.compute_warmup_bars().
 from __future__ import annotations
 
 from datetime import date
+from typing import cast
 from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.execution.services.sleeve_sizing import VOL_LOOKBACK_BARS
 from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunner,
     SimulationRunRequest,
@@ -129,13 +131,15 @@ def test_warmup_for_stub_strategy_is_registry_derived() -> None:
 
     runner.run(_make_request("stub", {"price_change_threshold": 0.0}))
 
+    # Registry says stub needs 1 warmup bar; old heuristic would give 0. The window
+    # also holds the sizer's volatility closes (step 5c-E).
+    cast(MagicMock, runner.context_builder).with_lookback.assert_called_once_with(1)
     _, kwargs = mock_loader.load_window.call_args
-    # Registry says stub needs 1 warmup bar; old heuristic would give 0.
-    assert kwargs["warmup_bars"] == 1
+    assert kwargs["warmup_bars"] == VOL_LOOKBACK_BARS
 
 
-def test_warmup_for_random_strategy_is_zero() -> None:
-    """random warmup_bars_fn returns 0."""
+def test_warmup_for_random_strategy_is_one_bar() -> None:
+    """random warmup_bars_fn returns 0; every strategy is handed at least one bar."""
     runner, mock_loader = _build_runner()
 
     runner.run(
@@ -145,8 +149,9 @@ def test_warmup_for_random_strategy_is_zero() -> None:
         )
     )
 
+    cast(MagicMock, runner.context_builder).with_lookback.assert_called_once_with(1)
     _, kwargs = mock_loader.load_window.call_args
-    assert kwargs["warmup_bars"] == 0
+    assert kwargs["warmup_bars"] == VOL_LOOKBACK_BARS
 
 
 def test_warmup_for_moving_average_crossover_is_long_window_plus_one() -> None:
@@ -205,9 +210,10 @@ def test_warmup_uses_default_parameters_when_none_supplied() -> None:
         _make_request("momentum", {}),  # empty parameters → defaults applied
     )
 
-    _, kwargs = mock_loader.load_window.call_args
     # momentum default lookback=5, so warmup = 6
-    assert kwargs["warmup_bars"] == 6
+    cast(MagicMock, runner.context_builder).with_lookback.assert_called_once_with(6)
+    _, kwargs = mock_loader.load_window.call_args
+    assert kwargs["warmup_bars"] == VOL_LOOKBACK_BARS
 
 
 # ---------------------------------------------------------------------------
@@ -230,3 +236,42 @@ def test_warmup_bars_is_not_multiplied_by_78() -> None:
     # Old heuristic: 30 * 78 = 2340. Registry: 31.
     assert kwargs["warmup_bars"] != 30 * 78
     assert kwargs["warmup_bars"] == 31
+
+
+@pytest.mark.parametrize(
+    ("strategy_type", "parameters", "expected"),
+    [
+        ("moving_average_crossover", {"short_window": 10, "long_window": 30}, 31),
+        (
+            "factor_based",
+            {
+                "momentum_lookback": 1,
+                "mean_reversion_window": 100,
+                "volatility_window": 100,
+                "volume_window": 100,
+            },
+            100,
+        ),
+        ("momentum", {"lookback": 5}, 6),
+    ],
+)
+def test_strategy_is_handed_its_registry_warmup_in_bars(
+    strategy_type: str, parameters: dict, expected: int
+) -> None:
+    """Rotation step 5c (F1): research used a fixed 20-bar context for every strategy,
+    so a 10/30 crossover or 100-bar factor strategy never had enough bars to trade.
+    The engine now gets a context builder gated on the same count the trading cycle
+    uses."""
+    runner, mock_loader = _build_runner()
+
+    runner.run(_make_request(strategy_type, parameters))
+
+    cast(MagicMock, runner.context_builder).with_lookback.assert_called_once_with(expected)
+    _, engine_kwargs = cast(MagicMock, runner.execution_engine).execute.call_args
+    assert (
+        engine_kwargs["context_builder"]
+        is cast(MagicMock, runner.context_builder).with_lookback.return_value
+    )
+    # The window also holds the sizer's volatility closes (step 5c-E).
+    _, loader_kwargs = mock_loader.load_window.call_args
+    assert loader_kwargs["warmup_bars"] == max(expected, VOL_LOOKBACK_BARS)

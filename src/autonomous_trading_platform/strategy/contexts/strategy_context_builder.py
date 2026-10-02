@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import copy
 from datetime import datetime
 from typing import Any
 from uuid import UUID
+
+import pyarrow as pa
+import pyarrow.compute as pc
 
 from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
     LookaheadGuardService,
@@ -13,6 +17,11 @@ from autonomous_trading_platform.research.simulation.services.simulation_window_
 from autonomous_trading_platform.storage.parquet.datasets import ParquetDataset
 from autonomous_trading_platform.storage.parquet.reader import HistoricalBarDatasetReader
 from autonomous_trading_platform.strategy.contracts.strategy_context import StrategyContext
+
+
+def _arrow_ts(value: datetime, table: pa.Table) -> pa.Scalar:
+    """value as a scalar of the table's timestamp type (tz-aware comparisons in Arrow)."""
+    return pa.scalar(value, type=table.schema.field("timestamp").type)
 
 
 class StrategyContextBuilder:
@@ -34,6 +43,16 @@ class StrategyContextBuilder:
         self.dataset_version = dataset_version
         self.fallback_dataset = fallback_dataset
         self.fallback_dataset_version = fallback_dataset_version
+
+    def with_lookback(self, lookback_bars: int) -> StrategyContextBuilder:
+        """A copy that hands strategies exactly lookback_bars bars.
+
+        Research runs use the strategy's registry warmup, the same count the trading
+        cycle uses, so both paths evaluate a strategy on identical bars.
+        """
+        builder = copy.copy(self)
+        builder.lookback_bars = lookback_bars
+        return builder
 
     def build(
         self,
@@ -90,16 +109,17 @@ class StrategyContextBuilder:
         if table.num_rows == 0:
             return None
 
-        bars = [
-            ParquetBarRepository._row_to_market_bar(row)
-            for row in table.to_pylist()
-            if row["timestamp"] < bar_timestamp
-        ]
-
-        if len(bars) < self.lookback_bars:
+        # Filter and slice in Arrow, then convert only the bars handed to the strategy:
+        # the date window holds far more rows than a short lookback needs (a 5-bar
+        # strategy reads ~24 days), and per-row MarketBar conversion dominated cycle time.
+        before = table.filter(pc.less(table["timestamp"], _arrow_ts(bar_timestamp, table)))
+        if before.num_rows < self.lookback_bars:
             return None
 
-        context_bars = bars[-self.lookback_bars :]
+        context_bars = [
+            ParquetBarRepository._row_to_market_bar(row)
+            for row in before.slice(before.num_rows - self.lookback_bars).to_pylist()
+        ]
 
         self.lookahead_guard_service.assert_historical_only(
             symbol=symbol,

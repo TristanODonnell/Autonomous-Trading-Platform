@@ -8,11 +8,15 @@ from typing import Any
 import pytest
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     _instantiate_strategy,
+    _resolve_active_strategy,
 )
 from autonomous_trading_platform.storage.sor.models.strategy_configs import StrategyConfigs
 from autonomous_trading_platform.strategy.implementations.stub_strategy import StubStrategy
+from autonomous_trading_platform.strategy.registry import get_registry
+from tests.conftest import seed_strategy_governance
 
 _T0 = datetime(2026, 9, 28, tzinfo=UTC)
 
@@ -127,3 +131,37 @@ def test_invalid_parameters_fall_back_to_a_stub_with_the_real_id(db_session: Ses
 
     assert isinstance(strategy, StubStrategy)
     assert strategy.strategy_id == sid
+
+
+def test_warmup_is_the_shared_context_lookback(db_session: Session) -> None:
+    """Research re-sims hand a strategy the same number of bars (rotation step 5c)."""
+    params = {"short_window": 10, "long_window": 30}
+    _config(
+        db_session,
+        "macd__x",
+        "moving_average_crossover",
+        _wrapped("moving_average_crossover", "macd__x", params),
+    )
+
+    _, warmup = _instantiate_strategy(db_session, "macd__x")
+
+    expected = get_registry().get_definition("moving_average_crossover")
+    assert warmup == expected.context_lookback_bars(params) == 31
+
+
+def test_single_strategy_cycle_uses_researched_parameters(db_session: Session) -> None:
+    """Portfolio mode off: the legacy path merged the wrapped config over the defaults,
+    so a research candidate traded with default parameters there."""
+    sid = "momentum__legacy"
+    params = {"lookback": 12, "buy_above": 0.3, "sell_below": -0.3}
+    _config(db_session, sid, "momentum", _wrapped("momentum", sid, params))
+    seed_strategy_governance(db_session, strategy_id=sid)
+
+    strategy, strategy_id, _, warmup = _resolve_active_strategy(
+        session=db_session, settings=Settings()
+    )
+
+    assert strategy_id == sid
+    assert not isinstance(strategy, StubStrategy)
+    assert (vars(strategy)["lookback"], vars(strategy)["buy_above"]) == (12, 0.3)
+    assert warmup == 13

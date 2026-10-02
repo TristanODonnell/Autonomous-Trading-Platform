@@ -96,6 +96,14 @@ def test_random_warmup_is_zero() -> None:
     assert defn.compute_warmup_bars() == 0
 
 
+def test_context_lookback_is_the_warmup_but_at_least_one_bar() -> None:
+    registry = get_registry()
+    assert registry.get_definition("random").context_lookback_bars() == 1
+    assert registry.get_definition("stub").context_lookback_bars() == 1
+    crossover = registry.get_definition("moving_average_crossover")
+    assert crossover.context_lookback_bars({"short_window": 5, "long_window": 50}) == 51
+
+
 def test_moving_average_crossover_warmup_default() -> None:
     defn = get_registry().get_definition("moving_average_crossover")
     # default long_window=30, needs long_window+1 bars

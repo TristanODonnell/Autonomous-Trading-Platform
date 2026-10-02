@@ -9,6 +9,7 @@ from decimal import ROUND_DOWN, Decimal
 from autonomous_trading_platform.execution.services.drawdown_scaling_service import (
     DrawdownScalingService,
 )
+from autonomous_trading_platform.execution.services.sleeve_sizing import position_budget_usd
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.observability.metrics import (
     ratp_drawdown_scaling_applied_total,
@@ -81,6 +82,7 @@ class PositionSizer:
         performance_tier: str | None = None,
         combined_scalar: Decimal | None = None,
         realized_drawdown: float | None = None,
+        symbol_count: int | None = None,
     ) -> SizingResult:
         """
         Compute the whole-share quantity for a position.
@@ -90,6 +92,10 @@ class PositionSizer:
         we only scale positions down, never up.  The clamp is enforced by
         PortfolioConstructionService before this call; raising here is a
         final safety net.
+
+        symbol_count (portfolio mode) splits the allocation equally across the symbols
+        the strategy trades, as research re-sims do (sleeve_sizing.position_budget_usd);
+        None sizes the position from the whole allocation.
 
         Scaling composition (outermost first):
             final = base * combined_scalar * drawdown_scalar
@@ -108,7 +114,7 @@ class PositionSizer:
         allocated = Decimal(str(allocation.allocated_capital_usd))
 
         # base_notional: capital committed before any risk scaling
-        base_notional = allocated * self._capital_fraction
+        base_notional = position_budget_usd(allocated * self._capital_fraction, symbol_count)
         target_notional = base_notional
 
         # Apply combined vol/Sharpe scalar (FINDING-18 — replaces old TASK-193 vol_scalar)

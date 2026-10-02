@@ -100,6 +100,11 @@ class SimulationCacheKey:
     # 16-char SHA-256 of sorted dividend events (A-02).  Empty = no dividends applied.
     # Changing dividend inputs produces a distinct cache entry.
     dividend_events_hash: str = ""
+    # Position sizing rule (execution/services/sleeve_sizing.SIZING_MODEL) and volume
+    # participation cap (step 5c-E). Empty = sized and filled before parity with the
+    # trading cycle; such results never match a current key.
+    sizing_model: str = ""
+    max_volume_participation_rate: str = ""
 
     def __post_init__(self) -> None:
         if not self.config_hash:
@@ -125,10 +130,12 @@ class SimulationCacheKey:
             "feature_versions_hash": self.feature_versions_hash,
             "fill_policy": self.fill_policy,
             "latency_bars": self.latency_bars,
+            "max_volume_participation_rate": self.max_volume_participation_rate,
             "price_basis": self.price_basis,
             "random_seed": self.random_seed,
             "regime_dataset_version": self.regime_dataset_version,
             "settlement_days": self.settlement_days,
+            "sizing_model": self.sizing_model,
             "slippage_config_hash": self.slippage_config_hash,
             "stage_name": self.stage_name,
             "start_date": self.start_date,

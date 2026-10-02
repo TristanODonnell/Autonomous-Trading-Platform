@@ -19,6 +19,7 @@ from autonomous_trading_platform.contracts.runtime.simulation_run import Simulat
 from autonomous_trading_platform.contracts.runtime.strategy_config import (
     StrategyConfig as RuntimeStrategyConfig,
 )
+from autonomous_trading_platform.execution.services.sleeve_sizing import VOL_LOOKBACK_BARS
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.research.experiments.filtering.metrics.return_metrics import (
     ReturnMetrics,
@@ -218,6 +219,12 @@ class SimulationRunner:
         # recorded in execution_config from the start.
         strategy_type = request.strategy_config["type"]
         strategy_parameters = request.strategy_config.get("parameters", {})
+        # The strategy sees exactly its registry warmup in bars, as in the trading cycle
+        # (_instantiate_strategy): same bars in, same signals out. Path-dependent
+        # indicators (EMA, Wilder RSI) need the same count, not just enough bars.
+        lookback_bars = (
+            get_registry().get_definition(strategy_type).context_lookback_bars(strategy_parameters)
+        )
 
         if self.feature_dependency_resolver is not None:
             resolved_deps = self.feature_dependency_resolver.resolve(
@@ -231,19 +238,13 @@ class SimulationRunner:
             )
             feature_requests = resolved_deps.feature_requests
             resolved_feature_dataset_ids = resolved_deps.resolved_feature_dataset_ids
-            warmup_bars = resolved_deps.warmup_bars
+            warmup_bars = max(resolved_deps.warmup_bars, VOL_LOOKBACK_BARS)
         else:
-            # Registry warmup replaces the former parameter-name heuristic
-            # (_long_window * 78).  The registry warmup functions already return
-            # bars directly; no day-to-bar conversion is needed here.
-            # When resampling to daily bars, skip intraday warmup entirely —
-            # the StrategyContextBuilder lookback window serves as effective warmup.
-            if request.resample_to_daily:
-                warmup_bars = 0
-            else:
-                registry = get_registry()
-                defn = registry.get_definition(strategy_type)
-                warmup_bars = defn.compute_warmup_bars(strategy_parameters)
+            # When resampling to daily bars, skip intraday warmup entirely: the first
+            # lookback_bars daily bars of the window serve as warmup. Otherwise load at
+            # least the sizer's volatility closes too (the trading cycle reads them from
+            # history); the strategy context still gets exactly lookback_bars.
+            warmup_bars = 0 if request.resample_to_daily else max(lookback_bars, VOL_LOOKBACK_BARS)
             feature_requests = []
             resolved_feature_dataset_ids = {}
 
@@ -288,6 +289,7 @@ class SimulationRunner:
                     request=request,
                     window=window,
                     strategy=strategy,
+                    lookback_bars=lookback_bars,
                 )
             )
 
@@ -310,7 +312,7 @@ class SimulationRunner:
 
             rm = compute_return_metrics(live_equity_curve)
             risk = compute_risk_metrics(live_equity_curve)
-            tm = compute_trade_metrics(trade_logs)
+            tm = compute_trade_metrics(trade_logs, live_equity_curve)
             sm = compute_stability_metrics(live_equity_curve)
 
             self._record_run_completed(
@@ -354,13 +356,13 @@ class SimulationRunner:
             self._commit_metadata()
             raise
 
-    def _execute_simulation(self, *, run_id, request, window, strategy):
+    def _execute_simulation(self, *, run_id, request, window, strategy, lookback_bars):
 
         result = self.execution_engine.execute(
             run_id=run_id,
             strategy=strategy,
             window=window,
-            context_builder=self.context_builder,
+            context_builder=self.context_builder.with_lookback(lookback_bars),
             simulated_execution_service=self.simulated_execution_service,
             initial_cash=request.initial_cash,
         )

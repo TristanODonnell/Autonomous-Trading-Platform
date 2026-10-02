@@ -236,9 +236,14 @@ def _resolve_active_strategy(
             continue
         try:
             defn = registry.get_definition(config_row.strategy_type)
-            params = {**(defn.default_parameters or {}), **(config_row.config_json or {})}
+            # Unwrap research's {type, parameters} config, as _instantiate_strategy does,
+            # so a researched strategy trades with its own parameters here too.
+            params = {
+                **(defn.default_parameters or {}),
+                **stored_config_parameters(config_row.config_json),
+            }
             strategy = defn.builder(strategy_id=gov_row.strategy_id, params=params)
-            warmup_bars = defn.warmup_bars_fn(params)
+            warmup_bars = max(defn.warmup_bars_fn(params), 1)
             logger.info(
                 "trading_cycle.active_strategy_resolved",
                 extra={
@@ -310,7 +315,10 @@ def _instantiate_strategy(session: Session, strategy_id: str) -> tuple[BaseStrat
     try:
         defn = get_registry().get_definition(config_row.strategy_type)
         params = defn.normalize_parameters(stored_config_parameters(config_row.config_json))
-        return defn.builder(strategy_id=strategy_id, params=params), defn.warmup_bars_fn(params)
+        # Same bar count as research re-sims (StrategyDefinition.context_lookback_bars).
+        return defn.builder(strategy_id=strategy_id, params=params), defn.context_lookback_bars(
+            params
+        )
     except Exception as exc:
         logger.warning(
             "trading_cycle.strategy_instantiation_failed_using_stub",

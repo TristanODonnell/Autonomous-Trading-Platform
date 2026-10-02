@@ -1,8 +1,12 @@
 # autonomous_trading_platform/scheduler/jobs/run_trading_evaluation_job.py
 
+from collections.abc import Collection
 from datetime import datetime
 from decimal import Decimal
 from time import perf_counter
+
+import pyarrow as pa
+import pyarrow.compute as pc
 
 from autonomous_trading_platform.common.errors import (
     TransientInfrastructureError,
@@ -14,6 +18,7 @@ from autonomous_trading_platform.contracts.trading.signal_aggregate import Signa
 from autonomous_trading_platform.execution.services.portfolio_signal_aggregator import (
     PortfolioSignalAggregator,
 )
+from autonomous_trading_platform.execution.services.sleeve_sizing import VOL_LOOKBACK_BARS
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
@@ -31,6 +36,7 @@ from autonomous_trading_platform.observability.metrics import (
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     TradingCycleDependencies,
+    resolve_trading_universe,
 )
 from autonomous_trading_platform.scheduler.jobs.portfolio_evaluation import (
     run_portfolio_evaluation,
@@ -48,7 +54,7 @@ TRADING_EVALUATION_JOB_METRICS = JobMetricSet(
 
 # Number of recent closes to fetch per symbol for vol computation.
 # 20 bars ≈ ~25 minutes of 5-min data — enough for intraday vol estimate.
-_VOL_LOOKBACK_BARS = 20
+_VOL_LOOKBACK_BARS = VOL_LOOKBACK_BARS
 
 
 def _fetch_positions(broker_client) -> dict[str, Position]:
@@ -94,6 +100,16 @@ def _fetch_equity(broker_client) -> float | None:
     return float(equity_str)
 
 
+def _resolve_universe_symbols(session, now_utc: datetime) -> set[str]:
+    """The active trading universe, or nothing (every unsignalled position exits)."""
+    try:
+        symbols, *_ = resolve_trading_universe(session=session, now_utc=now_utc)
+    except Exception:
+        logger.warning("evaluation_job.universe_unresolved", extra={"now_utc": now_utc.isoformat()})
+        return set()
+    return symbols
+
+
 def _fetch_recent_closes(
     strategy_context,
     symbols: list[str],
@@ -125,11 +141,12 @@ def _fetch_recent_closes(
                 recent_closes[symbol] = []
                 continue
 
-            rows = sorted(
-                [r for r in bars.to_pylist() if r["timestamp"] < bar_timestamp],
-                key=lambda r: r["timestamp"],
-            )
-            recent_closes[symbol] = [float(r["close"]) for r in rows[-lookback_bars:]]
+            # Only the close column of the last lookback bars before the bar (reads
+            # come back sorted by timestamp); no per-row conversion.
+            ts = bars["timestamp"]
+            before = bars.filter(pc.less(ts, pa.scalar(bar_timestamp, type=ts.type)))
+            closes = before.column("close").to_pylist()[-lookback_bars:]
+            recent_closes[symbol] = [float(c) for c in closes]
 
         except Exception as exc:
             logger.warning(
@@ -146,7 +163,14 @@ def run_trading_evaluation_job(
     now_utc: datetime,
     trading_cycle_dependencies: TradingCycleDependencies,
     manifest: RunManifest,
+    universe_symbols: Collection[str] | None = None,
 ):
+    """Evaluate the active strategy (or every strategy in portfolio mode) and size orders.
+
+    universe_symbols: the cycle's trading universe. Strategies hold positions in it
+    until they signal an exit; positions outside it are closed. Resolved here when the
+    caller has not already done so.
+    """
     component = "scheduler.jobs.trading_evaluation_job"
     job = "trading_evaluation_job"
     job_start = perf_counter()
@@ -156,6 +180,8 @@ def run_trading_evaluation_job(
     session = trading_cycle_dependencies.session
     portfolio_engine = trading_cycle_dependencies.portfolio_engine
     broker_client = execution_context.broker_client
+    if universe_symbols is None:
+        universe_symbols = _resolve_universe_symbols(session, now_utc)
 
     record_job_started(
         logger=logger,
@@ -202,6 +228,7 @@ def run_trading_evaluation_job(
                     fetch_recent_closes=_fetch_recent_closes,
                     vol_lookback_bars=_VOL_LOOKBACK_BARS,
                     job_span=job_span,
+                    universe_symbols=universe_symbols,
                 )
                 record_job_completed(
                     logger=logger,
@@ -332,6 +359,7 @@ def run_trading_evaluation_job(
                     bar_timestamp=bar_timestamp,
                     now=now_utc,
                     recent_closes=recent_closes,
+                    hold_symbols=universe_symbols,
                 )
             )
 

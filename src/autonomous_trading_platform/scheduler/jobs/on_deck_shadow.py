@@ -26,6 +26,7 @@ are closed at the cycle price, so a later return to on-deck starts flat.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -102,6 +103,7 @@ def run_on_deck_shadow(
     fetch_prices: Any,
     fetch_recent_closes: Any,
     vol_lookback_bars: int,
+    universe_symbols: Collection[str] = (),
 ) -> ShadowCycleResult:
     session = deps.session
     broker_client = deps.execution_context.broker_client
@@ -180,6 +182,7 @@ def run_on_deck_shadow(
                 total_capital=total_capital,
                 fetch_recent_closes=fetch_recent_closes,
                 vol_lookback_bars=vol_lookback_bars,
+                universe_symbols=universe_symbols,
             )
         except Exception as exc:
             session.rollback()
@@ -245,6 +248,7 @@ def _shadow_trade(
     total_capital: Decimal,
     fetch_recent_closes: Any,
     vol_lookback_bars: int,
+    universe_symbols: Collection[str] = (),
 ) -> ShadowStrategyOutcome:
     # Imported here: portfolio_evaluation imports this module.
     from autonomous_trading_platform.scheduler.jobs.portfolio_evaluation import (
@@ -293,6 +297,10 @@ def _shadow_trade(
                 deps, positions=positions, prices=prices, total_equity=total_capital
             ),
             on_order_rejected=on_rejected,
+            # Equal split across the traded universe, as real sleeves and re-sims.
+            symbol_count=manifest.universe_member_count,
+            # Hold until the strategy signals an exit, as real ACTIVE sleeves do.
+            hold_symbols=universe_symbols,
         )
     )
     budget_usd = Decimal(str(runtime.budget_pct)) * total_capital
