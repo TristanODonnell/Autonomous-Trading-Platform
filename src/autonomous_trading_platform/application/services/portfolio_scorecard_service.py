@@ -24,6 +24,8 @@ Lenses (penalties subtracted from the evidence score):
                      the actives excluding the incumbent it would replace
     the market       regime label recorded only (scored in step 5)
     (shadow)         blocked-order ratio of the shadow sleeve
+    trading cost     re-sim turnover above TURNOVER_FREE times the capital per day
+                     (step 5c-G: noise traders turned over 13-26x a day)
 
 The weights below are step 4 starting values; step 5 tunes them.
 """
@@ -85,6 +87,10 @@ CORRELATION_WEIGHT = Decimal("0.5")
 # Mean correlation up to this level is free (long-only strategies share market beta).
 CORRELATION_FREE = 0.3
 BLOCKED_WEIGHT = Decimal("0.25")
+# Turnover up to this many times the capital per day is free; each 1x above costs
+# TURNOVER_WEIGHT (13x/day -> 0.22, about half a Sharpe point; 26x/day -> 0.48).
+TURNOVER_FREE = 2.0
+TURNOVER_WEIGHT = Decimal("0.02")
 SCORE_FLOOR = Decimal("0.01")
 _QUANT = Decimal("0.000001")
 
@@ -119,6 +125,7 @@ class StrategyEvidence:
     backtest_age_days: int | None = None
     health_status: str | None = None
     blocked_ratio: float | None = None
+    resim_turnover: float | None = None
 
 
 @dataclass
@@ -243,6 +250,7 @@ def build_scorecards(
             backtest_age_days=e.backtest_age_days,
             health_status=e.health_status,
             blocked_ratio=e.blocked_ratio,
+            daily_turnover=e.resim_turnover,
             regime_label=regime_label,
         )
         if w_f + w_rs + w_bt > 0:
@@ -261,12 +269,14 @@ def build_scorecards(
                 card.blocked_penalty = (BLOCKED_WEIGHT * Decimal(str(e.blocked_ratio))).quantize(
                     _QUANT
                 )
+            card.turnover_penalty = turnover_penalty(e.resim_turnover)
             score = (
                 card.evidence_score
                 - card.decay_penalty
                 - card.health_penalty
                 - card.correlation_penalty
                 - card.blocked_penalty
+                - card.turnover_penalty
             )
             card.score = max(score, SCORE_FLOOR).quantize(_QUANT)
         cards[e.strategy_id] = card
@@ -283,6 +293,13 @@ def build_scorecards(
     for index, card in enumerate(ordered, start=1):
         card.rank = index
     return ScorecardSet(cards=cards, returns=returns, active_ids=active_ids)
+
+
+def turnover_penalty(daily_turnover: float | None) -> Decimal:
+    """TURNOVER_WEIGHT per 1x of daily turnover above TURNOVER_FREE; 0 when unknown."""
+    if daily_turnover is None or daily_turnover <= TURNOVER_FREE:
+        return Decimal("0")
+    return (TURNOVER_WEIGHT * Decimal(str(daily_turnover - TURNOVER_FREE))).quantize(_QUANT)
 
 
 def _decay_penalty(e: StrategyEvidence, *, w_f: Decimal, w_rs: Decimal, w_bt: Decimal) -> Decimal:
@@ -372,6 +389,7 @@ class PortfolioScorecardService:
         if resim is not None and resim.ok and resim.score is not None:
             evidence.resim_score = resim.score
             evidence.resim_returns = resim.daily_returns
+            evidence.resim_turnover = resim.daily_turnover
 
         if tier == MembershipStatus.ACTIVE.value:
             evidence.forward = self._forward(strategy_id, now=now, book=SleeveBook.REAL)

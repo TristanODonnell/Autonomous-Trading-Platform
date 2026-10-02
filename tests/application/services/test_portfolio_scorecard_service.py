@@ -221,6 +221,37 @@ def test_health_penalty(status: str, penalty: str) -> None:
     assert card.health_penalty == Decimal(penalty)
 
 
+@pytest.mark.parametrize(
+    ("turnover", "penalty"),
+    [(None, "0"), (1.6, "0"), (2.0, "0"), (12.9, "0.218"), (25.6, "0.472")],
+)
+def test_turnover_penalty_above_the_free_level(turnover, penalty) -> None:
+    """Step 5c-G: noise traders turned their sleeve over 13-26x a day."""
+    card = _card(
+        [StrategyEvidence("a", ACTIVE, resim_score=Decimal("1.5"), resim_turnover=turnover)], "a"
+    )
+
+    assert card.daily_turnover == turnover
+    assert card.turnover_penalty == Decimal(penalty)
+    assert card.score == pytest.approx(
+        card.evidence_score - card.turnover_penalty, abs=Decimal("0.00001")
+    )
+
+
+def test_a_churner_ranks_below_an_equal_strategy_that_trades_less() -> None:
+    cards = build_scorecards(
+        [
+            StrategyEvidence("churner", ACTIVE, resim_score=Decimal("1.4"), resim_turnover=26.0),
+            StrategyEvidence("holder", BENCH, resim_score=Decimal("1.3"), resim_turnover=2.0),
+        ],
+        review_id="r1",
+        now=T0,
+    ).cards
+
+    assert cards["holder"].rank == 1
+    assert cards["churner"].rank == 2
+
+
 def test_correlation_penalty_only_against_other_actives() -> None:
     cards = build_scorecards(
         [

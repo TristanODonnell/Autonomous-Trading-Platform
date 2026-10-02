@@ -95,6 +95,9 @@ class Scorecard(BaseModel):
     # Shadow orders blocked by risk / throttles ÷ (blocked + shadow trades).
     blocked_ratio: float | None = None
     blocked_penalty: Decimal = Decimal("0")
+    # Re-sim notional traded per day / mean equity, and its penalty above the free level.
+    daily_turnover: float | None = None
+    turnover_penalty: Decimal = Decimal("0")
     # Against the market: recorded only in step 4.
     regime_label: str | None = None
 

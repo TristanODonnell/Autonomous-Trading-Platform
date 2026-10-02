@@ -68,6 +68,8 @@ class PortfolioScorecardRow(Base):
     correlation_penalty: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False, default=0)
     blocked_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
     blocked_penalty: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False, default=0)
+    daily_turnover: Mapped[float | None] = mapped_column(Float, nullable=True)
+    turnover_penalty: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False, default=0)
     regime_label: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     score: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)

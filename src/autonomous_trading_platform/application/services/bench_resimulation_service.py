@@ -60,6 +60,8 @@ class ResimOutcome:
     max_drawdown: float | None = None
     win_rate: float | None = None
     score: Decimal | None = None
+    # Notional traded per day / mean equity over the window.
+    daily_turnover: float | None = None
     # Daily close-to-close returns over the window, indexed by date.
     daily_returns: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
     error: str | None = None
@@ -138,6 +140,7 @@ class BenchResimulationService:
         outcome.sharpe_ratio = float(result.risk_metrics.sharpe_ratio)
         outcome.max_drawdown = float(result.risk_metrics.max_drawdown)
         outcome.win_rate = float(result.trade_metrics.win_rate)
+        outcome.daily_turnover = float(result.trade_metrics.daily_turnover)
         outcome.score = metrics_quality_score(
             sharpe=outcome.sharpe_ratio,
             total_return=outcome.total_return,

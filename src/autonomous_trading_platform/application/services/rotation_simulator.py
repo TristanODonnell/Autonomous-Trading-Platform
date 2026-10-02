@@ -248,7 +248,7 @@ class RotationSimulator:
                 *(set(f.index) for f in self.forward.values()),
             )
         )
-        self._resim_cache: dict[tuple[str, datetime], tuple[Decimal, pd.Series] | None] = {}
+        self._resim_cache: dict[tuple[str, datetime], tuple[Decimal, pd.Series, float] | None] = {}
 
     # ------------------------------------------------------------------ evidence
 
@@ -270,8 +270,8 @@ class RotationSimulator:
         )
         return fills.loc[mask]
 
-    def resim_evidence(self, sid: str, at: datetime) -> tuple[Decimal, pd.Series] | None:
-        """Re-sim score and daily returns over the bench window ending at `at`."""
+    def resim_evidence(self, sid: str, at: datetime) -> tuple[Decimal, pd.Series, float] | None:
+        """Re-sim score, daily returns and daily turnover over the bench window ending at `at`."""
         key = (sid, at)
         if key not in self._resim_cache:
             start = at - timedelta(days=RESIM_WINDOW_CALENDAR_DAYS)
@@ -285,7 +285,7 @@ class RotationSimulator:
             else:
                 rm = return_metrics(window)
                 rk = risk_metrics(window)
-                tm = trade_metrics(self._fills_slice(sid, start, at))
+                tm = trade_metrics(self._fills_slice(sid, start, at), window)
                 score = metrics_quality_score(
                     sharpe=rk.sharpe_ratio,
                     total_return=rm.total_return,
@@ -293,7 +293,11 @@ class RotationSimulator:
                     win_rate=tm.win_rate,
                     trade_count=tm.total_trades,
                 )
-                self._resim_cache[key] = (score, _daily_closes(window).pct_change().dropna())
+                self._resim_cache[key] = (
+                    score,
+                    _daily_closes(window).pct_change().dropna(),
+                    tm.daily_turnover,
+                )
         return self._resim_cache[key]
 
     def forward_evidence(
@@ -400,7 +404,7 @@ class RotationSimulator:
                 )
                 resim = self.resim_evidence(sid, at)
                 if resim is not None:
-                    ev.resim_score, ev.resim_returns = resim
+                    ev.resim_score, ev.resim_returns, ev.resim_turnover = resim
                 if tier in (ACTIVE, ON_DECK):
                     ev.forward = self.forward_evidence(sid, tier, since, at)
                 evidence.append(ev)

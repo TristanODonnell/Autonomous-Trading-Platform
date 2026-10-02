@@ -413,6 +413,8 @@ def _scorecard_row(card: Scorecard) -> PortfolioScorecardRow:
         correlation_penalty=float(card.correlation_penalty),
         blocked_ratio=card.blocked_ratio,
         blocked_penalty=float(card.blocked_penalty),
+        daily_turnover=card.daily_turnover,
+        turnover_penalty=float(card.turnover_penalty),
         regime_label=card.regime_label,
         score=_f(card.score),
         rank=card.rank,

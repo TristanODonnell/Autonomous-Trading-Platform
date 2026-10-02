@@ -56,7 +56,7 @@ def _result(equity: list[float], *, trades: int = 12, sharpe: float = 1.5) -> An
         trade_count=trades,
         return_metrics=SimpleNamespace(total_return=equity[-1] / equity[0] - 1),
         risk_metrics=SimpleNamespace(sharpe_ratio=sharpe, max_drawdown=-0.04),
-        trade_metrics=SimpleNamespace(win_rate=0.55),
+        trade_metrics=SimpleNamespace(win_rate=0.55, daily_turnover=3.5),
         equity_curve=_equity(equity),
     )
 
@@ -135,6 +135,7 @@ def test_outcome_carries_metrics_shared_score_and_daily_returns(db_session: Sess
         trade_count=12,
     )
     assert list(outcome.daily_returns.round(4)) == [0.02, -0.02]
+    assert outcome.daily_turnover == 3.5  # feeds the review's turnover lens (step 5c-G)
 
 
 def test_one_failure_does_not_stop_the_others(db_session: Session) -> None:
