@@ -424,6 +424,22 @@ candidates; no change to how strategies trade (no holding period).
   into one transaction, skip per-tick mark-to-market rewrites in backtests) — a larger change
   to the cycle's persistence, proposed as a follow-up.
 
+#### 5c-H quick wins after 5d (2026-10-02)
+Re-profiled 3 production-cadence days (Mar 4–6 2024, 234 ticks, 952 s under cProfile) on the
+5d code: 20 % was the feature pipeline recomputing the identical day-level features on every
+5-minute bar (the whole day is ingested before the bar loop; 234 feature cycles and as many
+registered dataset versions for 3 days), 6 % the four strategies each reading the same
+symbol's Parquet window per tick, ~31 % waiting on Postgres round trips (the per-row
+persistence, unchanged), 6 % `ActivePortfolioService.refresh` per tick (governance logic,
+left alone). Taken (commit `25114b313`): intraday backtests run features on the first bar of
+the day only (3 cycles for 3 days instead of 234); one `MemoizingBarDatasetReader` per
+trading cycle serves every strategy's context build and the volatility scalar. Fills and
+final value identical before and after (224 / 489 / 676, 249,860.95); 3 days now 586 s
+without the profiler (~3.3 min/day on day 3). The ≤ 2 min/day target still needs the
+persistence batching, deferred to the worker era by the user (backtests run on the always-on
+worker). Also: `scripts/reset_backtest_state.py` now clears `feature_dataset_versions`
+(1,344 rows had outlived every reset since July).
+
 ### 5c-I — Re-record with all fixes + A/B (2026-10-02)
 `portfolio_rotation_6m_intraday.yaml` (Jan 2 – Jun 28 2024, 5-minute cadence, auto review,
 streak 4 / tenure 60), output `portfolio_rotation_6m_intraday_5c*.json`. 129/129 days, 0 failed,

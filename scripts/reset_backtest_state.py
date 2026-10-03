@@ -100,6 +100,7 @@ candidates = [
     "ingestion_checkpoints",
     "ingestion_runs",
     "symbol_date_coverages",  # references dataset_versions — must come before it
+    "feature_dataset_versions",  # feature outputs of the run (no FK; stale rows otherwise outlive resets)
     "dataset_versions",
     "runtime_job_runs",
     "operational_alerts",
