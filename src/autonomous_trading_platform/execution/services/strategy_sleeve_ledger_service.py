@@ -18,11 +18,15 @@ sleeves have no account to reconcile against.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from datetime import datetime
 from decimal import Decimal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
+from autonomous_trading_platform.accounting.corporate_actions import (
+    PositionAdjustment,
+    apply_action,
+)
 from autonomous_trading_platform.contracts.accounting.position_snapshot import Position
 from autonomous_trading_platform.contracts.accounting.strategy_sleeve import (
     UNATTRIBUTED_SLEEVE_ID,
@@ -34,7 +38,8 @@ from autonomous_trading_platform.contracts.accounting.strategy_sleeve import (
     SleeveReconciliationReport,
     SleeveSnapshot,
 )
-from autonomous_trading_platform.contracts.common.enums import Side
+from autonomous_trading_platform.contracts.common.enums import CorporateActionType, Side
+from autonomous_trading_platform.contracts.market.corporate_action import CorporateAction
 from autonomous_trading_platform.contracts.trading.fill import Fill
 from autonomous_trading_platform.execution.services.position_ledger_service import (
     PositionLedgerResult,
@@ -218,6 +223,82 @@ class StrategySleeveLedgerService:
         uow.strategy_sleeves.insert_entry(_entry_row(uow.strategy_sleeves, entry))
         return entry
 
+    def apply_corporate_action(
+        self,
+        uow: SorUnitOfWork,
+        *,
+        action: CorporateAction,
+        strategy_id: str,
+        timestamp: datetime,
+        cash_in_lieu_price: Decimal | None = None,
+        run_id: UUID | None = None,
+    ) -> tuple[SleeveLedgerEntry, PositionAdjustment] | None:
+        """Apply a split or cash dividend to one sleeve through the shared rule.
+
+        Split: the position's quantity and average cost are rewritten (no P&L) and
+        a ledger entry records the share change; a fractional remainder is paid in
+        cash and its realized difference booked. Dividend: the position is untouched
+        and a ledger entry books the cash as realized income, so the sleeve's P&L
+        includes it. Both books. Returns None when the sleeve holds no position in
+        the symbol or the action was already applied to this sleeve (idempotent).
+        """
+        repo = self._repo(uow)
+        entry_id = _entry_id("corporate_action", action.action_id, strategy_id)
+        if repo.has_entry(entry_id):
+            return None
+        row = repo.get_position(strategy_id, action.symbol)
+        if row is None or Decimal(row.quantity) <= ZERO:
+            return None
+
+        adjustment = apply_action(
+            action,
+            quantity=Decimal(row.quantity),
+            avg_cost=Decimal(row.avg_cost),
+            cash_in_lieu_price=cash_in_lieu_price,
+        )
+
+        if adjustment.position_changed:
+            if adjustment.quantity_after <= ZERO:
+                repo.delete_position(strategy_id, action.symbol)
+            else:
+                repo.save_position(
+                    repo.position_model(
+                        strategy_id=strategy_id,
+                        symbol=action.symbol,
+                        quantity=adjustment.quantity_after,
+                        avg_cost=adjustment.avg_cost_after,
+                        updated_at=timestamp,
+                    )
+                )
+
+        if action.action_type is CorporateActionType.CASH_DIVIDEND:
+            # Income on the shares held: quantity held × rate, no position change.
+            side, quantity, price = (
+                Side.SELL,
+                adjustment.quantity_before,
+                Decimal(str(action.cash_amount)),
+            )
+        else:
+            delta = adjustment.quantity_delta
+            side = Side.BUY if delta >= ZERO else Side.SELL
+            quantity, price = abs(delta), ZERO
+
+        entry = SleeveLedgerEntry(
+            entry_id=entry_id,
+            strategy_id=strategy_id,
+            symbol=action.symbol,
+            side=side,
+            quantity=quantity,
+            price=price,
+            fees=ZERO,
+            realized_pnl=adjustment.realized_pnl,
+            source=SleeveEntrySource.CORPORATE_ACTION,
+            run_id=run_id,
+            timestamp=timestamp,
+        )
+        repo.insert_entry(_entry_row(repo, entry))
+        return entry, adjustment
+
     def liquidate(
         self,
         uow: SorUnitOfWork,
@@ -373,17 +454,21 @@ class StrategySleeveLedgerService:
         account_positions: Mapping[str, Decimal | Position],
         timestamp: datetime,
         adopt_unowned: bool = False,
+        skip_adoption_symbols: Collection[str] = (),
     ) -> SleeveReconciliationReport:
         """Compare summed sleeve quantities with the broker account.
 
         With adopt_unowned, account shares no sleeve owns are assigned to the
         unattributed sleeve at the account's average cost. Over-claims (sleeves
         holding more than the account) are always reported, never auto-fixed.
+        Symbols in ``skip_adoption_symbols`` (a corporate action is pending on them)
+        are reported as mismatches instead of adopted.
         """
         self._require_real("reconciliation")
         sleeve_totals = self.aggregate_quantities(uow)
         mismatches: list[SleeveMismatch] = []
         adopted: list[str] = []
+        skip = {s.upper() for s in skip_adoption_symbols}
 
         for symbol in sorted(set(sleeve_totals) | set(account_positions)):
             raw = account_positions.get(symbol, ZERO)
@@ -394,7 +479,13 @@ class StrategySleeveLedgerService:
                 continue
 
             avg_cost = raw.avg_cost if isinstance(raw, Position) else None
-            if adopt_unowned and unowned > ZERO and avg_cost is not None and avg_cost > ZERO:
+            if (
+                adopt_unowned
+                and symbol.upper() not in skip
+                and unowned > ZERO
+                and avg_cost is not None
+                and avg_cost > ZERO
+            ):
                 self.adopt(
                     uow,
                     strategy_id=UNATTRIBUTED_SLEEVE_ID,

@@ -9,6 +9,7 @@ from . import broker_orders as broker_orders
 from . import capital_allocation_policies as capital_allocation_policies
 from . import cash_snapshots as cash_snapshots
 from . import checksums as checksums
+from . import corporate_action_applications as corporate_action_applications
 from . import corporate_actions as corporate_actions
 from . import correlation_snapshots as correlation_snapshots
 from . import dataset_versions as dataset_versions
@@ -69,6 +70,7 @@ __all__ = [
     "broker_account_snapshots",
     "broker_orders",
     "cash_snapshots",
+    "corporate_action_applications",
     "corporate_actions",
     "fills",
     "governance_audit_events",

@@ -50,6 +50,7 @@ candidates = [
     "audit_logs",
     "fill_quality_metrics",
     # Portfolio mode: per-strategy sleeves and active-set membership
+    "corporate_action_applications",
     "strategy_sleeve_ledger",
     "strategy_sleeve_snapshots",
     "strategy_sleeve_positions",

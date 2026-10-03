@@ -17,6 +17,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.cash_snapshot_rep
 from autonomous_trading_platform.storage.sor.repositories.core.checksums_repository import (
     ChecksumsRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.corporate_action_application_repository import (
+    CorporateActionApplicationRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.corporate_action_repository import (
     CorporateActionRepository,
 )
@@ -103,6 +106,7 @@ class SorUnitOfWork:
         self.session = session
         self.market_bars = MarketBarRepository(session)
         self.corporate_actions = CorporateActionRepository(session)
+        self.corporate_action_applications = CorporateActionApplicationRepository(session)
         self.universe_snapshots = UniverseSnapshotRepository(session)
         self.universe_versions = UniverseVersionRepository(session)
         self.raw_market_pool = RawMarketPoolRepository(session)

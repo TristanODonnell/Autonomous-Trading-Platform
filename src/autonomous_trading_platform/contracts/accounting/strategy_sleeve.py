@@ -41,6 +41,9 @@ class SleeveEntrySource(enum.StrEnum):
     ADOPTION = "adoption"
     # Shadow book: a simulated fill for an on-deck strategy's order.
     SHADOW_FILL = "shadow_fill"
+    # A split or cash dividend applied to the sleeve by the shared accounting rule
+    # (quantity/cost change for splits, realized income for dividends; no fill).
+    CORPORATE_ACTION = "corporate_action"
     # Shadow book: positions closed at the mark when the strategy leaves on-deck.
     TIER_EXIT = "tier_exit"
 
