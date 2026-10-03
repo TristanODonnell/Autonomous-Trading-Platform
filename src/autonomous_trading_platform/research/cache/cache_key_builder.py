@@ -11,6 +11,7 @@ import hashlib
 import json
 from typing import Any
 
+from autonomous_trading_platform.contracts.market.corporate_action import CorporateAction
 from autonomous_trading_platform.contracts.simulation.dividend_event import DividendEvent
 from autonomous_trading_platform.execution.clients.simulated_broker_client import (
     build_platform_execution_service,
@@ -60,6 +61,7 @@ def build_simulation_cache_key(
     adverse_threshold_bps: str = "10",
     settlement_days: int | None = None,
     dividend_events: list[DividendEvent] | None = None,
+    corporate_actions: list[CorporateAction] | None = None,
 ) -> SimulationCacheKey:
     """Build a fully-specified simulation cache key.
 
@@ -133,6 +135,7 @@ def build_simulation_cache_key(
         adverse_threshold_bps=adverse_threshold_bps,
         settlement_days=effective_settlement_days,
         dividend_events_hash=_hash_dividend_events(effective_dividend_events),
+        corporate_actions_hash=_hash_corporate_actions(corporate_actions),
         sizing_model=SIZING_MODEL,
         max_volume_participation_rate=str(fill.max_volume_participation_rate),
     )
@@ -162,6 +165,27 @@ def _hash_feature_versions(versions: dict[str, str] | None) -> str:
         {k: versions[k] for k in sorted(versions)},
         separators=(",", ":"),
     ).encode()
+    return hashlib.sha256(payload).hexdigest()[:16]
+
+
+def _hash_corporate_actions(actions: list[CorporateAction] | None) -> str:
+    """Deterministic 16-char hash of the actions' economic content (order-independent)."""
+    if not actions:
+        return ""
+    items = sorted(
+        [
+            {
+                "symbol": a.symbol,
+                "ex_date": str(a.effective_date),
+                "type": a.action_type.value,
+                "split_ratio": str(a.split_ratio) if a.split_ratio is not None else "",
+                "cash_amount": str(a.cash_amount) if a.cash_amount is not None else "",
+            }
+            for a in actions
+        ],
+        key=lambda x: (x["symbol"], x["ex_date"], x["type"]),
+    )
+    payload = json.dumps(items, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()[:16]
 
 

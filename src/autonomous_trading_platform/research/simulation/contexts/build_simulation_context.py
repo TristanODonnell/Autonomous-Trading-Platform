@@ -72,6 +72,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.simulation_runs_r
 from autonomous_trading_platform.storage.sor.repositories.core.strategy_configs_repository import (
     StrategyConfigsRepository,
 )
+from autonomous_trading_platform.storage.sor.services.corporate_action_split_source import (
+    SorCorporateActionSource,
+)
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
     StrategyContextBuilder,
 )
@@ -143,6 +146,8 @@ def build_simulation_context(
         manifest_service=RunManifestRepository(session),
         experiment_repository=experiments_repository,
         metrics_summary_repository=metrics_summary_repository,
+        # Stored splits and cash dividends are applied in every research run (plan 5d-E).
+        corporate_action_source=SorCorporateActionSource(session),
     )
 
     filter_score_service = FilterScoreService(

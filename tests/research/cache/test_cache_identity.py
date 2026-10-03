@@ -169,6 +169,7 @@ class TestSimulationCacheKey:
             "config_hash",
             "dataset_version",
             "dividend_events_hash",
+            "corporate_actions_hash",
             "universe_version",
             "price_basis",
             "symbols_hash",

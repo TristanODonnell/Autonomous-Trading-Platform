@@ -100,6 +100,9 @@ class SimulationCacheKey:
     # 16-char SHA-256 of sorted dividend events (A-02).  Empty = no dividends applied.
     # Changing dividend inputs produces a distinct cache entry.
     dividend_events_hash: str = ""
+    # 16-char SHA-256 of the corporate actions (splits + dividends) given to the run
+    # (plan 5d-E). Empty = none given explicitly.
+    corporate_actions_hash: str = ""
     # Position sizing rule (execution/services/sleeve_sizing.SIZING_MODEL) and volume
     # participation cap (step 5c-E). Empty = sized and filled before parity with the
     # trading cycle; such results never match a current key.
@@ -123,6 +126,7 @@ class SimulationCacheKey:
             "calibration_snapshot_id": self.calibration_snapshot_id,
             "commission_per_share": self.commission_per_share,
             "config_hash": self.config_hash,
+            "corporate_actions_hash": self.corporate_actions_hash,
             "cost_model_type": self.cost_model_type,
             "dataset_version": self.dataset_version,
             "dividend_events_hash": self.dividend_events_hash,

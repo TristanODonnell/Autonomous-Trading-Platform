@@ -4,21 +4,32 @@ import json
 import platform
 import random
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import pandas as pd
 
+from autonomous_trading_platform.accounting.corporate_actions import (
+    CorporateActionSource,
+    StaticSplitSource,
+    dividend_events_from,
+    is_split,
+)
 from autonomous_trading_platform.common.system_info import get_dependency_lock_hash, get_git_commit
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis, RunType
+from autonomous_trading_platform.contracts.execution.execution_policy_config import (
+    ExecutionPolicyConfig,
+)
+from autonomous_trading_platform.contracts.market.corporate_action import CorporateAction
 from autonomous_trading_platform.contracts.runtime.metrics_summary import MetricsSummary
 from autonomous_trading_platform.contracts.runtime.run_manifest import RunManifest
 from autonomous_trading_platform.contracts.runtime.simulation_run import SimulationRun
 from autonomous_trading_platform.contracts.runtime.strategy_config import (
     StrategyConfig as RuntimeStrategyConfig,
 )
+from autonomous_trading_platform.contracts.simulation.dividend_event import DividendEvent
 from autonomous_trading_platform.execution.services.sleeve_sizing import VOL_LOOKBACK_BARS
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.research.experiments.filtering.metrics.return_metrics import (
@@ -86,6 +97,27 @@ from autonomous_trading_platform.strategy.registry.strategy_registry import get_
 # Stable namespace for deterministic run_id generation (P-01).
 _RUN_NS = uuid5(NAMESPACE_URL, "autonomous-trading-platform:run")
 
+# Corporate actions are loaded this far before a run's window so the warmup history
+# the strategy reads is split-adjusted too (the longest registry warmup is ~1 year).
+CORPORATE_ACTION_HISTORY_DAYS = 400
+
+
+def corporate_actions_for_request(
+    source: CorporateActionSource | None, request: SimulationRunRequest
+) -> list[CorporateAction]:
+    """The run's corporate actions: the request's own list when given, else the
+    source's stored actions for the symbols from ``CORPORATE_ACTION_HISTORY_DAYS``
+    before the window start to its end."""
+    if request.corporate_actions is not None:
+        return list(request.corporate_actions)
+    if source is None:
+        return []
+    return source.actions_for(
+        symbols=request.symbols,
+        start_date=request.start_date - timedelta(days=CORPORATE_ACTION_HISTORY_DAYS),
+        end_date=request.end_date,
+    )
+
 
 @dataclass(slots=True)
 class SimulationRunRequest:
@@ -106,6 +138,17 @@ class SimulationRunRequest:
     resample_to_daily: bool = False
     # Scales slippage + commission for execution-cost stress runs. 1.0 = normal.
     cost_multiplier: float = 1.0
+    # Settlement delay in trading bars (0 = immediate) and the child-order policy,
+    # forwarded to the engine (plan 5d, D7).
+    settlement_days: int = 0
+    execution_policy_config: ExecutionPolicyConfig | None = None
+    # Corporate actions for the run. None = load the stored splits and cash dividends
+    # for the symbols from the runner's source (the SOR in production); a list (even
+    # empty) is used as given. Splits adjust the strategy's history on read and the
+    # held positions on the ex-date; dividends become the engine's dividend events
+    # unless ``dividend_events`` is given explicitly.
+    corporate_actions: list[CorporateAction] | None = None
+    dividend_events: list[DividendEvent] | None = None
 
 
 @dataclass(slots=True)
@@ -162,8 +205,10 @@ class SimulationRunner:
         manifest_service: Any | None = None,
         strategy_factory: StrategyFactory,
         feature_dependency_resolver: FeatureDependencyResolverService | None = None,
+        corporate_action_source: CorporateActionSource | None = None,
     ) -> None:
         self.strategy_factory = strategy_factory
+        self.corporate_action_source = corporate_action_source
         self.dataset_resolver = dataset_resolver
         self.window_loader = window_loader
         self.result_recorder = result_recorder
@@ -283,6 +328,8 @@ class SimulationRunner:
             )
             strategy = self.strategy_factory.build(strategy_config)
 
+            corporate_actions = corporate_actions_for_request(self.corporate_action_source, request)
+
             trade_logs, equity_curve, per_bar_metrics, positions, signal_log = (
                 self._execute_simulation(
                     run_id=run_id,
@@ -290,6 +337,7 @@ class SimulationRunner:
                     window=window,
                     strategy=strategy,
                     lookback_bars=lookback_bars,
+                    corporate_actions=corporate_actions,
                 )
             )
 
@@ -356,15 +404,42 @@ class SimulationRunner:
             self._commit_metadata()
             raise
 
-    def _execute_simulation(self, *, run_id, request, window, strategy, lookback_bars):
+    def _execute_simulation(
+        self,
+        *,
+        run_id,
+        request,
+        window,
+        strategy,
+        lookback_bars,
+        corporate_actions: list[CorporateAction] | None = None,
+    ):
+        actions = list(corporate_actions or [])
+        context_builder = self.context_builder.with_lookback(lookback_bars)
+        if actions:
+            # History the strategy sees is split-adjusted on read (plan 5d, D5), from
+            # every loaded split — including those before the window, for warmup bars.
+            context_builder = context_builder.with_split_source(StaticSplitSource(actions))
+        in_window = [
+            a for a in actions if request.start_date <= a.effective_date <= request.end_date
+        ]
+        dividend_events = (
+            list(request.dividend_events)
+            if request.dividend_events is not None
+            else dividend_events_from(in_window)
+        )
 
         result = self.execution_engine.execute(
             run_id=run_id,
             strategy=strategy,
             window=window,
-            context_builder=self.context_builder.with_lookback(lookback_bars),
+            context_builder=context_builder,
             simulated_execution_service=self.simulated_execution_service,
             initial_cash=request.initial_cash,
+            execution_policy_config=request.execution_policy_config,
+            settlement_days=request.settlement_days,
+            dividend_events=dividend_events,
+            corporate_actions=[a for a in in_window if is_split(a)],
         )
 
         return (
