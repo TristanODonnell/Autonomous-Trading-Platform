@@ -106,6 +106,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_r
 from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
     UniverseVersionRepository,
 )
+from autonomous_trading_platform.storage.sor.services.corporate_action_split_source import (
+    SorSplitSource,
+)
 from autonomous_trading_platform.universe.services.universe_resolution_service import (
     UniverseResolutionService,
 )
@@ -326,6 +329,7 @@ def run_feature_pipeline_cycle(
         resolver_service = FeatureDatasetResolverService(
             dataset_registration_service=dataset_registration_service,
             parquet_reader=parquet_bar_repository,
+            split_source=SorSplitSource(session),
         )
         writer_service = FeatureDatasetWriterService(
             feature_dataset_repository=feature_dataset_repository,

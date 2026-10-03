@@ -886,7 +886,7 @@ class PlatformBacktestRunner:
                     feat_result = run_features_at_timestamp(
                         session=session,
                         timestamp=tick_ts,
-                        dataset_version_id=None,
+                        dataset_version_id=latest_dataset_version_id,
                         symbols=inputs.symbols,
                         replay_context=tick_ctx,
                     )
@@ -957,7 +957,7 @@ class PlatformBacktestRunner:
                             feat_result = run_features_at_timestamp(
                                 session=session,
                                 timestamp=bar_ts,
-                                dataset_version_id=None,
+                                dataset_version_id=latest_dataset_version_id,
                                 symbols=inputs.symbols,
                                 replay_context=bar_ctx,
                             )

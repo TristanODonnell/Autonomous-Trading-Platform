@@ -459,29 +459,20 @@ def _build_replay_experiment_definition(
         dataset_version = dataset_version_id_override
         price_basis = PriceBasis.RAW
     else:
-        # Resolve dataset_version from latest validated adjusted_bars, then raw_bars
+        # Latest validated raw_bars: research reads raw bars and split-adjusts
+        # history on read, like the trading cycle (plan 5d, D5).
         dataset_row = (
             session.query(DatasetVersions)
-            .filter(DatasetVersions.dataset_name == "adjusted_bars")
+            .filter(DatasetVersions.dataset_name == "raw_bars")
             .filter(DatasetVersions.validation_status == "validated")
             .order_by(DatasetVersions.created_at.desc())
             .first()
         )
         if dataset_row is None:
-            dataset_row = (
-                session.query(DatasetVersions)
-                .filter(DatasetVersions.dataset_name == "raw_bars")
-                .filter(DatasetVersions.validation_status == "validated")
-                .order_by(DatasetVersions.created_at.desc())
-                .first()
-            )
-        if dataset_row is None:
             return None
 
         dataset_version = dataset_row.dataset_version_id
-        price_basis = (
-            PriceBasis.ADJUSTED if dataset_row.dataset_name == "adjusted_bars" else PriceBasis.RAW
-        )
+        price_basis = PriceBasis.RAW
 
     lookback_days = (
         90  # ~64 trading days; covers 3 months so walk-forward (needs 75 days) always fires

@@ -300,21 +300,17 @@ def resolve_bench_window(
         if row is not None and row.date_coverage_start is not None:
             start = max(start, row.date_coverage_start)
     else:
-        row = None
-        for name in ("adjusted_bars", "raw_bars"):
-            row = (
-                session.query(DatasetVersions)
-                .filter(DatasetVersions.dataset_name == name)
-                .filter(DatasetVersions.validation_status == "validated")
-                .order_by(DatasetVersions.created_at.desc())
-                .first()
-            )
-            if row is not None:
-                break
+        row = (
+            session.query(DatasetVersions)
+            .filter(DatasetVersions.dataset_name == "raw_bars")
+            .filter(DatasetVersions.validation_status == "validated")
+            .order_by(DatasetVersions.created_at.desc())
+            .first()
+        )
         if row is None:
             return None
         dataset_version = row.dataset_version_id
-        price_basis = PriceBasis.ADJUSTED if row.dataset_name == "adjusted_bars" else PriceBasis.RAW
+        price_basis = PriceBasis.RAW
 
     if (as_of - start).days < _MIN_WINDOW_CALENDAR_DAYS:
         return None

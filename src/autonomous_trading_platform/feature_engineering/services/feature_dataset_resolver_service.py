@@ -6,6 +6,10 @@ from typing import Any
 
 import pandas as pd
 
+from autonomous_trading_platform.accounting.corporate_actions import (
+    SplitSource,
+    split_factor_for,
+)
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.contracts.runtime.dataset_version import DatasetVersion
 from autonomous_trading_platform.runtime.services.dataset_registration_service import (
@@ -37,9 +41,12 @@ class FeatureDatasetResolverService:
         self,
         dataset_registration_service: DatasetRegistrationService,
         parquet_reader: Any,
+        split_source: SplitSource | None = None,
     ) -> None:
         self._dataset_registration_service = dataset_registration_service
         self._parquet_reader = parquet_reader
+        # Splits applied to history on read, as the strategy context does (plan 5d, D5).
+        self._split_source = split_source
 
     def get_latest_validated_market_dataset(
         self,
@@ -133,9 +140,43 @@ class FeatureDatasetResolverService:
             )
 
             if table.num_rows > 0:
-                frames.append(table.to_pandas())
+                frames.append(self._split_adjusted(table.to_pandas(), symbol, start_date, end_date))
 
         if not frames:
             raise ValueError(f"No bar data found for dataset_version_id={dataset_version_id}.")
 
         return pd.concat(frames, ignore_index=True)
+
+    _PRICE_COLUMNS = ("open", "high", "low", "close", "vwap")
+
+    def _split_adjusted(
+        self, frame: pd.DataFrame, symbol: str, start_date: date, end_date: date
+    ) -> pd.DataFrame:
+        """Express bars before each split's ex-date (ex-date <= end_date) in post-split
+        terms so features never see the split jump."""
+        if self._split_source is None or frame.empty or "timestamp" not in frame:
+            return frame
+        splits = self._split_source.splits_for(symbol, start_date, end_date)
+        if not splits:
+            return frame
+        bar_dates = pd.to_datetime(frame["timestamp"]).dt.date
+        factors = bar_dates.map(
+            lambda d: float(split_factor_for(splits, bar_date=d, as_of=end_date))
+        )
+        if (factors == 1.0).all():
+            return frame
+        adjusted = frame.copy()
+        for column in self._PRICE_COLUMNS:
+            if column in adjusted:
+                adjusted[column] = adjusted[column].astype(float) * factors.to_numpy()
+        if "volume" in adjusted:
+            adjusted["volume"] = (
+                (adjusted["volume"].astype(float) / factors.to_numpy()).round().astype("int64")
+            )
+        if "adjustment_factor" in adjusted:
+            adjusted["adjustment_factor"] = (
+                adjusted["adjustment_factor"].astype(float) * factors.to_numpy()
+            )
+        if "price_basis" in adjusted:
+            adjusted.loc[factors.to_numpy() != 1.0, "price_basis"] = PriceBasis.ADJUSTED.value
+        return adjusted

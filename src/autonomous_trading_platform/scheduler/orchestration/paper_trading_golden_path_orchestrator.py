@@ -143,11 +143,15 @@ class PaperTradingGoldenPathOrchestrator:
             if latest_raw_bars is None:
                 raise RuntimeError("No raw_bars dataset version found after ingestion")
 
+            # Capture before any cycle closes the session (the row detaches).
+            raw_bars_version_id = latest_raw_bars.dataset_version_id
+            raw_bars_symbols = self._dataset_symbols(latest_raw_bars)
+
             run_feature_pipeline_cycle(
                 now_utc=now_utc,
                 price_basis=PriceBasis.RAW,
-                dataset_version_id=latest_raw_bars.dataset_version_id,
-                symbols=self._dataset_symbols(latest_raw_bars),
+                dataset_version_id=raw_bars_version_id,
+                symbols=raw_bars_symbols,
                 start_date=latest_raw_bars.date_coverage_start,
                 end_date=latest_raw_bars.date_coverage_end,
                 include_returns=True,
@@ -159,7 +163,11 @@ class PaperTradingGoldenPathOrchestrator:
 
             run_trading_cycle(now_utc=now_utc)
 
-            run_corporate_action_ingestion_cycle()
+            run_corporate_action_ingestion_cycle(
+                source_raw_bars_dataset_version_id=raw_bars_version_id,
+                as_of=now_utc.date(),
+                fetch_symbols=raw_bars_symbols,
+            )
 
         self.runner.run(
             job_name="paper_trading_golden_path",
@@ -207,41 +215,18 @@ class PaperTradingGoldenPathOrchestrator:
 
             run_corporate_action_ingestion_cycle(
                 source_raw_bars_dataset_version_id=raw_bars_version_id,
+                as_of=now_utc.date(),
+                fetch_symbols=raw_bars_symbols,
             )
 
-            adjusted_bars_version_id = generate_dataset_version("adjusted_bars")
-            self.session.add(
-                DatasetVersions(
-                    dataset_version_id=adjusted_bars_version_id,
-                    dataset_name="adjusted_bars",
-                    created_at=now_utc,
-                    source="corporate_action_ingestion",
-                    price_basis=PriceBasis.ADJUSTED,
-                    interval=raw_bars_interval,
-                    schema_version="1.0.0",
-                    symbol_coverage=raw_bars_coverage,
-                    date_coverage_start=raw_bars_start,
-                    date_coverage_end=raw_bars_end,
-                    validation_status="validated",
-                    checksum=None,
-                    source_dataset_version=raw_bars_version_id,
-                    source_manifest={
-                        "source_raw_bars_version": raw_bars_version_id,
-                        "pipeline": "corporate_action_adjustment",
-                    },
-                    metadata_json={
-                        "price_basis": PriceBasis.ADJUSTED.value,
-                        "trading_date": raw_bars_end.isoformat() if raw_bars_end else None,
-                    },
-                )
-            )
-            self.session.flush()
-
+            # Features run on the day's raw version; the feature pipeline split-adjusts
+            # history on read from the stored corporate actions (plan 5d, D5). The
+            # materialised adjusted-bars dataset is retired.
             try:
                 run_feature_pipeline_cycle(
                     now_utc=now_utc,
-                    price_basis=PriceBasis.ADJUSTED,
-                    dataset_version_id=adjusted_bars_version_id,
+                    price_basis=PriceBasis.RAW,
+                    dataset_version_id=raw_bars_version_id,
                     symbols=raw_bars_symbols,
                     start_date=raw_bars_start,
                     end_date=raw_bars_end,
@@ -254,8 +239,7 @@ class PaperTradingGoldenPathOrchestrator:
             except ValueError as exc:
                 if not str(exc).startswith("No bar data found for dataset_version_id="):
                     raise
-                # No adjusted bars produced (e.g. no corporate action adjustments) — skip features.
-
+                # No bars for the day (holiday / empty fixture) — skip features.
             features_version_id = generate_dataset_version("features")
             self.session.add(
                 DatasetVersions(
@@ -263,7 +247,7 @@ class PaperTradingGoldenPathOrchestrator:
                     dataset_name="features",
                     created_at=now_utc,
                     source="feature_pipeline",
-                    price_basis=PriceBasis.ADJUSTED,
+                    price_basis=PriceBasis.RAW,
                     interval=raw_bars_interval,
                     schema_version="1.0.0",
                     symbol_coverage=raw_bars_coverage,
@@ -271,14 +255,16 @@ class PaperTradingGoldenPathOrchestrator:
                     date_coverage_end=raw_bars_end,
                     validation_status="validated",
                     checksum=None,
-                    source_dataset_version=adjusted_bars_version_id,
+                    source_dataset_version=raw_bars_version_id,
                     source_manifest={
-                        "source_adjusted_bars_version": adjusted_bars_version_id,
+                        "source_raw_bars_version": raw_bars_version_id,
                         "pipeline": "feature_pipeline",
+                        "split_adjusted_on_read": True,
                     },
                     metadata_json={
-                        "price_basis": PriceBasis.ADJUSTED.value,
-                        "source_adjusted_bars_version": adjusted_bars_version_id,
+                        "price_basis": PriceBasis.RAW.value,
+                        "source_raw_bars_version": raw_bars_version_id,
+                        "stage": "eod",
                     },
                 )
             )

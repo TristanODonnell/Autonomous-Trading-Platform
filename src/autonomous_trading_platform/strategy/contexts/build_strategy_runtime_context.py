@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
     LookaheadGuardService,
 )
+from autonomous_trading_platform.runtime.services.live_bar_dataset_resolver import (
+    LiveBarDatasetResolver,
+)
 from autonomous_trading_platform.runtime.services.run_manifest_service import RunManifestService
 from autonomous_trading_platform.storage.parquet.datasets import (
-    ADJUSTED_BARS_DATASET,
     RAW_BARS_DATASET,
     ParquetDataset,
 )
@@ -21,6 +23,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.strategy_runtime_
 )
 from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
     UniverseVersionRepository,
+)
+from autonomous_trading_platform.storage.sor.services.corporate_action_split_source import (
+    SorSplitSource,
 )
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
     StrategyContextBuilder,
@@ -54,16 +59,29 @@ class SqlAlchemyUniverseMembershipReader:
         return self.repository.get_symbols(version.universe_version_id)
 
 
+# Name recorded on a live builder; reads always go through the daily-version resolver.
+LIVE_DATASET_VERSION_PLACEHOLDER = "live_daily_raw_bars"
+
+
 def build_strategy_runtime_context(
     *,
     session: Session,
     strategy: BaseStrategy,
-    dataset_version: str = "v1",
+    dataset_version: str | None = None,
     fallback_dataset: ParquetDataset | None = None,
     fallback_dataset_version: str | None = None,
-    use_raw_bars: bool = False,
+    use_raw_bars: bool = True,
     lookback_bars: int = 300,
 ) -> StrategyRuntimeContext:
+    """Strategy runtime wired to raw bars with split-adjusted history.
+
+    ``dataset_version`` is the one cumulative raw version a backtest reads. Without it
+    (live/paper) the builder resolves the validated daily raw versions covering each
+    read window. Strategy history is split-adjusted on read from the stored corporate
+    actions (plan 5d, D5/D6); the materialised adjusted dataset is no longer read, so
+    ``use_raw_bars`` is kept only for callers that still pass it.
+    """
+    del use_raw_bars  # raw bars are the only source now
     universe_repository = UniverseVersionRepository(session)
     runtime_state_repository = StrategyRuntimeStateRepository(session)
 
@@ -76,14 +94,17 @@ def build_strategy_runtime_context(
 
     lookahead_guard_service = LookaheadGuardService()
 
+    resolver = LiveBarDatasetResolver(session) if dataset_version is None else None
     strategy_context_builder = StrategyContextBuilder(
         market_bar_reader=bar_reader,
-        bars_dataset=RAW_BARS_DATASET if use_raw_bars else ADJUSTED_BARS_DATASET,
+        bars_dataset=RAW_BARS_DATASET,
         lookback_bars=lookback_bars,
         lookahead_guard_service=lookahead_guard_service,
-        dataset_version=dataset_version,
+        dataset_version=dataset_version or LIVE_DATASET_VERSION_PLACEHOLDER,
         fallback_dataset=fallback_dataset,
         fallback_dataset_version=fallback_dataset_version,
+        dataset_version_resolver=resolver.resolve if resolver is not None else None,
+        split_source=SorSplitSource(session),
     )
 
     signal_writer = SignalWriter(session)

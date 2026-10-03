@@ -370,9 +370,6 @@ def resolve_strategy_runtimes(
         return None
 
     budgets = {budget.strategy_id: budget.pct_of_capital for budget in service.budgets(now=now_utc)}
-    use_raw = dataset_version_id_override is not None and dataset_version_id_override.startswith(
-        "raw_bars_"
-    )
     runtimes: list[StrategyRuntime] = []
     for member in members:
         context = None
@@ -381,8 +378,7 @@ def resolve_strategy_runtimes(
             context = build_strategy_runtime_context(
                 session=session,
                 strategy=strategy,
-                dataset_version=dataset_version_id_override or "v1",
-                use_raw_bars=use_raw,
+                dataset_version=dataset_version_id_override,
                 lookback_bars=warmup_bars,
             )
         runtimes.append(
@@ -413,8 +409,7 @@ def resolve_strategy_runtimes(
                     strategy_context=build_strategy_runtime_context(
                         session=session,
                         strategy=strategy,
-                        dataset_version=dataset_version_id_override or "v1",
-                        use_raw_bars=use_raw,
+                        dataset_version=dataset_version_id_override,
                         lookback_bars=warmup_bars,
                     ),
                 )
@@ -452,9 +447,6 @@ def build_trading_cycle_dependencies(
 
     environment_safety_policy = EnvironmentSafetyPolicy(settings=settings)
 
-    use_raw = dataset_version_id_override is not None and dataset_version_id_override.startswith(
-        "raw_bars_"
-    )
     strategy_runtimes: list[StrategyRuntime] | None = None
     if resolve_strategies:
         strategy_runtimes = resolve_strategy_runtimes(
@@ -495,8 +487,7 @@ def build_trading_cycle_dependencies(
     strategy_context = first_active_context or build_strategy_runtime_context(
         session=session,
         strategy=active_strategy,
-        dataset_version=dataset_version_id_override or "v1",
-        use_raw_bars=use_raw,
+        dataset_version=dataset_version_id_override,
         lookback_bars=warmup_bars,
     )
 

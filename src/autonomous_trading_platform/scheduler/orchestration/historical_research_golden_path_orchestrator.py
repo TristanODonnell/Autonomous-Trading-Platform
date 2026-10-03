@@ -111,6 +111,9 @@ class HistoricalResearchGoldenPathOrchestrator:
 
             run_corporate_action_ingestion_cycle(
                 source_raw_bars_dataset_version_id=raw_version_id,
+                fetch_start=raw_start.isoformat() if raw_start is not None else None,
+                fetch_end=raw_end.isoformat() if raw_end is not None else None,
+                fetch_symbols=raw_symbols,
             )
 
             # For now, feature pipeline can run on raw until adjusted-bar production is fully wired.
