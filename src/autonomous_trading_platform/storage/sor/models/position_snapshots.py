@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import Enum as SAEnum
@@ -36,6 +37,12 @@ class PositionSnapshot(Base):
     source: Mapped[OrderSource] = mapped_column(
         SAEnum(OrderSource, name="order_source_enum"),
         nullable=False,
+    )
+
+    # When the row was written; breaks ties between snapshots sharing a `timestamp`.
+    # Null = written before this column existed (its `timestamp` is used instead).
+    recorded_at: Mapped[UTCDateTime | None] = mapped_column(
+        UTCDateTimeType(), nullable=True, default=lambda: datetime.now(UTC)
     )
 
     # Relationship to child rows

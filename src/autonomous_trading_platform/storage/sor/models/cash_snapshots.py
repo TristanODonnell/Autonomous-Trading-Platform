@@ -1,5 +1,6 @@
 # autonomous_trading_platform/storage/sor/models/cash_snapshots.py
 
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import Enum as SAEnum
@@ -34,3 +35,9 @@ class CashSnapshot(Base):
     # Settlement-aware fields (F-06). Null → legacy: all cash is settled.
     settled_cash: Mapped[Money | None] = mapped_column(MoneyType(), nullable=True)
     unsettled_cash: Mapped[Money | None] = mapped_column(MoneyType(), nullable=True)
+    # When the row was written. Several snapshots share one `timestamp` within a tick
+    # (one per fill); the latest written is the current one. Null = written before
+    # this column existed (its `timestamp` is used instead).
+    recorded_at: Mapped[UTCDateTime | None] = mapped_column(
+        UTCDateTimeType(), nullable=True, default=lambda: datetime.now(UTC)
+    )

@@ -24,3 +24,6 @@ class CashSnapshot(BaseModel):
     # Settlement-aware fields (F-06). None → legacy: treat all cash as settled.
     settled_cash: Money | None = None
     unsettled_cash: Money | None = None
+    # When the row was written (write order within one timestamp); None on read of
+    # rows from before the column existed, set by the store on insert.
+    recorded_at: UTCDateTime | None = None
