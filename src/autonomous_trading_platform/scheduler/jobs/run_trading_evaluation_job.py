@@ -5,9 +5,6 @@ from datetime import datetime
 from decimal import Decimal
 from time import perf_counter
 
-import pyarrow as pa
-import pyarrow.compute as pc
-
 from autonomous_trading_platform.common.errors import (
     TransientInfrastructureError,
 )
@@ -37,6 +34,9 @@ from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     TradingCycleDependencies,
     resolve_trading_universe,
+)
+from autonomous_trading_platform.scheduler.jobs.apply_corporate_actions_step import (
+    apply_due_corporate_actions,
 )
 from autonomous_trading_platform.scheduler.jobs.portfolio_evaluation import (
     run_portfolio_evaluation,
@@ -123,31 +123,15 @@ def _fetch_recent_closes(
     Returns an empty list for any symbol where bars are unavailable —
     the scaling service will skip vol scaling for that symbol.
     """
-    from datetime import timedelta
-
+    builder = strategy_context.strategy_evaluation_service.context_builder
     recent_closes: dict[str, list[float]] = {}
-
     for symbol in symbols:
         try:
-            bars = strategy_context.strategy_evaluation_service.context_builder.market_bar_reader.read(
-                dataset=strategy_context.strategy_evaluation_service.context_builder.bars_dataset,
-                dataset_version=strategy_context.strategy_evaluation_service.context_builder.dataset_version,
-                symbol=symbol,
-                start_date=(bar_timestamp - timedelta(days=5)).date(),
-                end_date=bar_timestamp.date(),
+            # The builder reads every dataset version holding the window and
+            # split-adjusts the closes, so the vol scalar never sees a split jump.
+            recent_closes[symbol] = builder.recent_closes(
+                symbol=symbol, before=bar_timestamp, lookback_bars=lookback_bars
             )
-
-            if bars.num_rows == 0:
-                recent_closes[symbol] = []
-                continue
-
-            # Only the close column of the last lookback bars before the bar (reads
-            # come back sorted by timestamp); no per-row conversion.
-            ts = bars["timestamp"]
-            before = bars.filter(pc.less(ts, pa.scalar(bar_timestamp, type=ts.type)))
-            closes = before.column("close").to_pylist()[-lookback_bars:]
-            recent_closes[symbol] = [float(c) for c in closes]
-
         except Exception as exc:
             logger.warning(
                 "evaluation_job.recent_closes_fetch_failed",
@@ -218,6 +202,21 @@ def run_trading_evaluation_job(
                         },
                     )
 
+            # Splits / dividends due today are applied to the books before anything
+            # reads positions (plan 5d-C); a failed step withholds adoption this cycle.
+            corporate_actions = apply_due_corporate_actions(
+                session=session,
+                now_utc=now_utc,
+                broker_client=broker_client,
+                run_id=manifest.run_id,
+                price_provider=lambda symbols: _fetch_prices(broker_client, symbols),
+                audit_logger=trading_cycle_dependencies.audit_logger,
+            )
+            job_span.set_attribute(
+                "ratp.corporate_actions_applied",
+                corporate_actions.report.applied_count if corporate_actions.report else -1,
+            )
+
             if trading_cycle_dependencies.strategy_runtimes is not None:
                 portfolio_result, portfolio_intents = run_portfolio_evaluation(
                     now_utc=now_utc,
@@ -229,6 +228,8 @@ def run_trading_evaluation_job(
                     vol_lookback_bars=_VOL_LOOKBACK_BARS,
                     job_span=job_span,
                     universe_symbols=universe_symbols,
+                    adopt_unowned=corporate_actions.adoption_allowed,
+                    skip_adoption_symbols=corporate_actions.skip_adoption_symbols,
                 )
                 record_job_completed(
                     logger=logger,

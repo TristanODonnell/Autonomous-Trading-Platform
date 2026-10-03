@@ -98,7 +98,12 @@ def run_portfolio_evaluation(
     vol_lookback_bars: int,
     job_span: Any,
     universe_symbols: Collection[str] = (),
+    adopt_unowned: bool = True,
+    skip_adoption_symbols: Collection[str] = (),
 ) -> tuple[PortfolioEvaluationResult, list[OrderIntent]]:
+    """``adopt_unowned`` / ``skip_adoption_symbols`` come from the corporate-action
+    step: no adoption at all when it failed, and none in symbols with a pending
+    action (the broker's post-split quantity must not be mistaken for an orphan)."""
     session = deps.session
     execution_context = deps.execution_context
     broker_client = execution_context.broker_client
@@ -118,8 +123,19 @@ def run_portfolio_evaluation(
                 uow,
                 account_positions=account_positions,
                 timestamp=now_utc,
-                adopt_unowned=True,
+                adopt_unowned=adopt_unowned,
+                skip_adoption_symbols=skip_adoption_symbols,
             )
+            if adoption.mismatches and (not adopt_unowned or skip_adoption_symbols):
+                logger.warning(
+                    "portfolio_evaluation.adoption_withheld",
+                    extra={
+                        "mismatches": [m.symbol for m in adoption.mismatches],
+                        "skip_adoption_symbols": sorted(skip_adoption_symbols),
+                        "adopt_unowned": adopt_unowned,
+                        "run_id": str(manifest.run_id),
+                    },
+                )
             if adoption.adopted_symbols:
                 logger.warning(
                     "portfolio_evaluation.unowned_positions_adopted",
