@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 import pytest
 
 import autonomous_trading_platform.scheduler.cycles.run_corporate_action_ingestion_cycle as cycle_module
@@ -117,10 +119,8 @@ def test_corporate_action_job_receives_source_raw_dataset_version(
         job_kwargs["source_raw_bars_dataset_version_id"] == fixture.source_raw_bars_dataset_version
     )
     assert job_kwargs["dataset_version_id"].startswith("corporate_actions_")
-    assert job_kwargs["adjusted_bars_dataset_version_id"].startswith("adjusted_bars_")
-    assert job_kwargs["dataset_version_id"] != job_kwargs["adjusted_bars_dataset_version_id"]
+    assert "adjusted_bars_dataset_version_id" not in job_kwargs
     assert job_kwargs["ingestion_run_id"] is not None
-    assert job_kwargs["bar_repository"] is not None
 
 
 def test_activity_events_are_emitted_for_corporate_action_ingestion_cycle(
@@ -178,15 +178,15 @@ def test_runtime_job_run_is_recorded_for_corporate_action_ingestion_cycle(
     assert job is not None
 
     assert job.output_summary_json["corporate_actions_dataset_version_id"] is not None
-    assert job.output_summary_json["adjusted_bars_dataset_version_id"] is not None
+    assert "adjusted_bars_dataset_version_id" not in job.output_summary_json
     assert (
         job.output_summary_json["corporate_actions_dataset_version_id"]
         == job.output_summary_json["dataset_version_id"]
     )
-    assert (
-        job.output_summary_json["corporate_actions_dataset_version_id"]
-        != job.output_summary_json["adjusted_bars_dataset_version_id"]
-    )
+    as_of = date.fromisoformat(job.output_summary_json["as_of"])
+    assert date.fromisoformat(job.output_summary_json["fetch_start"]) == as_of - timedelta(days=7)
+    assert date.fromisoformat(job.output_summary_json["fetch_end"]) == as_of + timedelta(days=30)
+    assert job.output_summary_json["counts"] == {}
 
     assert job.job_name == "corporate_action_ingestion_cycle"
     assert job.parent_job_run_id is None
@@ -249,3 +249,118 @@ def test_corporate_action_ingestion_cycle_marks_failure_when_parquet_write_fails
     assert job is not None
     assert job.status == "failed"
     assert "simulated parquet write failure" in job.error_message
+
+
+def _capture_job_kwargs(monkeypatch):
+    captured = []
+
+    class CapturingJob:
+        def __init__(self, **kwargs):
+            captured.append(kwargs)
+
+        def ingest_corporate_actions_job(self):
+            return None
+
+    monkeypatch.setattr(cycle_module, "IngestCorporateActionsJob", CapturingJob)
+    return captured
+
+
+def test_fetch_window_defaults_to_seven_days_back_and_thirty_ahead_of_as_of(
+    seeded_corporate_action_ingestion_cycle_fixture,
+    monkeypatch,
+):
+    captured = _capture_job_kwargs(monkeypatch)
+
+    summary = run_corporate_action_ingestion_cycle(as_of=date(2024, 6, 10))
+
+    assert captured[0]["fetch_start"] == "2024-06-03"
+    assert captured[0]["fetch_end"] == "2024-07-10"
+    assert summary["as_of"] == "2024-06-10"
+    assert summary["fetch_start"] == "2024-06-03"
+    assert summary["fetch_end"] == "2024-07-10"
+    assert summary["cycle_start"].startswith("2024-06-03")
+    assert summary["cycle_end"].startswith("2024-07-10")
+
+
+def test_explicit_fetch_dates_override_the_default_window(
+    seeded_corporate_action_ingestion_cycle_fixture,
+    monkeypatch,
+):
+    captured = _capture_job_kwargs(monkeypatch)
+
+    run_corporate_action_ingestion_cycle(
+        as_of=date(2024, 6, 10), fetch_start="2024-01-01", fetch_end="2024-06-30"
+    )
+
+    assert captured[0]["fetch_start"] == "2024-01-01"
+    assert captured[0]["fetch_end"] == "2024-06-30"
+
+
+def test_inverted_fetch_window_is_rejected(
+    seeded_corporate_action_ingestion_cycle_fixture,
+    monkeypatch,
+):
+    _capture_job_kwargs(monkeypatch)
+    with pytest.raises(ValueError, match="inverted"):
+        run_corporate_action_ingestion_cycle(fetch_start="2024-06-30", fetch_end="2024-06-01")
+
+
+def test_fetch_symbols_default_to_the_source_dataset_manifest(
+    seeded_corporate_action_ingestion_cycle_fixture,
+    db_session,
+    monkeypatch,
+):
+    fixture = seeded_corporate_action_ingestion_cycle_fixture
+    row = db_session.get(DatasetVersions, fixture.source_raw_bars_dataset_version)
+    row.source_manifest = {**(row.source_manifest or {}), "symbols": ["nvda", "AAPL", "NVDA"]}
+    db_session.flush()
+    captured = _capture_job_kwargs(monkeypatch)
+
+    summary = run_corporate_action_ingestion_cycle(
+        source_raw_bars_dataset_version_id=fixture.source_raw_bars_dataset_version
+    )
+
+    assert captured[0]["fetch_symbols"] == ["AAPL", "NVDA"]
+    assert summary["fetch_symbol_count"] == 2
+
+
+def test_explicit_fetch_symbols_win_over_the_manifest(
+    seeded_corporate_action_ingestion_cycle_fixture,
+    monkeypatch,
+):
+    captured = _capture_job_kwargs(monkeypatch)
+
+    run_corporate_action_ingestion_cycle(fetch_symbols=["MSFT"])
+
+    assert captured[0]["fetch_symbols"] == ["MSFT"]
+
+
+def test_job_counts_are_surfaced_in_the_summary_and_runtime_job_run(
+    seeded_corporate_action_ingestion_cycle_fixture,
+    db_session,
+    monkeypatch,
+):
+    from autonomous_trading_platform.ingestion.corporate_actions.services.corporate_action_ingestion_service import (
+        CorporateActionIngestionCounts,
+        CorporateActionProcessingResult,
+    )
+
+    class CountingJob:
+        def __init__(self, **kwargs):
+            pass
+
+        def ingest_corporate_actions_job(self):
+            return CorporateActionProcessingResult(
+                created_actions=[],
+                counts=CorporateActionIngestionCounts(fetched=4, created=3, manual_review=1),
+            )
+
+    monkeypatch.setattr(cycle_module, "IngestCorporateActionsJob", CountingJob)
+
+    summary = run_corporate_action_ingestion_cycle()
+
+    assert summary["counts"]["created"] == 3
+    assert summary["counts"]["manual_review"] == 1
+    job = _latest_runtime_job_run(db_session)
+    assert job.output_summary_json["counts"]["fetched"] == 4
+    assert _latest_ingestion_run(db_session).row_count == 3

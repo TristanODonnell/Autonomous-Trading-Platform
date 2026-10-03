@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import platform
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from time import perf_counter
 
@@ -50,15 +50,19 @@ from autonomous_trading_platform.storage.parquet.datasets import (
     CORPORATE_ACTIONS_DATASET,
     RAW_BARS_DATASET,
 )
-from autonomous_trading_platform.storage.parquet.repositories.parquet_bar_repository import (
-    ParquetBarRepository,
-)
 from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
 from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_repository import (
     RuntimeJobRunRepository,
 )
 
 logger = get_logger(__name__)
+
+# Fetch window around the as-of date: a week back catches a missed run, a month
+# ahead stores announced actions before their ex-date so the trading cycle can
+# prepare for them (plan 5d, decision D2).
+FETCH_WINDOW_DAYS_BACK = 7
+FETCH_WINDOW_DAYS_AHEAD = 30
+
 CORPORATE_ACTION_INGESTION_CYCLE_METRICS = CycleMetricSet(
     runs=corporate_action_ingestion_cycle_runs,
     failures=corporate_action_ingestion_cycle_failures,
@@ -70,23 +74,56 @@ CORPORATE_ACTION_INGESTION_STEP_METRICS = StepMetricSet(
 )
 
 
+def _declared_symbols(dataset_version: object | None) -> list[str] | None:
+    """Symbols a raw-bars dataset declares in its source manifest, or None."""
+    manifest = getattr(dataset_version, "source_manifest", None) or {}
+    symbols = manifest.get("symbols") if isinstance(manifest, dict) else None
+    if isinstance(symbols, list) and symbols and all(isinstance(s, str) and s for s in symbols):
+        return sorted({s.upper() for s in symbols})
+    return None
+
+
 def run_corporate_action_ingestion_cycle(
     *,
     source_raw_bars_dataset_version_id: str | None = None,
     trigger_type: str = "scheduler",
     actor: str | None = None,
+    as_of: date | None = None,
     fetch_start: str | None = None,
     fetch_end: str | None = None,
     fetch_symbols: list[str] | None = None,
 ) -> dict[str, object]:
     """
-    Entry point for the Airflow DAG.
+    Entry point for the scheduler, the platform backtest and the CLI.
+
+    ``as_of`` is the date the run is for: the replayed tick date in a backtest, today
+    in live. Unless ``fetch_start``/``fetch_end`` are given, actions are fetched for
+    ``[as_of - 7 days, as_of + 30 days]``. ``fetch_symbols`` defaults to the symbols
+    declared by the source raw-bars dataset (its ``source_manifest.symbols``); when
+    the dataset declares none, every symbol is fetched.
 
     When called from a parent orchestrator that already resolved the active raw_bars
     dataset, pass ``source_raw_bars_dataset_version_id`` to skip the internal lookup
     and use the exact version the caller wants processed.
     """
     now_utc = datetime.now(UTC)
+    as_of_date = as_of or now_utc.date()
+    window_start = (
+        date.fromisoformat(fetch_start)
+        if fetch_start
+        else as_of_date - timedelta(days=FETCH_WINDOW_DAYS_BACK)
+    )
+    window_end = (
+        date.fromisoformat(fetch_end)
+        if fetch_end
+        else as_of_date + timedelta(days=FETCH_WINDOW_DAYS_AHEAD)
+    )
+    if window_end < window_start:
+        raise ValueError(
+            f"corporate action fetch window is inverted: {window_start} > {window_end}"
+        )
+    fetch_start = window_start.isoformat()
+    fetch_end = window_end.isoformat()
     cycle_wall_start = perf_counter()
 
     session: Session = get_session()
@@ -157,11 +194,10 @@ def run_corporate_action_ingestion_cycle(
     )
 
     try:
-        cycle_end = now_utc
-        cycle_start = cycle_end - timedelta(days=1)
+        cycle_start = datetime.combine(window_start, datetime.min.time(), tzinfo=UTC)
+        cycle_end = datetime.combine(window_end, datetime.min.time(), tzinfo=UTC)
 
         corporate_actions_dataset_version_id = generate_dataset_version("corporate_actions")
-        adjusted_bars_dataset_version_id = generate_dataset_version("adjusted_bars")
         dataset_version_id = corporate_actions_dataset_version_id
 
         manifest = RunManifest(
@@ -194,6 +230,9 @@ def run_corporate_action_ingestion_cycle(
             "dataset_version_id": dataset_version_id,
             "cycle_start": cycle_start.isoformat(),
             "cycle_end": cycle_end.isoformat(),
+            "as_of": as_of_date.isoformat(),
+            "fetch_start": fetch_start,
+            "fetch_end": fetch_end,
             "pipeline": "corporate_actions_ingestion",
             "manifest_run_type": manifest.run_type.value,
             "trigger_type": trigger_type,
@@ -201,6 +240,9 @@ def run_corporate_action_ingestion_cycle(
         }
 
         if source_raw_bars_dataset_version_id is not None:
+            source_raw_dataset = dataset_registration_service.get_by_dataset_version_id(
+                source_raw_bars_dataset_version_id
+            )
             _resolved_raw_bars_version_id = source_raw_bars_dataset_version_id
         else:
             source_raw_dataset = dataset_registration_service.get_latest_validated_dataset(
@@ -212,6 +254,10 @@ def run_corporate_action_ingestion_cycle(
             _resolved_raw_bars_version_id = source_raw_dataset.dataset_version_id
 
         source_raw_bars_dataset_version_id = _resolved_raw_bars_version_id
+
+        if fetch_symbols is None:
+            fetch_symbols = _declared_symbols(source_raw_dataset)
+        base_metadata["fetch_symbol_count"] = len(fetch_symbols) if fetch_symbols else None
 
         dataset_version_contract = DatasetVersion(
             dataset_version_id=dataset_version_id,
@@ -293,22 +339,23 @@ def run_corporate_action_ingestion_cycle(
                     step_span.set_attribute("ratp.dataset_version_id", str(dataset_version_id))
                     step_span.set_attribute("ratp.step", step)
 
-                    bar_repository = ParquetBarRepository()
                     job = IngestCorporateActionsJob(
                         session=session,
                         run_id=str(run_id),
                         audit_logger=audit_logger,
-                        cycle_timestamp=cycle_end,
+                        cycle_timestamp=now_utc,
                         ingestion_run_id=str(ingestion_run_id),
                         dataset_version_id=str(corporate_actions_dataset_version_id),
-                        adjusted_bars_dataset_version_id=str(adjusted_bars_dataset_version_id),
-                        bar_repository=bar_repository,
                         source_raw_bars_dataset_version_id=source_raw_bars_dataset_version_id,
                         fetch_start=fetch_start,
                         fetch_end=fetch_end,
                         fetch_symbols=fetch_symbols,
                     )
-                    job.ingest_corporate_actions_job()
+                    job_result = job.ingest_corporate_actions_job()
+                    job_counts = getattr(job_result, "counts", None)
+                    counts: dict[str, object] = (
+                        job_counts.as_dict() if job_counts is not None else {}
+                    )
 
                 step_duration = perf_counter() - step_start
                 record_step_completed(
@@ -334,6 +381,8 @@ def run_corporate_action_ingestion_cycle(
 
             ingestion_run.status = "completed"
             ingestion_run.completed_at = datetime.now(UTC)
+            created_count = counts.get("created")
+            ingestion_run.row_count = created_count if isinstance(created_count, int) else None
             ingestion_run = ingestion_run_registration_service.save(ingestion_run)
 
             dataset_version.validation_status = "validated"
@@ -348,9 +397,12 @@ def run_corporate_action_ingestion_cycle(
                     "corporate_actions_dataset_version_id": str(
                         corporate_actions_dataset_version_id
                     ),
-                    "adjusted_bars_dataset_version_id": str(adjusted_bars_dataset_version_id),
                     "ingestion_run_id": str(ingestion_run_id),
                     "source_raw_bars_dataset_version_id": str(source_raw_bars_dataset_version_id),
+                    "as_of": as_of_date.isoformat(),
+                    "fetch_start": fetch_start,
+                    "fetch_end": fetch_end,
+                    "counts": counts,
                     "last_successful_step": "ingest_corporate_actions",
                 },
             )
@@ -380,10 +432,14 @@ def run_corporate_action_ingestion_cycle(
                 "ingestion_run_id": str(ingestion_run_id),
                 "dataset_version_id": str(corporate_actions_dataset_version_id),
                 "corporate_actions_dataset_version_id": str(corporate_actions_dataset_version_id),
-                "adjusted_bars_dataset_version_id": str(adjusted_bars_dataset_version_id),
                 "source_raw_bars_dataset_version_id": str(source_raw_bars_dataset_version_id),
                 "cycle_start": cycle_start.isoformat(),
                 "cycle_end": cycle_end.isoformat(),
+                "as_of": as_of_date.isoformat(),
+                "fetch_start": fetch_start,
+                "fetch_end": fetch_end,
+                "fetch_symbol_count": len(fetch_symbols) if fetch_symbols else None,
+                "counts": counts,
                 "trigger_type": trigger_type,
                 "actor": actor,
                 "last_successful_step": "ingest_corporate_actions",

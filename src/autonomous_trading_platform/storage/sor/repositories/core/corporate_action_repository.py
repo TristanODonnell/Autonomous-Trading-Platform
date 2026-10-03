@@ -1,9 +1,13 @@
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 from typing import Generic, TypeVar, cast
 
 from sqlalchemy import select
 
+from autonomous_trading_platform.contracts.market.corporate_action import (
+    CorporateAction as CorporateActionContract,
+)
 from autonomous_trading_platform.storage.sor.models.corporate_actions import CorporateAction
 from autonomous_trading_platform.storage.sor.repositories.base import BaseRepository
 
@@ -17,6 +21,48 @@ class UpsertResult(Generic[T]):
 
 
 class CorporateActionRepository(BaseRepository):
+    # -----------------------------
+    # Contract <-> row mapping
+    # -----------------------------
+
+    @staticmethod
+    def to_row(contract: CorporateActionContract) -> CorporateAction:
+        return CorporateAction(
+            action_id=contract.action_id,
+            symbol=contract.symbol,
+            action_type=contract.action_type,
+            effective_date=contract.effective_date,
+            announced_date=contract.announced_date,
+            record_date=contract.record_date,
+            payable_date=contract.payable_date,
+            split_ratio=float(contract.split_ratio) if contract.split_ratio is not None else None,
+            cash_amount=contract.cash_amount,
+            currency=contract.currency,
+            new_symbol=contract.new_symbol,
+            source=contract.source,
+            ingested_at=contract.ingested_at,
+            meta=contract.metadata,
+        )
+
+    @staticmethod
+    def to_contract(row: CorporateAction) -> CorporateActionContract:
+        return CorporateActionContract(
+            action_id=row.action_id,
+            symbol=row.symbol,
+            action_type=row.action_type,
+            effective_date=row.effective_date,
+            announced_date=row.announced_date,
+            record_date=row.record_date,
+            payable_date=row.payable_date,
+            split_ratio=Decimal(str(row.split_ratio)) if row.split_ratio is not None else None,
+            cash_amount=row.cash_amount,
+            currency=row.currency,
+            new_symbol=row.new_symbol,
+            source=row.source,
+            ingested_at=row.ingested_at,
+            metadata=row.meta,
+        )
+
     # -----------------------------
     # Basic lookup
     # -----------------------------
@@ -76,8 +122,41 @@ class CorporateActionRepository(BaseRepository):
     # Upserts
     # -----------------------------
 
-    def upsert(self, row: CorporateAction) -> UpsertResult[CorporateAction]:
+    def get_by_natural_key(
+        self,
+        *,
+        symbol: str,
+        action_type: object,
+        effective_date: date,
+        source: str,
+    ) -> CorporateAction | None:
+        """Fetch by the unique (symbol, type, effective_date, source) key."""
+        stmt = select(CorporateAction).where(
+            CorporateAction.symbol == symbol,
+            CorporateAction.action_type == action_type,
+            CorporateAction.effective_date == effective_date,
+            CorporateAction.source == source,
+        )
+        result: CorporateAction | None = self.session.execute(stmt).scalar_one_or_none()
+        return result
+
+    def upsert(
+        self, row: CorporateAction | CorporateActionContract
+    ) -> UpsertResult[CorporateAction]:
+        """Insert or update by action_id (then by natural key). Accepts the Pydantic
+        contract the ingestion service produces or an ORM row."""
+        if isinstance(row, CorporateActionContract):
+            row = self.to_row(row)
         existing = self.get_by_action_id(row.action_id)
+        if existing is None:
+            # The provider may re-issue the same event under a new id; the natural key
+            # is unique, so update that row instead of violating the constraint.
+            existing = self.get_by_natural_key(
+                symbol=row.symbol,
+                action_type=row.action_type,
+                effective_date=row.effective_date,
+                source=row.source,
+            )
 
         if existing is None:
             self.session.add(row)

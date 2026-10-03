@@ -1,6 +1,6 @@
 import uuid
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -219,6 +219,32 @@ class AuditLoggingService:
             message=f"corporate action validation failed for {symbol}",
             metadata={
                 "symbol": symbol,
+                "cycle_timestamp": cycle_timestamp.isoformat(),
+            },
+        )
+
+    def record_corporate_action_manual_review_required(
+        self,
+        run_id: str,
+        symbol: str,
+        action_type: str,
+        effective_date: date,
+        cycle_timestamp: datetime,
+    ) -> None:
+        """A stored action the platform does not apply to its books (merger, spin-off,
+        stock dividend, name change): an operator must handle the position."""
+        self._record_event(
+            run_id=run_id,
+            event_type="CORPORATE_ACTION_MANUAL_REVIEW_REQUIRED",
+            component="corporate_action_ingestion",
+            message=(
+                f"{action_type} on {symbol} effective {effective_date.isoformat()} "
+                "requires manual review"
+            ),
+            metadata={
+                "symbol": symbol,
+                "action_type": action_type,
+                "effective_date": effective_date.isoformat(),
                 "cycle_timestamp": cycle_timestamp.isoformat(),
             },
         )

@@ -69,9 +69,12 @@ CORPORATE_ACTION_RULES: list[Rule[CorporateAction]] = [
         message=lambda ca, _ctx: "effective_date must be present",
     ),
     Rule(
-        code="EFFECTIVE_DATE_PRESENT",
-        field="effective_date",
-        check=lambda ca, _ctx: ca.effective_date is not None,
-        message=lambda ca, _ctx: "effective_date must be present",
+        code="CASH_AMOUNT_POSITIVE_FOR_CASH_DIVIDEND",
+        field="cash_amount",
+        check=lambda ca, _ctx: (
+            ca.action_type != CorporateActionType.CASH_DIVIDEND
+            or (ca.cash_amount is not None and is_positive(ca.cash_amount))
+        ),
+        message=lambda ca, _ctx: "when action_type is CASH_DIVIDEND, cash_amount must be > 0",
     ),
 ]

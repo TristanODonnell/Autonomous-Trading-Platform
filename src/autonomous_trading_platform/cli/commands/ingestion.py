@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast
 
 from autonomous_trading_platform.cli.formatters import print_header, print_json
@@ -225,6 +225,14 @@ def register(subparsers) -> None:
         help="Operator identity to include in run metadata for manual invocations",
     )
     run_corporate_actions_parser.add_argument(
+        "--as-of",
+        dest="as_of",
+        help=(
+            "Date the run is for (ISO). Without --start/--end the fetch window is "
+            "as-of minus 7 days to as-of plus 30 days; defaults to today"
+        ),
+    )
+    run_corporate_actions_parser.add_argument(
         "--start",
         dest="fetch_start",
         help="Start date for corporate actions fetch (ISO format, e.g. 2023-10-01)",
@@ -337,10 +345,12 @@ def handle_run_corporate_actions(args: argparse.Namespace) -> int:
         if getattr(args, "fetch_symbols", None)
         else None
     )
+    as_of_raw = getattr(args, "as_of", None)
     summary = run_corporate_action_ingestion_cycle(
         source_raw_bars_dataset_version_id=args.source_raw_bars_dataset_version,
         trigger_type="manual_cli",
         actor=args.actor,
+        as_of=date.fromisoformat(as_of_raw) if as_of_raw else None,
         fetch_start=getattr(args, "fetch_start", None),
         fetch_end=getattr(args, "fetch_end", None),
         fetch_symbols=fetch_symbols,
