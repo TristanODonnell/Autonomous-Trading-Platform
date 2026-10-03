@@ -109,6 +109,14 @@ def run_features_at_timestamp(
             errors=[str(exc)],
         )
 
+    if result.get("status") == "skipped":
+        return FeatureReplayResult(
+            **base,
+            status="skipped",
+            summary={"dataset_version_id": dataset_version_id, "date": ts_date.isoformat()},
+            warnings=[f"No bars for {ts_date.isoformat()} — feature pipeline skipped"],
+        )
+
     feature_version_ids: dict[str, str] = {}
     features_computed: list[str] = []
     features_reused: list[str] = []

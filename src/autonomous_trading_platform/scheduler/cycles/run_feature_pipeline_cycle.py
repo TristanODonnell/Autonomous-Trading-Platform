@@ -36,6 +36,7 @@ from autonomous_trading_platform.feature_engineering.jobs.volatility_feature_job
 )
 from autonomous_trading_platform.feature_engineering.services.feature_dataset_resolver_service import (
     FeatureDatasetResolverService,
+    NoBarsForWindow,
 )
 from autonomous_trading_platform.feature_engineering.services.feature_dataset_writer_service import (
     FeatureDatasetWriterService,
@@ -456,6 +457,9 @@ def run_feature_pipeline_cycle(
                     )
                     record_feature_result(step, result)
                     return result
+                except NoBarsForWindow:
+                    # Not a failure: the day has no bars. The cycle records a skip.
+                    raise
                 except Exception as exc:
                     step_duration = perf_counter() - step_start
                     record_step_failed(
@@ -601,6 +605,40 @@ def run_feature_pipeline_cycle(
 
             return output_summary
 
+    except NoBarsForWindow as exc:
+        # Market holiday / empty day: nothing to compute. Recorded as a skipped run so
+        # long backtests and the paper end-of-day chain show no error for it.
+        skipped_summary: dict[str, object] = {
+            "run_id": str(run_id),
+            "runtime_job_run_id": job_run_id,
+            "dataset_version_id": dataset_version_id,
+            "status": "skipped",
+            "reason": "no_bars_for_window",
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+            "feature_dataset_versions": [],
+        }
+        _save_runtime_job_run(
+            status="skipped",
+            completed_at=datetime.now(UTC),
+            error_message=None,
+            output_summary_json=skipped_summary,
+        )
+        if manifest is not None:
+            manifest.status = "skipped"
+            manifest.current_step = None
+            manifest.error_message = None
+            manifest_service.save(manifest)
+        audit_logger.record_run_completed(
+            run_id=str(run_id),
+            component=component,
+            metadata={**base_metadata, "status": "skipped", "reason": str(exc)},
+        )
+        logger.info(
+            "cycle_skipped",
+            extra={"component": component, "run_id": str(run_id), "reason": str(exc)},
+        )
+        return skipped_summary
     except Exception as exc:
         total_duration = perf_counter() - cycle_wall_start
 

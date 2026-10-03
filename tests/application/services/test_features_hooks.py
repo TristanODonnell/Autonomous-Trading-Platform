@@ -55,3 +55,18 @@ def test_other_failures_still_fail() -> None:
         )
     assert result.status == "failed"
     assert result.errors == ["schema mismatch"]
+
+
+def test_a_skipped_cycle_summary_is_reported_as_skipped() -> None:
+    skipped = {"status": "skipped", "reason": "no_bars_for_window", "feature_dataset_versions": []}
+    with patch(_CYCLE, return_value=skipped):
+        result = run_features_at_timestamp(
+            session=MagicMock(),
+            timestamp=datetime(2024, 5, 27, 20, tzinfo=UTC),
+            dataset_version_id="raw_v",
+            symbols=["NVDA"],
+            replay_context=_context(),
+        )
+    assert result.status == "skipped"
+    assert result.errors == []
+    assert result.warnings == ["No bars for 2024-05-27 — feature pipeline skipped"]

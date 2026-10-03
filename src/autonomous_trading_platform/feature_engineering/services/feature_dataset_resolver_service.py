@@ -21,6 +21,15 @@ from autonomous_trading_platform.storage.parquet.datasets import (
 )
 
 
+class NoBarsForWindow(ValueError):
+    """The source dataset holds no bars for the requested symbols and dates (a market
+    holiday, an empty fixture day). Callers treat it as "nothing to compute"."""
+
+    def __init__(self, dataset_version_id: str) -> None:
+        super().__init__(f"No bar data found for dataset_version_id={dataset_version_id}.")
+        self.dataset_version_id = dataset_version_id
+
+
 @dataclass(slots=True)
 class ResolvedSourceDataset:
     dataset_version: DatasetVersion
@@ -143,7 +152,7 @@ class FeatureDatasetResolverService:
                 frames.append(self._split_adjusted(table.to_pandas(), symbol, start_date, end_date))
 
         if not frames:
-            raise ValueError(f"No bar data found for dataset_version_id={dataset_version_id}.")
+            raise NoBarsForWindow(dataset_version_id)
 
         return pd.concat(frames, ignore_index=True)
 

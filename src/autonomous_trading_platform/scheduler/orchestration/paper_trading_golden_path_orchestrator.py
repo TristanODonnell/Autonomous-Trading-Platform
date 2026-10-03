@@ -237,9 +237,10 @@ class PaperTradingGoldenPathOrchestrator:
                     include_regime=False,
                 )
             except ValueError as exc:
+                # The cycle records a day with no bars as a skipped run itself; this
+                # guard only remains for an older cycle that still raises.
                 if not str(exc).startswith("No bar data found for dataset_version_id="):
                     raise
-                # No bars for the day (holiday / empty fixture) — skip features.
             features_version_id = generate_dataset_version("features")
             self.session.add(
                 DatasetVersions(

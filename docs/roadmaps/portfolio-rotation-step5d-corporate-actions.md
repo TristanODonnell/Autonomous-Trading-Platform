@@ -434,7 +434,8 @@ Fixture `fixtures/platform/replays/medium/corporate_actions_nvda_split.yaml`: NV
 MSFT, daily cadence, **2024-05-20 → 2024-06-14** (three weeks before the ex-date so
 positions exist by then — the plan's 06-03 start would have had no holders), the four
 approved seeds, research smoke monthly, bench weekly. Dev DB backed up first
-(`D:\PythonVenvstp_db_backupsatp_before_5d_reset_20261002_1803.dump`, 97 MB), reset,
+(`D:\PythonVenvstp_db_backups
+atp_before_5d_reset_20261002_1803.dump`, 97 MB), reset,
 checkpoint removed, run under the 6 GB cap in the background (~4.5 min for 19 trading
 days). Artifact `artifacts/platform/backtests/corporate_actions_nvda_split.json`.
 
@@ -501,6 +502,31 @@ Left open: the 6-month intraday re-record (D8 option a, with the speed work); li
 ingestion still writes one raw version per day (D6 chose the resolver); cash-in-lieu
 for live comes from the broker's own booking (we only guard adoption); the research
 cache key does not hash runner-loaded actions (keyed by dataset + window).
+
+### Follow-up — 6-month daily record with corporate actions (2026-10-02)
+
+`portfolio_rotation_6m.yaml` (10 symbols, daily cadence, Jan 2 → Jun 28 2024), output
+`portfolio_rotation_6m_5d_record.json`, run after the snapshot tie-break fix (commit
+`2ba2ca348`, migration `bb66cc77dd88`): **129 ticks, 0 errors**, 1,163 fills, 56 hours →
+57 min. Corporate actions: **56 applications** — 21 cash dividends on 9 symbols applied to
+the account book, 24 real sleeves and 9 shadow sleeves (XOM 326.80, JPM 94.35, MSFT 79.50,
+SPY 78.15, AAPL 48.92 … NVDA 1.14 in total per book), and the NVDA 10:1 split applied to
+the account book (14 → 140 at 1,147.03 → 114.70) and four sleeves (factor_based 4 → 40,
+mean_reversion__e2d8 2 → 20, momentum__ab29 5 → 50, momentum_v1 3 → 30; cost ÷10, no
+realized loss). Every holder's sleeve net P&L moved less than 2 % across 2024-06-10
+(momentum__ab29 6,634.84 → 6,674.09 — the strategy that booked −3,246 on that day in the
+5c record). 438 skips, all `position_changed_on_or_after_ex_date` (the 30-day lookback
+re-evaluating pre-position ex-dates daily; correct, noisy). Rotation: +19.6 % vs SPY
++15.1 %, Sharpe 3.06, max drawdown 4.3 %, 3 swaps. Not a like-for-like comparison with the
+5c intraday record (different cadence); the intraday re-record follows.
+
+Fixed on the way: the five market-holiday feature cycles (MLK, Presidents', Good Friday,
+Memorial, Juneteenth) were recorded as failed job runs with tracebacks although the replay
+hook already skipped them. `FeatureDatasetResolverService` now raises `NoBarsForWindow`,
+`run_feature_pipeline_cycle` records a **skipped** run and manifest for it (no traceback),
+and the replay hook reads that summary. Snapshot tie-break (see commit message): one
+trading cycle writes a cash snapshot per fill with one timestamp and "latest" broke the tie
+on the random snapshot id; `recorded_at` now decides.
 
 ## Out of scope
 Mergers/spin-off book changes (alerted only, D1), short positions, options, Airflow (Step 6),
