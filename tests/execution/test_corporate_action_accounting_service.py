@@ -390,6 +390,25 @@ class TestAccountingService:
         assert report.pending_symbols == {"NVDA"}
         assert real.positions(uow, "mom")["NVDA"].quantity == Decimal("28")
 
+        # The decision is final and remembered: the next cycle does not re-skip (the
+        # symbol stays pending only by the ex-date/day-after rule), and the ledger holds
+        # one "skipped" resolution row.
+        again = service.apply_due_actions(
+            uow,
+            as_of=_EX_DATE,
+            timestamp=_TICK + timedelta(minutes=10),
+            adjust_account_book=False,
+        )
+        assert again.applied_count == 0
+        assert again.skipped == []
+        assert again.pending_symbols == {"NVDA"}  # due-today rule, not a skip
+        rows = uow.corporate_action_applications.list_all()
+        assert len(rows) == 1
+        assert rows[0].details["resolution"] == "skipped"
+        assert rows[0].details["reason"] == "position_changed_on_or_after_ex_date"
+        assert Decimal(rows[0].quantity_before) == Decimal(rows[0].quantity_after) == Decimal("28")
+        assert uow.corporate_action_applications.list_applied() == []
+
     def test_actions_after_as_of_or_outside_the_lookback_are_ignored(
         self, uow, real, service
     ) -> None:

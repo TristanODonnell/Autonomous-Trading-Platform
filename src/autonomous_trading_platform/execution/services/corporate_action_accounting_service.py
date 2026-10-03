@@ -299,11 +299,16 @@ class CorporateActionAccountingService:
                 continue
             if _as_utc(row.updated_at) >= ex_cutoff:
                 self._skip(
+                    uow,
                     report,
                     action,
                     book,
                     scope,
                     "position_changed_on_or_after_ex_date",
+                    quantity=Decimal(row.quantity),
+                    avg_cost=Decimal(row.avg_cost) if row.avg_cost is not None else None,
+                    timestamp=timestamp,
+                    run_id=run_id,
                 )
                 continue
             outcome = ledger.apply_corporate_action(
@@ -348,11 +353,22 @@ class CorporateActionAccountingService:
         ]
         if not held:
             return
+        item = held[0]
         if _as_utc(latest.timestamp) >= ex_cutoff:
-            self._skip(report, action, book, ACCOUNT_SCOPE, "position_changed_on_or_after_ex_date")
+            self._skip(
+                uow,
+                report,
+                action,
+                book,
+                ACCOUNT_SCOPE,
+                "position_changed_on_or_after_ex_date",
+                quantity=Decimal(item.quantity),
+                avg_cost=Decimal(item.avg_cost) if item.avg_cost is not None else None,
+                timestamp=timestamp,
+                run_id=run_id,
+            )
             return
 
-        item = held[0]
         adjustment = apply_action(
             action,
             quantity=Decimal(item.quantity),
@@ -493,6 +509,7 @@ class CorporateActionAccountingService:
             realized_pnl=adjustment.realized_pnl,
             run_id=run_id,
             details={
+                "resolution": "applied",
                 "fractional_shares": str(adjustment.fractional_shares),
                 "split_ratio": str(action.split_ratio) if action.split_ratio is not None else None,
                 "cash_amount": str(action.cash_amount) if action.cash_amount is not None else None,
@@ -514,14 +531,49 @@ class CorporateActionAccountingService:
             },
         )
 
-    @staticmethod
     def _skip(
+        self,
+        uow: SorUnitOfWork,
         report: CorporateActionApplicationReport,
         action: CorporateActionContract,
         book: CorporateActionBook,
         scope: str,
         reason: str,
+        *,
+        quantity: Decimal,
+        avg_cost: Decimal | None,
+        timestamp: datetime,
+        run_id: UUID | None,
     ) -> None:
+        """Leave the position alone and remember the decision.
+
+        A skip is final: the position was changed on or after the ex-date, so it is
+        already in post-action terms and will never become applicable. Recording it in
+        the applications ledger (``details.resolution = "skipped"``) means the next
+        cycle's ``is_applied`` check is true and the action is not re-evaluated — a
+        6-month production-cadence run otherwise re-skipped the same positions 47,881
+        times and audited each cycle.
+        """
+        uow.corporate_action_applications.record(
+            CorporateActionApplication(
+                application_id=application_id_for(action.action_id, book, scope),
+                action_id=action.action_id,
+                book=book,
+                scope=scope,
+                symbol=action.symbol,
+                action_type=action.action_type,
+                effective_date=action.effective_date,
+                applied_at=timestamp,
+                quantity_before=quantity,
+                quantity_after=quantity,
+                avg_cost_before=avg_cost,
+                avg_cost_after=avg_cost,
+                cash_delta=ZERO,
+                realized_pnl=ZERO,
+                run_id=run_id,
+                details={"resolution": "skipped", "reason": reason},
+            )
+        )
         report.skipped.append(
             SkippedApplication(
                 action_id=action.action_id,

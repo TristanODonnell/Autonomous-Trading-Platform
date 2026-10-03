@@ -557,13 +557,18 @@ Not a clean A/B (the 5c record predates 5d-A's ingestion fixes and the tie-break
 research admissions and the one extra swap differ), but the NVDA split no longer costs the
 portfolio ~3 pp on one day, and the re-sims that drive admission see the same history as
 the platform. DB dump of the finished run:
-`D:\PythonVenvstp_db_backupsatp_after_6m_intraday_5d_record_20261003_0952.dump`.
+`D:\PythonVenvstp_db_backups
+atp_after_6m_intraday_5d_record_20261003_0952.dump`.
 
-Follow-up worth a small change later (not blocking): the apply step re-evaluates the
-30-day lookback on **every** 5-minute cycle, so a 6-month intraday run logs 47,881
-`position_changed_on_or_after_ex_date` skips and 9,025 `CORPORATE_ACTIONS_APPLIED` audit
-events, almost all "0 applied, N skipped". Evaluating skips once per symbol per day (or
-only auditing when something was applied) would remove the noise and a little time.
+Follow-up done the same day: the apply step re-evaluated the 30-day lookback on **every**
+5-minute cycle, so the run logged 47,881 `position_changed_on_or_after_ex_date` skips and
+9,025 `CORPORATE_ACTIONS_APPLIED` audit events, almost all "0 applied, N skipped". A skip
+is a final decision (the position is already in post-action terms), so it is now recorded
+in `corporate_action_applications` as a resolution row (`details.resolution = "skipped"`,
+quantity unchanged, cash 0) and the next cycle's idempotency check is true: evaluated and
+logged once, never again. Applied rows carry `details.resolution = "applied"`;
+`CorporateActionApplicationRepository.list_applied()` filters the ledger to real changes.
+The ex-date/day-after adoption guard is unchanged.
 
 ## Out of scope
 Mergers/spin-off book changes (alerted only, D1), short positions, options, Airflow (Step 6),

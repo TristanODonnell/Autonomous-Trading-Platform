@@ -120,6 +120,12 @@ class CorporateActionApplicationRepository(BaseRepository):
         )
         return cast(list[CorporateActionApplicationRow], self.session.execute(stmt).scalars().all())
 
+    def list_applied(self) -> list[CorporateActionApplicationRow]:
+        """Rows that changed a book (skipped resolutions carry details.resolution == "skipped")."""
+        return [
+            row for row in self.list_all() if (row.details or {}).get("resolution") != "skipped"
+        ]
+
     def list_all(self) -> list[CorporateActionApplicationRow]:
         stmt = select(CorporateActionApplicationRow).order_by(
             CorporateActionApplicationRow.applied_at.asc()
