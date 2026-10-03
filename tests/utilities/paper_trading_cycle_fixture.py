@@ -189,6 +189,13 @@ def _seed_environment(monkeypatch) -> None:
     monkeypatch.setenv("SKIP_EVALUATION_ON_INGESTION_FAILURE", "true")
     monkeypatch.setenv("HOLD_POSITIONS_ON_EVALUATION_FAILURE", "true")
     monkeypatch.setenv("FREEZE_TRADING_ON_RECONCILIATION_FAILURE", "true")
+    # Risk limits the cycle tests rely on. Only the developer's .env used to raise them
+    # (defaults: 1 order per bar, $25k daily notional / reserved cash), so in CI, which
+    # has no .env, the portfolio tests' second order was rejected and the tests failed.
+    monkeypatch.setenv("MAX_ORDERS_PER_BAR", "10")
+    monkeypatch.setenv("MAX_GROSS_EXPOSURE", "100000")
+    monkeypatch.setenv("MAX_DAILY_NOTIONAL_TRADED", "100000")
+    monkeypatch.setenv("MAX_RESERVED_CASH", "100000")
 
 
 def _patch_strategy_evaluation(monkeypatch) -> None:

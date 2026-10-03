@@ -209,10 +209,10 @@ def _column_type_shape(column_or_type: Column[Any] | Any) -> str:
         return "date"
     if isinstance(column_type, DateTime):
         return "datetime"
-    if isinstance(column_type, Numeric):
+    # Float stopped being a Numeric subclass in SQLAlchemy 2.1; contracts type both as
+    # numbers, so both column kinds are "numeric" here regardless of the installed version.
+    if isinstance(column_type, Numeric | Float):
         return "numeric"
-    if isinstance(column_type, Float):
-        return "float"
     if isinstance(column_type, String):
         return "string"
     return cast(str, column_type.__class__.__name__).lower()
