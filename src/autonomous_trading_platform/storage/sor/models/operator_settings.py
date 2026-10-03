@@ -58,6 +58,47 @@ class OperatorSettingsRow(Base):
         Numeric(8, 4), nullable=True, default=None
     )
 
+    # Active portfolio set (portfolio rotation step 1). Off = legacy single-strategy cycle.
+    portfolio_mode_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    min_active_strategies: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    max_active_strategies: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
+    # On-deck shadow tier (portfolio rotation step 2). 0 disables on-deck.
+    max_on_deck_strategies: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    # Bench management (portfolio rotation step 3). Off = every candidate may go on-deck.
+    bench_management_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    max_bench_strategies: Mapped[int] = mapped_column(Integer, nullable=False, default=25)
+    # Daily re-sim return correlation at or above which two strategies are redundant.
+    bench_correlation_threshold: Mapped[float] = mapped_column(
+        Numeric(6, 4), nullable=False, default=0.85
+    )
+    bench_resim_window_days: Mapped[int] = mapped_column(Integer, nullable=False, default=63)
+    # Re-sim quality score below which a review counts as a strike (1.0 = flat).
+    bench_score_floor: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False, default=1.0)
+    bench_floor_strikes: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    bench_max_idle_days: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
+    # Portfolio review (portfolio rotation step 4): off / advisory / auto.
+    portfolio_review_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="off")
+    # Relative score edge a challenger needs over an incumbent (after turnover cost).
+    review_swap_margin: Mapped[float] = mapped_column(Numeric(6, 4), nullable=False, default=0.10)
+    # Consecutive weekly reviews the edge must hold before a swap.
+    # Rotation step 5 tuning: longer streak and tenure (rotate less) did best on the
+    # 6-month sweep; see docs/roadmaps/portfolio-rotation-step5-rotation-backtest.md.
+    review_swap_consecutive: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
+    review_min_tenure_days: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    review_max_swaps_per_review: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # Days between swap-eligible (monthly) reviews.
+    review_swap_interval_days: Mapped[int] = mapped_column(Integer, nullable=False, default=28)
+    # Round-trip cost of moving an incumbent's sleeve, charged against the challenger's edge.
+    review_turnover_cost_bps: Mapped[float] = mapped_column(
+        Numeric(8, 2), nullable=False, default=20
+    )
+    # Shadow record a candidate needs before the review may promote it to paper.
+    review_min_shadow_days: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
+    review_min_shadow_trades: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    # Absolute score floor for taking an open seat / keeping one above min (1.0 = flat).
+    review_score_floor: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False, default=1.0)
+    review_on_deck_min_tenure_days: Mapped[int] = mapped_column(Integer, nullable=False, default=21)
+
     # Portfolio drawdown governance (FINDING-16)
     portfolio_max_drawdown_pct: Mapped[float | None] = mapped_column(
         Numeric(6, 4), nullable=True, default=0.15

@@ -48,9 +48,10 @@ from autonomous_trading_platform.storage.sor.repositories.core.strategy_health_t
 
 # State alias normalization - mirrors StrategyGovernanceService._STATE_ALIASES
 _STATE_ALIASES: dict[str, str] = {
-    "research": "approved_research",
-    "approved_research": "approved_research",
-    "approved_for_research": "approved_research",
+    "research": "candidate",
+    "candidate": "candidate",
+    "approved_for_research": "candidate",
+    "approved_research": "candidate",  # legacy name
     "paper": "approved_for_paper_trading",
     "approved_paper": "approved_for_paper_trading",
     "approved_for_paper_trading": "approved_for_paper_trading",
@@ -62,7 +63,7 @@ _STATE_ALIASES: dict[str, str] = {
 
 # Valid from/to values for promotion rule configuration
 _RULE_STATUS_VALUES = {
-    "approved_research",
+    "candidate",
     "approved_paper",
     "approved_live",
 }
@@ -196,7 +197,7 @@ def register(subparsers) -> None:
         "--state",
         help=(
             "Filter by lifecycle state. Accepts aliases: research, paper, live, retired, "
-            "approved_research, approved_for_paper_trading, approved_for_live_trading."
+            "candidate, approved_for_paper_trading, approved_for_live_trading."
         ),
     )
     state_list.add_argument("--json", action="store_true")
@@ -256,7 +257,7 @@ def register(subparsers) -> None:
         "--from",
         dest="from_status",
         required=True,
-        help="From status (e.g. approved_research, approved_paper).",
+        help="From status (e.g. candidate, approved_paper).",
     )
     rules_show.add_argument(
         "--to",

@@ -1,0 +1,138 @@
+# scenario:
+#   name: portfolio_bench_management
+#   purpose: >
+#     Portfolio rotation step 3E. Bench management on a slim run (~9 weeks, 6 symbols):
+#     weekly bench reviews re-simulate every tracked strategy on a shared trailing
+#     window, group near-duplicates by return correlation, admit only novel-or-better
+#     candidates, retire redundant / weak / idle ones, and hold the bench cap. Research
+#     (smoke profile) adds fresh candidates in February, reviewed the same tick.
+#   expected_behavior: >
+#     Start: 2 active (approved), approved-but-unseated momentum_v1 on-deck; the six
+#     candidates are pending (bench management on, so they cannot go on-deck yet).
+#     First reviews with >= 15 days of data admit up to max_bench_strategies=4 and
+#     retire the rest with reasons (redundant / below_score_floor / over_bench_cap);
+#     a benched candidate then fills the second on-deck seat. Near-variants
+#     (mean_reversion 7932 vs e77f, momentum a14e vs d5ca) collapse to one champion if
+#     their re-sim returns correlate >= 0.85. Research output in February is reviewed
+#     right after the research tick. bench_max_idle_days=35 makes the idle rule fire
+#     for bench members that never reach on-deck. Active / on-deck members are never
+#     retired. Re-sim runs (experiment bench_resim_*) never become approval metrics.
+#   recommended_use: validation
+#
+# Run against a clean backtest state (wipes backtest tables in DATABASE_URL):
+#   python scripts/reset_backtest_state.py
+#   rm -f artifacts/platform/backtests/portfolio_bench_management.checkpoint.json
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/medium/portfolio_bench_management.yaml \
+#     --output artifacts/platform/backtests/portfolio_bench_management.json
+
+platform_replay:
+  name: portfolio_bench_management
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN]
+  start: 2024-01-02
+  end: 2024-03-08
+  starting_cash: 250000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: false
+    rebalance_frequency: daily
+    portfolio_mode_enabled: true
+    min_active_strategies: 2
+    max_active_strategies: 2
+    max_on_deck_strategies: 2
+    max_total_strategy_allocation_pct: 0.95
+    per_strategy_cap: 0.5
+    portfolio_drawdown_action: warn_only
+    portfolio_drawdown_recovery_mode: auto_resume
+    bench_management_enabled: true
+    max_bench_strategies: 4
+    bench_correlation_threshold: 0.85
+    bench_resim_window_days: 63
+    bench_score_floor: 1.0
+    bench_floor_strikes: 3
+    bench_max_idle_days: 35
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies:
+    - factor_based__19abece93f5b760d646be3cf9b16d8bbaff468d78c1ebc70a6c041cd2b56df79
+    - macd_crossover_v1
+    - momentum_v1
+    - momentum__795c6c46b4620f5f3c31ffbb1e26409857ab8d0cfdb2a3d7a92d07add6f3121c
+    - momentum__a14ef1ca750cda4234c575376233672bc51badae78f42536f1e2172047353c16
+    - momentum__d5ca423d584388b90384fa08a96c4376cba48413b16642632b4566a322e4258b
+    - mean_reversion__7932f73f0c4d625f70438cb2871e0592610b2e6a6cbdff007fe892bacb91667b
+    - mean_reversion__e77f7ebac901ddafaa95223b406dd7eb188a33a7e719740bbe76ab3dd016c488
+    - composite_rule__145e07f7f272eb46a6120c7f3d620fd281ccf45fc6a8596883e9533e78d45140
+  governance:
+    # Approved: two take the active seats, momentum_v1 goes on-deck.
+    - strategy_id: factor_based__19abece93f5b760d646be3cf9b16d8bbaff468d78c1ebc70a6c041cd2b56df79
+      state: approved_for_paper_trading
+    - strategy_id: macd_crossover_v1
+      state: approved_for_paper_trading
+    - strategy_id: momentum_v1
+      state: approved_for_paper_trading
+    # Candidates: pending until the first bench review.
+    - strategy_id: momentum__795c6c46b4620f5f3c31ffbb1e26409857ab8d0cfdb2a3d7a92d07add6f3121c
+      state: candidate
+    - strategy_id: momentum__a14ef1ca750cda4234c575376233672bc51badae78f42536f1e2172047353c16
+      state: candidate
+    - strategy_id: momentum__d5ca423d584388b90384fa08a96c4376cba48413b16642632b4566a322e4258b
+      state: candidate
+    - strategy_id: mean_reversion__7932f73f0c4d625f70438cb2871e0592610b2e6a6cbdff007fe892bacb91667b
+      state: candidate
+    - strategy_id: mean_reversion__e77f7ebac901ddafaa95223b406dd7eb188a33a7e719740bbe76ab3dd016c488
+      state: candidate
+    - strategy_id: composite_rule__145e07f7f272eb46a6120c7f3d620fd281ccf45fc6a8596883e9533e78d45140
+      state: candidate
+  allocations: []
+  universe:
+    selection_mode: fixed
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  universe:
+    cadence: monthly
+    enabled: true
+  research:
+    cadence: monthly
+    enabled: true
+    options:
+      profile: smoke        # cheap: 2 samples per family
+  bench:
+    cadence: weekly
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: false
+
+timeline_events: []

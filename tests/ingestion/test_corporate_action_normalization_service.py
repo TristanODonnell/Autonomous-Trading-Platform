@@ -219,3 +219,194 @@ class TestCorporateActionNormalizationService:
 
         with pytest.raises(ValueError, match="missing required field"):
             CorporateActionNormalizationService.parse_alpaca_corporate_action(raw)
+
+
+# ---------------------------------------------------------------------------
+# Real Alpaca /v1/corporate-actions payloads (captured 2026-10-02). Items carry no
+# type field: the list key is the type, passed as ``provider_type``.
+# ---------------------------------------------------------------------------
+
+NVDA_FORWARD_SPLIT = {
+    "cusip": "67066G104",
+    "due_bill_redemption_date": "2024-06-10",
+    "ex_date": "2024-06-10",
+    "id": "50199fac-0af8-43ef-9846-eaf64c6d322d",
+    "new_rate": 10,
+    "old_rate": 1,
+    "payable_date": "2024-06-10",
+    "process_date": "2024-06-10",
+    "record_date": "2024-06-07",
+    "symbol": "NVDA",
+}
+AAPL_CASH_DIVIDEND = {
+    "cusip": "037833100",
+    "ex_date": "2024-02-09",
+    "foreign": False,
+    "id": "35849a16-e94e-4f9a-b66f-a1333d6289af",
+    "payable_date": "2024-02-15",
+    "process_date": "2024-02-15",
+    "rate": 0.24,
+    "record_date": "2024-02-12",
+    "special": False,
+    "symbol": "AAPL",
+}
+ATRA_REVERSE_SPLIT = {
+    "ex_date": "2024-06-20",
+    "id": "446f18f3-92fc-42a8-8b93-4700f06bc8e0",
+    "new_cusip": "046513206",
+    "new_rate": 1,
+    "old_cusip": "046513107",
+    "old_rate": 25,
+    "payable_date": "2024-06-20",
+    "process_date": "2024-06-20",
+    "record_date": "2024-06-20",
+    "symbol": "ATRA",
+}
+PXD_XOM_STOCK_MERGER = {
+    "acquiree_cusip": "723787107",
+    "acquiree_rate": 1,
+    "acquiree_symbol": "PXD",
+    "acquirer_cusip": "30231G102",
+    "acquirer_rate": 2.3234,
+    "acquirer_symbol": "XOM",
+    "effective_date": "2024-05-03",
+    "id": "db28e8a7-66f6-4c76-ba9c-e87b3060edcd",
+    "payable_date": "2024-05-03",
+    "process_date": "2024-05-03",
+}
+CASH_MERGER = {
+    "acquiree_cusip": "358CVR025",
+    "acquiree_symbol": "358CVR025",
+    "effective_date": "2024-06-04",
+    "id": "8bf3ce03-af62-43d0-9985-c9757d735ede",
+    "payable_date": "2024-06-04",
+    "process_date": "2024-06-04",
+    "rate": 0.01895669,
+}
+SPIN_OFF = {
+    "ex_date": "2024-06-03",
+    "id": "48ec8707-a183-421f-83eb-51f39ed6d36d",
+    "new_cusip": "007975113",
+    "new_rate": 0.47698,
+    "new_symbol": "007975113",
+    "process_date": "2024-06-03",
+    "record_date": "2024-05-31",
+    "source_cusip": "007975600",
+    "source_rate": 1,
+    "source_symbol": "AEZS",
+}
+NAME_CHANGE = {
+    "id": "76d6dc2b-ae42-4294-9bc0-1305650fde0d",
+    "new_cusip": "06777U101",
+    "new_symbol": "BNED",
+    "old_cusip": "067BAS012",
+    "old_symbol": "067BAS012",
+    "process_date": "2024-06-11",
+}
+STOCK_DIVIDEND = {
+    "cusip": "009126202",
+    "ex_date": "2024-06-24",
+    "id": "57ae88b6-6022-4c4b-be1b-81e544dd49b3",
+    "payable_date": "2024-07-01",
+    "process_date": "2024-06-24",
+    "rate": 1.1,
+    "record_date": "2024-06-24",
+    "symbol": "AIQUY",
+}
+
+
+class TestRealAlpacaPayloads:
+    def test_forward_split_from_list_key(self) -> None:
+        action = CorporateActionNormalizationService.parse_alpaca_corporate_action(
+            NVDA_FORWARD_SPLIT, "forward_split"
+        )
+        assert action.action_type == CorporateActionType.SPLIT_FORWARD
+        assert action.symbol == "NVDA"
+        assert action.effective_date == date(2024, 6, 10)
+        assert action.record_date == date(2024, 6, 7)
+        assert str(action.split_ratio) == "10"
+        assert action.cash_amount is None
+        assert action.action_id == "50199fac-0af8-43ef-9846-eaf64c6d322d"
+        assert action.metadata is not None
+        assert action.metadata["provider_type"] == "forward_split"
+
+    def test_reverse_split_from_list_key(self) -> None:
+        action = CorporateActionNormalizationService.parse_alpaca_corporate_action(
+            ATRA_REVERSE_SPLIT, "reverse_split"
+        )
+        assert action.action_type == CorporateActionType.SPLIT_REVERSE
+        assert str(action.split_ratio) == "0.04"
+
+    def test_cash_dividend_reads_rate_as_cash_amount(self) -> None:
+        action = CorporateActionNormalizationService.parse_alpaca_corporate_action(
+            AAPL_CASH_DIVIDEND, "cash_dividend"
+        )
+        assert action.action_type == CorporateActionType.CASH_DIVIDEND
+        assert action.symbol == "AAPL"
+        assert action.effective_date == date(2024, 2, 9)
+        assert action.payable_date == date(2024, 2, 15)
+        assert str(action.cash_amount) == "0.24"
+        assert action.currency == "USD"
+
+    def test_stock_merger_uses_acquiree_symbol_and_effective_date(self) -> None:
+        action = CorporateActionNormalizationService.parse_alpaca_corporate_action(
+            PXD_XOM_STOCK_MERGER, "stock_merger"
+        )
+        assert action.action_type == CorporateActionType.MERGER_STOCK
+        assert action.symbol == "PXD"
+        assert action.new_symbol == "XOM"
+        assert action.effective_date == date(2024, 5, 3)
+        assert action.split_ratio is None
+
+    def test_cash_merger_reads_rate_as_cash_amount(self) -> None:
+        action = CorporateActionNormalizationService.parse_alpaca_corporate_action(
+            CASH_MERGER, "cash_merger"
+        )
+        assert action.action_type == CorporateActionType.MERGER_CASH
+        assert action.symbol == "358CVR025"
+        assert str(action.cash_amount) == "0.01895669"
+
+    def test_spin_off_uses_source_symbol(self) -> None:
+        action = CorporateActionNormalizationService.parse_alpaca_corporate_action(
+            SPIN_OFF, "spin_off"
+        )
+        assert action.action_type == CorporateActionType.SPINOFF
+        assert action.symbol == "AEZS"
+        assert action.new_symbol == "007975113"
+        assert action.effective_date == date(2024, 6, 3)
+
+    def test_name_change_uses_old_symbol_and_process_date(self) -> None:
+        action = CorporateActionNormalizationService.parse_alpaca_corporate_action(
+            NAME_CHANGE, "name_change"
+        )
+        assert action.action_type == CorporateActionType.NAME_CHANGE
+        assert action.symbol == "067BAS012"
+        assert action.new_symbol == "BNED"
+        assert action.effective_date == date(2024, 6, 11)
+
+    def test_stock_dividend_is_parsed_without_a_ratio(self) -> None:
+        action = CorporateActionNormalizationService.parse_alpaca_corporate_action(
+            STOCK_DIVIDEND, "stock_dividend"
+        )
+        assert action.action_type == CorporateActionType.STOCK_DIVIDEND
+        assert action.split_ratio is None
+        assert action.cash_amount is None
+        assert action.metadata is not None
+        assert action.metadata["rate"] == 1.1
+
+    def test_real_item_without_provider_type_still_fails_clearly(self) -> None:
+        with pytest.raises(ValueError, match="missing valid 'type' field"):
+            CorporateActionNormalizationService.parse_alpaca_corporate_action(NVDA_FORWARD_SPLIT)
+
+    def test_explicit_provider_type_wins_over_item_fields(self) -> None:
+        raw = {**AAPL_CASH_DIVIDEND, "ca_type": "forward_split"}
+        action = CorporateActionNormalizationService.parse_alpaca_corporate_action(
+            raw, "cash_dividend"
+        )
+        assert action.action_type == CorporateActionType.CASH_DIVIDEND
+
+    def test_unknown_list_key_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="Unsupported corporate action type"):
+            CorporateActionNormalizationService.parse_alpaca_corporate_action(
+                {"id": "x", "symbol": "ZZZ", "process_date": "2024-06-13"}, "worthless_removal"
+            )

@@ -45,7 +45,7 @@ const BTN: Record<'ghost' | 'primary' | 'danger' | 'outline', string> = {
 function govBadge(state: string): { variant: BadgeVariant; label: string } {
   if (state.includes('live'))     return { variant: 'green',  label: 'Live'     }
   if (state.includes('paper'))    return { variant: 'blue',   label: 'Paper'    }
-  if (state.includes('research')) return { variant: 'purple', label: 'Research' }
+  if (state === 'candidate' || state.includes('research')) return { variant: 'purple', label: 'Candidate' }
   if (state === 'filtered')       return { variant: 'yellow', label: 'Filtered' }
   if (state === 'rejected')       return { variant: 'red',    label: 'Rejected' }
   return { variant: 'gray', label: state || '—' }
@@ -295,7 +295,7 @@ function StrategiesPanel({
             <tbody>
               {strategies.map(s => {
                 const gov = govBadge(s.governance_state)
-                const canPromote = s.governance_state === 'research' || s.governance_state === 'approved_research'
+                const canPromote = s.governance_state === 'candidate'
                 return (
                   <tr key={s.strategy_id}>
                     <td className="font-mono text-[11px] text-[var(--text2)] py-2.5 pr-4" style={tdBorder}>

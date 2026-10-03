@@ -4,6 +4,9 @@ from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
 
+from autonomous_trading_platform.application.services.live_performance_metrics_service import (
+    LivePerformanceMetricsService,
+)
 from autonomous_trading_platform.application.services.strategy_health_lifecycle_service import (
     StrategyHealthLifecycleService,
 )
@@ -77,6 +80,8 @@ def run_strategy_health_lifecycle_cycle(
 
     def job() -> dict:
         try:
+            # Health reads the latest persisted live snapshot; refresh it first.
+            LivePerformanceMetricsService(session).refresh_monitored()
             result = StrategyHealthLifecycleService(session=session).run(
                 run_id=str(run_id),
                 rebalance_run_id=rebalance_run_id,

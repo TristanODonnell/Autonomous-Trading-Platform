@@ -67,3 +67,22 @@ def test_new_symbol_required_for_name_change():
 
     assert not result.ok
     assert any(v.code == "NEW_SYMBOL_PRESENT_WHEN_NAME_CHANGE" for v in result.violations)
+
+
+def test_cash_dividend_requires_positive_cash_amount():
+    missing = make_corporate_action(cash_amount=None)
+    result = run_rules(missing, CORPORATE_ACTION_RULES)
+    assert not result.ok
+    assert [v.code for v in result.violations] == ["CASH_AMOUNT_POSITIVE_FOR_CASH_DIVIDEND"]
+
+    zero = make_corporate_action(cash_amount=Decimal("0"))
+    assert not run_rules(zero, CORPORATE_ACTION_RULES).ok
+
+
+def test_cash_amount_rule_ignores_non_dividend_actions():
+    split = make_corporate_action(
+        action_type=CorporateActionType.SPLIT_FORWARD,
+        split_ratio=Decimal("10"),
+        cash_amount=None,
+    )
+    assert run_rules(split, CORPORATE_ACTION_RULES).ok

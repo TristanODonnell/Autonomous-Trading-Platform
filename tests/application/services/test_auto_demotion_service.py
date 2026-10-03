@@ -136,8 +136,8 @@ def test_auto_demotion_paper_strategy_demotes_to_research(db_session: Session) -
     result = AutoDemotionService(session=db_session).run(actor="test")
     governance = _get_governance(db_session, "paper_breach")
 
-    assert result.demotions_executed[0]["new_governance_state"] == "approved_research"
-    assert governance.current_state == "approved_research"
+    assert result.demotions_executed[0]["new_governance_state"] == "candidate"
+    assert governance.current_state == "candidate"
 
 
 def test_auto_demotion_detects_sharpe_maintenance_breach(db_session: Session) -> None:

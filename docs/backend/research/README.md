@@ -27,3 +27,4 @@ Status: Current as of CLI drift audit.
 - `docs/backend/research/strategy_generation_engine.md`
 - `docs/backend/research/research_checkpoint_resume.md`
 - `docs/backend/simulation/research_execution_paths.md`
+- `docs/backend/research/research_robustness_stages.md`

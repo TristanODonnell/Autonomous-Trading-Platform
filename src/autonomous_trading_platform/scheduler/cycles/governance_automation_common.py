@@ -57,7 +57,7 @@ def create_governance_manifest(
             "input_settings": input_settings,
             "rules_used": rules_used or [],
         },
-        governance_state=GovernanceState.APPROVED_RESEARCH,
+        governance_state=GovernanceState.CANDIDATE,
     )
     RunManifestRepository(session).upsert(manifest)
     return manifest

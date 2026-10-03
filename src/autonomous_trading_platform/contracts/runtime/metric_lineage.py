@@ -12,6 +12,8 @@ class MetricLineageType(StrEnum):
     RESEARCH = "research"
     LIVE = "live"
     BLENDED = "blended"
+    # On-deck forward results from simulated (shadow) fills; never live evidence.
+    SHADOW = "shadow"
 
 
 class MetricLineageMetadata(BaseModel):

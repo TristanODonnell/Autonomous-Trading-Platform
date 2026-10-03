@@ -64,6 +64,9 @@ from autonomous_trading_platform.scheduler.jobs.run_order_submission_job import 
 from autonomous_trading_platform.scheduler.jobs.run_risk_snapshot_job import (
     run_risk_snapshot_job,
 )
+from autonomous_trading_platform.scheduler.jobs.run_sleeve_snapshot_job import (
+    run_sleeve_snapshot_job,
+)
 from autonomous_trading_platform.scheduler.jobs.run_trading_evaluation_job import (
     run_trading_evaluation_job,
 )
@@ -137,6 +140,7 @@ def run_trading_cycle(
     trading_cycle_dependencies = build_trading_cycle_dependencies(
         broker_client=broker_client,
         dataset_version_id_override=dataset_version_id_override,
+        now_utc=now_utc,
     )
 
     settings = trading_cycle_dependencies.settings
@@ -603,6 +607,7 @@ def run_trading_cycle(
                             now_utc=now_utc,
                             trading_cycle_dependencies=trading_cycle_dependencies,
                             manifest=manifest,
+                            universe_symbols=expected_symbols,
                         )
                         generated_intents = list(generated_intents)
                     except Exception as exc:
@@ -881,6 +886,27 @@ def run_trading_cycle(
                 manifest.error_message = str(exc)
                 manifest_service.save(manifest)
                 raise
+
+            # STEP 4b: SLEEVE SNAPSHOT (portfolio mode) — per-strategy valuation and the
+            # sleeve-vs-account attribution check. Bookkeeping only; never fails the cycle.
+            if trading_cycle_dependencies.strategy_runtimes is not None:
+                try:
+                    run_sleeve_snapshot_job(
+                        trading_cycle_dependencies=trading_cycle_dependencies,
+                        run_id=run_id,
+                        now_utc=now_utc,
+                    )
+                except Exception as exc:
+                    with contextlib.suppress(Exception):
+                        session.rollback()
+                    logger.warning(
+                        "trading_cycle.sleeve_snapshot_failed",
+                        extra=LogContext(
+                            run_id=str(run_id),
+                            component=component,
+                            error_message=str(exc),
+                        ).to_extra(),
+                    )
 
             # STEP 5: RISK SNAPSHOT
             step = "risk_snapshot"

@@ -31,13 +31,14 @@ def run_features_at_timestamp(
     dataset_version_id: str | None = None,
     symbols: list[str] | None = None,
     replay_context: PlatformReplayContext,
-    price_basis: PriceBasis = PriceBasis.ADJUSTED,
+    price_basis: PriceBasis = PriceBasis.RAW,
     dry_run: bool = False,
 ) -> FeatureReplayResult:
     """Run the feature pipeline for the given timestamp.
 
     The platform runner must supply dataset_version_id (resolved from ingestion
-    result) or this hook resolves the latest validated version automatically.
+    result) or this hook resolves the latest validated raw version automatically.
+    Bars are raw; the pipeline split-adjusts history on read (plan 5d, D5).
     """
     base = dict(
         domain="features",
@@ -63,10 +64,8 @@ def run_features_at_timestamp(
     # Resolve dataset version from latest validated raw/adjusted bars if not given
     if not dataset_version_id:
         repo = DatasetVersionsRepository(session)
-        ds = repo.get_latest_validated(
-            dataset_name="adjusted_bars" if price_basis == PriceBasis.ADJUSTED else "raw_bars",
-            price_basis=price_basis,
-        )
+        ds = repo.get_latest_validated(dataset_name="raw_bars", price_basis=PriceBasis.RAW)
+        price_basis = PriceBasis.RAW
         if ds is None:
             return FeatureReplayResult(
                 **base,
@@ -93,11 +92,29 @@ def run_features_at_timestamp(
             include_regime=True,
             include_regime_classification=True,
         )
+    except ValueError as exc:
+        # A day with no bars (market holiday, empty fixture day): nothing to compute.
+        if str(exc).startswith("No bar data found for dataset_version_id="):
+            return FeatureReplayResult(
+                **base,
+                status="skipped",
+                summary={"dataset_version_id": dataset_version_id, "date": ts_date.isoformat()},
+                warnings=[f"No bars for {ts_date.isoformat()} — feature pipeline skipped"],
+            )
+        return FeatureReplayResult(**base, status="failed", errors=[str(exc)])
     except Exception as exc:
         return FeatureReplayResult(
             **base,
             status="failed",
             errors=[str(exc)],
+        )
+
+    if result.get("status") == "skipped":
+        return FeatureReplayResult(
+            **base,
+            status="skipped",
+            summary={"dataset_version_id": dataset_version_id, "date": ts_date.isoformat()},
+            warnings=[f"No bars for {ts_date.isoformat()} — feature pipeline skipped"],
         )
 
     feature_version_ids: dict[str, str] = {}

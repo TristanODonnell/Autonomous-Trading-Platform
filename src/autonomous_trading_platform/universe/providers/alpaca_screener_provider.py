@@ -1,7 +1,12 @@
 """AlpacaScreenerProvider — ranks all active US equities by trailing dollar volume.
 
 Satisfies RawSymbolProvider. Uses Alpaca's assets API + historical daily bars
-for point-in-time correct screening without requiring pre-ingested internal data.
+without requiring pre-ingested internal data.
+
+Survivorship caveat: the ranking is point-in-time (bars up to as_of), but the
+*membership* step asks Alpaca for assets active **today**. Tickers delisted
+since as_of are absent, so for historical replays prefer
+PointInTimeIndexProvider (universe/providers/point_in_time_index_provider.py).
 """
 
 from __future__ import annotations
@@ -9,6 +14,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime, timedelta
 from math import ceil
+from typing import Any
 
 from autonomous_trading_platform.universe.types import RawSymbolRecord
 
@@ -37,8 +43,8 @@ class AlpacaScreenerProvider:
     bars in batches to score each symbol. Returns the top_n by average daily
     dollar volume, filtered by min_price and min_dollar_volume.
 
-    Uses the as_of date for historical correctness — safe to call for any past
-    date during a backtest without lookahead bias.
+    Ranking uses bars up to as_of, but membership is today's active assets —
+    see the module docstring for the survivorship caveat.
     """
 
     source_name = "alpaca_screener"
@@ -99,55 +105,17 @@ class AlpacaScreenerProvider:
 
         eligible_symbols = sorted(asset_map.keys())
 
-        # ── Step 2: fetch daily bars in batches for dollar-volume scoring ────
-        end_dt = datetime.combine(self.as_of, datetime.min.time())
-        # Over-fetch by 7 days to cover weekends/holidays, then score on actual bars
-        start_dt = datetime.combine(
-            self.as_of - timedelta(days=self.lookback_days + 7),
-            datetime.min.time(),
+        # ── Steps 2-4: score by trailing dollar volume, filter, rank ─────────
+        ranked = rank_symbols_by_dollar_volume(
+            data_client=data_client,
+            symbols=eligible_symbols,
+            as_of=self.as_of,
+            lookback_days=self.lookback_days,
+            min_price=self.min_price,
+            min_dollar_volume=self.min_dollar_volume,
+            top_n=self.top_n,
+            batch_size=self.batch_size,
         )
-
-        dollar_volumes: dict[str, float] = {}
-        last_prices: dict[str, float] = {}
-
-        from alpaca.data.requests import StockBarsRequest
-        from alpaca.data.timeframe import TimeFrame
-
-        n_batches = ceil(len(eligible_symbols) / self.batch_size)
-        for i in range(n_batches):
-            batch = eligible_symbols[i * self.batch_size : (i + 1) * self.batch_size]
-            try:
-                bar_request = StockBarsRequest(
-                    symbol_or_symbols=batch,
-                    start=start_dt,
-                    end=end_dt,
-                    timeframe=TimeFrame.Day,
-                    feed="iex",
-                )
-                bar_set = data_client.get_stock_bars(bar_request)
-                for symbol, bars in bar_set.data.items():
-                    if not bars:
-                        continue
-                    dv_values = [
-                        float(b.close) * float(b.volume) for b in bars if float(b.volume) > 0
-                    ]
-                    if not dv_values:
-                        continue
-                    dollar_volumes[symbol] = sum(dv_values) / len(dv_values)
-                    last_prices[symbol] = float(bars[-1].close)
-            except Exception:
-                # Skip failed batches — partial coverage is acceptable
-                continue
-
-        # ── Step 3: apply quality filters ────────────────────────────────────
-        qualified: dict[str, float] = {
-            s: dv
-            for s, dv in dollar_volumes.items()
-            if dv >= self.min_dollar_volume and last_prices.get(s, 0.0) >= self.min_price
-        }
-
-        # ── Step 4: rank by dollar volume, take top_n ────────────────────────
-        ranked = sorted(qualified, key=lambda s: -qualified[s])[: self.top_n]
 
         # ── Step 5: build RawSymbolRecord list ───────────────────────────────
         records: list[RawSymbolRecord] = []
@@ -172,3 +140,61 @@ class AlpacaScreenerProvider:
                 )
             )
         return records
+
+
+def rank_symbols_by_dollar_volume(
+    *,
+    data_client: Any,
+    symbols: list[str],
+    as_of: date,
+    lookback_days: int,
+    min_price: float,
+    min_dollar_volume: float,
+    top_n: int,
+    batch_size: int = 200,
+) -> list[str]:
+    """Rank symbols by average daily dollar volume over bars ending at as_of.
+
+    Only bars before as_of are used, so the ranking is point-in-time. Symbols
+    with no bars in the window (not yet listed, or already gone) drop out.
+    """
+    from alpaca.data.requests import StockBarsRequest
+    from alpaca.data.timeframe import TimeFrame
+
+    end_dt = datetime.combine(as_of, datetime.min.time())
+    # Over-fetch by 7 days to cover weekends/holidays, then score on actual bars
+    start_dt = datetime.combine(as_of - timedelta(days=lookback_days + 7), datetime.min.time())
+
+    dollar_volumes: dict[str, float] = {}
+    last_prices: dict[str, float] = {}
+
+    n_batches = ceil(len(symbols) / batch_size)
+    for i in range(n_batches):
+        batch = symbols[i * batch_size : (i + 1) * batch_size]
+        try:
+            bar_request = StockBarsRequest(
+                symbol_or_symbols=batch,
+                start=start_dt,
+                end=end_dt,
+                timeframe=TimeFrame.Day,
+                feed="iex",
+            )
+            bar_set = data_client.get_stock_bars(bar_request)
+            for symbol, bars in bar_set.data.items():
+                if not bars:
+                    continue
+                dv_values = [float(b.close) * float(b.volume) for b in bars if float(b.volume) > 0]
+                if not dv_values:
+                    continue
+                dollar_volumes[symbol] = sum(dv_values) / len(dv_values)
+                last_prices[symbol] = float(bars[-1].close)
+        except Exception:
+            # Skip failed batches — partial coverage is acceptable
+            continue
+
+    qualified = {
+        s: dv
+        for s, dv in dollar_volumes.items()
+        if dv >= min_dollar_volume and last_prices.get(s, 0.0) >= min_price
+    }
+    return sorted(qualified, key=lambda s: -qualified[s])[:top_n]

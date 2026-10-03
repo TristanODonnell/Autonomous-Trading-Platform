@@ -169,6 +169,7 @@ class TestSimulationCacheKey:
             "config_hash",
             "dataset_version",
             "dividend_events_hash",
+            "corporate_actions_hash",
             "universe_version",
             "price_basis",
             "symbols_hash",
@@ -185,6 +186,8 @@ class TestSimulationCacheKey:
             "regime_dataset_version",
             "feature_versions_hash",
             "settlement_days",
+            "sizing_model",
+            "max_volume_participation_rate",
         }
         assert set(d.keys()) == expected_fields
 

@@ -418,4 +418,10 @@ def simulation_request_cache_key(request: SimulationRunRequest):
         window_role=request.window_role,
         stage_name=request.stage_name,
     )
-    return build_simulation_cache_key(strategy_config=config, run_config=run_config)
+    return build_simulation_cache_key(
+        strategy_config=config,
+        run_config=run_config,
+        settlement_days=request.settlement_days,
+        dividend_events=request.dividend_events,
+        corporate_actions=request.corporate_actions,
+    )

@@ -1,6 +1,7 @@
 from . import allocation_overrides as allocation_overrides
 from . import allocation_rebalance_history as allocation_rebalance_history
 from . import audit_logs as audit_logs
+from . import bench_evaluations as bench_evaluations
 from . import black_litterman_research_runs as black_litterman_research_runs
 from . import blended_metrics_snapshots as blended_metrics_snapshots
 from . import broker_account_snapshots as broker_account_snapshots
@@ -8,6 +9,7 @@ from . import broker_orders as broker_orders
 from . import capital_allocation_policies as capital_allocation_policies
 from . import cash_snapshots as cash_snapshots
 from . import checksums as checksums
+from . import corporate_action_applications as corporate_action_applications
 from . import corporate_actions as corporate_actions
 from . import correlation_snapshots as correlation_snapshots
 from . import dataset_versions as dataset_versions
@@ -28,6 +30,8 @@ from . import optimizer_runs as optimizer_runs
 from . import order_intents as order_intents
 from . import portfolio_construction as portfolio_construction
 from . import portfolio_drawdown_governance_state as portfolio_drawdown_governance_state
+from . import portfolio_memberships as portfolio_memberships
+from . import portfolio_reviews as portfolio_reviews
 from . import position_snapshot_items as position_snapshot_items
 from . import position_snapshots as position_snapshots
 from . import promotion_rules as promotion_rules
@@ -51,6 +55,7 @@ from . import strategy_health_transitions as strategy_health_transitions
 from . import strategy_live_performance_snapshots as strategy_live_performance_snapshots
 from . import strategy_quality_score_history as strategy_quality_score_history
 from . import strategy_runtime_states as strategy_runtime_states
+from . import strategy_sleeves as strategy_sleeves
 from . import symbol_date_coverage as symbol_date_coverage
 from . import ticker_lifecycle_event as ticker_lifecycle_events
 from . import tracked_orders as tracked_orders
@@ -65,6 +70,7 @@ __all__ = [
     "broker_account_snapshots",
     "broker_orders",
     "cash_snapshots",
+    "corporate_action_applications",
     "corporate_actions",
     "fills",
     "governance_audit_events",
@@ -72,6 +78,8 @@ __all__ = [
     "order_intents",
     "operator_settings",
     "operational_alerts",
+    "portfolio_memberships",
+    "portfolio_reviews",
     "position_snapshot_items",
     "position_snapshots",
     "risk_snapshots",
@@ -81,6 +89,8 @@ __all__ = [
     "universe_versions",
     "raw_market_pool",
     "strategy_runtime_states",
+    "strategy_sleeves",
+    "bench_evaluations",
     "audit_logs",
     "tracked_orders",
     "ticker_lifecycle_events",

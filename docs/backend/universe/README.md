@@ -42,6 +42,7 @@ rollbacks, and historical membership.
 ## Related Docs
 
 - `docs/backend/storage-lineage/universe.md`
+- `docs/backend/universe/survivorship_safe_replay.md`
 - `docs/backend/storage-lineage/storage.md`
 - `docs/backend/orchestration/scheduler.md`
 - `docs/backend/cli/cli.md`

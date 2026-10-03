@@ -13,6 +13,9 @@ from autonomous_trading_platform.safety.errors import (
 
 @dataclass(frozen=True)
 class _RepeatedOrderReservationKey:
+    # Scoped per strategy: in portfolio mode two strategies may legitimately trade the
+    # same symbol and side in one bar. A repeat from the *same* strategy is still blocked.
+    strategy_id: str | None
     symbol: str
     side: object
     bar_timestamp: datetime
@@ -71,11 +74,15 @@ class OrderThrottleService:
 
     def _assert_not_repeated_within_bar(self, order_intent, bar_timestamp: datetime) -> None:
         repeat_key = _RepeatedOrderReservationKey(
+            strategy_id=getattr(order_intent, "strategy_id", None),
             symbol=order_intent.symbol,
             side=order_intent.side,
             bar_timestamp=bar_timestamp,
         )
 
+        # NOTE: the persisted check is account-wide (no strategy). The only reader in use
+        # (StubOrderActivityReader) always returns False; a real implementation must scope
+        # by strategy or it will block legitimate multi-strategy orders.
         repeated_in_persisted_state = self.order_activity_reader.has_matching_order_in_bar(
             symbol=order_intent.symbol,
             side=order_intent.side,
@@ -104,6 +111,7 @@ class OrderThrottleService:
         if self.settings.block_repeat_orders_same_bar:
             self._reserved_repeat_keys.add(
                 _RepeatedOrderReservationKey(
+                    strategy_id=getattr(order_intent, "strategy_id", None),
                     symbol=order_intent.symbol,
                     side=order_intent.side,
                     bar_timestamp=bar_timestamp,

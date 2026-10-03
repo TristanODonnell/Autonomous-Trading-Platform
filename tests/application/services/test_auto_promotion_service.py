@@ -76,7 +76,7 @@ def test_auto_promotion_disabled_flag_prevents_promotion(db_session: Session) ->
 
     assert result.skipped_reason == "auto_promote_disabled"
     assert result.promotions_executed == []
-    assert governance.current_state == "approved_research"
+    assert governance.current_state == "candidate"
     assert (
         db_session.query(AuditLogRow)
         .filter_by(event_type="STRATEGY_AUTO_PROMOTION_SKIPPED")
@@ -110,14 +110,14 @@ def test_auto_promotion_enabled_promotes_only_eligible_and_emits_notification(
     assert result.promotions_executed == [
         {
             "strategy_id": "eligible",
-            "from_state": "approved_research",
+            "from_state": "candidate",
             "to_state": "approved_for_paper_trading",
             "rule_id": "research_to_paper",
             "status": "promoted",
         }
     ]
     assert eligible.current_state == "approved_for_paper_trading"
-    assert bad.current_state == "approved_research"
+    assert bad.current_state == "candidate"
     assert (
         db_session.query(AuditLogRow).filter_by(event_type="STRATEGY_PROMOTION_EVENT").count() == 1
     )
@@ -145,7 +145,7 @@ def _seed_rule(session: Session) -> None:
     session.add(
         PromotionRules(
             rule_id="research_to_paper",
-            from_status="approved_research",
+            from_status="candidate",
             to_status="approved_paper",
             min_sharpe=1.5,
             max_drawdown=0.15,
@@ -479,7 +479,7 @@ def _seed_candidate(
     session: Session,
     strategy_id: str,
     *,
-    state: str = "approved_research",
+    state: str = "candidate",
     sharpe: float,
     drawdown: float = 0.05,
     days: int,

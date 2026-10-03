@@ -91,7 +91,7 @@ class _StubVersionRepo:
         self._window_versions = window_versions or []
         self._symbols_by_id: dict[str, list[str]] = symbols_by_id or {}
 
-    def get_active_version(self, as_of: datetime) -> UniverseVersion | None:
+    def get_version_effective_at(self, as_of: datetime) -> UniverseVersion | None:
         return self._active
 
     def get_active_versions_in_window(

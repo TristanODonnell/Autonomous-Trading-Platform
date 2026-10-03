@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import contextlib
-from datetime import UTC, date, datetime
-from datetime import time as dt_time
+import logging
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -23,9 +23,11 @@ from autonomous_trading_platform.storage.sor.repositories.core.dataset_versions_
 from autonomous_trading_platform.storage.sor.repositories.core.missing_bar_incidents_repository import (
     MissingBarIncidentsRepository,
 )
+from autonomous_trading_platform.universe.services.market_calendar_service import (
+    MarketCalendarService,
+)
 
-_MARKET_OPEN_UTC = dt_time(14, 30)  # 09:30 ET = 14:30 UTC (EST, no DST adjustment)
-_MARKET_CLOSE_UTC = dt_time(21, 0)  # 16:00 ET = 21:00 UTC
+logger = logging.getLogger(__name__)
 
 
 def _compact_day_partitions(
@@ -135,9 +137,10 @@ def run_ingestion_at_timestamp(
     cycle_start_override: datetime | None = None
     cycle_end_override: datetime | None = None
     if full_day:
-        tick_date = timestamp.date()
-        cycle_start_override = datetime.combine(tick_date, _MARKET_OPEN_UTC).replace(tzinfo=UTC)
-        cycle_end_override = datetime.combine(tick_date, _MARKET_CLOSE_UTC).replace(tzinfo=UTC)
+        # The day's regular session in exchange time (DST and early closes respected).
+        cycle_start_override, cycle_end_override = MarketCalendarService().regular_session_utc(
+            timestamp.date()
+        )
 
     try:
         summary = run_market_ingestion_cycle(
@@ -219,11 +222,13 @@ def run_corporate_actions_at_timestamp(
     replay_context: PlatformReplayContext,
     source_dataset_version_id: str | None = None,
 ) -> IngestionReplayResult:
-    """Run corporate action ingestion cycle at timestamp.
+    """Run the corporate action ingestion cycle for the replayed tick date.
 
     Should be called after market ingestion so the source raw bars dataset
     version is available. Uses its own internal session via
-    run_corporate_action_ingestion_cycle.
+    run_corporate_action_ingestion_cycle. Actions are fetched for the replay
+    symbols around ``timestamp.date()`` (the cycle's as-of window), so a backtest
+    stores the real historical actions, not whatever is current at wall-clock time.
     """
     base: dict[str, Any] = {
         "domain": "corporate_actions",
@@ -247,6 +252,8 @@ def run_corporate_actions_at_timestamp(
             source_raw_bars_dataset_version_id=source_dataset_version_id,
             trigger_type="platform_replay",
             actor=replay_context.actor,
+            as_of=timestamp.date(),
+            fetch_symbols=list(replay_context.symbols),
         )
     except Exception as exc:
         return IngestionReplayResult(
@@ -255,27 +262,20 @@ def run_corporate_actions_at_timestamp(
             errors=[str(exc)],
         )
 
-    # The CA cycle produces two artifacts:
-    #   dataset_version_id              → corporate_actions events dataset
-    #   adjusted_bars_dataset_version_id → the adjusted bars dataset features need
-    # Expose the adjusted_bars ID as this result's dataset_version_id so the
-    # platform runner can pass it directly to the feature pipeline.
+    # Actions live in the SOR; strategy history is split-adjusted on read, so there
+    # is no adjusted-bars dataset to hand to the feature pipeline any more.
     ca_events_id = str(result.get("dataset_version_id", "")) or None
-    adj_bars_id = str(result.get("adjusted_bars_dataset_version_id", "")) or None
+    counts = result.get("counts") or {}
     return IngestionReplayResult(
         **base,
         status="ok",
-        dataset_version_id=adj_bars_id,  # adjusted_bars version for features
+        dataset_version_id=ca_events_id,
         summary={
             "corporate_actions_dataset_version_id": ca_events_id,
-            "adjusted_bars_dataset_version_id": adj_bars_id,
             "source_raw_bars_dataset_version_id": source_dataset_version_id,
             "timestamp": timestamp.isoformat(),
-            **{
-                k: v
-                for k, v in result.items()
-                if k not in ("dataset_version_id", "adjusted_bars_dataset_version_id")
-            },
+            "actions_created": counts.get("created", 0) if isinstance(counts, dict) else 0,
+            **{k: v for k, v in result.items() if k != "dataset_version_id"},
         },
     )
 
@@ -308,3 +308,46 @@ def build_ingestion_summary(*, session: Session) -> IngestionSummary:
         corporate_actions_ingested=corp_count,
         date_range=date_range,
     )
+
+
+def detect_delistings_at_timestamp(
+    *,
+    session: Session,
+    tick_date: date,
+    symbols: list[str],
+    dataset_version_id: str,
+) -> list[dict[str, Any]]:
+    """Record DELISTING lifecycle events for replay symbols whose bars stopped.
+
+    Returns the newly detected delistings (empty on repeat calls). Never raises:
+    detection failure must not abort the replay tick.
+    """
+    try:
+        from autonomous_trading_platform.storage.sor.repositories.core.symbol_date_coverage_repository import (
+            SymbolDateCoverageRepository,
+        )
+        from autonomous_trading_platform.storage.sor.repositories.core.ticker_lifecycle_repository import (
+            TickerLifecycleRepository,
+        )
+        from autonomous_trading_platform.universe.services.delisting_detection_service import (
+            DelistingDetectionService,
+        )
+
+        service = DelistingDetectionService(
+            coverage_repository=SymbolDateCoverageRepository(session),
+            lifecycle_repository=TickerLifecycleRepository(session),
+        )
+        found = service.detect_and_record(
+            dataset_version=dataset_version_id, symbols=symbols, today=tick_date
+        )
+    except Exception:
+        logger.warning("delisting detection failed at %s", tick_date, exc_info=True)
+        return []
+    return [
+        {
+            "symbol": d.symbol,
+            "last_bar_date": d.last_bar_date.isoformat(),
+            "missing_market_days": d.missing_market_days,
+        }
+        for d in found
+    ]

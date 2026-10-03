@@ -7,7 +7,7 @@
 #     Expect: 3 research runs, at least some stage-1 survivors, governance promotions.
 #   expected_behavior: >
 #     ~65 ticks. Research fires 3× (Jan, Feb, Mar). Stage-1 survivors > 0 each month.
-#     At least 1 strategy seeded to approved_research by end of run.
+#     At least 1 strategy seeded to candidate by end of run.
 #     Governance auto-promotions > 0. Portfolio value moves (simulated fills).
 #   recommended_use: research validation, post-fix regression
 

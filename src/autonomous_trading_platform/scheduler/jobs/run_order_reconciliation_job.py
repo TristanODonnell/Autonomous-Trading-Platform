@@ -23,6 +23,12 @@ from autonomous_trading_platform.runtime.services.audit_logging_service import A
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     build_trading_cycle_dependencies,
 )
+from autonomous_trading_platform.scheduler.jobs.run_order_submission_job import (
+    apply_fill_to_sleeve,
+)
+from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
+    OperatorSettingsRepository,
+)
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 logger = get_logger(__name__)
@@ -45,10 +51,15 @@ def run_order_reconciliation_job(
     job = "order_reconciliation_job"
     job_start = perf_counter()
 
-    dependencies = build_trading_cycle_dependencies(broker_client=broker_client)
+    dependencies = build_trading_cycle_dependencies(
+        broker_client=broker_client, resolve_strategies=False
+    )
     session = dependencies.session
     execution_context = dependencies.execution_context
     audit_logger = AuditLoggingService(session)
+    portfolio_mode = bool(
+        OperatorSettingsRepository(session).get_or_create_default().portfolio_mode_enabled
+    )
 
     record_job_started(
         logger=logger,
@@ -139,6 +150,18 @@ def run_order_reconciliation_job(
                             "post_fill_accounting.failed",
                             extra={"fill_id": result.fill.fill_id, "error": str(exc)},
                         )
+                    if portfolio_mode:
+                        with SorUnitOfWork(session) as uow:
+                            intent_row = uow.order_intents.get_by_intent_id(result.fill.intent_id)
+                            if intent_row is None:
+                                logger.error(
+                                    "sleeve_ledger.fill_intent_missing",
+                                    extra={"fill_id": result.fill.fill_id},
+                                )
+                            else:
+                                apply_fill_to_sleeve(
+                                    uow=uow, fill=result.fill, strategy_id=intent_row.strategy_id
+                                )
             job_span.set_attribute("ratp.reconciliation.mismatch_count", mismatch_count)
             audit_logger.record_event(
                 run_id=run_id,

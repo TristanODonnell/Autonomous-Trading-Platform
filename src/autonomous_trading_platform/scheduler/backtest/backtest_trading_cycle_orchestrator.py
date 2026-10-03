@@ -134,8 +134,7 @@ def _build_backtest_dependencies(
     strategy_context = build_strategy_runtime_context(
         session=session,
         strategy=StubStrategy(strategy_id=f"backtest_{run_id}"),
-        fallback_dataset=RAW_BARS_DATASET,
-        fallback_dataset_version=raw_dataset_version_id,
+        dataset_version=raw_dataset_version_id,
     )
 
     safety_context = build_safety_context(

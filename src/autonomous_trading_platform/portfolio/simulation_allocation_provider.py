@@ -37,7 +37,7 @@ class _OverridesRepo(Protocol):
 
 
 _ALLOCATABLE_STATUSES = (
-    GovernanceState.APPROVED_RESEARCH.value,
+    GovernanceState.CANDIDATE.value,
     GovernanceState.APPROVED_PAPER.value,
     GovernanceState.APPROVED_LIVE.value,
 )
@@ -255,7 +255,7 @@ class SimulationAllocationProvider:
             )
 
         resolved_status = (
-            approval_status if approval_status is not None else GovernanceState.APPROVED_RESEARCH
+            approval_status if approval_status is not None else GovernanceState.CANDIDATE
         )
         allocated_usd = max_pct * self._total_capital
 
@@ -288,7 +288,7 @@ def snapshot_allocation_config(
     Pass the resulting ``AllocationConfig`` to ``SimulationAllocationProvider``.
     Do NOT call this function during simulation execution.
 
-    The function reads the APPROVED_RESEARCH base policy to set the config defaults,
+    The function reads the CANDIDATE base policy to set the config defaults,
     ensuring simulations without explicit strategy entries still receive realistic
     allocation fractions rather than hardcoded constants.
 
@@ -302,11 +302,9 @@ def snapshot_allocation_config(
     """
     now = datetime.now(tz=UTC)
 
-    # Read base APPROVED_RESEARCH policy to use as the config defaults.
+    # Read base CANDIDATE policy to use as the config defaults.
     # Falls back to hardcoded constants when no policy exists (e.g. test environments).
-    base_policy = policies_repo.get_active_policy(
-        approval_status=GovernanceState.APPROVED_RESEARCH.value
-    )
+    base_policy = policies_repo.get_active_policy(approval_status=GovernanceState.CANDIDATE.value)
     default_max_pct = base_policy.max_pct_of_capital if base_policy is not None else 0.10
     default_max_drawdown = base_policy.max_drawdown_allowed if base_policy is not None else 0.20
     default_policy_id = base_policy.policy_id if base_policy is not None else "simulation_default"

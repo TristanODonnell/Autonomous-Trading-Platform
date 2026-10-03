@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -46,11 +46,14 @@ from autonomous_trading_platform.portfolio.exceptions import (
     MissingPositionScalingDataError,
     NoPolicyFoundError,
 )
+from autonomous_trading_platform.safety.errors import ORDER_LIMIT_ERRORS
 from autonomous_trading_platform.safety.services.pre_trade_risk_service import PreTradeRiskService
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
 
+# Longest strategy_id kept verbatim in a client_order_id (see _build_client_order_id).
+_MAX_STRATEGY_PREFIX_LEN = 24
 logger = logging.getLogger(__name__)
 
 
@@ -111,7 +114,34 @@ class PortfolioConstructionService:
         performance_tier: str | None = None,
         recent_closes: dict[str, list[float]] | None = None,
         realized_drawdown: float | None = None,
+        skip_order_limit_breaches: bool = False,
+        pre_trade_risk_service: PreTradeRiskService | None = None,
+        on_order_rejected: Callable[[OrderIntent, Exception], None] | None = None,
+        symbol_count: int | None = None,
+        hold_symbols: Collection[str] = (),
     ):
+        """Yield risk-checked order intents for one strategy.
+
+        hold_symbols: a held position in one of these symbols that got no signal this
+        bar keeps its size — a strategy holds until it signals SELL/FLAT (as research
+        simulations do; entry/exit strategies signal only on the crossing bar). Callers
+        pass the trading universe, so a symbol that left it (or was delisted) still
+        exits. Positions outside hold_symbols without a signal are exited (exit-only
+        sleeves pass nothing).
+
+        symbol_count (portfolio mode): the number of symbols the strategy trades; each
+        position gets an equal split of the allocation (see PositionSizer).
+
+        skip_order_limit_breaches (portfolio mode): an order that breaches a per-order
+        limit (ORDER_LIMIT_ERRORS) is dropped and logged instead of raising, so one
+        strategy's order cannot halt every strategy's cycle. Global safety errors
+        always raise.
+
+        pre_trade_risk_service overrides the account-level risk check for this call
+        (on-deck shadow orders are checked against their shadow sleeve);
+        on_order_rejected is told about every order dropped by a limit breach.
+        """
+        risk_service = pre_trade_risk_service or self.pre_trade_risk_service
         signals_by_symbol = {signal.symbol: signal for signal in signals}
         target_positions, per_symbol_metadata = self._compute_target_positions(
             signals=signals,
@@ -121,7 +151,11 @@ class PortfolioConstructionService:
             performance_tier=performance_tier,
             recent_closes=recent_closes,
             realized_drawdown=realized_drawdown,
+            symbol_count=symbol_count,
         )
+        for symbol, held in positions.items():
+            if symbol not in target_positions and symbol in hold_symbols:
+                target_positions[symbol] = int(getattr(held, "quantity", held))
         deltas = self.calculate_deltas(positions, target_positions)
 
         for delta in deltas:
@@ -151,7 +185,24 @@ class PortfolioConstructionService:
                 combined_metadata.update(sizing_meta)
             if combined_metadata:
                 order_intent.metadata = {**(order_intent.metadata or {}), **combined_metadata}
-            self.pre_trade_risk_service.assert_order_allowed(order_intent, now=now)
+            try:
+                risk_service.assert_order_allowed(order_intent, now=now)
+            except ORDER_LIMIT_ERRORS as exc:
+                if not skip_order_limit_breaches:
+                    raise
+                if on_order_rejected is not None:
+                    on_order_rejected(order_intent, exc)
+                logger.warning(
+                    "order_intent.rejected_by_order_limit",
+                    extra={
+                        "strategy_id": strategy_id,
+                        "symbol": symbol,
+                        "side": order_intent.side.value,
+                        "qty": str(order_intent.qty),
+                        "error": str(exc),
+                    },
+                )
+                continue
             yield order_intent
 
     # ------------------------------------------------------------------
@@ -167,6 +218,7 @@ class PortfolioConstructionService:
         performance_tier: str | None = None,
         recent_closes: dict[str, list[float]] | None = None,
         realized_drawdown: float | None = None,
+        symbol_count: int | None = None,
     ) -> tuple[dict[str, int], dict[str, dict[str, Any]]]:
         """
         Returns (target_positions, per_symbol_sizing_metadata).
@@ -235,6 +287,7 @@ class PortfolioConstructionService:
                     performance_tier=performance_tier,
                     combined_scalar=scalar_result.combined_scalar,
                     realized_drawdown=realized_drawdown,
+                    symbol_count=symbol_count,
                 )
             except (AllocationDeniedError, NoPolicyFoundError, InsufficientCapitalError) as exc:
                 logger.warning(
@@ -555,7 +608,15 @@ class PortfolioConstructionService:
             f"qty={qty}"
         )
         deterministic_uuid = uuid5(NAMESPACE_URL, seed)
-        return f"{strategy_id}-{symbol}-{deterministic_uuid.hex[:16]}"
+        # broker_orders.client_order_id is String(64). Research-generated strategy ids
+        # run ~90 chars, so long ids get a readable prefix plus a digest of the full
+        # id; uniqueness still comes from the seed hash, which uses the full id.
+        # Short ids keep their exact historical format.
+        prefix = strategy_id
+        if len(strategy_id) > _MAX_STRATEGY_PREFIX_LEN:
+            digest = uuid5(NAMESPACE_URL, f"strategy:{strategy_id}").hex[:8]
+            prefix = f"{strategy_id[:15]}~{digest}"
+        return f"{prefix}-{symbol}-{deterministic_uuid.hex[:16]}"
 
     @staticmethod
     def _build_intent_id(*, client_order_id: str) -> UUID:

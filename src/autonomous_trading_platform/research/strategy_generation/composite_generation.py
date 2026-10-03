@@ -10,6 +10,9 @@ from autonomous_trading_platform.research.strategy_generation.generation_result 
     GenerationSummary,
 )
 from autonomous_trading_platform.research.strategy_generation.generators.utils import make_config
+from autonomous_trading_platform.research.strategy_generation.parameter_space_resolver import (
+    MIN_RESEARCH_WINDOW_BARS,
+)
 from autonomous_trading_platform.strategy.components import ComponentType, get_component_registry
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
@@ -132,6 +135,30 @@ _PRICE_COMPARISON_PAIRS: list[
         ("sma_50", "simple_moving_average", {"window": 50}),
         ("ema_50", "exponential_moving_average", {"window": 50}),
     ),
+]
+
+
+def _above_floor(instance: tuple[str, str, dict[str, Any]]) -> bool:
+    """No window / lookback under the research floor (MIN_RESEARCH_WINDOW_BARS)."""
+    params = instance[2]
+    return all(
+        int(params[key]) >= MIN_RESEARCH_WINDOW_BARS
+        for key in ("window", "lookback")
+        if key in params
+    )
+
+
+# Research search floor (rotation step 5c-G): drop indicator instances that read fewer
+# bars than the floor — they flip on 5-minute noise.
+_ZERO_CENTERED = [i for i in _ZERO_CENTERED if _above_floor(i)]
+_RATIO = [i for i in _RATIO if _above_floor(i)]
+_CROSSOVER_FAMILIES = [
+    family
+    for family in ([i for i in f if _above_floor(i)] for f in _CROSSOVER_FAMILIES)
+    if len(family) >= 2
+]
+_PRICE_COMPARISON_PAIRS = [
+    pair for pair in _PRICE_COMPARISON_PAIRS if _above_floor(pair[0]) and _above_floor(pair[1])
 ]
 
 _SINGLE_RULE_AGGS: list[dict[str, Any]] = [

@@ -88,3 +88,12 @@ class StrategyDefinition:
         """
         params = self.normalize_parameters(parameters)
         return self.warmup_bars_fn(params)
+
+    def context_lookback_bars(self, parameters: dict[str, Any] | None = None) -> int:
+        """Bars a strategy is handed per evaluation, in research and in the trading cycle.
+
+        Both paths must use this one number: path-dependent indicators (EMA, Wilder RSI)
+        give different values for different bar counts. At least one bar, so a
+        zero-warmup strategy still sees the latest bar.
+        """
+        return max(self.compute_warmup_bars(parameters), 1)

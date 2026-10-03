@@ -1,5 +1,6 @@
 # autonomous_trading_platform/scheduler/jobs/run_trading_evaluation_job.py
 
+from collections.abc import Collection
 from datetime import datetime
 from decimal import Decimal
 from time import perf_counter
@@ -14,6 +15,7 @@ from autonomous_trading_platform.contracts.trading.signal_aggregate import Signa
 from autonomous_trading_platform.execution.services.portfolio_signal_aggregator import (
     PortfolioSignalAggregator,
 )
+from autonomous_trading_platform.execution.services.sleeve_sizing import VOL_LOOKBACK_BARS
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
@@ -31,6 +33,13 @@ from autonomous_trading_platform.observability.metrics import (
 from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     TradingCycleDependencies,
+    resolve_trading_universe,
+)
+from autonomous_trading_platform.scheduler.jobs.apply_corporate_actions_step import (
+    apply_due_corporate_actions,
+)
+from autonomous_trading_platform.scheduler.jobs.portfolio_evaluation import (
+    run_portfolio_evaluation,
 )
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 from autonomous_trading_platform.strategy.jobs.evaluate_strategy_job import EvaluateStrategyJob
@@ -45,7 +54,7 @@ TRADING_EVALUATION_JOB_METRICS = JobMetricSet(
 
 # Number of recent closes to fetch per symbol for vol computation.
 # 20 bars ≈ ~25 minutes of 5-min data — enough for intraday vol estimate.
-_VOL_LOOKBACK_BARS = 20
+_VOL_LOOKBACK_BARS = VOL_LOOKBACK_BARS
 
 
 def _fetch_positions(broker_client) -> dict[str, Position]:
@@ -91,6 +100,16 @@ def _fetch_equity(broker_client) -> float | None:
     return float(equity_str)
 
 
+def _resolve_universe_symbols(session, now_utc: datetime) -> set[str]:
+    """The active trading universe, or nothing (every unsignalled position exits)."""
+    try:
+        symbols, *_ = resolve_trading_universe(session=session, now_utc=now_utc)
+    except Exception:
+        logger.warning("evaluation_job.universe_unresolved", extra={"now_utc": now_utc.isoformat()})
+        return set()
+    return symbols
+
+
 def _fetch_recent_closes(
     strategy_context,
     symbols: list[str],
@@ -104,30 +123,15 @@ def _fetch_recent_closes(
     Returns an empty list for any symbol where bars are unavailable —
     the scaling service will skip vol scaling for that symbol.
     """
-    from datetime import timedelta
-
+    builder = strategy_context.strategy_evaluation_service.context_builder
     recent_closes: dict[str, list[float]] = {}
-
     for symbol in symbols:
         try:
-            bars = strategy_context.strategy_evaluation_service.context_builder.market_bar_reader.read(
-                dataset=strategy_context.strategy_evaluation_service.context_builder.bars_dataset,
-                dataset_version=strategy_context.strategy_evaluation_service.context_builder.dataset_version,
-                symbol=symbol,
-                start_date=(bar_timestamp - timedelta(days=5)).date(),
-                end_date=bar_timestamp.date(),
+            # The builder reads every dataset version holding the window and
+            # split-adjusts the closes, so the vol scalar never sees a split jump.
+            recent_closes[symbol] = builder.recent_closes(
+                symbol=symbol, before=bar_timestamp, lookback_bars=lookback_bars
             )
-
-            if bars.num_rows == 0:
-                recent_closes[symbol] = []
-                continue
-
-            rows = sorted(
-                [r for r in bars.to_pylist() if r["timestamp"] < bar_timestamp],
-                key=lambda r: r["timestamp"],
-            )
-            recent_closes[symbol] = [float(r["close"]) for r in rows[-lookback_bars:]]
-
         except Exception as exc:
             logger.warning(
                 "evaluation_job.recent_closes_fetch_failed",
@@ -143,7 +147,14 @@ def run_trading_evaluation_job(
     now_utc: datetime,
     trading_cycle_dependencies: TradingCycleDependencies,
     manifest: RunManifest,
+    universe_symbols: Collection[str] | None = None,
 ):
+    """Evaluate the active strategy (or every strategy in portfolio mode) and size orders.
+
+    universe_symbols: the cycle's trading universe. Strategies hold positions in it
+    until they signal an exit; positions outside it are closed. Resolved here when the
+    caller has not already done so.
+    """
     component = "scheduler.jobs.trading_evaluation_job"
     job = "trading_evaluation_job"
     job_start = perf_counter()
@@ -153,6 +164,8 @@ def run_trading_evaluation_job(
     session = trading_cycle_dependencies.session
     portfolio_engine = trading_cycle_dependencies.portfolio_engine
     broker_client = execution_context.broker_client
+    if universe_symbols is None:
+        universe_symbols = _resolve_universe_symbols(session, now_utc)
 
     record_job_started(
         logger=logger,
@@ -189,7 +202,46 @@ def run_trading_evaluation_job(
                         },
                     )
 
-            # Strategy evaluation
+            # Splits / dividends due today are applied to the books before anything
+            # reads positions (plan 5d-C); a failed step withholds adoption this cycle.
+            corporate_actions = apply_due_corporate_actions(
+                session=session,
+                now_utc=now_utc,
+                broker_client=broker_client,
+                run_id=manifest.run_id,
+                price_provider=lambda symbols: _fetch_prices(broker_client, symbols),
+                audit_logger=trading_cycle_dependencies.audit_logger,
+            )
+            job_span.set_attribute(
+                "ratp.corporate_actions_applied",
+                corporate_actions.report.applied_count if corporate_actions.report else -1,
+            )
+
+            if trading_cycle_dependencies.strategy_runtimes is not None:
+                portfolio_result, portfolio_intents = run_portfolio_evaluation(
+                    now_utc=now_utc,
+                    deps=trading_cycle_dependencies,
+                    manifest=manifest,
+                    fetch_positions=_fetch_positions,
+                    fetch_prices=_fetch_prices,
+                    fetch_recent_closes=_fetch_recent_closes,
+                    vol_lookback_bars=_VOL_LOOKBACK_BARS,
+                    job_span=job_span,
+                    universe_symbols=universe_symbols,
+                    adopt_unowned=corporate_actions.adoption_allowed,
+                    skip_adoption_symbols=corporate_actions.skip_adoption_symbols,
+                )
+                record_job_completed(
+                    logger=logger,
+                    metrics=TRADING_EVALUATION_JOB_METRICS,
+                    job=job,
+                    component=component,
+                    run_id=str(manifest.run_id),
+                    duration_seconds=perf_counter() - job_start,
+                )
+                return portfolio_result, iter(portfolio_intents)
+
+            # Strategy evaluation (legacy single-strategy path)
             evaluate_strategy_job = EvaluateStrategyJob(
                 readiness_service=strategy_context.strategy_bar_readiness_service,
                 evaluation_service=strategy_context.strategy_evaluation_service,
@@ -308,6 +360,7 @@ def run_trading_evaluation_job(
                     bar_timestamp=bar_timestamp,
                     now=now_utc,
                     recent_closes=recent_closes,
+                    hold_symbols=universe_symbols,
                 )
             )
 

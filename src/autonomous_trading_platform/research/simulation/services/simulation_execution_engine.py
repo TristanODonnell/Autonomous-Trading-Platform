@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections import defaultdict
-from dataclasses import dataclass
+from collections import defaultdict, deque
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
@@ -9,6 +9,12 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import pandas as pd
 
+from autonomous_trading_platform.accounting.corporate_actions import (
+    apply_action,
+    dividend_cash,
+    is_split,
+    split_ratio_of,
+)
 from autonomous_trading_platform.contracts.accounting.cash_snapshot import CashSnapshot
 from autonomous_trading_platform.contracts.accounting.position_snapshot import Position
 from autonomous_trading_platform.contracts.common.enums import (
@@ -20,6 +26,7 @@ from autonomous_trading_platform.contracts.common.enums import (
 from autonomous_trading_platform.contracts.execution.execution_policy_config import (
     ExecutionPolicyConfig,
 )
+from autonomous_trading_platform.contracts.market.corporate_action import CorporateAction
 from autonomous_trading_platform.contracts.simulation.dividend_event import DividendEvent
 from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
 from autonomous_trading_platform.contracts.trading.signal import Signal
@@ -27,6 +34,7 @@ from autonomous_trading_platform.execution.services.cash_ledger_service import C
 from autonomous_trading_platform.execution.services.position_ledger_service import (
     PositionLedgerService,
 )
+from autonomous_trading_platform.execution.services.sleeve_sizing import VOL_LOOKBACK_BARS
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
     LookaheadGuardService,
@@ -66,6 +74,24 @@ class PendingSettlement:
     order_id: str = ""
 
 
+_CORPORATE_ACTION_LOG_COLUMNS = (
+    "run_id",
+    "strategy_id",
+    "symbol",
+    "timestamp",
+    "ex_date",
+    "action_id",
+    "action_type",
+    "split_ratio",
+    "quantity_before",
+    "quantity_after",
+    "avg_cost_before",
+    "avg_cost_after",
+    "cash_in_lieu",
+    "realized_pnl",
+)
+
+
 @dataclass(slots=True)
 class SimulationExecutionResult:
     trade_logs: pd.DataFrame
@@ -74,6 +100,8 @@ class SimulationExecutionResult:
     positions: pd.DataFrame
     signal_log: pd.DataFrame
     dividend_log: pd.DataFrame
+    # One row per split applied to a held position (plan 5d-E).
+    corporate_action_log: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 
 class SimulationExecutionEngine:
@@ -104,6 +132,7 @@ class SimulationExecutionEngine:
         execution_policy_config: ExecutionPolicyConfig | None = None,
         settlement_days: int = 0,
         dividend_events: list[DividendEvent] | None = None,
+        corporate_actions: list[CorporateAction] | None = None,
     ) -> SimulationExecutionResult:
         settled_cash = Decimal(str(initial_cash))
         unsettled_cash = ZERO
@@ -126,6 +155,14 @@ class SimulationExecutionEngine:
         for _evt in dividend_events or []:
             dividend_by_date[_evt.ex_date].append(_evt)
 
+        # Splits by ex-date: applied to held positions on the first bar of the ex-date
+        # through the shared accounting rule, as the trading cycle does (plan 5d, D7).
+        splits_by_date: dict[date, list[CorporateAction]] = defaultdict(list)
+        for _action in corporate_actions or []:
+            if is_split(_action):
+                splits_by_date[_action.effective_date].append(_action)
+        corporate_action_rows: list[dict[str, Any]] = []
+
         strategy_state: dict[str, Any] = {}
         timeline = list(window.timeline)
 
@@ -135,9 +172,38 @@ class SimulationExecutionEngine:
         # Execution scheduler: maps target_bar_index → orders to execute on that bar.
         scheduled: dict[int, list[OrderIntent]] = {}
 
+        # Closes of the bars before the current one (warmup included) for the sizer's
+        # volatility scalar — the trading cycle reads the same closes from Parquet.
+        close_history: dict[str, deque[float]] = defaultdict(
+            lambda: deque(maxlen=VOL_LOOKBACK_BARS)
+        )
+        previous_bars: dict[str, Any] | None = None
+
         for bar_index, timestamp in enumerate(timeline):
             bars_at_timestamp = window.bars_by_timestamp[timestamp]
             is_warmup = window.is_warmup(timestamp)
+            if previous_bars is not None:
+                for symbol, close in self._extract_prices(previous_bars).items():
+                    close_history[symbol].append(close)
+            previous_bars = bars_at_timestamp
+
+            # Splits first: this bar's prices are post-split, so the position (and the
+            # sizer's close history) must be in post-split terms before anything is
+            # marked, filled or sized on this bar.
+            bar_splits = splits_by_date.pop(timestamp.date(), [])
+            if bar_splits:
+                settled_cash = self._apply_splits_for_bar(
+                    run_id=run_id,
+                    strategy_id=strategy.strategy_id,
+                    timestamp=timestamp,
+                    splits=bar_splits,
+                    positions=positions,
+                    settled_cash=settled_cash,
+                    realized_pnl_by_symbol=realized_pnl_by_symbol,
+                    prices=self._extract_prices(bars_at_timestamp),
+                    close_history=close_history,
+                    rows=corporate_action_rows,
+                )
 
             # Mature pending settlements before processing this bar's fills.
             # Settlement matures when bar_index >= settlement_bar_index so proceeds
@@ -231,6 +297,14 @@ class SimulationExecutionEngine:
                 run_id=run_id,
                 strategy_id=strategy.strategy_id,
                 timestamp=timestamp,
+                recent_closes=close_history,
+                # Size from equity marked at the previous bar, as the trading cycle
+                # sizes from the account equity of its last snapshot.
+                capital_scale=(
+                    Decimal(str(equity_rows[-1]["equity"])) / Decimal(str(initial_cash))
+                    if equity_rows
+                    else Decimal("1")
+                ),
             )
 
             child_pairs = self._plan_child_orders(
@@ -423,7 +497,95 @@ class SimulationExecutionEngine:
                     "currency",
                 ]
             ),
+            corporate_action_log=pd.DataFrame(corporate_action_rows)
+            if corporate_action_rows
+            else pd.DataFrame(columns=list(_CORPORATE_ACTION_LOG_COLUMNS)),
         )
+
+    # ------------------------------------------------------------------
+    # Corporate actions
+    # ------------------------------------------------------------------
+
+    def _apply_splits_for_bar(
+        self,
+        *,
+        run_id: UUID,
+        strategy_id: str,
+        timestamp: datetime,
+        splits: list[CorporateAction],
+        positions: dict[str, Position],
+        settled_cash: Decimal,
+        realized_pnl_by_symbol: dict[str, Decimal],
+        prices: dict[str, float],
+        close_history: dict[str, deque[float]],
+        rows: list[dict[str, Any]],
+    ) -> Decimal:
+        """Apply this bar's splits: held shares × ratio (whole shares; the fraction is
+        paid in cash at this bar's price), cost ÷ ratio, and the close history the
+        volatility scalar reads expressed in post-split terms. Returns settled cash."""
+        updated_settled = settled_cash
+        for action in splits:
+            ratio = split_ratio_of(action)
+            history = close_history.get(action.symbol)
+            if history:
+                scaled = [close / float(ratio) for close in history]
+                history.clear()
+                history.extend(scaled)
+
+            position = positions.get(action.symbol)
+            if position is None or Decimal(str(position.quantity)) <= ZERO:
+                continue
+            price = prices.get(action.symbol)
+            market_price = Decimal(str(price)) if price is not None else None
+            adjustment = apply_action(
+                action,
+                quantity=Decimal(str(position.quantity)),
+                avg_cost=Decimal(str(position.avg_cost if position.avg_cost is not None else ZERO)),
+                cash_in_lieu_price=market_price,
+            )
+            mark = market_price if market_price is not None else adjustment.avg_cost_after
+            positions[action.symbol] = Position(
+                symbol=action.symbol,
+                quantity=adjustment.quantity_after,
+                avg_cost=adjustment.avg_cost_after,
+                market_price=mark,
+                market_value=adjustment.quantity_after * mark,
+                unrealized_pnl=(mark - adjustment.avg_cost_after) * adjustment.quantity_after,
+            )
+            updated_settled += adjustment.cash_delta
+            realized_pnl_by_symbol[action.symbol] = (
+                realized_pnl_by_symbol.get(action.symbol, ZERO) + adjustment.realized_pnl
+            )
+            rows.append(
+                {
+                    "run_id": str(run_id),
+                    "strategy_id": strategy_id,
+                    "symbol": action.symbol,
+                    "timestamp": timestamp,
+                    "ex_date": action.effective_date,
+                    "action_id": action.action_id,
+                    "action_type": action.action_type.value,
+                    "split_ratio": float(ratio),
+                    "quantity_before": float(adjustment.quantity_before),
+                    "quantity_after": float(adjustment.quantity_after),
+                    "avg_cost_before": float(adjustment.avg_cost_before),
+                    "avg_cost_after": float(adjustment.avg_cost_after),
+                    "cash_in_lieu": float(adjustment.cash_delta),
+                    "realized_pnl": float(adjustment.realized_pnl),
+                }
+            )
+            logger.debug(
+                "corporate_action.split_applied",
+                extra={
+                    "symbol": action.symbol,
+                    "ex_date": str(action.effective_date),
+                    "split_ratio": str(ratio),
+                    "quantity_before": str(adjustment.quantity_before),
+                    "quantity_after": str(adjustment.quantity_after),
+                    "cash_in_lieu": str(adjustment.cash_delta),
+                },
+            )
+        return updated_settled
 
     # ------------------------------------------------------------------
     # Settlement
@@ -524,7 +686,7 @@ class SimulationExecutionEngine:
                 )
                 continue
 
-            cash_applied = shares * event.cash_amount_per_share
+            cash_applied = dividend_cash(shares, event.cash_amount_per_share)
             updated_settled += cash_applied
             total_cash_applied += cash_applied
 
@@ -632,8 +794,17 @@ class SimulationExecutionEngine:
         run_id: UUID,
         strategy_id: str,
         timestamp: datetime,
+        recent_closes: dict[str, deque[float]] | None = None,
+        capital_scale: Decimal = Decimal("1"),
     ) -> list[OrderIntent]:
-        targets = self.position_sizer.compute_targets(signals=signals, prices=prices)
+        closes = (
+            {s.symbol: list(recent_closes.get(s.symbol, ())) for s in signals}
+            if recent_closes is not None
+            else None
+        )
+        targets = self.position_sizer.compute_targets(
+            signals=signals, prices=prices, recent_closes=closes, capital_scale=capital_scale
+        )
         order_intents: list[OrderIntent] = []
 
         for symbol, target_qty in targets.items():

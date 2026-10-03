@@ -1,3 +1,4 @@
+from datetime import date
 from typing import cast
 
 from sqlalchemy import select
@@ -113,6 +114,32 @@ class DatasetVersionsRepository(BaseRepository):
             .order_by(DatasetVersions.created_at.desc())
         )
 
+        return list(self.session.scalars(stmt).all())
+
+    def list_validated_overlapping(
+        self,
+        *,
+        dataset_name: str,
+        price_basis: PriceBasis,
+        start_date: date,
+        end_date: date,
+    ) -> list[DatasetVersions]:
+        """Validated versions whose coverage overlaps [start_date, end_date], oldest
+        coverage first and, for equal coverage, oldest registration first."""
+        stmt = (
+            select(DatasetVersions)
+            .where(
+                DatasetVersions.dataset_name == dataset_name,
+                DatasetVersions.price_basis == price_basis,
+                DatasetVersions.validation_status == "validated",
+                DatasetVersions.date_coverage_end >= start_date,
+                DatasetVersions.date_coverage_start <= end_date,
+            )
+            .order_by(
+                DatasetVersions.date_coverage_start.asc(),
+                DatasetVersions.created_at.asc(),
+            )
+        )
         return list(self.session.scalars(stmt).all())
 
     def list_validated_by_ids_and_price_basis(

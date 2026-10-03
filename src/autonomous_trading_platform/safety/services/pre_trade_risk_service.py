@@ -98,7 +98,13 @@ class PreTradeRiskService:
                 f"limit {self.settings.max_gross_exposure}."
             )
 
-        if projected_symbol_exposure > float(self.settings.max_symbol_exposure):
+        # The symbol cap blocks orders that add exposure. An order that reduces an
+        # over-cap position (a partial sell) must pass, or the position can never be
+        # brought back under the cap (same rule as the portfolio-level symbol check).
+        if (
+            projected_symbol_exposure > float(self.settings.max_symbol_exposure)
+            and projected_symbol_exposure > current_symbol_exposure
+        ):
             raise SymbolExposureLimitExceededError(
                 f"Projected symbol exposure for {order_intent.symbol} "
                 f"{projected_symbol_exposure} exceeds limit "
@@ -140,6 +146,23 @@ class PreTradeRiskService:
         if order_intent.limit_price is not None:
             return float(order_intent.limit_price)
         raise ValueError("Order intent must provide limit_price.")
+
+    def symbol_exposure_cap_usd(self, total_equity: float | None = None) -> float | None:
+        """Tightest per-symbol exposure cap in dollars, or None when none is set.
+
+        min(max_symbol_exposure, max_portfolio_symbol_exposure_usd,
+        max_portfolio_symbol_pct x total_equity). Read-only: lets callers that place
+        several orders in one cycle keep their combined exposure under the cap that
+        assert_order_allowed checks order by order.
+        """
+        caps: list[float] = []
+        if getattr(self.settings, "max_symbol_exposure", None) is not None:
+            caps.append(float(self.settings.max_symbol_exposure))
+        if self._max_portfolio_symbol_exposure_usd is not None:
+            caps.append(float(self._max_portfolio_symbol_exposure_usd))
+        if self._max_portfolio_symbol_pct is not None and total_equity:
+            caps.append(float(self._max_portfolio_symbol_pct) * float(total_equity))
+        return min(caps) if caps else None
 
     def _calculate_exposure_delta(
         self,

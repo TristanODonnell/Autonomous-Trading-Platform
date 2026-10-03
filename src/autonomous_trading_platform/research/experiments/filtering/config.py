@@ -43,6 +43,10 @@ class FilterConfig:
     ---------------------
     robustness_min_sharpe               per-window Sharpe floor             default 0.0 (off)
     robustness_min_profitable_windows   absolute window count floor         default 0   (off)
+
+    Turnover (rotation step 5c-G)
+    -----------------------------
+    max_daily_turnover  float|None  notional traded per day / mean equity    default None (off)
     """
 
     # Core
@@ -64,6 +68,9 @@ class FilterConfig:
     # Robustness
     robustness_min_sharpe: float = 0.0
     robustness_min_profitable_windows: int = 0
+
+    # Turnover
+    max_daily_turnover: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

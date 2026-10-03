@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import cast
 
-from sqlalchemy import asc, case, desc, select
+from sqlalchemy import asc, case, desc, func, select
 
 from autonomous_trading_platform.contracts.common.enums import OrderSource
 from autonomous_trading_platform.storage.sor.models.cash_snapshots import CashSnapshot
@@ -24,11 +24,15 @@ class CashSnapshotRepository(BaseRepository):
         return cast(CashSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     def get_latest(self) -> CashSnapshot | None:
+        """The current snapshot: newest `timestamp`, ledger before broker before the
+        rest, then the row written last (several snapshots share a timestamp within one
+        trading cycle; the write order, not the random snapshot id, decides)."""
         stmt = (
             select(CashSnapshot)
             .order_by(
                 desc(CashSnapshot.timestamp),
                 asc(_cash_source_priority()),
+                desc(_recorded_at()),
                 desc(CashSnapshot.snapshot_id),
             )
             .limit(1)
@@ -41,6 +45,7 @@ class CashSnapshotRepository(BaseRepository):
             .order_by(
                 desc(CashSnapshot.timestamp),
                 asc(_cash_source_priority()),
+                desc(_recorded_at()),
                 desc(CashSnapshot.snapshot_id),
             )
             .limit(limit)
@@ -122,6 +127,11 @@ class CashSnapshotRepository(BaseRepository):
         obj = self.get_by_snapshot_id(id_value)
         if obj is not None:
             self.session.delete(obj)
+
+
+def _recorded_at():
+    # Rows written before `recorded_at` existed fall back to their own timestamp.
+    return func.coalesce(CashSnapshot.recorded_at, CashSnapshot.timestamp)
 
 
 def _cash_source_priority():

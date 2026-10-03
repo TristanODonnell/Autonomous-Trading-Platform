@@ -750,9 +750,9 @@ function GovernancePendingCard() {
   const [promoting, setPromoting] = useState<string | null>(null)
   const [promoteReason, setPromoteReason] = useState('')
 
-  const { data: researchStrategies = [], isLoading, error } = useQuery({
-    queryKey: ['strategies', 'research'],
-    queryFn: () => fetchAllStrategies('research'),
+  const { data: candidateStrategies = [], isLoading, error } = useQuery({
+    queryKey: ['strategies', 'candidate'],
+    queryFn: () => fetchAllStrategies('candidate'),
     refetchInterval: 30_000,
   })
 
@@ -782,13 +782,13 @@ function GovernancePendingCard() {
         </CardNote>
       </div>
 
-      {researchStrategies.length === 0 ? (
+      {candidateStrategies.length === 0 ? (
         <p className="font-mono text-[11px] text-center py-4" style={{ color: 'var(--text3)' }}>
-          No research strategies awaiting promotion
+          No candidate strategies awaiting promotion
         </p>
       ) : (
-        researchStrategies.map((s, i) => {
-          const isLast = i === researchStrategies.length - 1
+        candidateStrategies.map((s, i) => {
+          const isLast = i === candidateStrategies.length - 1
           const isPromoting = promoting === s.strategy_id
 
           if (isPromoting) {

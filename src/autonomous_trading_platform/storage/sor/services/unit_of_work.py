@@ -17,6 +17,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.cash_snapshot_rep
 from autonomous_trading_platform.storage.sor.repositories.core.checksums_repository import (
     ChecksumsRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.corporate_action_application_repository import (
+    CorporateActionApplicationRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.corporate_action_repository import (
     CorporateActionRepository,
 )
@@ -75,6 +78,10 @@ from autonomous_trading_platform.storage.sor.repositories.core.strategy_control_
 from autonomous_trading_platform.storage.sor.repositories.core.strategy_runtime_state_repository import (
     StrategyRuntimeStateRepository,
 )
+from autonomous_trading_platform.storage.sor.repositories.core.strategy_sleeve_repository import (
+    ShadowSleeveRepository,
+    StrategySleeveRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.symbol_date_coverage_repository import (
     SymbolDateCoverageRepository,
 )
@@ -99,6 +106,7 @@ class SorUnitOfWork:
         self.session = session
         self.market_bars = MarketBarRepository(session)
         self.corporate_actions = CorporateActionRepository(session)
+        self.corporate_action_applications = CorporateActionApplicationRepository(session)
         self.universe_snapshots = UniverseSnapshotRepository(session)
         self.universe_versions = UniverseVersionRepository(session)
         self.raw_market_pool = RawMarketPoolRepository(session)
@@ -115,6 +123,8 @@ class SorUnitOfWork:
         self.tracked_orders = TrackedOrderRepository(session)
         self.strategy_control_states = StrategyControlStateRepository(session)
         self.strategy_runtime_states = StrategyRuntimeStateRepository(session)
+        self.strategy_sleeves = StrategySleeveRepository(session)
+        self.shadow_sleeves = ShadowSleeveRepository(session)
         self.ticker_lifecycles = TickerLifecycleRepository(session)
         self.dataset_versions = DatasetVersionsRepository(session)
         self.missing_bar_incidents = MissingBarIncidentsRepository(session)

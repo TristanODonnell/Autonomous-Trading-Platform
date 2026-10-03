@@ -6,6 +6,21 @@ from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+# ── Env vars required before any app import ──────────────────────────────────
+# Must run before anything imports autonomous_trading_platform: config.settings
+# calls load_dotenv() at import, and .env's DATABASE_URL points at the dev
+# Postgres. load_dotenv never overrides a variable that is already set, so these
+# defaults win over .env (an explicit shell DATABASE_URL still wins, for
+# integration runs). Previously this block ran after the app imports, and tests
+# that use get_engine() truncated tables in the dev database.
+os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+os.environ.setdefault("TRADING_ENVIRONMENT", "paper")
+os.environ.setdefault("NO_LIVE_TRADING", "true")
+os.environ.setdefault("SHADOW_MODE_ENABLED", "false")
+os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-prod-1234")
+os.environ.setdefault("JWT_ALGORITHM", "HS256")
+
 import jwt
 import pytest
 from fastapi.testclient import TestClient
@@ -53,15 +68,6 @@ from tests.utilities.paper_trading_golden_path_fixture import (  # noqa: E402
     SeededPaperTradingGoldenPathFixture,
     seed_paper_trading_golden_path_fixture,
 )
-
-# ── Env vars required before any app import ──────────────────────────────────
-os.environ.setdefault("APP_ENV", "test")
-os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
-os.environ.setdefault("TRADING_ENVIRONMENT", "paper")
-os.environ.setdefault("NO_LIVE_TRADING", "true")
-os.environ.setdefault("SHADOW_MODE_ENABLED", "false")
-os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-prod-1234")
-os.environ.setdefault("JWT_ALGORITHM", "HS256")
 
 # ---------------------------------------------------------------------------
 # SQLite compatibility shims for PostgreSQL-specific column types.

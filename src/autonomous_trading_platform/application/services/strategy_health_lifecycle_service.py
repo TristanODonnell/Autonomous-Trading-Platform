@@ -387,10 +387,14 @@ class StrategyHealthLifecycleService:
         run_id: str | None = None,
         rebalance_run_id: str | None = None,
         config: HealthLifecycleConfig | None = None,
+        now: datetime | None = None,
     ) -> LifecycleRunResult:
-        """Evaluate health lifecycle for all monitorable strategies."""
+        """Evaluate health lifecycle for all monitorable strategies.
+
+        `now` is the as-of time used for cooldowns (replay tick in backtests).
+        """
         start = perf_counter()
-        now = datetime.now(UTC)
+        now = now or datetime.now(UTC)
         run_id = run_id or str(uuid4())
         resolved_config = config or self._load_config()
 

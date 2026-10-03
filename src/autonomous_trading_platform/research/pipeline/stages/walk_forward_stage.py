@@ -43,9 +43,12 @@ from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunRequest,
     SimulationRunResult,
 )
+from autonomous_trading_platform.research.validation.walk_forward_validation import (
+    FoldValidationInput,
+)
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
-from .base_stage import BaseStage, StageResult
+from .base_stage import BaseStage, StageDiagnostics, StageResult
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +128,30 @@ class _FoldResult:
     train_filter_output: FilterScoreOutput
     test_filter_output: FilterScoreOutput | None
     passed: bool
+
+
+def _to_fold_input(fr: _FoldResult) -> FoldValidationInput | None:
+    """Convert a fold with both train and test runs into validation input.
+
+    Folds that stopped at the train filter have no test metrics, so they
+    carry no train/test degradation evidence and are skipped.
+    """
+    test = fr.test_sim_result
+    if test is None or fr.test_filter_output is None:
+        return None
+    train = fr.train_sim_result
+    return FoldValidationInput(
+        fold_index=fr.fold_index,
+        train_sharpe=float(train.risk_metrics.sharpe_ratio),
+        test_sharpe=float(test.risk_metrics.sharpe_ratio),
+        train_drawdown=float(train.risk_metrics.max_drawdown),
+        test_drawdown=float(test.risk_metrics.max_drawdown),
+        train_return=float(train.return_metrics.total_return),
+        test_return=float(test.return_metrics.total_return),
+        train_passed=bool(fr.train_filter_output.filter_result.passed),
+        test_passed=bool(fr.test_filter_output.filter_result.passed),
+        fold_passed=fr.passed,
+    )
 
 
 class WalkForwardStage(BaseStage):
@@ -244,6 +271,9 @@ class WalkForwardStage(BaseStage):
         )
 
         fold_pass_counts: dict[str, int] = {c.strategy_id: 0 for c in survivors}
+        # Completed folds (train + test both simulated) per strategy — evidence
+        # for OverfittingStage (train/test degradation, fold instability).
+        fold_inputs: dict[str, list[FoldValidationInput]] = {c.strategy_id: [] for c in survivors}
         all_sim_results: list[SimulationRunResult] = []
         all_filter_outputs: list[FilterScoreOutput] = []
 
@@ -267,6 +297,9 @@ class WalkForwardStage(BaseStage):
                     all_sim_results.append(fr.test_sim_result)
                 if fr.test_filter_output is not None:
                     all_filter_outputs.append(fr.test_filter_output)
+                fold_input = _to_fold_input(fr)
+                if fold_input is not None:
+                    fold_inputs[fr.train_sim_result.strategy_id].append(fold_input)
                 if fr.passed:
                     fold_pass_counts[fr.train_sim_result.strategy_id] += 1
                     passed_fold += 1
@@ -322,6 +355,11 @@ class WalkForwardStage(BaseStage):
             simulation_results=all_sim_results,
             filter_outputs=all_filter_outputs,
             survivors=final_survivors,
+            diagnostics={
+                sid: StageDiagnostics(fold_inputs=inputs)
+                for sid, inputs in fold_inputs.items()
+                if inputs
+            },
         )
 
     def _generate_folds(self) -> list[_Fold]:

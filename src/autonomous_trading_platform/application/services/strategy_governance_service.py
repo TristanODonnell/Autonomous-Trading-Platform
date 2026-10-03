@@ -41,9 +41,10 @@ from autonomous_trading_platform.storage.sor.repositories.core.promotion_rules_r
 logger = get_logger(__name__)
 
 _STATE_ALIASES = {
-    "research": "approved_research",
-    "approved_research": "approved_research",
-    "approved_for_research": "approved_research",
+    "research": "candidate",
+    "candidate": "candidate",
+    "approved_for_research": "candidate",
+    "approved_research": "candidate",  # legacy name
     "paper": "approved_for_paper_trading",
     "paper_trading_active": "approved_for_paper_trading",
     "approved_paper": "approved_for_paper_trading",
@@ -55,23 +56,33 @@ _STATE_ALIASES = {
 }
 
 _RULE_STATE_ALIASES = {
-    "approved_research": "approved_research",
+    "candidate": "candidate",
     "approved_for_paper_trading": "approved_paper",
     "approved_for_live_trading": "approved_live",
     "retired": "retired",
 }
 
 _ALLOWED_TRANSITIONS = {
-    "approved_research": {"approved_for_paper_trading"},
-    "approved_for_paper_trading": {"approved_for_live_trading", "approved_research"},
+    # candidate -> retired: bench management prunes redundant / stale candidates.
+    "candidate": {"approved_for_paper_trading", "retired"},
+    "approved_for_paper_trading": {"approved_for_live_trading", "candidate"},
     "approved_for_live_trading": {"approved_for_paper_trading", "retired"},
 }
 
 _TARGET_STATE_ROLES = {
-    "approved_research": {"researcher", "system_risk", "admin"},
-    "approved_for_paper_trading": {"risk_manager", "system_risk", "admin"},
+    "candidate": {"researcher", "system_risk", "admin"},
+    "approved_for_paper_trading": {"risk_manager", "system_risk", "admin", "system_portfolio"},
     "approved_for_live_trading": {"admin"},
-    "retired": {"operator", "risk_manager", "admin"},
+    "retired": {"operator", "risk_manager", "admin", "system_bench"},
+}
+
+# System roles restricted to specific source states. system_bench (automatic bench
+# management) may only retire candidates — never an approved or live strategy.
+# system_portfolio (portfolio review) may only promote to paper a candidate that won a
+# swap; promotion rules still apply, and live approval stays human-only.
+_ROLE_SOURCE_STATES = {
+    "system_bench": {"candidate"},
+    "system_portfolio": {"candidate"},
 }
 
 _PROMOTION_TARGET_STATES = {"approved_for_paper_trading", "approved_for_live_trading"}
@@ -80,7 +91,7 @@ _PROMOTION_TARGET_STATES = {"approved_for_paper_trading", "approved_for_live_tra
 # Encode the policy here rather than scattering conditionals across the service.
 _SOURCE_RUN_REQUIRED_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("approved_research", "approved_for_paper_trading"),
+        ("candidate", "approved_for_paper_trading"),
         ("approved_for_paper_trading", "approved_for_live_trading"),
     }
 )
@@ -93,7 +104,7 @@ _REQUIRED_CRITERIA_BY_TRANSITION: dict[tuple[str, str], frozenset[str]] = {
     ("approved_paper", "approved_live"): frozenset(
         {"min_sharpe", "min_days_tested", "min_trade_count"}
     ),
-    ("approved_research", "approved_paper"): frozenset(),
+    ("candidate", "approved_paper"): frozenset(),
 }
 
 
@@ -129,7 +140,13 @@ class StrategyGovernanceService:
         actor_role: str,
         source_run_id: str | None = None,
         record_governance_audit: bool = True,
+        now: datetime | None = None,
     ) -> StrategyGovernanceTransitionResult:
+        """Transition a strategy's governance state.
+
+        now is the as-of time recorded on the transition (defaults to the wall
+        clock); backtests pass the replay tick.
+        """
         governance = self._latest_governance(strategy_id)
         if governance is None:
             raise LookupError(f"Strategy not found: {strategy_id}")
@@ -143,6 +160,7 @@ class StrategyGovernanceService:
         )
 
         self._assert_role_allowed(target_state=target_state, actor_role=actor_role)
+        self._assert_role_source_allowed(from_state=from_state, actor_role=actor_role)
         self._assert_transition_allowed(from_state=from_state, target_state=target_state)
         criteria_summary: dict[str, object] = {}
         if self._is_promotion_transition(from_state=from_state, target_state=target_state):
@@ -153,7 +171,7 @@ class StrategyGovernanceService:
                 target_state=target_state,
             )
 
-        now = datetime.now(UTC)
+        now = now or datetime.now(UTC)
         previous_state = governance.current_state
         governance.current_state = target_state
         governance.updated_at = now
@@ -207,6 +225,39 @@ class StrategyGovernanceService:
             updated_by=updated_by,
             updated_at=now,
         )
+
+    def would_pass_promotion(
+        self, strategy_id: str, to_state: str, *, source_run_id: str | None = None
+    ) -> tuple[bool, str | None]:
+        """Whether a promotion of the strategy to to_state would pass the promotion rules.
+
+        Runs the same checks as transition() (rule present, source run, criteria) without
+        changing anything: audit rows the checks write are rolled back. Returns
+        (passed, reason for failure).
+        """
+        governance = self._latest_governance(strategy_id)
+        if governance is None:
+            return False, "strategy_not_found"
+        from_state = self._normalize_state(governance.current_state)
+        target_state = self._normalize_state(to_state)
+        if not self._is_promotion_transition(from_state=from_state, target_state=target_state):
+            return False, f"not_a_promotion:{from_state}->{target_state}"
+        source_run_id = source_run_id or (
+            str(governance.source_run_id) if governance.source_run_id else None
+        )
+        savepoint = self._session.begin_nested()
+        try:
+            self._assert_promotion_criteria_met(
+                strategy_id=strategy_id,
+                source_run_id=source_run_id,
+                from_state=from_state,
+                target_state=target_state,
+            )
+        except Exception as exc:
+            return False, str(exc) or type(exc).__name__
+        finally:
+            savepoint.rollback()
+        return True, None
 
     def _record_governance_decision(
         self,
@@ -302,9 +353,7 @@ class StrategyGovernanceService:
         return bool(settings.notify_strategy_promotion_events)
 
     def _is_promotion_transition(self, *, from_state: str, target_state: str) -> bool:
-        return (
-            from_state == "approved_research" and target_state == "approved_for_paper_trading"
-        ) or (
+        return (from_state == "candidate" and target_state == "approved_for_paper_trading") or (
             from_state == "approved_for_paper_trading"
             and target_state == "approved_for_live_trading"
         )
@@ -316,6 +365,14 @@ class StrategyGovernanceService:
             raise PermissionError(
                 f"Role '{actor_role}' cannot transition strategies to {target_state}. "
                 f"Required role: {allowed}."
+            )
+
+    def _assert_role_source_allowed(self, *, from_state: str, actor_role: str) -> None:
+        allowed_sources = _ROLE_SOURCE_STATES.get(actor_role)
+        if allowed_sources is not None and from_state not in allowed_sources:
+            raise PermissionError(
+                f"Role '{actor_role}' can only transition strategies from "
+                f"{', '.join(sorted(allowed_sources))}; strategy is {from_state}."
             )
 
     def _assert_transition_allowed(self, *, from_state: str, target_state: str) -> None:

@@ -1,7 +1,7 @@
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.exc import IntegrityError
 
 from autonomous_trading_platform.storage.sor.models.position_snapshots import PositionSnapshot
@@ -24,7 +24,16 @@ class PositionSnapshotRepository(BaseRepository):
         return cast(PositionSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     def get_latest(self) -> PositionSnapshot | None:
-        stmt = select(PositionSnapshot).order_by(desc(PositionSnapshot.timestamp)).limit(1)
+        # Newest timestamp, then the row written last (ties within one trading cycle).
+        stmt = (
+            select(PositionSnapshot)
+            .order_by(
+                desc(PositionSnapshot.timestamp),
+                desc(func.coalesce(PositionSnapshot.recorded_at, PositionSnapshot.timestamp)),
+                desc(PositionSnapshot.snapshot_id),
+            )
+            .limit(1)
+        )
         return cast(PositionSnapshot | None, self.session.scalars(stmt).one_or_none())
 
     def get_latest_for_symbol(self, symbol: str) -> PositionSnapshot | None:

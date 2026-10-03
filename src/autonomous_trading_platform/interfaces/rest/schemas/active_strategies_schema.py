@@ -87,7 +87,7 @@ class StrategyGovernanceTransitionResponse(BaseModel):
     updated_at: datetime
 
 
-StrategyStatus = Literal["live", "paper", "research", "off"]
+StrategyStatus = Literal["live", "paper", "candidate", "off"]
 
 
 class StrategyListItemResponse(BaseModel):

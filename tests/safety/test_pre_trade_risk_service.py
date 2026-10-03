@@ -431,3 +431,107 @@ def test_pre_trade_risk_reducing_existing_position_should_not_increase_symbol_ri
     )
 
     service.assert_order_allowed(order_intent=order_intent, now=datetime.now(UTC))
+
+
+# --- Position-aware reader (portfolio rotation 1F finding) -----------------------
+
+
+def _position_aware_reader(symbol: str, qty: str, market_value: str):
+    from autonomous_trading_platform.safety.readers.portfolio_risk_state_reader import (
+        PortfolioRiskStateReader,
+    )
+    from autonomous_trading_platform.safety.readers.risk_state_reader import (
+        PositionAwareRiskStateReader,
+    )
+
+    return PositionAwareRiskStateReader(
+        PortfolioRiskStateReader(
+            {symbol: Decimal(market_value)},
+            Decimal("250000"),
+            symbol_quantities={symbol: Decimal(qty)},
+        )
+    )
+
+
+def test_selling_an_appreciated_position_above_the_symbol_cap_is_allowed() -> None:
+    # Bought under the cap, price ran up: exiting is a 30.7k order against a 25k cap.
+    service = PreTradeRiskService(
+        settings=_settings(max_symbol_exposure=25_000.0, max_daily_notional_traded=1e9),
+        risk_state_reader=_position_aware_reader("NVDA", "34", "30707.78"),
+    )
+
+    service.assert_order_allowed(
+        order_intent=_order_intent(symbol="NVDA", qty=34, limit_price=903.17, side=Side.SELL),
+        now=datetime.now(UTC),
+    )
+
+
+def test_buying_more_of_a_symbol_already_at_the_cap_is_blocked() -> None:
+    service = PreTradeRiskService(
+        settings=_settings(max_symbol_exposure=25_000.0, max_daily_notional_traded=1e9),
+        risk_state_reader=_position_aware_reader("NVDA", "34", "30707.78"),
+    )
+
+    with pytest.raises(SymbolExposureLimitExceededError):
+        service.assert_order_allowed(
+            order_intent=_order_intent(symbol="NVDA", qty=1, limit_price=903.17),
+            now=datetime.now(UTC),
+        )
+
+
+def test_stub_reader_treated_the_same_exit_as_new_exposure() -> None:
+    # Documents the bug the position-aware reader fixes.
+    from autonomous_trading_platform.safety.readers.risk_state_reader import StubRiskStateReader
+
+    service = PreTradeRiskService(
+        settings=_settings(max_symbol_exposure=25_000.0, max_daily_notional_traded=1e9),
+        risk_state_reader=StubRiskStateReader(),
+    )
+
+    with pytest.raises(SymbolExposureLimitExceededError):
+        service.assert_order_allowed(
+            order_intent=_order_intent(symbol="NVDA", qty=34, limit_price=903.17, side=Side.SELL),
+            now=datetime.now(UTC),
+        )
+
+
+# --- Reducing an over-cap position (portfolio rotation step 5 finding) ------------
+
+
+def test_partial_sell_of_an_over_cap_position_is_allowed() -> None:
+    # Account holds 300 JPM ($59.6k) against a $25k cap; one sleeve sells 125.
+    # Before the fix: projected 34.3k > cap -> rejected, and the position froze.
+    service = PreTradeRiskService(
+        settings=_settings(max_symbol_exposure=25_000.0, max_daily_notional_traded=1e9),
+        risk_state_reader=_position_aware_reader("JPM", "300", "59577.03"),
+    )
+
+    service.assert_order_allowed(
+        order_intent=_order_intent(symbol="JPM", qty=125, limit_price=202.32, side=Side.SELL),
+        now=datetime.now(UTC),
+    )
+
+
+def test_sell_that_flips_into_an_over_cap_short_is_blocked() -> None:
+    # Holds 10 NVDA ($9k); selling 60 leaves a 50-share short (~$45k) above the cap.
+    service = PreTradeRiskService(
+        settings=_settings(max_symbol_exposure=25_000.0, max_daily_notional_traded=1e9),
+        risk_state_reader=_position_aware_reader("NVDA", "10", "9031.70"),
+    )
+
+    with pytest.raises(SymbolExposureLimitExceededError):
+        service.assert_order_allowed(
+            order_intent=_order_intent(symbol="NVDA", qty=60, limit_price=903.17, side=Side.SELL),
+            now=datetime.now(UTC),
+        )
+
+
+def test_symbol_exposure_cap_is_the_tightest_configured_limit() -> None:
+    service = PreTradeRiskService(
+        settings=_settings(max_symbol_exposure=25_000.0),
+        risk_state_reader=FakeRiskStateReader(),
+        max_portfolio_symbol_pct=0.05,
+    )
+
+    assert service.symbol_exposure_cap_usd(total_equity=250_000.0) == 12_500.0
+    assert service.symbol_exposure_cap_usd(total_equity=None) == 25_000.0

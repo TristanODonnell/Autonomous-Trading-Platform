@@ -47,12 +47,25 @@ class SimulationCostModelService:
         reference_price: Decimal,
         quantity: Decimal,
         context: SlippageContext | None = None,
+        cost_multiplier: Decimal = Decimal("1"),
     ) -> SimulatedTradeCosts:
+        """Apply slippage and commission.
+
+        cost_multiplier scales both the slippage distance and the commission.
+        It exists for execution-cost stress scenarios (e.g. 2x / 3x costs) and
+        must stay at 1 for normal simulations.
+        """
+        if cost_multiplier < 0:
+            raise ValueError(f"cost_multiplier must be >= 0, got {cost_multiplier}")
+
         fill_price = self.slippage_model.calculate_fill_price(
             side=side,
             market_price=reference_price,
             context=context,
         )
+        if cost_multiplier != 1:
+            # Scale the slippage distance, keeping its sign (adverse for both sides).
+            fill_price = reference_price + (fill_price - reference_price) * cost_multiplier
 
         if side == Side.BUY:
             slippage_per_share = fill_price - reference_price
@@ -63,9 +76,12 @@ class SimulationCostModelService:
 
         slippage_notional = slippage_per_share * quantity
 
-        commission = max(
-            self.config.min_commission,
-            self.config.commission_per_share * quantity,
+        commission = (
+            max(
+                self.config.min_commission,
+                self.config.commission_per_share * quantity,
+            )
+            * cost_multiplier
         )
 
         effective_slippage_rate = (

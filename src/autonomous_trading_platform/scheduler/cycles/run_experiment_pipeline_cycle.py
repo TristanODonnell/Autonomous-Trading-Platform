@@ -224,7 +224,7 @@ def run_experiment_pipeline_cycle(
             git_commit="dev",
             python_version=platform.python_version(),
             notes=f"Experiment pipeline cycle: {experiment_plan.experiment_id}",
-            governance_state=GovernanceState.APPROVED_RESEARCH,
+            governance_state=GovernanceState.CANDIDATE,
         )
         manifest_service.save(manifest)
 
@@ -381,7 +381,7 @@ def _seed_governance_for_survivors(
     experiment_id: str,
     now_utc: datetime,
 ) -> None:
-    """Insert approved_research governance rows for pipeline survivors that don't yet have one."""
+    """Insert candidate governance rows for pipeline survivors that don't yet have one."""
     for config in survivors:
         config_hash = config.config_hash()
         existing = session.get(StrategyGovernance, (config.strategy_id, config_hash))
@@ -390,7 +390,7 @@ def _seed_governance_for_survivors(
                 StrategyGovernance(
                     strategy_id=config.strategy_id,
                     config_hash=config_hash,
-                    current_state="approved_research",
+                    current_state="candidate",
                     experiment_id=experiment_id,
                     source_run_id=None,
                     submitted_at=now_utc,

@@ -365,7 +365,7 @@ def test_inactive_strategy_allocation_is_excluded_from_aggregate_budget(
         StrategyGovernance(
             strategy_id="research-strategy",
             config_hash="abc123",
-            current_state="approved_research",
+            current_state="candidate",
             experiment_id="exp-1",
             source_run_id=None,
             submitted_at=datetime.now(UTC),

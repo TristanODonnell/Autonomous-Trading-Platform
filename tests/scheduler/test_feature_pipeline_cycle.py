@@ -427,3 +427,36 @@ def test_feature_pipeline_cycle_marks_failure_when_source_dataset_is_missing(
     assert job is not None
     assert job.status == "failed"
     assert missing_dataset_version in job.error_message
+
+
+def test_a_day_without_bars_is_a_skipped_run_not_a_failure(
+    seeded_feature_pipeline_cycle_fixture,
+    db_session,
+):
+    """Market holiday / empty day (plan 5d-F): the cycle returns a skipped summary and
+    records a skipped job run and manifest instead of raising and logging a traceback."""
+    from datetime import timedelta
+
+    fixture = seeded_feature_pipeline_cycle_fixture
+    holiday = fixture.end_date + timedelta(days=30)
+
+    summary = run_feature_pipeline_cycle(
+        price_basis=PriceBasis.RAW,
+        dataset_version_id=fixture.dataset_version,
+        symbols=fixture.symbols,
+        start_date=holiday,
+        end_date=holiday,
+    )
+
+    assert summary["status"] == "skipped"
+    assert summary["reason"] == "no_bars_for_window"
+    assert summary["feature_dataset_versions"] == []
+    job_run = _latest_runtime_job_run(db_session)
+    assert job_run is not None
+    assert job_run.status == "skipped"
+    assert job_run.error_message is None
+    assert job_run.output_summary_json["reason"] == "no_bars_for_window"
+    manifest = _latest_manifest(db_session)
+    assert manifest is not None
+    assert manifest.status == "skipped"
+    assert manifest.error_message is None

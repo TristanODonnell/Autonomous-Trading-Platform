@@ -89,7 +89,7 @@ def _seed_promotion_rule(session: Session) -> None:
     session.add(
         PromotionRules(
             rule_id="research_to_paper",
-            from_status="approved_research",
+            from_status="candidate",
             to_status="approved_paper",
             min_sharpe=1.5,
             max_drawdown=0.20,
@@ -126,7 +126,7 @@ def _seed_strategy(
     session: Session,
     strategy_id: str,
     *,
-    state: str = "approved_research",
+    state: str = "candidate",
     sharpe: float = 2.0,
     days_tested: int = 30,
 ) -> None:

@@ -213,8 +213,8 @@ class IngestBarsJob:
                     f"Too many missing bars ({missing_ratio:.2%}) at {cycle_timestamp}"
                 )
 
-    async def _process_symbol_bars(self, symbol_bars) -> None:
-        for provider_bar in symbol_bars:
+    async def _process_bars(self, provider_bars) -> None:
+        for provider_bar in provider_bars:
             await self.on_provider_bar(provider_bar)
 
     def run_once(self, start: datetime, end: datetime) -> None:
@@ -278,10 +278,21 @@ class IngestBarsJob:
                     },
                 )
 
+                # Feed bars in time order across symbols: a cycle is finalized (and its
+                # missing symbols recorded) when a later bar arrives, so symbol-by-symbol
+                # order flagged every other symbol missing at every cycle of a
+                # multi-cycle window (a backtest's full-day fetch).
+                bars_in_time_order = sorted(
+                    (
+                        bar
+                        for symbol in self.expected_symbols
+                        for bar in response.data.get(symbol, [])
+                    ),
+                    key=lambda bar: (bar.timestamp, bar.symbol),
+                )
+
                 async def _run() -> None:
-                    for symbol in sorted(self.expected_symbols):
-                        symbol_bars = response.data.get(symbol, [])
-                        await self._process_symbol_bars(symbol_bars)
+                    await self._process_bars(bars_in_time_order)
 
                 asyncio.run(_run())
 

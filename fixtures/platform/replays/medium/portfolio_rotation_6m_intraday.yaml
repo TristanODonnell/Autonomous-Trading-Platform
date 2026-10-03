@@ -1,0 +1,141 @@
+# scenario:
+#   name: portfolio_rotation_6m_intraday
+#   purpose: >
+#     Portfolio rotation step 5b: the step 5 recording scenario at PRODUCTION cadence
+#     (trading cycle every 5 minutes, as market_trading_dag and research re-sims).
+#     Step 5 (daily cadence) scenario: Six months, ten symbols,
+#     Steps 1-4 all on: four approved seeds (seats 3-5), research (smoke) monthly feeding
+#     a bench of up to 10, on-deck 4, weekly bench + portfolio review with the current
+#     review defaults. portfolio_review_mode is overridden per run: auto with the
+#     current defaults (recording run, also the simulator's validation target), off
+#     (no-rotation baseline) and auto with tuned values (confirmation).
+#   expected_behavior: >
+#     0 errors; research candidates admitted to the bench, promoted on-deck and, when
+#     they beat an incumbent for 3 weekly reviews on a monthly review with a research
+#     run that passes the paper rule, swapped in. The artifact's rotation section
+#     reports performance vs SPY buy-and-hold, swaps per month, turnover and
+#     per-strategy contribution.
+#   recommended_use: validation
+#
+# Run against a clean backtest state (wipes backtest tables in DATABASE_URL):
+#   python scripts/reset_backtest_state.py
+#   # The checkpoint is named after --output (<output stem>.checkpoint.json); a stale one
+#   # makes the run silently resume and skip every tick.
+#   rm -f artifacts/platform/backtests/portfolio_rotation_6m_intraday_record.checkpoint.json
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/medium/portfolio_rotation_6m_intraday.yaml \
+#     --output artifacts/platform/backtests/portfolio_rotation_6m_intraday_record.json
+
+platform_replay:
+  name: portfolio_rotation_6m_intraday
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, GOOGL, META, JPM, XOM]
+  start: 2024-01-02
+  end: 2024-06-28
+  starting_cash: 250000
+  random_seed: 42
+  cadence_minutes: 5   # production cadence: the trading DAG runs every 5 minutes
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: false
+    auto_rebalance_enabled: true
+    rebalance_frequency: daily
+    portfolio_mode_enabled: true
+    min_active_strategies: 3
+    max_active_strategies: 5
+    max_on_deck_strategies: 4
+    max_total_strategy_allocation_pct: 0.95
+    per_strategy_cap: 0.35
+    portfolio_drawdown_action: warn_only
+    portfolio_drawdown_recovery_mode: auto_resume
+    bench_management_enabled: true
+    max_bench_strategies: 10
+    bench_correlation_threshold: 0.85
+    bench_resim_window_days: 63
+    bench_score_floor: 1.0
+    bench_floor_strikes: 3
+    bench_max_idle_days: 120
+    portfolio_review_mode: auto
+    review_swap_margin: 0.10
+    review_swap_consecutive: 4
+    review_min_tenure_days: 60
+    review_max_swaps_per_review: 1
+    review_swap_interval_days: 28
+    review_turnover_cost_bps: 20
+    review_min_shadow_days: 20
+    review_min_shadow_trades: 10
+    review_score_floor: 1.0
+    review_on_deck_min_tenure_days: 21
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies:
+    - factor_based__19abece93f5b760d646be3cf9b16d8bbaff468d78c1ebc70a6c041cd2b56df79
+    - macd_crossover_v1
+    - momentum_v1
+    - mean_reversion_v1
+  governance:
+    - strategy_id: factor_based__19abece93f5b760d646be3cf9b16d8bbaff468d78c1ebc70a6c041cd2b56df79
+      state: approved_for_paper_trading
+    - strategy_id: macd_crossover_v1
+      state: approved_for_paper_trading
+    - strategy_id: momentum_v1
+      state: approved_for_paper_trading
+    - strategy_id: mean_reversion_v1
+      state: approved_for_paper_trading
+  promotion_rules:
+    - rule_id: fixture_candidate_to_paper
+      from_status: candidate
+      to_status: approved_paper
+      min_sharpe: 0.5
+      max_drawdown: 0.25
+      min_trade_count: 10
+  allocations: []
+  universe:
+    selection_mode: fixed
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  universe:
+    cadence: monthly
+    enabled: true
+  research:
+    cadence: monthly
+    enabled: true
+    options:
+      profile: smoke        # cheap: 2 samples per family
+  bench:
+    cadence: weekly         # the portfolio review runs right after each bench review
+    enabled: true
+  dashboard_snapshot:
+    cadence: daily
+    enabled: false
+
+timeline_events: []

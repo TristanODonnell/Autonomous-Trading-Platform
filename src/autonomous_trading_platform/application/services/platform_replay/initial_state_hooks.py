@@ -22,7 +22,8 @@ _STATE_MAP: dict[str, str] = {
     "paper_trading_active": "approved_for_paper_trading",
     "approved_for_paper_trading": "approved_for_paper_trading",
     "approved_paper": "approved_for_paper_trading",
-    "approved_research": "approved_research",
+    "candidate": "candidate",
+    "approved_research": "candidate",  # legacy name
     "approved_live": "approved_for_live_trading",
     "approved_for_live_trading": "approved_for_live_trading",
     "proposed": "proposed",
@@ -117,6 +118,15 @@ def apply_initial_state(
         except Exception as exc:
             summary["errors"].append(f"allocation[{strategy_id}]: {exc}")
 
+    # 4b. Governance promotion rules
+    for entry in getattr(initial_state, "promotion_rules", []) or []:
+        try:
+            _upsert_promotion_rule(session=session, entry=dict(entry), now=now)
+            summary.setdefault("promotion_rules_upserted", 0)
+            summary["promotion_rules_upserted"] += 1
+        except Exception as exc:
+            summary["errors"].append(f"promotion_rule[{entry.get('rule_id')}]: {exc}")
+
     # 5. Ensure base capital allocation policies exist so PortfolioEngine.get_allocation()
     #    can size positions. Per-strategy overrides set specific percentages; this base
     #    policy is the required fallback that must exist for NoPolicyFoundError not to fire.
@@ -153,6 +163,29 @@ def _apply_operator_settings(*, session: Session, patch: dict[str, Any], now: da
         "target_portfolio_volatility": ("target_portfolio_volatility", float),
         "min_rebalance_interval_hours": ("min_rebalance_interval_hours", float),
         "min_allocation_change_pct": ("min_allocation_change_pct", float),
+        "max_total_strategy_allocation_pct": ("max_total_strategy_allocation_pct", float),
+        "portfolio_mode_enabled": ("portfolio_mode_enabled", _to_bool),
+        "min_active_strategies": ("min_active_strategies", int),
+        "max_active_strategies": ("max_active_strategies", int),
+        "max_on_deck_strategies": ("max_on_deck_strategies", int),
+        "bench_management_enabled": ("bench_management_enabled", _to_bool),
+        "max_bench_strategies": ("max_bench_strategies", int),
+        "bench_correlation_threshold": ("bench_correlation_threshold", float),
+        "bench_resim_window_days": ("bench_resim_window_days", int),
+        "bench_score_floor": ("bench_score_floor", float),
+        "bench_floor_strikes": ("bench_floor_strikes", int),
+        "bench_max_idle_days": ("bench_max_idle_days", int),
+        "portfolio_review_mode": ("portfolio_review_mode", str),
+        "review_swap_margin": ("review_swap_margin", float),
+        "review_swap_consecutive": ("review_swap_consecutive", int),
+        "review_min_tenure_days": ("review_min_tenure_days", int),
+        "review_max_swaps_per_review": ("review_max_swaps_per_review", int),
+        "review_swap_interval_days": ("review_swap_interval_days", int),
+        "review_turnover_cost_bps": ("review_turnover_cost_bps", float),
+        "review_min_shadow_days": ("review_min_shadow_days", int),
+        "review_min_shadow_trades": ("review_min_shadow_trades", int),
+        "review_score_floor": ("review_score_floor", float),
+        "review_on_deck_min_tenure_days": ("review_on_deck_min_tenure_days", int),
         "portfolio_drawdown_action": ("portfolio_drawdown_action", str),
         "portfolio_drawdown_recovery_mode": ("portfolio_drawdown_recovery_mode", str),
         "portfolio_max_drawdown_pct": ("portfolio_max_drawdown_pct", float),
@@ -201,6 +234,42 @@ def _upsert_strategy_governance(
         submitted_by=actor,
     )
     session.add(row)
+
+
+_PROMOTION_RULE_FIELDS = (
+    "from_status",
+    "to_status",
+    "min_sharpe",
+    "max_drawdown",
+    "min_days_tested",
+    "min_trade_count",
+    "min_cagr",
+    "min_win_rate",
+    "lookback_window_bars",
+    "lookback_window_trades",
+    "maintenance_min_sharpe",
+    "maintenance_min_win_rate",
+    "maintenance_max_drawdown",
+    "is_active",
+    "notes",
+)
+
+
+def _upsert_promotion_rule(*, session: Session, entry: dict[str, Any], now: datetime) -> None:
+    from autonomous_trading_platform.storage.sor.models.promotion_rules import PromotionRules
+
+    rule_id = str(entry["rule_id"])
+    values = {f: entry[f] for f in _PROMOTION_RULE_FIELDS if f in entry}
+    if "from_status" not in values or "to_status" not in values:
+        raise ValueError("promotion rule needs from_status and to_status")
+    existing = session.get(PromotionRules, rule_id)
+    if existing is not None:
+        for field_name, value in values.items():
+            setattr(existing, field_name, value)
+        return
+    values.setdefault("is_active", True)
+    values.setdefault("notes", "initial state seeding from fixture")
+    session.add(PromotionRules(rule_id=rule_id, created_at=now, **values))
 
 
 def _upsert_allocation_override(
@@ -265,7 +334,7 @@ def _ensure_capital_allocation_policies(
 
     # Seed for all allocatable states. Use short-form enum values (what the DB stores
     # in capital_allocation_policies.approval_status).
-    for status in ("approved_paper", "approved_live", "approved_research"):
+    for status in ("approved_paper", "approved_live", "candidate"):
         if repo.get_active_policy(approval_status=status, performance_tier=None) is not None:
             continue
         repo.insert(

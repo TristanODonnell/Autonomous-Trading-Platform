@@ -1,10 +1,14 @@
-from decimal import Decimal
-
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.execution.clients.simulated_broker_client import (
+    build_platform_execution_service,
+)
 from autonomous_trading_platform.execution.services.cash_ledger_service import CashLedgerService
 from autonomous_trading_platform.execution.services.position_ledger_service import (
     PositionLedgerService,
+)
+from autonomous_trading_platform.execution.services.volatility_scaling_service import (
+    VolatilityScalingService,
 )
 from autonomous_trading_platform.research.cache.simulation_result_cache import SimulationResultCache
 from autonomous_trading_platform.research.cache.strategy_generation_cache import (
@@ -26,12 +30,6 @@ from autonomous_trading_platform.research.services.research_dataset_resolver_ser
 from autonomous_trading_platform.research.simulation.contexts.simulation_context import (
     SimulationContext,
 )
-from autonomous_trading_platform.research.simulation.models.fill_model import (
-    SimulatedFillModelConfig,
-)
-from autonomous_trading_platform.research.simulation.models.volume_share_slippage_model import (
-    VolumeShareSlippageModel,
-)
 from autonomous_trading_platform.research.simulation.services.lookahead_guard_service import (
     LookaheadGuardService,
 )
@@ -40,13 +38,6 @@ from autonomous_trading_platform.research.simulation.services.result_recorder_se
 )
 from autonomous_trading_platform.research.simulation.services.simple_position_sizer import (
     SimplePositionSizer,
-)
-from autonomous_trading_platform.research.simulation.services.simulated_execution_service import (
-    SimulatedExecutionService,
-)
-from autonomous_trading_platform.research.simulation.services.simulation_cost_model_service import (
-    SimulationCostModelConfig,
-    SimulationCostModelService,
 )
 from autonomous_trading_platform.research.simulation.services.simulation_execution_engine import (
     SimulationExecutionEngine,
@@ -81,6 +72,9 @@ from autonomous_trading_platform.storage.sor.repositories.core.simulation_runs_r
 from autonomous_trading_platform.storage.sor.repositories.core.strategy_configs_repository import (
     StrategyConfigsRepository,
 )
+from autonomous_trading_platform.storage.sor.services.corporate_action_split_source import (
+    SorCorporateActionSource,
+)
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
     StrategyContextBuilder,
 )
@@ -91,7 +85,7 @@ _DEFAULT_TOTAL_CAPITAL = 100_000.00
 
 
 def build_simulation_context(
-    *, session: Session, universe_size: int | None = None, lookback_bars: int = 50
+    *, session: Session, universe_size: int | None = None
 ) -> SimulationContext:
     strategy_factory = StrategyFactory()
 
@@ -111,27 +105,23 @@ def build_simulation_context(
     context_builder = StrategyContextBuilder(
         market_bar_reader=bar_reader,
         bars_dataset=ADJUSTED_BARS_DATASET,
-        lookback_bars=lookback_bars,
+        # SimulationRunner hands each strategy its registry warmup in bars
+        # (StrategyDefinition.context_lookback_bars), as the trading cycle does.
         lookahead_guard_service=lookahead_guard_service,
     )
 
-    # Simulation sizing: pure math, no DB, no governance, no policies.
+    # Simulation sizing: pure math, no DB, no governance, no policies. Same rule as the
+    # platform portfolio cycle (execution/services/sleeve_sizing.py): equal split across
+    # the universe, scaled down by the same volatility scalar.
     position_sizer = SimplePositionSizer(
         total_capital=_DEFAULT_TOTAL_CAPITAL,
         universe_size=universe_size if universe_size is not None else _DEFAULT_UNIVERSE_SIZE,
+        volatility_scaling_service=VolatilityScalingService(),
     )
 
-    simulation_cost_model_service = SimulationCostModelService(
-        config=SimulationCostModelConfig(
-            commission_per_share=Decimal("0.0000"),
-            min_commission=Decimal("0.00"),
-        ),
-        slippage_model=VolumeShareSlippageModel(),
-    )
-    simulated_execution_service = SimulatedExecutionService(
-        simulation_cost_model_service=simulation_cost_model_service,
-        fill_model_config=SimulatedFillModelConfig(),
-    )
+    # The platform's fill model (current-bar close, 5% volume participation cap,
+    # volume-share slippage, zero commission), so re-sims fill as the platform does.
+    simulated_execution_service = build_platform_execution_service()
 
     simulation_engine = SimulationExecutionEngine(
         cash_ledger_service=CashLedgerService(),
@@ -156,6 +146,8 @@ def build_simulation_context(
         manifest_service=RunManifestRepository(session),
         experiment_repository=experiments_repository,
         metrics_summary_repository=metrics_summary_repository,
+        # Stored splits and cash dividends are applied in every research run (plan 5d-E).
+        corporate_action_source=SorCorporateActionSource(session),
     )
 
     filter_score_service = FilterScoreService(

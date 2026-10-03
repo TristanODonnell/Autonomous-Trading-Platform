@@ -617,6 +617,13 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
     # detaches ORM objects loaded before the call.
     source_raw_dataset_version_id = source_raw_dataset.dataset_version_id
     raw_feature_dataset = _latest_raw_feature_dataset_version(db_session)
+    # The fixture pre-seeds a legacy adjusted_bars version; EOD must not add another.
+    adjusted_before = _latest_adjusted_bars_dataset_version(db_session)
+    adjusted_before_id = adjusted_before.dataset_version_id if adjusted_before else None
+    adjusted_feature_before = _latest_adjusted_feature_dataset_version(db_session)
+    adjusted_feature_before_id = (
+        adjusted_feature_before.dataset_version_id if adjusted_feature_before else None
+    )
 
     # Intraday fixture may produce a no-op feature cycle if no bars
     # are available for the exact simulated tick.
@@ -625,8 +632,8 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
         assert raw_feature_dataset.validation_status == "validated"
         assert raw_feature_dataset.source_dataset_version == source_raw_dataset_version_id
 
-    # EOD maintenance flow:
-    # corporate_action_ingestion_cycle -> adjusted_bars generation -> features on adjusted_bars
+    # EOD maintenance flow (5d-D): corporate_action_ingestion_cycle -> features on the
+    # day's raw bars (history split-adjusted on read); no adjusted-bars dataset any more.
     result = orchestrator.run_eod_maintenance(
         now_utc=fixture.now_utc.replace(hour=22, minute=0, second=0, microsecond=0),
     )
@@ -652,39 +659,27 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
         == source_raw_dataset_version_id
     )
 
-    adjusted_dataset = _latest_adjusted_bars_dataset_version(db_session)
+    adjusted_after = _latest_adjusted_bars_dataset_version(db_session)
+    assert (adjusted_after.dataset_version_id if adjusted_after else None) == adjusted_before_id
+    adjusted_feature_after = _latest_adjusted_feature_dataset_version(db_session)
+    assert (
+        adjusted_feature_after.dataset_version_id if adjusted_feature_after else None
+    ) == adjusted_feature_before_id
 
-    assert adjusted_dataset is not None
-    assert adjusted_dataset.dataset_name == "adjusted_bars"
-    assert adjusted_dataset.validation_status == "validated"
-    assert adjusted_dataset.source_dataset_version == source_raw_dataset_version_id
-    assert adjusted_dataset.dataset_version_id != source_raw_dataset_version_id
-
-    adjusted_feature_dataset = _latest_adjusted_feature_dataset_version(db_session)
-
-    if adjusted_feature_dataset is not None:
-        if raw_feature_dataset is not None:
-            assert (
-                raw_feature_dataset.dataset_version_id
-                != adjusted_feature_dataset.dataset_version_id
-            )
-
-            assert raw_feature_dataset.source_dataset_version == source_raw_dataset_version_id
-
-        assert (
-            adjusted_feature_dataset.source_dataset_version == adjusted_dataset.dataset_version_id
-        )
-
-        assert adjusted_feature_dataset.dataset_name == "features"
-        assert adjusted_feature_dataset.validation_status == "validated"
-
-        assert adjusted_feature_dataset.metadata_json["price_basis"] == PriceBasis.ADJUSTED.value
+    eod_feature_dataset = _latest_raw_feature_dataset_version(db_session)
+    assert eod_feature_dataset is not None
+    assert eod_feature_dataset.dataset_name == "features"
+    assert eod_feature_dataset.validation_status == "validated"
+    assert eod_feature_dataset.source_dataset_version == source_raw_dataset_version_id
+    assert eod_feature_dataset.metadata_json["price_basis"] == PriceBasis.RAW.value
+    assert eod_feature_dataset.metadata_json["stage"] == "eod"
+    if raw_feature_dataset is not None:
+        assert raw_feature_dataset.dataset_version_id != eod_feature_dataset.dataset_version_id
 
     assert feature_jobs != []
-    # The EOD adjusted-bars feature cycle may legitimately fail when no corporate-action
-    # parquet was produced (e.g. in tests that use a fake corporate-actions job). The
-    # orchestrator catches that specific ValueError so the EOD job itself still completes;
-    # the individual feature_pipeline_cycle job record reflects the actual outcome.
+    # The EOD feature cycle may legitimately fail when the fixture has no bars for the
+    # day. The orchestrator catches that specific ValueError so the EOD job itself still
+    # completes; the individual feature_pipeline_cycle job record reflects the outcome.
     assert feature_jobs[0].status in ("completed", "failed")
 
     assert eod_jobs != []

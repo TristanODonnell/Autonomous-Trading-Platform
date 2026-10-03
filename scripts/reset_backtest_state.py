@@ -38,6 +38,7 @@ candidates = [
     "strategy_health_transitions",
     "strategy_quality_score_history",
     "strategy_live_performance_snapshots",
+    "strategy_shadow_performance_snapshots",
     "strategy_runtime_states",
     "strategy_control_states",
     "strategy_factor_exposures",
@@ -48,6 +49,20 @@ candidates = [
     "governance_audit_events",
     "audit_logs",
     "fill_quality_metrics",
+    # Portfolio mode: per-strategy sleeves and active-set membership
+    "corporate_action_applications",
+    "strategy_sleeve_ledger",
+    "strategy_sleeve_snapshots",
+    "strategy_sleeve_positions",
+    "shadow_sleeve_ledger",
+    "shadow_sleeve_snapshots",
+    "shadow_sleeve_positions",
+    "portfolio_review_decisions",
+    "portfolio_scorecards",
+    "portfolio_reviews",
+    "bench_evaluations",
+    "portfolio_membership_transitions",
+    "portfolio_memberships",
     # Core state tables
     "fills",
     "signals",
@@ -85,6 +100,7 @@ candidates = [
     "ingestion_checkpoints",
     "ingestion_runs",
     "symbol_date_coverages",  # references dataset_versions — must come before it
+    "feature_dataset_versions",  # feature outputs of the run (no FK; stale rows otherwise outlive resets)
     "dataset_versions",
     "runtime_job_runs",
     "operational_alerts",

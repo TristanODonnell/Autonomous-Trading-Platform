@@ -134,7 +134,7 @@ def test_governance_audit_seeds_promotion_rules_from_audit_defaults_not_settings
         settings_row=settings_row,
     )
 
-    research_rule = result["rules"]["approved_research_to_approved_paper"]
+    research_rule = result["rules"]["candidate_to_approved_paper"]
     assert research_rule.min_sharpe == 1.5
     assert research_rule.max_drawdown == 0.15
     assert research_rule.min_days_tested == 30

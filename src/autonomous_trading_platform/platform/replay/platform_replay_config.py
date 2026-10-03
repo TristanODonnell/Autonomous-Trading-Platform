@@ -29,6 +29,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 ALLOWED_JOB_NAMES = frozenset(
     {
         "research",
+        # Bench review (portfolio rotation step 3); also runs right after research.
+        "bench",
         "universe",
         "ingestion",
         "corporate_actions",
@@ -189,6 +191,9 @@ _DOMAIN_HOOK_MODULES: list[tuple[str, str]] = [
 class ScheduledJobConfig(BaseModel):
     cadence: str = "daily"
     enabled: bool = True
+    # Job-specific knobs passed through to the job's hook, e.g.
+    # research: { options: { profile: smoke } }
+    options: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("cadence")
     @classmethod
@@ -209,6 +214,8 @@ class TimelineEventConfig(BaseModel):
     patch: dict[str, Any] = Field(default_factory=dict)
     # Governance
     to_state: str | None = None
+    # Role the transition is performed as; demotion to candidate needs system_risk/admin.
+    actor_role: str = "operator"
     # Failure injection
     target: str | None = None
     failure: str | None = None
@@ -256,14 +263,42 @@ class InitialStateConfig(BaseModel):
     strategies: list[Any] = Field(default_factory=list)
     governance: list[Any] = Field(default_factory=list)
     allocations: list[Any] = Field(default_factory=list)
+    # Governance promotion rules (e.g. candidate -> approved_paper thresholds on the
+    # source run's metrics), upserted by rule_id.
+    promotion_rules: list[dict[str, Any]] = Field(default_factory=list)
     universe: dict[str, Any] = Field(default_factory=dict)
     datasets: dict[str, Any] = Field(default_factory=dict)
+
+
+class SymbolPoolConfig(BaseModel):
+    """Derive the replay's symbol list point-in-time instead of hand-picking it.
+
+    source: sp500_point_in_time — S&P 500 members as of the replay start date
+            (including companies that later disappeared), ranked by trailing
+            dollar volume; the top_n are ingested for the whole replay.
+    The same source drives the universe screener at bootstrap and every
+    rotation, so candidates come from the point-in-time pool, not from
+    today's list of active assets.
+    """
+
+    source: Literal["sp500_point_in_time"] = "sp500_point_in_time"
+    top_n: int = 100
+
+    @field_validator("top_n")
+    @classmethod
+    def _top_n_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"symbol_pool.top_n must be >= 1, got {v}")
+        return v
 
 
 class PlatformReplayBlock(BaseModel):
     name: str
     mode: Literal["historical_backtest"] = "historical_backtest"
+    # With symbol_pool set, symbols is optional and lists extra always-ingested
+    # symbols (e.g. benchmark ETFs) added on top of the resolved pool.
     symbols: list[str] = Field(default_factory=list)
+    symbol_pool: SymbolPoolConfig | None = None
     start: str | None = None
     end: str | None = None
     starting_cash: Decimal | None = None
@@ -367,6 +402,14 @@ class MergedReplayParams:
     timeline_events: list[TimelineEventConfig] = field(default_factory=list)
     failure_injections: list[TimelineEventConfig] = field(default_factory=list)
     outputs: OutputConfig = field(default_factory=OutputConfig)
+    # Unresolved until resolve_symbol_pool() runs (needs Alpaca); symbols then
+    # holds the resolved pool plus any explicit extras.
+    symbol_pool: SymbolPoolConfig | None = None
+
+    @property
+    def screener_source(self) -> str:
+        """Universe screener source the replay should use for candidate pools."""
+        return self.symbol_pool.source if self.symbol_pool else "alpaca_active"
 
 
 def merge_fixture_with_cli(
@@ -383,8 +426,10 @@ def merge_fixture_with_cli(
     cfg = fixture.platform_replay if fixture else None
 
     symbols = cli_symbols or (cfg.symbols if cfg else [])
-    if not symbols:
-        raise ValueError("--symbols is required (or specify symbols in fixture)")
+    # --symbols on the CLI is an explicit override: it replaces the pool.
+    symbol_pool = None if cli_symbols else (cfg.symbol_pool if cfg else None)
+    if not symbols and symbol_pool is None:
+        raise ValueError("--symbols is required (or specify symbols or symbol_pool in fixture)")
 
     raw_start = cli_start or (cfg.start if cfg else None)
     raw_end = cli_end or (cfg.end if cfg else None)
@@ -423,7 +468,36 @@ def merge_fixture_with_cli(
         timeline_events=fixture.domain_timeline_events() if fixture else [],
         failure_injections=fixture.failure_injections() if fixture else [],
         outputs=fixture.outputs if fixture else OutputConfig(),
+        symbol_pool=symbol_pool,
     )
+
+
+def resolve_symbol_pool(params: MergedReplayParams) -> list[str]:
+    """Resolve params.symbol_pool into a concrete symbol list (calls Alpaca).
+
+    Ranking is as of the replay start date, so the pool is what a screener
+    would have produced that day. Explicit fixture symbols are appended.
+    Returns params.symbols unchanged when no pool is configured.
+    """
+    if params.symbol_pool is None:
+        return list(params.symbols)
+
+    from autonomous_trading_platform.universe.providers.point_in_time_index_provider import (
+        build_universe_screener,
+    )
+
+    screener = build_universe_screener(
+        params.symbol_pool.source,
+        as_of=params.start_date,
+        top_n=params.symbol_pool.top_n,
+    )
+    pool = [record.symbol for record in screener.fetch_symbols()]
+    if not pool:
+        raise ValueError(
+            f"symbol_pool {params.symbol_pool.source!r} resolved to no symbols as of "
+            f"{params.start_date} — check Alpaca market-data access"
+        )
+    return sorted(set(pool) | set(params.symbols))
 
 
 # ---------------------------------------------------------------------------
@@ -475,6 +549,7 @@ def build_typed_timeline_events(events: list[TimelineEventConfig], actor: str) -
                     reason=ev.reason,
                     strategy_id=ev.strategy_id,
                     to_state=ev.to_state,
+                    actor_role=ev.actor_role,
                     metadata=ev.metadata,
                     scheduled_date=ev.at,
                 )
@@ -530,7 +605,7 @@ def validate_plan(
     ]
 
     # Symbol sanity
-    if not params.symbols:
+    if not params.symbols and params.symbol_pool is None:
         issues.append("symbols list is empty")
 
     # Output path
@@ -568,10 +643,15 @@ def validate_plan(
     # Scheduled job config summary — handle both ScheduledJobConfig and plain dicts
     def _job_info(cfg: Any) -> dict[str, Any]:
         if isinstance(cfg, dict):
-            return {"cadence": cfg.get("cadence", "daily"), "enabled": cfg.get("enabled", True)}
+            return {
+                "cadence": cfg.get("cadence", "daily"),
+                "enabled": cfg.get("enabled", True),
+                "options": cfg.get("options", {}),
+            }
         return {
             "cadence": getattr(cfg, "cadence", "daily"),
             "enabled": getattr(cfg, "enabled", True),
+            "options": getattr(cfg, "options", {}),
         }
 
     scheduled_jobs_plan = {name: _job_info(cfg) for name, cfg in params.scheduled_jobs.items()}
@@ -583,6 +663,11 @@ def validate_plan(
         "warnings": warnings,
         "fixture_name": params.fixture.platform_replay.name if params.fixture else None,
         "symbols": params.symbols,
+        "symbol_pool": (
+            {**params.symbol_pool.model_dump(), "resolved": "at run start (as of start_date)"}
+            if params.symbol_pool
+            else None
+        ),
         "start_date": params.start_date.isoformat(),
         "end_date": params.end_date.isoformat(),
         "starting_cash": str(params.starting_cash),

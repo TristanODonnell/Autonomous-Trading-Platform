@@ -7,6 +7,7 @@ import logging
 import os
 from datetime import date, datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.application.services.strategy_catalog_service import (
@@ -17,8 +18,16 @@ from autonomous_trading_platform.contracts.runtime.platform_replay import (
     ResearchReplayResult,
     ResearchSummary,
 )
+from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
 
 logger = logging.getLogger(__name__)
+
+
+# Research rejects candidates that trade more than this many times their capital per day
+# (rotation step 5c-G: 5-minute noise traders turned over 13-26x a day; the strategies
+# that held positions ran ~2x). Slippage is already in research returns; this cap is a
+# backstop for edges too thin to survive live costs.
+RESEARCH_MAX_DAILY_TURNOVER = 10.0
 
 
 def run_research_at_timestamp(
@@ -84,14 +93,22 @@ def run_scheduled_research_at_timestamp(
     timestamp: datetime,
     replay_context: PlatformReplayContext,
     dataset_version_id: str | None = None,
+    research_options: dict | None = None,
 ) -> ResearchReplayResult:
     """Run the full staged research pipeline at a scheduled replay timestamp.
 
-    Called monthly during platform replay. Builds an experiment with a 3-stage
-    pipeline (quality filter → walk-forward → Monte Carlo), runs it, runs the
-    validation + intelligence layer on final survivors, and seeds StrategyGovernance
-    records for deployable strategies in ranked order.
+    Called monthly during platform replay. Builds an experiment with a staged
+    pipeline (quality filter → walk-forward → Monte Carlo → regime → stress →
+    overfitting), runs it, runs the validation + intelligence layer on final
+    survivors, and seeds StrategyGovernance records for deployable strategies
+    in ranked order.
+
+    research_options comes from the fixture's scheduled_jobs.research.options.
+    Supported keys:
+      profile: "full" (default) | "smoke" — smoke shrinks candidate counts,
+               Monte Carlo runs and cost scenarios for cheap verification runs.
     """
+    profile = _resolve_research_profile(research_options)
     base = dict(
         domain="research",
         timestamp=timestamp,
@@ -116,19 +133,25 @@ def run_scheduled_research_at_timestamp(
             build_simulation_context,
         )
 
-        simulation_context = build_simulation_context(
-            session=session, universe_size=_universe_size, lookback_bars=20
-        )
+        simulation_context = build_simulation_context(session=session, universe_size=_universe_size)
     except Exception as exc:
         return ResearchReplayResult(**base, status="failed", errors=[str(exc)])
 
-    experiment_def = _build_replay_experiment_definition(
-        session=session,
-        timestamp=timestamp,
-        replay_context=replay_context,
-        simulation_runner=simulation_context.simulation_runner,
-        dataset_version_id_override=dataset_version_id,
+    from autonomous_trading_platform.universe.services.survivorship_guard import (
+        SurvivorshipBiasError,
     )
+
+    try:
+        experiment_def = _build_replay_experiment_definition(
+            session=session,
+            timestamp=timestamp,
+            replay_context=replay_context,
+            simulation_runner=simulation_context.simulation_runner,
+            dataset_version_id_override=dataset_version_id,
+            profile=profile,
+        )
+    except SurvivorshipBiasError as exc:
+        return ResearchReplayResult(**base, status="failed", errors=[f"survivorship_guard: {exc}"])
     if experiment_def is None:
         return ResearchReplayResult(
             **base,
@@ -152,6 +175,9 @@ def run_scheduled_research_at_timestamp(
     stage1_count = stage_results[0].n_passed if len(stage_results) > 0 else 0
     stage2_count = stage_results[1].n_passed if len(stage_results) > 1 else 0
     stage3_count = stage_results[2].n_passed if len(stage_results) > 2 else 0
+    stage_funnel = {
+        sr.stage_name: {"entered": sr.n_entered, "passed": sr.n_passed} for sr in stage_results
+    }
 
     final_survivors = pipeline_result.final_survivors
     config_by_id = {c.strategy_id: c for c in final_survivors}
@@ -170,17 +196,39 @@ def run_scheduled_research_at_timestamp(
             ResearchIntelligenceRequest,
             ResearchIntelligenceService,
         )
+        from autonomous_trading_platform.research.pipeline.gates.overfitting_gate import (
+            collect_overfitting_evidence,
+        )
+        from autonomous_trading_platform.research.validation.survivorship_validation import (
+            SurvivorshipValidationService,
+        )
         from autonomous_trading_platform.research.validation.validation_orchestrator import (
             ValidationOrchestrator,
             ValidationRequest,
         )
+        from autonomous_trading_platform.universe.services.survivorship_guard import (
+            SurvivorshipGuard,
+        )
 
-        val_orchestrator = ValidationOrchestrator()
+        val_orchestrator = ValidationOrchestrator(
+            survivorship_service=SurvivorshipValidationService(
+                survivorship_guard=SurvivorshipGuard()
+            )
+        )
+        universe_scope = _resolve_research_universe_scope(
+            session=session,
+            start_date=experiment_def.start_date,
+            end_date=experiment_def.end_date,
+        )
         intel_svc = ResearchIntelligenceService()
 
         for config in final_survivors:
             sid = config.strategy_id
-            sim_result = sim_by_id.get(sid)
+            # Evidence the robustness stages recorded (fold pairs, MC dispersion,
+            # regime profile, full-window reference run) feeds the validation
+            # layer, so its overfitting/regime checks see the same data as the gates.
+            evidence = collect_overfitting_evidence(sid, stage_results)
+            sim_result = evidence.reference_result or sim_by_id.get(sid)
             if sim_result is None:
                 continue
             equity_curve = sim_result.equity_curve
@@ -194,6 +242,12 @@ def run_scheduled_research_at_timestamp(
                         dataset_version=experiment_def.dataset_version,
                         equity_curve=equity_curve,
                         trade_count=sim_result.trade_count,
+                        wf_fold_inputs=evidence.fold_inputs or None,
+                        mc_aggregation=evidence.mc_aggregation,
+                        regime_profile=evidence.regime_profile,
+                        universe_scope=universe_scope,
+                        experiment_start=experiment_def.start_date,
+                        experiment_end=experiment_def.end_date,
                     )
                 )
                 intel_summary = intel_svc.analyze(
@@ -235,12 +289,11 @@ def run_scheduled_research_at_timestamp(
     diversity_score = regime_diversity.get("diversification_score", 0.0)
 
     logger.info(
-        "research_tick_complete | generated=%d | stage1=%d | stage2=%d | stage3=%d | "
+        "research_tick_complete | profile=%s | generated=%d | funnel=%s | "
         "validated=%d | top=%s score=%.3f | clusters=%d spam=%d | regime_diversity=%.3f",
+        profile,
         total_runs,
-        stage1_count,
-        stage2_count,
-        stage3_count,
+        " -> ".join(f"{name}:{c['passed']}/{c['entered']}" for name, c in stage_funnel.items()),
         len(intelligence_summaries),
         top_strategy_id or "none",
         top_score,
@@ -291,6 +344,8 @@ def run_scheduled_research_at_timestamp(
             "stage_1_survivors": stage1_count,
             "stage_2_survivors": stage2_count,
             "stage_3_survivors": stage3_count,
+            "stage_funnel": stage_funnel,
+            "research_profile": profile,
             "intelligence_analyzed": len(intelligence_summaries),
             "deployable_seeded": len(deployable),
             "spam_cluster_excluded": len(spam_excluded),
@@ -341,11 +396,16 @@ def _build_replay_experiment_definition(
     replay_context: PlatformReplayContext,
     simulation_runner,  # SimulationRunner — avoid hard import cycle
     dataset_version_id_override: str | None = None,
+    profile: str = "full",
 ):
-    """Build an ExperimentDefinition with a 3-stage pipeline for the monthly research tick.
+    """Build an ExperimentDefinition with the staged pipeline for the monthly research tick.
+
+    Stage 1 always runs. Walk-forward and everything after it (Monte Carlo,
+    regime, stress, overfitting) need >= 75 days of data.
 
     Returns None if no validated dataset is available.
     """
+    from autonomous_trading_platform.common.annualisation import BARS_PER_DAY
     from autonomous_trading_platform.contracts.common.enums import PriceBasis
     from autonomous_trading_platform.research.experiments.filtering.config import (
         FilterConfig,
@@ -355,14 +415,34 @@ def _build_replay_experiment_definition(
         ExperimentDefinition,
         ExperimentType,
     )
+    from autonomous_trading_platform.research.pipeline.gates.overfitting_gate import (
+        OverfittingGateConfig,
+    )
+    from autonomous_trading_platform.research.pipeline.gates.regime_gate import RegimeGateConfig
+    from autonomous_trading_platform.research.pipeline.gates.regime_labels import (
+        OnTheFlyRegimeLabelProvider,
+    )
+    from autonomous_trading_platform.research.pipeline.gates.stress_gate import StressGateConfig
     from autonomous_trading_platform.research.pipeline.pipeline_runner import StagedPipelineConfig
     from autonomous_trading_platform.research.pipeline.stages.monte_carlo_stage import (
         MonteCarloStage,
         MonteCarloStageConfig,
     )
+    from autonomous_trading_platform.research.pipeline.stages.overfitting_stage import (
+        OverfittingStage,
+        OverfittingStageConfig,
+    )
+    from autonomous_trading_platform.research.pipeline.stages.regime_stage import (
+        RegimeStage,
+        RegimeStageConfig,
+    )
     from autonomous_trading_platform.research.pipeline.stages.simulation_stage import (
         SimulationStage,
         SimulationStageConfig,
+    )
+    from autonomous_trading_platform.research.pipeline.stages.stress_stage import (
+        StressStage,
+        StressStageConfig,
     )
     from autonomous_trading_platform.research.pipeline.stages.walk_forward_stage import (
         WalkForwardStage,
@@ -370,6 +450,7 @@ def _build_replay_experiment_definition(
     )
     from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
 
+    smoke = profile == "smoke"
     tick_date = timestamp.date()
 
     # When running inside a platform backtest, use the pre-created cumulative version
@@ -378,62 +459,20 @@ def _build_replay_experiment_definition(
         dataset_version = dataset_version_id_override
         price_basis = PriceBasis.RAW
     else:
-        # Resolve dataset_version from latest validated adjusted_bars, then raw_bars
+        # Latest validated raw_bars: research reads raw bars and split-adjusts
+        # history on read, like the trading cycle (plan 5d, D5).
         dataset_row = (
             session.query(DatasetVersions)
-            .filter(DatasetVersions.dataset_name == "adjusted_bars")
+            .filter(DatasetVersions.dataset_name == "raw_bars")
             .filter(DatasetVersions.validation_status == "validated")
             .order_by(DatasetVersions.created_at.desc())
             .first()
         )
         if dataset_row is None:
-            dataset_row = (
-                session.query(DatasetVersions)
-                .filter(DatasetVersions.dataset_name == "raw_bars")
-                .filter(DatasetVersions.validation_status == "validated")
-                .order_by(DatasetVersions.created_at.desc())
-                .first()
-            )
-        if dataset_row is None:
             return None
 
         dataset_version = dataset_row.dataset_version_id
-        price_basis = (
-            PriceBasis.ADJUSTED if dataset_row.dataset_name == "adjusted_bars" else PriceBasis.RAW
-        )
-
-    # Resolve active universe version and its member symbols.
-    # Experiments should run on the historically active symbol set at tick_date
-    # (i.e. whatever the monthly universe rotation selected), not blindly on
-    # all ingested symbols. Falls back to replay_context.symbols if no rotation
-    # has fired yet (early in the first month).
-    universe_version = "v1"
-    symbols = sorted(replay_context.symbols)  # fallback
-    try:
-        from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
-            UniverseVersionRepository,
-        )
-        from autonomous_trading_platform.universe.services.universe_resolution_service import (
-            UniverseResolutionService,
-        )
-
-        _uvr = UniverseVersionRepository(session)
-        resolver = UniverseResolutionService(_uvr)
-        active = resolver.resolve_active(timestamp)
-        if active is not None:
-            universe_version = active.universe_version_id or "v1"
-            _members = _uvr.get_included_members(active.universe_version_id)
-            _active_symbols = sorted(m.symbol for m in _members)
-            # In backtest mode, restrict to symbols the fixture actually has data for.
-            # The DB may contain symbols from prior runs (e.g. GOOG vs GOOGL) that
-            # have no Parquet bars in the backtest dataset, causing every sim to fail.
-            if dataset_version_id_override is not None:
-                _fixture_symbols = set(replay_context.symbols)
-                _active_symbols = [s for s in _active_symbols if s in _fixture_symbols]
-            if _active_symbols:
-                symbols = _active_symbols
-    except Exception:
-        pass
+        price_basis = PriceBasis.RAW
 
     lookback_days = (
         90  # ~64 trading days; covers 3 months so walk-forward (needs 75 days) always fires
@@ -466,6 +505,29 @@ def _build_replay_experiment_definition(
     if available_days < 15:
         return None
 
+    # Survivorship-safe research universe: members active at the START of the
+    # research window, not at tick_date. A tick-date universe silently drops
+    # names that died inside the window; anchoring at the window start keeps
+    # them (their bars simply stop). SurvivorshipGuard enforces the anchor.
+    scope = _resolve_research_universe_scope(
+        session=session, start_date=start_date, end_date=tick_date
+    )
+    universe_version = scope.universe_version_id or "v1"
+    symbols = sorted(scope.member_symbols)
+    if dataset_version_id_override is not None:
+        # Backtest mode: only symbols the replay ingested have Parquet bars.
+        _ingested = set(replay_context.symbols)
+        symbols = [s for s in symbols if s in _ingested]
+    if not symbols:
+        from autonomous_trading_platform.universe.services.survivorship_guard import (
+            SurvivorshipBiasError,
+        )
+
+        raise SurvivorshipBiasError(
+            f"Universe active on {start_date} ({scope.universe_version_id}) has no "
+            "ingested symbols — refusing to fall back to an unanchored symbol list."
+        )
+
     # Use half of available CPUs for parallel simulation (threads share the GIL
     # but I/O — parquet reads — runs concurrently, giving real speedup there).
     _cpu = os.cpu_count() or 1
@@ -481,6 +543,7 @@ def _build_replay_experiment_definition(
         min_trades=5,
         min_consistency_score=0.3,
         min_total_return=-0.05,
+        max_daily_turnover=RESEARCH_MAX_DAILY_TURNOVER,
     )
 
     # Stage 1 — always runs (just needs start_date < end_date)
@@ -496,6 +559,7 @@ def _build_replay_experiment_definition(
                 min_trades=10,
                 min_consistency_score=0.4,
                 min_total_return=0.0,
+                max_daily_turnover=RESEARCH_MAX_DAILY_TURNOVER,
             ),
             scoring_weights=default_weights,
             max_workers=1,
@@ -538,7 +602,7 @@ def _build_replay_experiment_definition(
                 symbols=symbols,
                 start_date=start_date,
                 end_date=tick_date,
-                n_runs=5,
+                n_runs=3 if smoke else 5,
                 min_pass_rate=0.6,
                 filter_config=wf_mc_filter,
                 scoring_weights=default_weights,
@@ -548,17 +612,76 @@ def _build_replay_experiment_definition(
         )
         stages.append(stage3)
 
+        # Stage 4 — regime robustness on auto-classified daily regimes. Reuses
+        # the Monte Carlo representative run (same window), so it adds no
+        # simulations: one bar read + classification per research tick.
+        stages.append(
+            RegimeStage(
+                stage_config=RegimeStageConfig(
+                    name="regime_robustness",
+                    symbols=symbols,
+                    start_date=start_date,
+                    end_date=tick_date,
+                    gate=RegimeGateConfig(
+                        dimensions=("trend", "volatility"),
+                        # Research sims run on 5-min bars: a regime needs ~5
+                        # trading days of bars before its metrics mean anything.
+                        min_bars_per_regime=5 * BARS_PER_DAY,
+                        min_regime_sharpe=-1.0,
+                        max_regime_drawdown=-0.20,
+                        min_positive_regime_fraction=0.5,
+                        on_insufficient_coverage="pass",
+                    ),
+                ),
+                simulation_runner=simulation_runner,
+                label_provider=OnTheFlyRegimeLabelProvider.from_simulation_runner(
+                    simulation_runner
+                ),
+            )
+        )
+
+        # Stage 5 — stress: equity-curve shocks (free) + execution-cost re-runs.
+        stages.append(
+            StressStage(
+                stage_config=StressStageConfig(
+                    name="stress_robustness",
+                    symbols=symbols,
+                    start_date=start_date,
+                    end_date=tick_date,
+                    gate=StressGateConfig(
+                        min_shock_sharpe=0.0,
+                        max_shock_drawdown=-0.40,
+                        min_shock_survival_rate=0.5,
+                        cost_multipliers=(2.0,) if smoke else (2.0, 3.0),
+                        min_cost_sharpe=0.0,
+                        max_cost_drawdown=-0.40,
+                        min_cost_survival_rate=0.5,
+                    ),
+                ),
+                simulation_runner=simulation_runner,
+            )
+        )
+
+        # Stage 6 — overfitting: no simulations; combines WF/MC/regime evidence.
+        stages.append(
+            OverfittingStage(
+                stage_config=OverfittingStageConfig(
+                    name="overfitting_gate",
+                    gate=OverfittingGateConfig(
+                        max_overfitting_probability=0.6,
+                        min_core_indicators=2,
+                        min_trade_count=10,
+                        on_insufficient_evidence="pass",
+                    ),
+                )
+            )
+        )
+
     return ExperimentDefinition(
         experiment_id=experiment_id,
         experiment_type=ExperimentType.SWEEP,
         description=f"Monthly platform replay research — {tick_date.strftime('%B %Y')}",
-        strategy_set=[
-            {"type": "momentum", "method": "random", "options": {"n_samples": 6}},
-            {"type": "mean_reversion", "method": "random", "options": {"n_samples": 6}},
-            {"type": "moving_average_crossover", "method": "random", "options": {"n_samples": 6}},
-            {"type": "factor_based", "method": "random", "options": {"n_samples": 8}},
-            {"type": "composite_rule", "method": "random", "options": {"n_samples": 10}},
-        ],
+        strategy_set=_replay_strategy_set(smoke=smoke),
         parameter_grid=[{}],
         dataset_version=dataset_version,
         universe_version=universe_version,
@@ -570,6 +693,69 @@ def _build_replay_experiment_definition(
         parameter_space={},
         staged_pipeline_config=StagedPipelineConfig(stages=stages),
     )
+
+
+def _resolve_research_universe_scope(*, session: Session, start_date: date, end_date: date):
+    """Point-in-time universe scope for a research window, validated by SurvivorshipGuard.
+
+    Raises SurvivorshipBiasError when no universe was active at start_date.
+    """
+    from autonomous_trading_platform.storage.sor.repositories.core.universe_rotation_repository import (
+        UniverseRotationRepository,
+    )
+    from autonomous_trading_platform.storage.sor.repositories.core.universe_version_repository import (
+        UniverseVersionRepository,
+    )
+    from autonomous_trading_platform.universe.services.experiment_universe_resolver import (
+        ExperimentUniverseResolver,
+    )
+    from autonomous_trading_platform.universe.services.survivorship_guard import (
+        SurvivorshipGuard,
+    )
+    from autonomous_trading_platform.universe.services.universe_history_service import (
+        UniverseHistoryService,
+    )
+
+    version_repo = UniverseVersionRepository(session)
+    resolver = ExperimentUniverseResolver(
+        history_service=UniverseHistoryService(
+            version_repo=version_repo, rotation_repo=UniverseRotationRepository(session)
+        ),
+        version_repo=version_repo,
+    )
+    scope = resolver.resolve_active_as_of(start_date)
+    SurvivorshipGuard().validate_experiment_scope(scope, start_date, end_date)
+    return scope
+
+
+_RESEARCH_PROFILES = frozenset({"full", "smoke"})
+
+
+def _resolve_research_profile(research_options: dict | None) -> str:
+    profile = str((research_options or {}).get("profile", "full"))
+    if profile not in _RESEARCH_PROFILES:
+        logger.warning(
+            "Unknown research profile %r — falling back to 'full' (valid: %s)",
+            profile,
+            sorted(_RESEARCH_PROFILES),
+        )
+        return "full"
+    return profile
+
+
+def _replay_strategy_set(*, smoke: bool) -> list[dict]:
+    """Candidate mix per research tick. Smoke keeps every family at 2 samples each."""
+    full_counts = {
+        "momentum": 6,
+        "mean_reversion": 6,
+        "moving_average_crossover": 6,
+        "factor_based": 8,
+        "composite_rule": 10,
+    }
+    return [
+        {"type": t, "method": "random", "options": {"n_samples": 2 if smoke else n}}
+        for t, n in full_counts.items()
+    ]
 
 
 def _seed_research_governance_from_intelligence(
@@ -596,13 +782,13 @@ def _seed_research_governance_from_intelligence(
         )
         sim_result = sim_by_id.get(strategy_id)
         source_run_id = str(sim_result.run_id) if sim_result is not None else None
-        existing = session.get(StrategyGovernance, (strategy_id, config_hash))
+        existing = _latest_governance_row(session, strategy_id)
         if existing is None:
             session.add(
                 StrategyGovernance(
                     strategy_id=strategy_id,
                     config_hash=config_hash,
-                    current_state="approved_research",
+                    current_state="candidate",
                     experiment_id=experiment_id,
                     source_run_id=source_run_id,
                     submitted_at=now_utc,
@@ -610,7 +796,11 @@ def _seed_research_governance_from_intelligence(
                     submitted_by="system",
                 )
             )
-        elif existing.source_run_id is None and source_run_id is not None:
+        elif (
+            existing.current_state == "candidate"
+            and existing.source_run_id is None
+            and source_run_id is not None
+        ):
             # Back-fill source_run_id on rows seeded by a previous run that lacked it.
             existing.source_run_id = source_run_id
             existing.updated_at = now_utc
@@ -622,6 +812,23 @@ def _seed_research_governance_from_intelligence(
         raise
 
 
+def _latest_governance_row(session: Session, strategy_id: str) -> StrategyGovernance | None:
+    """Latest governance row for a strategy, whatever config_hash it was seeded with.
+
+    Strategy ids are content hashes, so an existing row means research already
+    produced this exact config. Keying on strategy_id alone (not (id, config_hash),
+    which different seeders hash differently) keeps research from re-seeding a
+    strategy as a fresh candidate — in particular one the bench review retired.
+    """
+    row: StrategyGovernance | None = session.scalars(
+        select(StrategyGovernance)
+        .where(StrategyGovernance.strategy_id == strategy_id)
+        .order_by(StrategyGovernance.updated_at.desc())
+        .limit(1)
+    ).first()
+    return row
+
+
 def _seed_research_governance(
     *,
     session: Session,
@@ -629,7 +836,7 @@ def _seed_research_governance(
     experiment_id: str,
     now_utc: datetime,
 ) -> None:
-    """Upsert StrategyGovernance rows for research survivors in approved_research state."""
+    """Upsert StrategyGovernance rows for research survivors in candidate state."""
     from autonomous_trading_platform.storage.sor.models.strategy_governance import (
         StrategyGovernance,
     )
@@ -637,13 +844,12 @@ def _seed_research_governance(
     for output in survivors:
         strategy_id = output.strategy_id
         config_hash = hashlib.sha256(strategy_id.encode()).hexdigest()[:16]
-        existing = session.get(StrategyGovernance, (strategy_id, config_hash))
-        if existing is None:
+        if _latest_governance_row(session, strategy_id) is None:
             session.add(
                 StrategyGovernance(
                     strategy_id=strategy_id,
                     config_hash=config_hash,
-                    current_state="approved_research",
+                    current_state="candidate",
                     experiment_id=experiment_id,
                     source_run_id=None,
                     submitted_at=now_utc,

@@ -87,6 +87,9 @@ package-dir = { "" = "src" }
 where = ["src"]
 exclude = ["tests*", "docs*"]
 
+[tool.setuptools.package-data]
+"autonomous_trading_platform.universe.reference_data" = ["*.csv", "*.txt"]
+
 # --- ruff ---
 [tool.ruff]
 line-length = 100

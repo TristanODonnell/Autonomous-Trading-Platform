@@ -81,6 +81,7 @@ class _FixedSizer:
         performance_tier: str | None = None,
         combined_scalar: Decimal | None = None,
         realized_drawdown: float | None = None,
+        symbol_count: int | None = None,
     ) -> SizingResult:
         exc_type = self._raises_for.get(symbol)
         if exc_type is not None:

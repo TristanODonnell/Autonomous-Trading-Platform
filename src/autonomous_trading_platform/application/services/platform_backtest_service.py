@@ -48,6 +48,9 @@ from autonomous_trading_platform.contracts.runtime.platform_replay import (
     SettingsTimelineEvent,
 )
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.universe.services.market_calendar_service import (
+    MarketCalendarService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +132,9 @@ class PlatformBacktestInputs:
     # Checkpoint path: if set, write a checkpoint after every committed tick and
     # resume from it on restart. Set to None to disable (default).
     checkpoint_path: Path | None = None
+    # Universe screener source for bootstrap + rotations: "alpaca_active"
+    # (today's active assets) or "sp500_point_in_time" (survivorship-safe).
+    universe_screener_source: str = "alpaca_active"
 
 
 @dataclass
@@ -144,6 +150,7 @@ class TickResult:
     governance: dict[str, Any] | None = None
     portfolio: dict[str, Any] | None = None
     research: dict[str, Any] | None = None
+    bench: dict[str, Any] | None = None
     operations: dict[str, Any] | None = None
     timeline_events: list[dict[str, Any]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -166,35 +173,28 @@ def _emit_progress(
 # Market timing
 # ---------------------------------------------------------------------------
 
-# Each replay tick is stamped at 4:00 PM ET ≈ 21:00 UTC (standard time / EST).
-# This puts ingestion, features, governance, and risk in the correct after-close
+# Each replay tick is stamped at the regular-session close (4:00 PM ET, 1:00 PM on early
+# closes) in exchange time, so daylight saving moves it: 21:00 UTC in winter, 20:00 UTC in
+# summer. This puts ingestion, features, governance, and risk in the correct after-close
 # window and gives the trading cycle a realistic same-day reference timestamp.
-_MARKET_CLOSE_UTC_HOUR = 21
-# Market open: 9:30 AM ET = 14:30 UTC (EST = UTC-5; ignores DST for simplicity).
-_MARKET_OPEN_UTC_HOUR = 14
-_MARKET_OPEN_UTC_MINUTE = 30
 
 
 def _market_close_ts(tick_date: date) -> datetime:
-    """Return the market-close UTC timestamp for a given trading date (21:00 UTC = 4 PM EST)."""
-    return datetime.combine(tick_date, dt_time(_MARKET_CLOSE_UTC_HOUR, 0)).replace(tzinfo=UTC)
+    """Return the regular-session close for a trading date as a UTC timestamp."""
+    return MarketCalendarService().regular_session_utc(tick_date)[1]
 
 
 def _intraday_bar_timestamps(tick_date: date, cadence_minutes: int) -> list[datetime]:
     """Return bar timestamps for one trading day.
 
     For cadence_minutes >= 390 (daily), returns a single EOD timestamp.
-    For intraday cadence, returns timestamps from 9:30 AM ET to the last bar
-    before 4:00 PM ET, spaced cadence_minutes apart.
+    For intraday cadence, returns timestamps from the 9:30 AM ET open to the last bar
+    before the close, spaced cadence_minutes apart (78 five-minute bars on a full day).
     """
     if cadence_minutes >= 390:
         return [_market_close_ts(tick_date)]
 
-    market_open = datetime.combine(
-        tick_date,
-        dt_time(_MARKET_OPEN_UTC_HOUR, _MARKET_OPEN_UTC_MINUTE),
-    ).replace(tzinfo=UTC)
-    market_close = _market_close_ts(tick_date)
+    market_open, market_close = MarketCalendarService().regular_session_utc(tick_date)
 
     bars: list[datetime] = []
     ts = market_open
@@ -207,6 +207,19 @@ def _intraday_bar_timestamps(tick_date: date, cadence_minutes: int) -> list[date
 # ---------------------------------------------------------------------------
 # Cadence scheduler
 # ---------------------------------------------------------------------------
+
+
+def _job_options(scheduled_jobs: dict[str, Any], job: str) -> dict[str, Any]:
+    """Job-specific options from the fixture (scheduled_jobs.<job>.options)."""
+    cfg = scheduled_jobs.get(job, {})
+    options = cfg.get("options") if isinstance(cfg, dict) else getattr(cfg, "options", None)
+    return dict(options or {})
+
+
+def _job_enabled(scheduled_jobs: dict[str, Any], job: str) -> bool:
+    cfg = scheduled_jobs.get(job, {})
+    enabled = cfg.get("enabled", True) if isinstance(cfg, dict) else getattr(cfg, "enabled", True)
+    return bool(enabled)
 
 
 class _CadenceScheduler:
@@ -503,14 +516,17 @@ class PlatformBacktestRunner:
                         from autonomous_trading_platform.storage.sor.repositories.core.raw_market_pool_repository import (
                             RawMarketPoolRepository as _RMPRepo,
                         )
+                        from autonomous_trading_platform.storage.sor.repositories.core.symbol_date_coverage_repository import (
+                            SymbolDateCoverageRepository as _SDCRepo,
+                        )
                         from autonomous_trading_platform.universe.jobs.run_candidate_generation import (
                             run_candidate_generation as _run_cg,
                         )
                         from autonomous_trading_platform.universe.jobs.run_universe_rotation import (
                             run_universe_rotation as _run_ur,
                         )
-                        from autonomous_trading_platform.universe.providers.alpaca_screener_provider import (
-                            AlpacaScreenerProvider as _Screener,
+                        from autonomous_trading_platform.universe.providers.point_in_time_index_provider import (
+                            build_universe_screener as _build_screener,
                         )
                         from autonomous_trading_platform.universe.services.raw_market_pool_refresh_service import (
                             RawMarketPoolRefreshService as _RMPSvc,
@@ -527,7 +543,11 @@ class PlatformBacktestRunner:
 
                         _screener_records: list | None = None
                         try:
-                            _screener = _Screener(as_of=inputs.start_date, top_n=500)
+                            _screener = _build_screener(
+                                inputs.universe_screener_source,
+                                as_of=inputs.start_date,
+                                top_n=500,
+                            )
                             _screener_records = _screener.fetch_symbols()
                             _pool_repo = _RMPRepo(session)
                             _refresh_svc = _RMPSvc(_pool_repo, _screener)
@@ -536,26 +556,78 @@ class PlatformBacktestRunner:
                         except Exception as _exc:
                             all_warnings.append(f"universe_screener_failed: {_exc}")
 
+                        # Historical bars live in versioned Parquet datasets, not the
+                        # SQL market_bars table, so candidate scoring must be pointed
+                        # at whichever dataset_version actually has ingested coverage
+                        # for this symbol/date window — otherwise every candidate is
+                        # rejected as no_market_data even when Parquet data exists.
+                        _cg_lookback_days = 20
+                        _cg_dataset_version_id: str | None = None
+                        try:
+                            _cg_dataset_version_id = _SDCRepo(
+                                session
+                            ).find_dataset_version_with_widest_coverage(
+                                symbols=inputs.symbols,
+                                start_date=(
+                                    _bootstrap_ts - timedelta(days=_cg_lookback_days * 3)
+                                ).date(),
+                                end_date=_bootstrap_ts.date(),
+                            )
+                        except Exception as _exc:
+                            all_warnings.append(
+                                f"universe_candidate_dataset_version_lookup_failed: {_exc}"
+                            )
+                        if _cg_dataset_version_id is None:
+                            all_warnings.append(
+                                "universe_candidate_dataset_version_unresolved: "
+                                "no symbol_date_coverages match for bootstrap window; "
+                                "candidate scoring will fall back to the SQL market_bars "
+                                "table and likely reject every candidate"
+                            )
+
                         _candidate_ok = False
                         if _screener_records:
                             try:
-                                _run_cg(
+                                _cg_result = _run_cg(
                                     as_of=_bootstrap_ts,
                                     config=_CGConfig(
-                                        as_of=_bootstrap_ts, lookback_days=20, max_symbols=500
+                                        as_of=_bootstrap_ts,
+                                        lookback_days=_cg_lookback_days,
+                                        max_symbols=500,
                                     ),
                                     rebalance_reason="backtest_bootstrap",
+                                    dataset_version_id=_cg_dataset_version_id,
                                 )
-                                _run_ur(
-                                    candidate_version_id=None,
-                                    config=_URConfig(),
-                                    rotation_reason="backtest_bootstrap",
-                                    force_rotation=True,
-                                    as_of=_bootstrap_ts,
-                                    skip_cadence_check=True,
-                                    session=session,
-                                )
-                                _candidate_ok = True
+                                if not _cg_result.included_members:
+                                    # Rotating an empty candidate would let the rotation
+                                    # service pick some other (possibly future-dated)
+                                    # candidate — use the fallback universe instead.
+                                    _rejection_summary = _cg_result.diagnostics.get(
+                                        "rejection_summary", {}
+                                    )
+                                    all_warnings.append(
+                                        "universe_candidate_empty: no candidates accepted "
+                                        f"(rejections: {_rejection_summary})"
+                                    )
+                                else:
+                                    # Pin rotation to the candidate just built, so it
+                                    # cannot resolve a stale or future-dated one.
+                                    _run_ur(
+                                        candidate_version_id=_cg_result.version.universe_version_id,
+                                        config=_URConfig(),
+                                        rotation_reason="backtest_bootstrap",
+                                        force_rotation=True,
+                                        as_of=_bootstrap_ts,
+                                        skip_cadence_check=True,
+                                        session=session,
+                                    )
+                                    if _UVRepo(session).get_active_version(_bootstrap_ts):
+                                        _candidate_ok = True
+                                    else:
+                                        all_warnings.append(
+                                            "universe_candidate_rotation_inactive: rotation did "
+                                            f"not activate a universe at {_bootstrap_ts.isoformat()}"
+                                        )
                             except Exception as _exc:
                                 all_warnings.append(f"universe_candidate_rotation_failed: {_exc}")
 
@@ -762,6 +834,30 @@ class PlatformBacktestRunner:
                     all_warnings.extend(ing_result.warnings)
                     cadence.record("ingestion", tick_date)
 
+                    # Symbols whose bars have stopped are delisted: recorded as
+                    # lifecycle events so the trading universe drops them and the
+                    # simulated broker can exit open positions at the last close.
+                    if backtest_dataset_version_id and ingestion_ran:
+                        from autonomous_trading_platform.application.services.platform_replay.ingestion_hooks import (
+                            detect_delistings_at_timestamp,
+                        )
+
+                        delisted = detect_delistings_at_timestamp(
+                            session=session,
+                            tick_date=tick_date,
+                            symbols=inputs.symbols,
+                            dataset_version_id=backtest_dataset_version_id,
+                        )
+                        if delisted:
+                            tick.ingestion = {
+                                **(tick.ingestion or {}),
+                                "delistings_detected": delisted,
+                            }
+                            all_warnings.extend(
+                                f"delisting_detected: {d['symbol']} (last bar {d['last_bar_date']})"
+                                for d in delisted
+                            )
+
                 # ── Corporate actions (daily — after ingestion) ─────────────
                 if cadence.should_run("corporate_actions", tick_date, ingestion_ran=ingestion_ran):
                     from autonomous_trading_platform.application.services.platform_replay.ingestion_hooks import (
@@ -790,7 +886,7 @@ class PlatformBacktestRunner:
                     feat_result = run_features_at_timestamp(
                         session=session,
                         timestamp=tick_ts,
-                        dataset_version_id=None,
+                        dataset_version_id=latest_dataset_version_id,
                         symbols=inputs.symbols,
                         replay_context=tick_ctx,
                     )
@@ -811,6 +907,7 @@ class PlatformBacktestRunner:
                         timestamp=tick_ts,
                         replay_context=tick_ctx,
                         skip_cadence_check=True,
+                        screener_source=inputs.universe_screener_source,
                     )
                     tick.universe = uni_result.summary
                     cadence.record("universe", tick_date)
@@ -853,14 +950,21 @@ class PlatformBacktestRunner:
                             dataset_version_id=tick_ctx.dataset_version_id,
                         )
 
-                        # Features per tick in intraday mode — uses bars up to bar_ts date
-                        if is_intraday and cadence.should_run(
-                            "features", tick_date, ingestion_ran=ingestion_ran
+                        # Features once per day in intraday mode, on the first bar: the
+                        # whole day was ingested before this loop, so every later bar
+                        # would recompute the identical day-level features (20 % of a
+                        # production-cadence run) and register a new dataset version.
+                        if (
+                            is_intraday
+                            and bar_ts == bar_timestamps[0]
+                            and cadence.should_run(
+                                "features", tick_date, ingestion_ran=ingestion_ran
+                            )
                         ):
                             feat_result = run_features_at_timestamp(
                                 session=session,
                                 timestamp=bar_ts,
-                                dataset_version_id=None,
+                                dataset_version_id=latest_dataset_version_id,
                                 symbols=inputs.symbols,
                                 replay_context=bar_ctx,
                             )
@@ -876,6 +980,8 @@ class PlatformBacktestRunner:
                             broker_client=day_broker_client,
                             backtest_dataset_version_id=backtest_dataset_version_id,
                         )
+                        if bar_result.errors:
+                            tick.errors.extend(bar_result.errors)
                         total_orders += bar_result.orders_submitted
                         total_fills += bar_result.fills_received
                         last_trading_result = bar_result
@@ -937,11 +1043,37 @@ class PlatformBacktestRunner:
                         timestamp=tick_ts,
                         replay_context=tick_ctx,
                         dataset_version_id=backtest_dataset_version_id,
+                        research_options=_job_options(inputs.scheduled_jobs_config, "research"),
                     )
                     tick.research = res_result.summary
                     if res_result.errors:
                         tick.errors.extend(res_result.errors)
                     cadence.record("research", tick_date)
+                    research_ran = res_result.status == "ok"
+                else:
+                    research_ran = False
+
+                # ── Bench review (weekly, and right after a research run) ────
+                # Only when the fixture declares the job: a job missing from
+                # scheduled_jobs would otherwise default to daily.
+                if "bench" in inputs.scheduled_jobs_config and (
+                    cadence.should_run("bench", tick_date)
+                    or (research_ran and _job_enabled(inputs.scheduled_jobs_config, "bench"))
+                ):
+                    from autonomous_trading_platform.application.services.platform_replay.bench_hooks import (
+                        run_bench_review_at_timestamp,
+                    )
+
+                    bench_result = run_bench_review_at_timestamp(
+                        session=session,
+                        timestamp=tick_ts,
+                        replay_context=tick_ctx,
+                        dataset_version_id=backtest_dataset_version_id,
+                    )
+                    tick.bench = bench_result.summary
+                    if bench_result.errors:
+                        tick.errors.extend(bench_result.errors)
+                    cadence.record("bench", tick_date)
 
                 # ── Operations health (daily) ────────────────────────────────
                 if cadence.should_run("operations_health", tick_date):
@@ -1096,6 +1228,23 @@ class PlatformBacktestRunner:
 
             strategy_catalog_summary = build_strategy_catalog_summary(session=session)
 
+            rotation_summary = None
+            try:
+                from autonomous_trading_platform.application.services.platform_replay.rotation_hooks import (
+                    build_rotation_summary,
+                )
+
+                rotation_summary = build_rotation_summary(
+                    session=session,
+                    start_date=inputs.start_date,
+                    end_date=inputs.end_date,
+                    starting_cash=float(inputs.starting_cash),
+                    dataset_version_id=backtest_dataset_version_id,
+                    symbols=list(ctx.symbols),
+                )
+            except Exception as exc:
+                all_warnings.append(f"rotation_report: {exc}")
+
         finally:
             session.close()
 
@@ -1144,6 +1293,7 @@ class PlatformBacktestRunner:
             research=research_summary,
             diagnostics=diagnostics_summary,
             strategy_catalog=strategy_catalog_summary,
+            rotation=rotation_summary,
             tick_results=tick_results,
             timeline_events_applied=timeline_events_applied,
             warnings=all_warnings,

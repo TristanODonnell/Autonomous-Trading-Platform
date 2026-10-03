@@ -157,3 +157,25 @@ def test_determinism():
     r1 = analyzer.analyze(strategy_id="s", wf_result=wf, trade_count=100, equity_curve=curve)
     r2 = analyzer.analyze(strategy_id="s", wf_result=wf, trade_count=100, equity_curve=curve)
     assert r1.overfitting_probability == pytest.approx(r2.overfitting_probability)
+
+
+def test_regime_concentration_ignores_empty_buckets():
+    """Regimes with no bars (sharpe None) must not count as unprofitable."""
+    mock_profile = MagicMock()
+    dim = MagicMock()
+    dim.metrics_by_label = {
+        "bull": MagicMock(sharpe=1.5),
+        "bear": MagicMock(sharpe=0.4),
+        "sideways": MagicMock(sharpe=None),  # never occurred in the window
+    }
+    empty = MagicMock()
+    empty.metrics_by_label = {"low_liquidity": MagicMock(sharpe=None)}
+    mock_profile.by_trend = dim
+    mock_profile.by_volatility = dim
+    mock_profile.by_liquidity = empty
+    mock_profile.by_mean_reversion = empty
+    mock_profile.by_risk = empty
+
+    result = OverfittingAnalyzer().analyze(strategy_id="s", regime_profile=mock_profile)
+
+    assert result.indicators.regime_concentration == 1.0

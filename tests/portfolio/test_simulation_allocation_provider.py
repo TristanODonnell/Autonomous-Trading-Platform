@@ -229,7 +229,7 @@ class TestSimulationAllocationProviderAllocation:
         cfg = _config(strategy_entries={"momentum_v2": _entry("momentum_v2", max_pct=0.15)})
         provider = SimulationAllocationProvider(cfg)
 
-        result = provider.get_allocation("momentum_v2", GovernanceState.APPROVED_RESEARCH)
+        result = provider.get_allocation("momentum_v2", GovernanceState.CANDIDATE)
 
         assert result.strategy_id == "momentum_v2"
         assert result.max_pct_of_capital == 0.15
@@ -257,11 +257,11 @@ class TestSimulationAllocationProviderAllocation:
         result = provider.get_allocation("strat_x", GovernanceState.PROPOSED)
         assert result.strategy_id == "strat_x"
 
-    def test_none_approval_status_resolves_to_approved_research(self) -> None:
+    def test_none_approval_status_resolves_to_candidate(self) -> None:
         cfg = _config()
         provider = SimulationAllocationProvider(cfg)
         result = provider.get_allocation("strat_x", None)
-        assert result.approval_status == GovernanceState.APPROVED_RESEARCH
+        assert result.approval_status == GovernanceState.CANDIDATE
 
     def test_override_fields_propagated_from_entry(self) -> None:
         entry = _entry("s1", override_applied=True, override_id="ov_abc")
@@ -277,7 +277,7 @@ class TestSimulationAllocationProviderAllocation:
         cfg = _config(strategy_entries={"s1": entry})
         provider = SimulationAllocationProvider(cfg)
 
-        result = provider.get_allocation("s1", GovernanceState.APPROVED_RESEARCH)
+        result = provider.get_allocation("s1", GovernanceState.CANDIDATE)
         assert result.max_position_size_usd == 5000.0
 
 
@@ -349,8 +349,8 @@ class TestReproducibility:
         p_a = SimulationAllocationProvider(cfg_a)
         p_b = SimulationAllocationProvider(cfg_b)
 
-        r_a = p_a.get_allocation("s1", GovernanceState.APPROVED_RESEARCH)
-        r_b = p_b.get_allocation("s1", GovernanceState.APPROVED_RESEARCH)
+        r_a = p_a.get_allocation("s1", GovernanceState.CANDIDATE)
+        r_b = p_b.get_allocation("s1", GovernanceState.CANDIDATE)
         assert r_a.allocated_capital_usd == r_b.allocated_capital_usd
         assert r_a.max_pct_of_capital == r_b.max_pct_of_capital
 
@@ -363,7 +363,7 @@ class TestReproducibility:
             policies=[
                 _FakePolicy(
                     policy_id="pol_001",
-                    approval_status="approved_research",
+                    approval_status="candidate",
                     max_pct_of_capital=0.10,
                     max_position_size_usd=None,
                     max_drawdown_allowed=0.20,
@@ -393,7 +393,7 @@ class TestReproducibility:
             policies=[
                 _FakePolicy(
                     policy_id="pol_001",
-                    approval_status="approved_research",
+                    approval_status="candidate",
                     max_pct_of_capital=0.10,
                     max_position_size_usd=None,
                     max_drawdown_allowed=0.20,
@@ -437,8 +437,8 @@ class TestReproducibility:
         p_original = SimulationAllocationProvider(original_cfg)
         p_restored = SimulationAllocationProvider(restored_cfg)
 
-        r_orig = p_original.get_allocation("momentum_v2", GovernanceState.APPROVED_RESEARCH)
-        r_rest = p_restored.get_allocation("momentum_v2", GovernanceState.APPROVED_RESEARCH)
+        r_orig = p_original.get_allocation("momentum_v2", GovernanceState.CANDIDATE)
+        r_rest = p_restored.get_allocation("momentum_v2", GovernanceState.CANDIDATE)
 
         assert r_orig.allocated_capital_usd == r_rest.allocated_capital_usd
         assert r_orig.max_pct_of_capital == r_rest.max_pct_of_capital
@@ -456,7 +456,7 @@ class TestSnapshotAllocationConfig:
             policies=[
                 _FakePolicy(
                     policy_id="pol_001",
-                    approval_status="approved_research",
+                    approval_status="candidate",
                     max_pct_of_capital=0.12,
                     max_position_size_usd=None,
                     max_drawdown_allowed=0.25,
@@ -505,7 +505,7 @@ class TestSnapshotAllocationConfig:
             policies=[
                 _FakePolicy(
                     policy_id="pol_research",
-                    approval_status="approved_research",
+                    approval_status="candidate",
                     max_pct_of_capital=0.15,
                     max_position_size_usd=None,
                     max_drawdown_allowed=0.20,
@@ -530,7 +530,7 @@ class TestSnapshotAllocationConfig:
             policies=[
                 _FakePolicy(
                     policy_id="pol_research",
-                    approval_status="approved_research",
+                    approval_status="candidate",
                     max_pct_of_capital=0.10,
                     max_position_size_usd=None,
                     max_drawdown_allowed=0.20,
@@ -596,7 +596,7 @@ class TestSnapshotAllocationConfig:
             policies=[
                 _FakePolicy(
                     policy_id="pol_001",
-                    approval_status="approved_research",
+                    approval_status="candidate",
                     max_pct_of_capital=0.10,
                     max_position_size_usd=None,
                     max_drawdown_allowed=0.20,

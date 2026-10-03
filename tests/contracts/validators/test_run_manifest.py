@@ -38,7 +38,7 @@ def make_run_manifest(**overrides) -> RunManifest:
         "python_version": None,
         "dependency_lock_hash": None,
         "notes": None,
-        "governance_state": GovernanceState.APPROVED_RESEARCH,
+        "governance_state": GovernanceState.CANDIDATE,
     }
 
     data.update(overrides)

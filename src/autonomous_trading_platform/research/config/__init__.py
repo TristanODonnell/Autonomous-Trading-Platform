@@ -9,8 +9,11 @@ from autonomous_trading_platform.research.config.simulation_run_config import Si
 from autonomous_trading_platform.research.config.stage_configs import (
     FilterConfigModel,
     MonteCarloStageConfigModel,
+    OverfittingStageConfigModel,
+    RegimeStageConfigModel,
     ScoringWeightsModel,
     SimulationStageConfigModel,
+    StressStageConfigModel,
     WalkForwardStageConfigModel,
 )
 from autonomous_trading_platform.research.config.strategy_parameter_validators import (
@@ -21,9 +24,12 @@ __all__ = [
     "ExperimentConfig",
     "FilterConfigModel",
     "MonteCarloStageConfigModel",
+    "OverfittingStageConfigModel",
+    "RegimeStageConfigModel",
     "ScoringWeightsModel",
     "SimulationRunConfig",
     "SimulationStageConfigModel",
+    "StressStageConfigModel",
     "WalkForwardStageConfigModel",
     "validate_strategy_parameters",
 ]

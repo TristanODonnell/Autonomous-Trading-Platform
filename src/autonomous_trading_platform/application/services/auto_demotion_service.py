@@ -72,15 +72,15 @@ _DEMOTABLE_STATES = {
 _NEXT_STATE = {
     "approved_for_live_trading": "approved_for_paper_trading",
     "approved_live": "approved_for_paper_trading",
-    "approved_for_paper_trading": "approved_research",
-    "approved_paper": "approved_research",
+    "approved_for_paper_trading": "candidate",
+    "approved_paper": "candidate",
 }
 
 _MAINTENANCE_RULE_STATUS = {
     "approved_for_live_trading": ("approved_paper", "approved_live"),
     "approved_live": ("approved_paper", "approved_live"),
-    "approved_for_paper_trading": ("approved_research", "approved_paper"),
-    "approved_paper": ("approved_research", "approved_paper"),
+    "approved_for_paper_trading": ("candidate", "approved_paper"),
+    "approved_paper": ("candidate", "approved_paper"),
 }
 
 logger = get_logger(__name__)

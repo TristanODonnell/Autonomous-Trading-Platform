@@ -22,12 +22,16 @@ platform_replay:
   name: two_year_full
   mode: historical_backtest
 
-  # Data universe — ingestion pulls bars for all of these.
-  # Universe rotation (monthly) then selects the best subset to actually trade,
-  # using the prior month's performance data. First rotation fires on tick 1.
-  # 100-symbol candidate pool. Universe rotation selects the best 20 to actively
-  # trade each month based on dollar volume, momentum, and bar quality scoring.
-  # Ingestion covers all 100; research and execution operate on the active 20.
+  # Data universe — survivorship-safe. Ingestion covers the 85 largest S&P 500
+  # members by trailing dollar volume *as of the start date* (including companies
+  # that were later acquired or failed, e.g. PXD, ATVI, SIVB) plus the ETFs below.
+  # Resolved once at run start; see docs/backend/universe/survivorship_safe_replay.md.
+  # Universe rotation (monthly) then selects the best 20 to actively trade from
+  # the same point-in-time pool; research and execution operate on the active 20.
+  symbol_pool:
+    source: sp500_point_in_time
+    top_n: 85
+  # Always ingested on top of the pool (benchmarks / macro — not index members).
   symbols:
     # ── Broad market / macro ETFs ─────────────────────────────────────────────
     - SPY   # S&P 500
@@ -46,101 +50,6 @@ platform_replay:
     - XLY   # Consumer discretionary
     - XLP   # Consumer staples
     - XLI   # Industrials
-    # ── Mega-cap technology ───────────────────────────────────────────────────
-    - AAPL
-    - MSFT
-    - NVDA
-    - GOOGL
-    - META
-    - AMZN
-    - TSLA
-    - AVGO
-    - ORCL
-    - AMD
-    - ADBE
-    - CRM
-    - INTU
-    - QCOM
-    - TXN
-    - CSCO
-    - IBM
-    - INTC
-    - ACN
-    - NOW
-    # ── Financials ────────────────────────────────────────────────────────────
-    - JPM
-    - BAC
-    - WFC
-    - GS
-    - MS
-    - V
-    - MA
-    - AXP
-    - BLK
-    - C
-    - COF
-    - SPGI
-    - ICE
-    # ── Healthcare ────────────────────────────────────────────────────────────
-    - UNH
-    - LLY
-    - JNJ
-    - ABBV
-    - MRK
-    - ABT
-    - TMO
-    - AMGN
-    - GILD
-    - PFE
-    - ISRG
-    - CVS
-    - REGN
-    - VRTX
-    # ── Consumer discretionary ────────────────────────────────────────────────
-    - HD
-    - MCD
-    - COST
-    - SBUX
-    - NKE
-    - LOW
-    - TGT
-    - BKNG
-    - WMT
-    # ── Consumer staples ──────────────────────────────────────────────────────
-    - PG
-    - KO
-    - PEP
-    - PM
-    - MO
-    - CL
-    # ── Energy ────────────────────────────────────────────────────────────────
-    - XOM
-    - CVX
-    - COP
-    - SLB
-    - EOG
-    - OXY
-    # ── Industrials ───────────────────────────────────────────────────────────
-    - CAT
-    - HON
-    - UPS
-    - GE
-    - RTX
-    - DE
-    - EMR
-    - FDX
-    - WM
-    # ── Utilities ─────────────────────────────────────────────────────────────
-    - NEE
-    - DUK
-    - SO
-    # ── Materials ─────────────────────────────────────────────────────────────
-    - LIN
-    - SHW
-    # ── Healthcare / diversified ──────────────────────────────────────────────
-    - ZTS
-    - ELV
-    - SYK
 
   start: 2023-01-02
   end: 2024-12-31

@@ -1,0 +1,135 @@
+# scenario:
+#   name: portfolio_on_deck_shadow
+#   purpose: >
+#     Portfolio rotation step 2E. Three active seats plus an on-deck shadow tier over
+#     ~6 weeks on 6 symbols (slim on purpose: enough to exercise every step-2 behaviour).
+#     On-deck strategies run through the same flow as actives but fill in simulation
+#     into shadow sleeves; they never produce order intents or broker orders.
+#   expected_behavior: >
+#     Start: all scores tie, so selection falls back to strategy id. Active:
+#     factor_based__19ab…, macd_crossover_v1, mean_reversion_v1. On-deck (max 4):
+#     momentum_v1 (approved but unseated) + three candidates.
+#     2024-01-16: mean_reversion_v1 is demoted to candidate. It winds down (or goes
+#     inactive if flat); momentum_v1 is promoted from on-deck into the open active seat
+#     (its shadow sleeve is closed, source tier_exit) and the freed on-deck seat is
+#     refilled once mean_reversion_v1 is flat.
+#     2024-01-29: max_on_deck_strategies drops to 2: the two lowest-ranked on-deck
+#     strategies leave (on_deck_over_max) and their shadow sleeves are closed.
+#     Throughout: real sleeves sum to the account every tick; shadow sleeves accrue
+#     P&L; shadow metrics are persisted per on-deck strategy at replay time.
+#   recommended_use: validation
+#
+# Run against a clean backtest state (wipes backtest tables in DATABASE_URL):
+#   python scripts/reset_backtest_state.py
+#   rm -f artifacts/platform/backtests/portfolio_on_deck_shadow.checkpoint.json
+#   atp platform backtest run \
+#     --fixture fixtures/platform/replays/medium/portfolio_on_deck_shadow.yaml \
+#     --output artifacts/platform/backtests/portfolio_on_deck_shadow.json
+
+platform_replay:
+  name: portfolio_on_deck_shadow
+  mode: historical_backtest
+  symbols: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN]
+  start: 2024-01-02
+  end: 2024-02-09
+  starting_cash: 250000
+  random_seed: 42
+
+initial_state:
+  settings:
+    risk_tolerance: medium
+    max_drawdown_limit: "0.15"
+    auto_promote_enabled: false
+    rebalance_frequency: daily
+    portfolio_mode_enabled: true
+    min_active_strategies: 3
+    max_active_strategies: 3
+    max_on_deck_strategies: 4
+    max_total_strategy_allocation_pct: 0.95
+    per_strategy_cap: 0.35
+    portfolio_drawdown_action: warn_only
+    portfolio_drawdown_recovery_mode: auto_resume
+  controls:
+    trading_mode: paper
+    kill_switch_active: false
+  strategies:
+    - factor_based__19abece93f5b760d646be3cf9b16d8bbaff468d78c1ebc70a6c041cd2b56df79
+    - macd_crossover_v1
+    - mean_reversion_v1
+    - momentum_v1
+    - momentum__795c6c46b4620f5f3c31ffbb1e26409857ab8d0cfdb2a3d7a92d07add6f3121c
+    - mean_reversion__1ef80cc62aac2b3f7afdac74dfeda4d381f85d133429b826ffcddd705efcfb52
+    - composite_rule__145e07f7f272eb46a6120c7f3d620fd281ccf45fc6a8596883e9533e78d45140
+  governance:
+    # Approved for paper: three take the active seats, the fourth goes on-deck.
+    - strategy_id: factor_based__19abece93f5b760d646be3cf9b16d8bbaff468d78c1ebc70a6c041cd2b56df79
+      state: approved_for_paper_trading
+    - strategy_id: macd_crossover_v1
+      state: approved_for_paper_trading
+    - strategy_id: mean_reversion_v1
+      state: approved_for_paper_trading
+    - strategy_id: momentum_v1
+      state: approved_for_paper_trading
+    # Candidates: shadow-traded only; never eligible for an active seat.
+    - strategy_id: momentum__795c6c46b4620f5f3c31ffbb1e26409857ab8d0cfdb2a3d7a92d07add6f3121c
+      state: candidate
+    - strategy_id: mean_reversion__1ef80cc62aac2b3f7afdac74dfeda4d381f85d133429b826ffcddd705efcfb52
+      state: candidate
+    - strategy_id: composite_rule__145e07f7f272eb46a6120c7f3d620fd281ccf45fc6a8596883e9533e78d45140
+      state: candidate
+  allocations: []
+  universe:
+    selection_mode: fixed
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: true
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: true
+  governance:
+    cadence: daily
+    enabled: true
+  portfolio_snapshot:
+    cadence: daily
+    enabled: true
+  operations_health:
+    cadence: daily
+    enabled: true
+  universe:
+    cadence: monthly      # fixed selection_mode: same symbols every rotation
+    enabled: true
+  research:
+    cadence: monthly
+    enabled: false        # fixed strategy pool: no new candidates in this run
+  dashboard_snapshot:
+    cadence: daily
+    enabled: false
+
+timeline_events:
+  # An active strategy is demoted mid-run: the approved on-deck strategy is promoted
+  # into the open seat and the freed on-deck seat is refilled.
+  - at: 2024-01-16
+    type: governance_manual_transition
+    strategy_id: mean_reversion_v1
+    to_state: candidate
+    actor_role: system_risk     # operators may not demote to candidate
+    reason: rotation step 2E — open an active seat for the approved on-deck strategy
+
+  # Operator shrinks the on-deck tier: the lowest-ranked on-deck strategies leave.
+  - at: 2024-01-29
+    type: settings_changed
+    patch:
+      max_on_deck_strategies: 2
+    reason: rotation step 2E — exercise the on-deck limit and shadow-sleeve closing

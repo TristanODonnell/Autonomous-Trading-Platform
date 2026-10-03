@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, time
+from datetime import UTC, date, datetime, time
 from typing import Protocol
 
 from autonomous_trading_platform.research.experiments.models.experiment_plan import (
@@ -115,7 +115,16 @@ class ExperimentUniverseResolver:
     def _resolve_active_as_of_start(
         self, plan: ExperimentDefinition, mode: UniverseResolutionMode
     ) -> ExperimentUniverseScope:
-        as_of = datetime.combine(plan.start_date, time.min, tzinfo=UTC)
+        return self.resolve_active_as_of(plan.start_date)
+
+    def resolve_active_as_of(self, start_date: date) -> ExperimentUniverseScope:
+        """ACTIVE_AS_OF_START_DATE scope for a research window starting on start_date.
+
+        Used directly by callers that build their window before they have an
+        ExperimentDefinition (e.g. the platform replay research tick).
+        """
+        mode = UniverseResolutionMode.ACTIVE_AS_OF_START_DATE
+        as_of = datetime.combine(start_date, time.min, tzinfo=UTC)
         version = self._history.get_active_as_of(as_of)
         if version is None:
             return ExperimentUniverseScope(
