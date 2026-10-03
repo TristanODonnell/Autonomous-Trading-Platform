@@ -441,6 +441,8 @@ worker). Also: `scripts/reset_backtest_state.py` now clears `feature_dataset_ver
 (1,344 rows had outlived every reset since July).
 
 ### 5c-I — Re-record with all fixes + A/B (2026-10-02)
+*Superseded 2026-10-03 by the 5d re-record (`portfolio_rotation_6m_intraday_5d.json`: +14.71 % / Sharpe 3.64, 0 errors, corporate actions applied) — see the 5d doc's follow-up section.*
+
 `portfolio_rotation_6m_intraday.yaml` (Jan 2 – Jun 28 2024, 5-minute cadence, auto review,
 streak 4 / tenure 60), output `portfolio_rotation_6m_intraday_5c*.json`. 129/129 days, 0 failed,
 0 tracebacks, 70,291 orders, 11 h (2.4 → 7 min per day — still grows, see 5c-H), peak 1.1 GB,

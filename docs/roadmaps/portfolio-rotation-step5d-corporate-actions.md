@@ -528,6 +528,43 @@ and the replay hook reads that summary. Snapshot tie-break (see commit message):
 trading cycle writes a cash snapshot per fill with one timestamp and "latest" broke the tie
 on the random snapshot id; `recorded_at` now decides.
 
+### Follow-up — 6-month production-cadence re-record with corporate actions (2026-10-03)
+
+`portfolio_rotation_6m_intraday.yaml` (10 symbols, 5-minute cadence, Jan 2 → Jun 28 2024),
+output `portfolio_rotation_6m_intraday_5d.json`, run on the code as committed through
+`37cc6096f`: **129/129 days, 0 errors, 0 tracebacks**, 10,062 trading cycles, 69,388 fills,
+12.4 h (started 3.5 min/day, ~6 min/day from March; the daily record took 57 min).
+Corporate actions: **61 applications** — dividends on 9 symbols to the account book, the
+real sleeves and the shadow sleeves; the NVDA 10:1 split applied at the **first 5-minute
+cycle of 2024-06-10 (13:30 UTC), before the day's first fill**, to the account book
+(8 → 80 at 1,207.22 → 120.72), two real sleeves (macd 5 → 50, momentum__ab29 3 → 30) and
+an on-deck shadow sleeve (momentum_v1 3 → 30); the $0.01 dividend the next day to seven
+holding books. Split-day NVDA fills all between 117.67 and 123.00; realized NVDA P&L per
+sleeve that day is tens of dollars (momentum__ab29 −87.59 vs −92.18 the day before — the
+strategy that booked −3,246 on this day in the 5c record). Five holiday feature cycles are
+recorded as **skipped** (no tracebacks).
+
+| | 5c record (no corporate actions) | 5d re-record |
+|---|---|---|
+| Return | +10.04 % | **+14.71 %** |
+| Sharpe | 2.71 | **3.64** |
+| Max drawdown | 2.26 % | 2.68 % |
+| SPY buy-and-hold | +15.13 % | +15.13 % |
+| Swaps | 1 | 2 |
+| Fills | 70,291 | 69,388 |
+
+Not a clean A/B (the 5c record predates 5d-A's ingestion fixes and the tie-break fix, so
+research admissions and the one extra swap differ), but the NVDA split no longer costs the
+portfolio ~3 pp on one day, and the re-sims that drive admission see the same history as
+the platform. DB dump of the finished run:
+`D:\PythonVenvstp_db_backupsatp_after_6m_intraday_5d_record_20261003_0952.dump`.
+
+Follow-up worth a small change later (not blocking): the apply step re-evaluates the
+30-day lookback on **every** 5-minute cycle, so a 6-month intraday run logs 47,881
+`position_changed_on_or_after_ex_date` skips and 9,025 `CORPORATE_ACTIONS_APPLIED` audit
+events, almost all "0 applied, N skipped". Evaluating skips once per symbol per day (or
+only auditing when something was applied) would remove the noise and a little time.
+
 ## Out of scope
 Mergers/spin-off book changes (alerted only, D1), short positions, options, Airflow (Step 6),
 intraday backtest speed (5c-H, still open), frontend.
