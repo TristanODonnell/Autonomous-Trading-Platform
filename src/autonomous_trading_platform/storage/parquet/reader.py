@@ -286,3 +286,47 @@ class HistoricalBarDatasetReader:
                     raise DatasetCorruptionError(
                         f"Checksum mismatch for {path}: expected {checksum_row.checksum_value}, got {actual}"
                     )
+
+
+class MemoizingBarDatasetReader(HistoricalBarDatasetReader):
+    """A reader for one trading cycle: the same (dataset, version, symbol, window) is
+    read from Parquet once and served from memory afterwards.
+
+    Within one cycle the datasets are static (ingestion ran before it), and every
+    strategy's context build and the volatility scalar ask for the same symbol windows,
+    so this removes the repeated reads. Never share one across cycles: the next
+    ingestion appends bars under the same version and dates.
+    """
+
+    def __init__(self, session: Session, *, base_path: str | Path = "data") -> None:
+        super().__init__(session, base_path=base_path)
+        self._memo: dict[tuple[str, str, str, date, date, str], pa.Table] = {}
+        self.hits = 0
+        self.misses = 0
+
+    def read(
+        self,
+        *,
+        dataset: ParquetDataset,
+        dataset_version: str,
+        symbol: str,
+        start_date: date,
+        end_date: date,
+        engine: str = "pyarrow",
+    ) -> pa.Table:
+        key = (dataset.dataset_key, dataset_version, symbol.upper(), start_date, end_date, engine)
+        table = self._memo.get(key)
+        if table is None:
+            self.misses += 1
+            table = super().read(
+                dataset=dataset,
+                dataset_version=dataset_version,
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+                engine=engine,
+            )
+            self._memo[key] = table
+        else:
+            self.hits += 1
+        return table

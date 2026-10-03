@@ -40,6 +40,7 @@ from autonomous_trading_platform.safety.readers.order_activity_reader import Stu
 from autonomous_trading_platform.safety.readers.risk_state_reader import (
     PositionAwareRiskStateReader,
 )
+from autonomous_trading_platform.storage.parquet.reader import MemoizingBarDatasetReader
 from autonomous_trading_platform.storage.sor.models.strategy_configs import StrategyConfigs
 from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
 from autonomous_trading_platform.storage.sor.repositories.core.allocation_overrides_repository import (
@@ -370,6 +371,8 @@ def resolve_strategy_runtimes(
         return None
 
     budgets = {budget.strategy_id: budget.pct_of_capital for budget in service.budgets(now=now_utc)}
+    # One reader for the whole cycle: every strategy reads the same symbol windows.
+    bar_reader = MemoizingBarDatasetReader(session=session, base_path="data")
     runtimes: list[StrategyRuntime] = []
     for member in members:
         context = None
@@ -380,6 +383,7 @@ def resolve_strategy_runtimes(
                 strategy=strategy,
                 dataset_version=dataset_version_id_override,
                 lookback_bars=warmup_bars,
+                bar_reader=bar_reader,
             )
         runtimes.append(
             StrategyRuntime(
@@ -411,6 +415,7 @@ def resolve_strategy_runtimes(
                         strategy=strategy,
                         dataset_version=dataset_version_id_override,
                         lookback_bars=warmup_bars,
+                        bar_reader=bar_reader,
                     ),
                 )
             )

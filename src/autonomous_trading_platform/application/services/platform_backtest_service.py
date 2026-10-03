@@ -950,9 +950,16 @@ class PlatformBacktestRunner:
                             dataset_version_id=tick_ctx.dataset_version_id,
                         )
 
-                        # Features per tick in intraday mode — uses bars up to bar_ts date
-                        if is_intraday and cadence.should_run(
-                            "features", tick_date, ingestion_ran=ingestion_ran
+                        # Features once per day in intraday mode, on the first bar: the
+                        # whole day was ingested before this loop, so every later bar
+                        # would recompute the identical day-level features (20 % of a
+                        # production-cadence run) and register a new dataset version.
+                        if (
+                            is_intraday
+                            and bar_ts == bar_timestamps[0]
+                            and cadence.should_run(
+                                "features", tick_date, ingestion_ran=ingestion_ran
+                            )
                         ):
                             feat_result = run_features_at_timestamp(
                                 session=session,

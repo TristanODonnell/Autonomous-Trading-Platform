@@ -72,6 +72,7 @@ def build_strategy_runtime_context(
     fallback_dataset_version: str | None = None,
     use_raw_bars: bool = True,
     lookback_bars: int = 300,
+    bar_reader: HistoricalBarDatasetReader | None = None,
 ) -> StrategyRuntimeContext:
     """Strategy runtime wired to raw bars with split-adjusted history.
 
@@ -87,10 +88,8 @@ def build_strategy_runtime_context(
 
     universe_reader = SqlAlchemyUniverseMembershipReader(universe_repository)
 
-    bar_reader = HistoricalBarDatasetReader(
-        session=session,
-        base_path="data",
-    )
+    if bar_reader is None:
+        bar_reader = HistoricalBarDatasetReader(session=session, base_path="data")
 
     lookahead_guard_service = LookaheadGuardService()
 
