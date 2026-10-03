@@ -1,6 +1,6 @@
 # Portfolio Rotation — Step 5c: Research ↔ Trading-Cycle Parity
 
-Status: in progress — plan approved 2026-10-01 (decisions below); 5c-A–G and I done (2026-10-02); 5c-H partly done; new finding F7 (splits) open
+Status: in progress — plan approved 2026-10-01 (decisions below); 5c-A–G and I done (2026-10-02); 5c-H partly done; F7 (splits) fixed in 5d
 Parent plan: `docs/roadmaps/portfolio-rotation-plan.md`. Follows Step 5b
 (`portfolio-rotation-step5b-production-cadence.md`, "Outcome" and "Next sprint").
 
@@ -452,7 +452,7 @@ no false missing-bar incidents.
   (sim) +9.32 % / 2.50; best +10.10 % / 2.86 (3 fixed seats, margin 0.05, streak 2) — a tie with
   the baseline, not a winner. Defaults unchanged.
 
-### F7 — Research re-sims ignore stock splits (found 2026-10-02, not fixed)
+### F7 — Research re-sims ignore stock splits (found 2026-10-02; fixed in step 5d, 2026-10-02)
 Re-sims run on the run's **raw** bars and the research engine has no split handling. A re-sim
 holding NVDA over its 10-for-1 split (2024-06-10) booked a ~90 % "loss" on it: 3.0 of
 `mean_reversion_v1`'s 3.3 pp gap is that one day. The platform is right (corporate actions
@@ -460,6 +460,13 @@ adjust positions). Affects research admission, bench re-sims and rotation export
 strategy holding overnight across a split (or reverse split); signals around the split see the
 jump too. Fix options: run research on split-adjusted bars, or apply split events in the
 simulation engine as dividends already are (A-02).
+
+*Fixed in 5d (`portfolio-rotation-step5d-corporate-actions.md`, 5d-D/E):* the strategy's
+history is split-adjusted on read in `StrategyContextBuilder` (same bars for research and
+the trading cycle) and `SimulationExecutionEngine` applies the stored splits to held
+positions through the shared accounting rule, so a re-sim across 2024-06-10 shows no split
+loss. 5d's discovery also corrected the claim above that the platform was right: before 5d
+nothing applied actions to sleeves or the account book either (5d F4).
 
 ## Out of scope
 Step 6 (Airflow), live trading, scorecard weights, frontend. Throttle / pre-trade / safety
