@@ -152,10 +152,10 @@ Not yet run on the EC2 box. Before the first deploy the box's `.env` needs `JWT_
 and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `required: false`)._
 
 **1.2 Before running unattended: backups + deploy freeze**
-- [ ] Nightly Postgres backup → S3
-- [ ] Auto-deploy (`.github/workflows/deploy.yml`) skips 9:00–16:30 ET on weekdays (and checks the market calendar)
-- [ ] Emergency override: manual `workflow_dispatch` with a required `reason`, logged
-- [ ] Scheduler stops gracefully on deploy: finishes the in-flight step and doesn't start a new one (matters for the post-close end-of-day chain, which falls outside the freeze)
+- [x] Nightly Postgres backup → S3 (`infra/ops/backup_postgres.sh`, systemd timer at 23:30 ET via `infra/ops/install_timers.sh`; runbook `docs/operations/runbooks/postgres-backup-restore.md`). Dump and restore tested locally (row counts match on all 90 tables); the S3 upload has only run against a stand-in. **Box setup still to do:** AWS CLI, bucket + lifecycle rule, instance role, `BACKUP_S3_BUCKET` in `infra/.env`, run the installer
+- [x] Auto-deploy (`.github/workflows/deploy.yml`) skips 9:00–16:30 ET on weekdays (and checks the market calendar): `scripts/deploy_window.py`, frozen from 30 min before the open to 30 min after the close, so half days and holidays follow the exchange calendar. A skipped deploy is **not** retried automatically: re-run the workflow after the close
+- [x] Emergency override: manual `workflow_dispatch` with a required `reason`, logged (job summary + `~/ratp-deploy.log` on the box, which records every deploy)
+- [ ] Scheduler stops gracefully on deploy: finishes the in-flight step and doesn't start a new one (matters for the post-close end-of-day chain, which falls outside the freeze). **Half done:** an in-flight intraday tick or end-of-day run finishes on SIGTERM (6 min grace, tested) and no new one starts. Still open, do with 1.3's per-step wrapper: stopping *between* end-of-day steps, and resuming the chain after a restart (today a restart after 18:00 ET re-runs the whole chain, because "done for today" is only held in memory)
 
 **1.3 Scheduling (soak-loop runner, no Airflow; see §3.1)**
 - [ ] Market calendar refresh (holidays, half days)

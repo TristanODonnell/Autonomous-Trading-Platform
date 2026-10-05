@@ -7,21 +7,86 @@ on:
       - completed
     branches:
       - main
+  # Emergency override: deploys main immediately, bypassing the market-hours freeze.
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why this deploy cannot wait for the market close (logged)"
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    if: github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      # Frozen from 30 min before the NYSE open to 30 min after the close (09:00-16:30 ET
+      # on a normal day); holidays and half days come from the exchange calendar.
+      - name: Check deploy window
+        id: window
+        run: |
+          pip install --quiet "$(grep -E '^exchange-calendars==' requirements.txt)"
+          python scripts/deploy_window.py
+
+      - name: Skip (market-hours freeze)
+        if: github.event_name != 'workflow_dispatch' && steps.window.outputs.frozen == 'true'
+        run: |
+          {
+            echo "### Deploy skipped"
+            echo "${{ steps.window.outputs.reason }}."
+            echo "Re-run this workflow after the freeze ends, or use **Run workflow** with a reason for an emergency deploy."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record deploy trigger
+        id: trigger
+        env:
+          RAW_REASON: ${{ inputs.reason }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Keep only characters that are safe to pass through the SSH environment.
+            reason="$(printf '%s' "$RAW_REASON" | tr -cd '[:alnum:] ._,:/#-' | cut -c1-200)"
+            if [ -z "$reason" ]; then
+              echo "A reason is required for an emergency deploy" >&2
+              exit 1
+            fi
+            echo "trigger=override" >> "$GITHUB_OUTPUT"
+            echo "reason=$reason" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Emergency deploy override"
+              echo "- By: ${{ github.actor }}"
+              echo "- Reason: $reason"
+              echo "- Deploy window: ${{ steps.window.outputs.reason }}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "trigger=ci" >> "$GITHUB_OUTPUT"
+            echo "reason=-" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy via SSH
+        if: github.event_name == 'workflow_dispatch' || steps.window.outputs.frozen == 'false'
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_TRIGGER: ${{ steps.trigger.outputs.trigger }}
+          DEPLOY_ACTOR: ${{ github.actor }}
+          DEPLOY_REASON: ${{ steps.trigger.outputs.reason }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          envs: DEPLOY_TRIGGER,DEPLOY_ACTOR,DEPLOY_REASON
+          # Covers the scheduler's stop_grace_period (6m) plus the image build
+          command_timeout: 30m
           script: |
+            set -e
             cd ~/Autonomous-Trading-Platform
             git pull origin main
             # migrate runs first (app and scheduler wait on it); --remove-orphans stops
             # services no longer in docker-compose.yml (the old Airflow containers)
             docker compose up -d --build --remove-orphans
+            echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) sha=$(git rev-parse --short HEAD) trigger=$DEPLOY_TRIGGER actor=$DEPLOY_ACTOR reason=$DEPLOY_REASON" >> ~/ratp-deploy.log
