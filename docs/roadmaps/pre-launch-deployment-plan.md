@@ -139,11 +139,17 @@ publish works.
 ### Phase 1: Box A runs unattended on paper
 
 **1.1 P0: blocks deploy**
-- [ ] `JWT_SECRET` in env (API crashes without it); add to `.env.example`
-- [ ] `DATABASE_URL` uses `postgres:5432` inside Compose, not `localhost:5433`
-- [ ] `alembic upgrade head` runs on deploy, before the app starts
-- [ ] API `app` service added to `docker-compose.yml`
-- [ ] `scheduler` service (soak-loop runner, `restart: unless-stopped`) added; Box A's compose has no Airflow services
+- [x] `JWT_SECRET` in env (API crashes without it); add to `.env.example`
+- [x] `DATABASE_URL` uses `postgres:5432` inside Compose, not `localhost:5433` (set in `docker-compose.yml`, so `.env` keeps the host-side URL; same for the OTel endpoints)
+- [x] `alembic upgrade head` runs on deploy, before the app starts (one-shot `migrate` service; `app` and `scheduler` wait for it to succeed)
+- [x] API `app` service added to `docker-compose.yml`
+- [x] `scheduler` service (soak-loop runner, `restart: unless-stopped`) added; Box A's compose has no Airflow services (moved to the dev-only overlay `docker-compose.airflow.yml`; the deploy uses `--remove-orphans` to stop the old Airflow containers)
+- [x] Found while building the image: `alembic`, `pyjwt` and `pytz` were imported but never declared, so the image could not migrate, serve the API or run `atp`. Added to `pyproject.toml` / `requirements.txt`
+
+_Done 2026-10-04. Verified locally against a scratch database: migrations from empty to head, API
+healthy and JWT-gated, scheduler starts, sleeps until the next open and exits cleanly on SIGTERM.
+Not yet run on the EC2 box. Before the first deploy the box's `.env` needs `JWT_SECRET`, `APP_ENV=paper`
+and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `required: false`)._
 
 **1.2 Before running unattended: backups + deploy freeze**
 - [ ] Nightly Postgres backup → S3

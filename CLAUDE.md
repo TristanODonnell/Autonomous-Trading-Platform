@@ -136,11 +136,15 @@ React 19 + Vite + TypeScript (strict), TanStack Router + Query, Zustand, Tailwin
 
 ## Infrastructure
 
-Docker Compose services (all local dev):
+Docker Compose services (`docker-compose.yml`, the Box A deployment; see `docs/roadmaps/pre-launch-deployment-plan.md`):
 - **postgres** port 5433 — system-of-record DB
-- **airflow-webserver** port 8080 — DAG orchestration UI
+- **migrate** — one-shot `alembic upgrade head`; `app` and `scheduler` wait for it
+- **app** port 8000 — FastAPI REST API
+- **scheduler** — soak-loop runner (`atp runtime soak-loop paper`); makes real Alpaca paper calls, so start it deliberately (`docker compose up -d postgres lgtm otel-collector` leaves it off)
 - **lgtm** port 3000 — Grafana observability (metrics + traces)
 - **otel-collector** ports 4317/4318 — OpenTelemetry ingestion
+
+Airflow is a dev-only overlay (`docker compose -f docker-compose.yml -f docker-compose.airflow.yml up -d`, webserver on port 8080). Never run its DAGs against a DB the `scheduler` service is driving.
 
 ## Docs
 

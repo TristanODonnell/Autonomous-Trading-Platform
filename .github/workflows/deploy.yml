@@ -22,4 +22,6 @@ jobs:
           script: |
             cd ~/Autonomous-Trading-Platform
             git pull origin main
-            docker compose up -d --build
+            # migrate runs first (app and scheduler wait on it); --remove-orphans stops
+            # services no longer in docker-compose.yml (the old Airflow containers)
+            docker compose up -d --build --remove-orphans
