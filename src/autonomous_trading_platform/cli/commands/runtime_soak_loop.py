@@ -24,6 +24,7 @@ from autonomous_trading_platform.runtime.interruptible_sleep import Interruptibl
 from autonomous_trading_platform.runtime.services.orphan_job_recovery_service import (
     OrphanJobRecoveryService,
 )
+from autonomous_trading_platform.scheduler.orchestration.eod_chain_runner import ChainStatus
 from autonomous_trading_platform.scheduler.orchestration.historical_research_golden_path_orchestrator import (
     HistoricalResearchGoldenPathOrchestrator,
 )
@@ -37,6 +38,7 @@ _ET = ZoneInfo("America/New_York")
 _INTRADAY_LOCK_KEY = SCHEDULER_REGISTRY["market_ingestion_cycle"].lock_key
 _EOD_LOCK_KEY = SCHEDULER_REGISTRY["corporate_action_ingestion_cycle"].lock_key
 _INTRADAY_INTERVAL_SECONDS = 300
+_EOD_ERROR_BACKOFF_SECONDS = 60
 
 
 def _parse_symbols(raw: str) -> list[str]:
@@ -113,25 +115,52 @@ class _PaperTradingSoakRunner:
             self._lock.release(_INTRADAY_LOCK_KEY)
 
     def _run_eod_maintenance(self) -> None:
-        print(f"[{_ts()}] Running EOD maintenance")
+        print(f"[{_ts()}] Running EOD chain")
         acquired = self._lock.acquire(_EOD_LOCK_KEY)
         if not acquired:
             self._locks_skipped += 1
-            print("  ⚠ Lock acquisition failed (EOD cycle already running)")
+            print("  ⚠ Lock acquisition failed (EOD chain already running)")
             return
         self._locks_acquired += 1
         session = get_session()
+        today_et = self._clock.now().astimezone(_ET).date()
         try:
             print(f"  Lock acquired: {_EOD_LOCK_KEY}")
-            print("  Steps: corporate_actions → features (adjusted bars)")
             orchestrator = PaperTradingGoldenPathOrchestrator(session)
-            result = orchestrator.run_eod_maintenance(now_utc=self._clock.now())
-            self._eod_done_for = self._clock.now().astimezone(_ET).date()
+            print("  Steps: " + " → ".join(step.name for step in orchestrator.eod_chain_steps()))
+            result = orchestrator.run_eod_maintenance(
+                now_utc=self._clock.now(), sleeper=self._sleeper
+            )
+            chain = result.chain
             print("  Lock released")
-            print(f"  ✓ Completed (correlation_id: {result.correlation_id})")
+            if chain is None:
+                self._eod_done_for = today_et
+                return
+            if chain.status is ChainStatus.INTERRUPTED:
+                print(
+                    f"  ⏸ Interrupted after {', '.join(chain.completed_steps) or 'no steps'}; "
+                    "resumes on next start"
+                )
+                return
+            # completed, completed_with_errors, failed and already_done all mean:
+            # nothing more to run for this date.
+            self._eod_done_for = today_et
             self._eod_cycles += 1
+            if chain.status is ChainStatus.ALREADY_DONE:
+                print("  ✓ Already run for today (found in job_runs)")
+            elif chain.failed_steps:
+                print(
+                    f"  ⚠ {chain.status.value}: failed={list(chain.failed_steps)} "
+                    f"skipped={list(chain.skipped_steps)} (correlation_id: {result.correlation_id})"
+                )
+            else:
+                print(f"  ✓ Completed (correlation_id: {result.correlation_id})")
         except Exception as exc:
-            print(f"  ⚠ Error during EOD maintenance: {exc}")
+            # The chain records its own step failures; reaching here means the runner
+            # itself could not work (for example the database is unreachable). Back off
+            # rather than retrying on the next loop iteration.
+            print(f"  ⚠ Error running EOD chain: {exc}; retrying in {_EOD_ERROR_BACKOFF_SECONDS}s")
+            self._sleeper.sleep(_EOD_ERROR_BACKOFF_SECONDS)
         finally:
             session.close()
             self._lock.release(_EOD_LOCK_KEY)

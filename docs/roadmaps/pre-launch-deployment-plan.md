@@ -241,4 +241,4 @@ and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `
 - [ ] Verify free-plan SIP historical access (affects backtest realism)
 - [ ] Exact API contract for worker → A publishing (design doc once 5c lands)
 - [ ] Settlement/T+1: does the live ledger need a daily pass, or is it simulation only?
-- [ ] Confirm risk/sleeve snapshots run inside the trading cycle or need their own schedule
+- [x] Confirm risk/sleeve snapshots run inside the trading cycle or need their own schedule: they run inside every trading cycle, with order reconciliation and portfolio drawdown governance; no separate schedule (see `pre-launch-1.3-scheduling.md` §1)

@@ -685,8 +685,14 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
     assert eod_jobs != []
     assert eod_jobs[0].status == "completed"
     assert eod_jobs[0].correlation_id == result.correlation_id
-    assert eod_jobs[0].input_summary_json["mode"] == "eod_maintenance"
     assert eod_jobs[0].input_summary_json["steps"] == [
-        "corporate_action_ingestion_cycle",
-        "feature_pipeline_cycle",
+        "resolve_raw_bars_dataset",
+        "corporate_actions",
+        "features",
     ]
+    assert eod_jobs[0].output_summary_json["completed_steps"] == [
+        "resolve_raw_bars_dataset",
+        "corporate_actions",
+        "features",
+    ]
+    assert result.chain is not None and result.chain.status.value == "completed"
