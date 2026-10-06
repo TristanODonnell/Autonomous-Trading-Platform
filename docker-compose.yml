@@ -22,6 +22,7 @@ x-app-base: &app-base
     DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ratp}:${POSTGRES_PASSWORD:-ratp_password}@postgres:5432/${POSTGRES_DB:-ratp}
     OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: http://otel-collector:4318/v1/logs
+    HOST_NAME: ${HOSTNAME:-unknown}
     PYTHONUNBUFFERED: "1"
   volumes:
     - ./data:/app/data
@@ -57,6 +58,8 @@ services:
     <<: *app-base
     container_name: ratp_migrate
     restart: "no"
+    environment:
+      OTEL_SERVICE_NAME: ratp-migrate
     command: alembic -c infra/db/alembic.ini upgrade head
     depends_on:
       postgres:
@@ -69,7 +72,9 @@ services:
     <<: *app-base
     container_name: ratp_app
     restart: unless-stopped
-    command: uvicorn autonomous_trading_platform.interfaces.rest.app:create_app --factory --host 0.0.0.0 --port 8000
+    environment:
+      OTEL_SERVICE_NAME: ratp-api
+    command: uvicorn autonomous_trading_platform.interfaces.rest.app:create_production_app --factory --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     depends_on:
@@ -91,6 +96,8 @@ services:
     <<: *app-base
     container_name: ratp_scheduler
     restart: unless-stopped
+    environment:
+      OTEL_SERVICE_NAME: ratp-scheduler
     command: atp runtime soak-loop paper --mode realistic
     # SIGTERM lets the in-flight cycle finish (TRADING_CYCLE_TIMEOUT_SECONDS=300) before SIGKILL
     stop_grace_period: 6m
@@ -128,8 +135,15 @@ services:
     logging: *logging
     container_name: ratp_otel_collector
     command: [ "--config=/etc/otelcol/config.yaml" ]
+    # root: the docker_stats receiver reads the Docker socket
+    user: "0:0"
+    environment:
+      HOST_NAME: ${HOSTNAME:-unknown}
     volumes:
       - ./infra/observability/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+      # hostmetrics reads the box through /hostfs; docker_stats reads container stats
+      - /:/hostfs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "4317:4317"
       - "4318:4318"

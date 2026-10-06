@@ -9,6 +9,7 @@ from autonomous_trading_platform.cli.commands.research import _load_experiment_f
 from autonomous_trading_platform.cli.formatters import print_error, print_header
 from autonomous_trading_platform.cli.helpers import parse_datetime
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.observability.metrics import record_scheduler_heartbeat
 from autonomous_trading_platform.research.experiments.models.experiment_plan import (
     ExperimentDefinition,
 )
@@ -39,6 +40,7 @@ _INTRADAY_LOCK_KEY = SCHEDULER_REGISTRY["market_ingestion_cycle"].lock_key
 _EOD_LOCK_KEY = SCHEDULER_REGISTRY["corporate_action_ingestion_cycle"].lock_key
 _INTRADAY_INTERVAL_SECONDS = 300
 _EOD_ERROR_BACKOFF_SECONDS = 60
+_EOD_OVERDUE_HOUR_ET = 19
 
 
 def _parse_symbols(raw: str) -> list[str]:
@@ -88,6 +90,9 @@ class _PaperTradingSoakRunner:
         self._locks_acquired = 0
         self._locks_skipped = 0
         self._eod_done_for: date | None = None
+        self._eod_completed_for: date | None = None
+        self._last_tick_success_at: float | None = None
+        self._eod_completed_at: float | None = None
 
     def _run_intraday_tick(self) -> None:
         tick_num = self._intraday_cycles + 1
@@ -108,6 +113,7 @@ class _PaperTradingSoakRunner:
             print("  Lock released")
             print(f"  ✓ Completed (correlation_id: {result.correlation_id})")
             self._intraday_cycles += 1
+            self._last_tick_success_at = self._clock.now().timestamp()
         except Exception as exc:
             print(f"  ⚠ Error during intraday tick: {exc}")
         finally:
@@ -146,6 +152,9 @@ class _PaperTradingSoakRunner:
             # nothing more to run for this date.
             self._eod_done_for = today_et
             self._eod_cycles += 1
+            if chain.status is not ChainStatus.FAILED:
+                self._eod_completed_for = today_et
+                self._eod_completed_at = self._clock.now().timestamp()
             if chain.status is ChainStatus.ALREADY_DONE:
                 print("  ✓ Already run for today (found in job_runs)")
             elif chain.failed_steps:
@@ -164,6 +173,23 @@ class _PaperTradingSoakRunner:
         finally:
             session.close()
             self._lock.release(_EOD_LOCK_KEY)
+
+    def _publish_heartbeat(self, now_utc: datetime, phase: MarketPhase) -> None:
+        """Gauges for the heartbeat alerts: the process knows the calendar, Prometheus
+        does not. A chain that failed for the day stays overdue so it is visible."""
+        now_et = now_utc.astimezone(_ET)
+        overdue = (
+            phase in (MarketPhase.POST_MARKET, MarketPhase.MARKET_HOURS)
+            and now_et.hour >= _EOD_OVERDUE_HOUR_ET
+            and self._eod_completed_for != now_et.date()
+        )
+        record_scheduler_heartbeat(
+            heartbeat_at=now_utc.timestamp(),
+            market_open=phase == MarketPhase.MARKET_HOURS,
+            eod_chain_overdue=overdue,
+            trading_cycle_last_success_at=self._last_tick_success_at,
+            eod_chain_completed_at=self._eod_completed_at,
+        )
 
     def _print_stats(self) -> None:
         total = self._locks_acquired + self._locks_skipped
@@ -225,6 +251,7 @@ class _PaperTradingSoakRunner:
         while not self._sleeper.is_shutdown:
             now_utc = self._clock.now()
             phase = self._calendar.market_phase(now_utc)
+            self._publish_heartbeat(now_utc, phase)
 
             if phase != last_phase:
                 if last_phase == MarketPhase.MARKET_HOURS and phase == MarketPhase.POST_MARKET:

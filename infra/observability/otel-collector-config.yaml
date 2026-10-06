@@ -6,10 +6,51 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
+  # Box-level metrics (the host is mounted at /hostfs in docker-compose.yml)
+  hostmetrics:
+    collection_interval: 30s
+    root_path: /hostfs
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+      load:
+      disk:
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+      network:
+
+  # Per-container CPU / memory / network via the Docker socket
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 30s
+    metrics:
+      container.cpu.utilization:
+        enabled: true
+      container.memory.percent:
+        enabled: true
+
 processors:
   memory_limiter:
     check_interval: 1s
     limit_mib: 256
+
+  # Tag collector-scraped metrics with the box; app metrics carry these from the SDK
+  resource/host:
+    attributes:
+      - key: host.name
+        value: ${env:HOST_NAME}
+        action: upsert
+      - key: service.name
+        value: otel-collector
+        action: insert
 
   probabilistic_sampler:
     sampling_percentage: 100
@@ -30,6 +71,10 @@ exporters:
 
   prometheus:
     endpoint: 0.0.0.0:9464
+    # deployment_environment / service_name / host_name become labels, so alert rules
+    # can exclude the backtest worker and dashboards can pick a host
+    resource_to_telemetry_conversion:
+      enabled: true
 
 service:
   pipelines:
@@ -42,6 +87,11 @@ service:
       receivers: [otlp]
       processors: [memory_limiter, batch]
       exporters: [debug, prometheus]
+
+    metrics/host:
+      receivers: [hostmetrics, docker_stats]
+      processors: [memory_limiter, resource/host, batch]
+      exporters: [prometheus]
 
     logs:
       receivers: [otlp]

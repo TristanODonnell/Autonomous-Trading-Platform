@@ -166,11 +166,11 @@ and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `
 - [x] Host timers: nightly Postgres backup (1.2), weekly retention job (`infra/ops/retention.sh`, Sunday 03:00 ET: dumps > 14 d, `artifacts/` > 30 d, Docker prune; Parquet untouched; container logs capped in compose)
 
 **1.4 Observability (before the worker exists)**
-- [ ] Resource tags: `deployment.environment` (paper/live/backtest, from `APP_ENV`), `service.name` per role, `host.name`
-- [ ] All alert rules (`infra/observability/prometheus/alerts/ratp-alerts.yaml`) exclude `deployment_environment="backtest"`
-- [ ] `hostmetrics` + container stats on A; watch memory and upsize to t4g.medium if needed
-- [ ] Dashboards: Infra (host dropdown) · Trading ops · End-of-day pipeline · Research pipeline (exists)
-- [ ] Heartbeat panel: "no trading cycle in 15 min during market hours" and "end-of-day chain not finished by ~19:00 ET" (stands in for Airflow's missed-run visibility)
+- [x] Resource tags: `deployment.environment` (paper/live/backtest, from `APP_ENV`), `service.name` per role (`OTEL_SERVICE_NAME` per compose service: ratp-api / ratp-scheduler / ratp-migrate; the API now starts through `create_production_app`, which sets telemetry up), `host.name` (`HOST_NAME` from the box's `$HOSTNAME`). The collector's Prometheus exporter converts them to labels (`resource_to_telemetry_conversion`), verified end to end on the dev stack 2026-10-05
+- [x] All alert rules (`infra/observability/prometheus/alerts/ratp-alerts.yaml`) exclude `deployment_environment="backtest"` (promtool: 18 rules OK)
+- [x] `hostmetrics` + container stats on A (collector receivers `hostmetrics` via `/hostfs` and `docker_stats` via the Docker socket; collector runs as root for the socket); **watch memory on the Infra dashboard and upsize to t4g.medium if needed** (still to observe on the box)
+- [x] Dashboards: Infra (host dropdown) · Trading ops · End-of-day pipeline · Research pipeline (exists). The Grafana Postgres datasource uses the default `ratp_password`; if the box's `infra/.env` differs, update `infra/observability/grafana/provisioning/datasources/datasources.yaml` or the SQL panels stay empty
+- [x] Heartbeat panel: "no trading cycle in 15 min during market hours" and "end-of-day chain not finished by ~19:00 ET" (stands in for Airflow's missed-run visibility). The scheduler exports `ratp_scheduler_heartbeat_timestamp_seconds`, `ratp_market_open`, `ratp_trading_cycle_last_success_timestamp_seconds`, `ratp_eod_chain_overdue`, `ratp_eod_chain_completed_timestamp_seconds`; alerts `RATPSchedulerDown`, `RATPTradingCycleStale`, `RATPEodChainOverdue` replace the two `absent_over_time` rules that fired every night and weekend; stat panels on Trading Ops
 
 **1.5 Soak**
 - [ ] 1–2 weeks of unattended paper running before relying on it

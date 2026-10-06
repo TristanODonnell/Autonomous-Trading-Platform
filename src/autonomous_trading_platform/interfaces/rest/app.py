@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -98,3 +100,15 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     return app
+
+
+def create_production_app() -> FastAPI:
+    """uvicorn factory for the deployed API: telemetry first, then the app.
+
+    create_app() stays telemetry-free so tests and tooling can build the app without
+    exporters trying to reach a collector.
+    """
+    from autonomous_trading_platform.observability.telemetry import setup_telemetry
+
+    setup_telemetry(os.getenv("OTEL_SERVICE_NAME", "ratp-api"))
+    return create_app()

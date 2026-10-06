@@ -151,3 +151,66 @@ def test_eod_runner_error_backs_off_instead_of_spinning(monkeypatch: pytest.Monk
     assert calls == [1]
     assert runner._eod_done_for is None  # still owed for today; retried after the backoff
     assert runner._sleeper.slept == [runtime_soak_loop._EOD_ERROR_BACKOFF_SECONDS]  # type: ignore[attr-defined]
+
+
+def _heartbeat_state():
+    from autonomous_trading_platform.observability import metrics as m
+
+    return m._scheduler_heartbeat_state
+
+
+def _et(hour: int, minute: int = 0) -> datetime:
+    from datetime import date
+
+    return datetime.combine(
+        date(2026, 10, 6), datetime.min.time(), tzinfo=runtime_soak_loop._ET
+    ).replace(hour=hour, minute=minute)
+
+
+def test_heartbeat_reports_market_open_and_tick_freshness() -> None:
+    runner = runtime_soak_loop._PaperTradingSoakRunner(mode="realistic")
+    runner._last_tick_success_at = 1_700_000_000.0
+    now = _et(11, 0)
+
+    runner._publish_heartbeat(now, MarketPhase.MARKET_HOURS)
+
+    st = _heartbeat_state()
+    assert st.heartbeat_at == now.timestamp()
+    assert st.market_open is True
+    assert st.trading_cycle_last_success_at == 1_700_000_000.0
+    assert st.eod_chain_overdue is False
+
+
+def test_eod_chain_is_overdue_after_19_et_until_it_completes() -> None:
+    from datetime import date
+
+    runner = runtime_soak_loop._PaperTradingSoakRunner(mode="realistic")
+
+    runner._publish_heartbeat(_et(18, 30), MarketPhase.POST_MARKET)
+    assert _heartbeat_state().eod_chain_overdue is False  # still inside the window
+
+    runner._publish_heartbeat(_et(19, 5), MarketPhase.POST_MARKET)
+    assert _heartbeat_state().eod_chain_overdue is True
+    assert _heartbeat_state().market_open is False
+
+    runner._eod_completed_for = date(2026, 10, 6)
+    runner._publish_heartbeat(_et(19, 10), MarketPhase.POST_MARKET)
+    assert _heartbeat_state().eod_chain_overdue is False
+
+
+def test_eod_chain_that_failed_for_the_day_stays_overdue() -> None:
+    from datetime import date
+
+    runner = runtime_soak_loop._PaperTradingSoakRunner(mode="realistic")
+    runner._eod_done_for = date(2026, 10, 6)  # the loop will not retry today...
+    runner._eod_completed_for = None  # ...but nothing completed
+
+    runner._publish_heartbeat(_et(20, 0), MarketPhase.POST_MARKET)
+
+    assert _heartbeat_state().eod_chain_overdue is True
+
+
+def test_no_eod_overdue_on_a_non_trading_day() -> None:
+    runner = runtime_soak_loop._PaperTradingSoakRunner(mode="realistic")
+    runner._publish_heartbeat(_et(20, 0), MarketPhase.NON_TRADING_DAY)
+    assert _heartbeat_state().eod_chain_overdue is False

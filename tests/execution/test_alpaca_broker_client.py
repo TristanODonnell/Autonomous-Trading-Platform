@@ -143,7 +143,7 @@ def test_alpaca_broker_client_broker_metrics_use_dashboard_safe_labels(monkeypat
     request_labels = requests_metric.calls[0][1]
     latency_labels = latency_metric.calls[0][1]
     assert request_labels == {
-        "environment": "unknown",
+        "environment": "test",
         "component": "execution.broker_client",
         "broker": "alpaca",
         "endpoint": "orders.submit",
