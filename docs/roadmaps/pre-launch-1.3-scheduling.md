@@ -112,7 +112,9 @@ Each sub-step ends with: new unit tests, `pre-commit`, and the full backend suit
    already covered by the health lifecycle, the drawdown ladder and portfolio drawdown governance.
 3. **Weekly review.** Wired now, `portfolio_review_mode` stays off until the worker supplies
    scorecards in Phase 3.
-4. **S3.** Bucket, region and credential model still to be supplied before sub-step D.
+4. **S3.** One bucket, two prefixes (`postgres/` backups, `datasets/` Parquet); the box authenticates
+   with an EC2 instance role. Nothing exists yet (2026-10-05): §6 has the console steps; the
+   real-bucket publish check runs once they are done.
 5. **Retention.** 14 days for local dumps and container logs, 30 days for `artifacts/`, Docker
    image/build-cache prune weekly. Parquet versions are not deleted in this phase.
 
@@ -124,3 +126,32 @@ deploy (`atp settings ...` or the settings API):
 - `min_rebalance_interval_hours = 168` and `auto_rebalance_enabled = true` (decision 1): weekly
   re-weight through the nightly step until the review is on.
 - `portfolio_review_mode` stays `off` until Phase 3 (decision 3).
+
+## 6. AWS setup to do once (console)
+
+Nothing here has been created yet. Pick the region the EC2 box is in and use it everywhere.
+
+1. **S3 → Create bucket.** Name e.g. `ratp-<yourname>-prod` (globally unique, lowercase). Keep
+   "Block all public access" on. Leave versioning off.
+2. **Bucket → Management → Create lifecycle rule.** Name `expire-postgres-backups`, scope: prefix
+   `postgres/`, action: expire current versions after **30** days. Do not add a rule for `datasets/`.
+3. **IAM → Policies → Create policy** (JSON), replacing the bucket name:
+   ```json
+   {"Version": "2012-10-17", "Statement": [
+     {"Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": "arn:aws:s3:::BUCKET"},
+     {"Effect": "Allow", "Action": ["s3:PutObject", "s3:GetObject"], "Resource": "arn:aws:s3:::BUCKET/*"}
+   ]}
+   ```
+   Name it `ratp-box-a-s3`.
+4. **IAM → Roles → Create role.** Trusted entity: AWS service → EC2. Attach `ratp-box-a-s3`. Name
+   it `ratp-box-a`.
+5. **EC2 → the instance → Actions → Security → Modify IAM role.** Pick `ratp-box-a`.
+6. **EC2 → the instance → Actions → Instance settings → Modify instance metadata options.** Set
+   "Metadata response hop limit" to **2** (containers are one network hop away from the metadata
+   service; with the default of 1 they cannot use the role).
+7. On the box: `BACKUP_S3_BUCKET=<bucket>` in `infra/.env`, `DATASET_S3_BUCKET=<bucket>` and
+   `DATASET_S3_REGION=<region>` in `.env`, then `docker compose up -d` and
+   `sudo infra/ops/install_timers.sh`.
+8. Check: `sudo systemctl start ratp-backup.service && journalctl -u ratp-backup -n 5` should end
+   with "uploaded to s3://…", and the next end-of-day chain's `publish_datasets` step should list
+   the day's versions in `runtime_job_runs`.
