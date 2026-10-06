@@ -16,6 +16,12 @@ anyio==4.13.0
     # via
     #   httpx
     #   starlette
+boto3==1.43.108
+    # via retail-autonomous-trading-platform (pyproject.toml)
+botocore==1.43.108
+    # via
+    #   boto3
+    #   s3transfer
 certifi==2026.2.25
     # via
     #   httpcore
@@ -66,6 +72,10 @@ importlib-metadata==8.7.1
     # via opentelemetry-api
 jinja2==3.1.6
     # via osqp
+jmespath==1.1.0
+    # via
+    #   boto3
+    #   botocore
 joblib==1.5.3
     # via osqp
 korean-lunar-calendar==0.4.0
@@ -153,6 +163,7 @@ pyluach==2.3.0
     # via exchange-calendars
 python-dateutil==2.9.0.post0
     # via
+    #   botocore
     #   pandas
     #   retail-autonomous-trading-platform (pyproject.toml)
 python-dotenv==1.2.2
@@ -168,6 +179,8 @@ requests==2.33.1
     #   alpaca-py
     #   opentelemetry-exporter-otlp-proto-http
     #   retail-autonomous-trading-platform (pyproject.toml)
+s3transfer==0.19.2
+    # via boto3
 scipy==1.17.1
     # via
     #   clarabel
@@ -220,7 +233,9 @@ tzdata==2026.1
     #   pandas
     #   psycopg
 urllib3==2.6.3
-    # via requests
+    # via
+    #   botocore
+    #   requests
 uvicorn==0.51.0
     # via retail-autonomous-trading-platform (pyproject.toml)
 websockets==16.0

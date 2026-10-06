@@ -53,6 +53,7 @@ dependencies = [
   "alpaca-py",
   "pytz",  # imported by alpaca-py but not declared by it
   "exchange_calendars>=4.5",
+  "boto3>=1.34",
 
     # opentelemetry
     "opentelemetry-api",

@@ -86,6 +86,7 @@ jobs:
             set -e
             cd ~/Autonomous-Trading-Platform
             git pull origin main
+            export GIT_SHA=$(git rev-parse HEAD)
             # migrate runs first (app and scheduler wait on it); --remove-orphans stops
             # services no longer in docker-compose.yml (the old Airflow containers)
             docker compose up -d --build --remove-orphans

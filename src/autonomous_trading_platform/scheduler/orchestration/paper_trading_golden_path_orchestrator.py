@@ -9,6 +9,9 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.dataset_publish_service import (
+    DatasetPublishService,
+)
 from autonomous_trading_platform.application.services.platform_replay.governance_hooks import (
     run_governance_at_timestamp,
 )
@@ -67,6 +70,7 @@ from autonomous_trading_platform.scheduler.orchestration.eod_chain_runner import
 from autonomous_trading_platform.scheduler.services.market_calendar_cross_check import (
     run_calendar_cross_check,
 )
+from autonomous_trading_platform.storage.parquet.object_store import ObjectStore, S3ObjectStore
 from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
 from autonomous_trading_platform.storage.sor.repositories.core.reconciliation_snapshot_repository import (
@@ -98,9 +102,15 @@ class PaperTradingGoldenPathOrchestrator:
         *,
         broker_client_factory: Callable[[], BrokerClient] | None = None,
         calendar: MarketCalendar | None = None,
+        object_store_factory: Callable[[Settings], ObjectStore] | None = None,
     ) -> None:
         self.session = session
         self._calendar = calendar or RealMarketCalendar()
+        self._object_store_factory = object_store_factory or (
+            lambda settings: S3ObjectStore(
+                settings.dataset_s3_bucket or "", region=settings.dataset_s3_region
+            )
+        )
         self._broker_client_factory = broker_client_factory or (
             lambda: AlpacaBrokerClient(Settings())
         )
@@ -311,6 +321,11 @@ class PaperTradingGoldenPathOrchestrator:
                 applies=lambda ctx: self._calendar.is_last_trading_day_of_month(ctx.trading_date),
             ),
             ChainStep("operations_health", self._step_operations_health),
+            ChainStep(
+                "publish_datasets",
+                self._step_publish_datasets,
+                applies=lambda ctx: Settings().dataset_s3_bucket is not None,
+            ),
         ]
 
     # -- end-of-day steps -------------------------------------------------------------
@@ -519,3 +534,15 @@ class PaperTradingGoldenPathOrchestrator:
     def _broker_sessions(self) -> Any:
         """Hook for tests; None makes the step fetch Alpaca's calendar."""
         return None
+
+    def _step_publish_datasets(self, ctx: ChainContext) -> dict[str, Any]:
+        """Upload every Parquet dataset version not yet in the object store, then the day's
+        index. Idempotent; nothing is deleted from the store."""
+        settings = Settings()
+        result = DatasetPublishService(
+            self._object_store_factory(settings),
+            session=self.session,
+            prefix=settings.dataset_s3_prefix,
+            git_sha=settings.git_sha,
+        ).publish_new_versions(trading_date=ctx.trading_date, now_utc=ctx.now_utc)
+        return result.summary()

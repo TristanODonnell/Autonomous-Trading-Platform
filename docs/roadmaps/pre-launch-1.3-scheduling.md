@@ -74,9 +74,12 @@ visible as failed; it does not spin.
 Steps 5, 6, 9 and 11 call the same functions the replay hooks call, so live and backtest cannot drift.
 `dataset_version_id` from step 1 is passed to steps 3, 4 and 12.
 
-**S3 publish.** Upload new immutable dataset-version directories under `data/` plus a small manifest
-(dataset name, version id, coverage, checksum) per trading date, so the worker can pin exact versions.
-Uses `boto3` with the instance role; nothing is deleted from S3.
+**S3 publish.** Every `dataset_version=<id>` directory under `data/` without a manifest in the store is
+uploaded (same relative layout under `<prefix>/`), then `<prefix>/manifests/<id>.json` is written last as
+the commit marker (files with sizes and sha256, the `dataset_versions` row, the image's `GIT_SHA`). A
+per-day index `<prefix>/published/<date>.json` lists what each end-of-day run published. Idempotent;
+nothing is deleted. `boto3` with the instance role: on EC2 the containers reach the role through IMDS,
+which needs the instance's metadata **hop limit set to 2**.
 
 **Calendar.** No refresh job. Add a daily cross-check of the next 10 sessions against Alpaca's
 calendar API that logs and counts a mismatch; `exchange_calendars` stays the source of truth.
@@ -94,7 +97,7 @@ Each sub-step ends with: new unit tests, `pre-commit`, and the full backend suit
 | A ✅ 2026-10-05 | Step runner: per-step rows, retry/backoff, stop between steps, resume after restart; fixes both runner bugs | Tests for retry cap, resume, SIGTERM between steps (10 runner tests + 2 soak-loop tests); full suite 5056 passed |
 | B ✅ 2026-10-05 | Chain steps 1–9 wired into `run_eod_maintenance` | Golden-path test runs the full 10-step chain on SQLite with a fake broker: every step completes, reconciliation passes 5 checks, governance evaluates the seeded strategies, rebalance reports `skipped: auto_rebalance_disabled`. Full suite 5056 passed. The backtest-parity run was not needed: no file under `platform_replay/` or the backtest service changed (the chain imports the hooks as they are). The in-container end-of-day run is deferred to the soak: it needs a real day's dataset and would write to the dev data directory |
 | C ✅ 2026-10-05 | Weekly and monthly steps (10, 11) | Calendar tests for the week's first session (Labor Day week) and the month's last session (weekend month-ends); weekly step verified a no-op with the review off; full suite 5068 passed. The monthly step runs at the close of the month's **last** session (the backtester rotates at the start of the first), with the churn guard on; `run_universe_at_timestamp` gained `force_rotation`/`rotation_reason` parameters whose defaults keep replay behaviour |
-| D | S3 publish (12) | Run against a real bucket from the dev machine |
+| D ◐ 2026-10-05 | S3 publish (12) | Code and tests done (`DatasetPublishService`, `S3ObjectStore`, chain step `publish_datasets`, off unless `DATASET_S3_BUCKET` is set; 7 tests on an in-memory store incl. idempotency and interrupted-upload recovery; full suite 5079 passed). **Still owed: a run against the real bucket** once the bucket name, region and instance role exist |
 | E ✅ 2026-10-05 | Calendar cross-check; retention timer | Cross-check is the chain's first step (report only); run live against Alpaca for the next 60 days: 43 sessions, 0 mismatches. Retention dry run on the dev checkout listed 8 old artifact files and nothing else. Container logs are capped in `docker-compose.yml` (50 MB × 5 per service) instead of by the script. Full suite 5072 passed |
 
 ## 4. Decisions (taken 2026-10-05)

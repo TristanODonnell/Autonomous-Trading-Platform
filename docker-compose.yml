@@ -11,6 +11,8 @@ x-app-base: &app-base
   build:
     context: .
     dockerfile: Dockerfile
+    args:
+      GIT_SHA: ${GIT_SHA:-unknown}
   image: ratp-app
   env_file:
     - path: .env
