@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -8,14 +9,36 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.platform_replay.governance_hooks import (
+    run_governance_at_timestamp,
+)
+from autonomous_trading_platform.application.services.platform_replay.operations_hooks import (
+    snapshot_operations_at_timestamp,
+)
+from autonomous_trading_platform.application.services.platform_replay.risk_hooks import (
+    run_risk_at_timestamp,
+)
+from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
+from autonomous_trading_platform.contracts.runtime.platform_replay import PlatformReplayContext
+from autonomous_trading_platform.execution.clients.alpaca_broker_client import AlpacaBrokerClient
+from autonomous_trading_platform.execution.services.external_broker_reconciliation_service import (
+    BrokerClient,
+    ExternalBrokerReconciliationService,
+)
 from autonomous_trading_platform.runtime.interruptible_sleep import InterruptibleSleeper
 from autonomous_trading_platform.runtime.services.pipeline_failure_notification_service import (
     PipelineFailureNotificationService,
 )
 from autonomous_trading_platform.runtime.services.runtime_job_runner import RuntimeJobRunner
+from autonomous_trading_platform.scheduler.cycles.run_allocation_rebalance_cycle import (
+    run_allocation_rebalance_cycle,
+)
 from autonomous_trading_platform.scheduler.cycles.run_corporate_action_ingestion_cycle import (
     run_corporate_action_ingestion_cycle,
+)
+from autonomous_trading_platform.scheduler.cycles.run_correlation_monitoring_cycle import (
+    run_correlation_monitoring_cycle,
 )
 from autonomous_trading_platform.scheduler.cycles.run_feature_pipeline_cycle import (
     run_feature_pipeline_cycle,
@@ -32,6 +55,9 @@ from autonomous_trading_platform.scheduler.orchestration.eod_chain_runner import
 )
 from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from autonomous_trading_platform.storage.sor.repositories.core.reconciliation_snapshot_repository import (
+    ReconciliationSnapshotRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_repository import (
     RuntimeJobRunRepository,
 )
@@ -52,8 +78,16 @@ class PaperTradingGoldenPathOrchestrator:
     High-level orchestrator for the paper trading golden path.
     """
 
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        broker_client_factory: Callable[[], BrokerClient] | None = None,
+    ) -> None:
         self.session = session
+        self._broker_client_factory = broker_client_factory or (
+            lambda: AlpacaBrokerClient(Settings())
+        )
         self.runner = RuntimeJobRunner(
             repository=RuntimeJobRunRepository(session),
             failure_notifier=PipelineFailureNotificationService(session),
@@ -228,15 +262,28 @@ class PaperTradingGoldenPathOrchestrator:
         )
 
     def eod_chain_steps(self) -> list[ChainStep]:
+        """The end-of-day chain, in the backtester's hook order (plan 1.3 §2).
+
+        Blocking steps produce the data the rest of the day needs; the governance block
+        is independent so one failing service leaves the others running, exactly as the
+        replay hooks swallow per-service errors into warnings.
+        """
         return [
+            ChainStep("final_ingestion", self._step_final_ingestion),
             ChainStep(
                 "resolve_raw_bars_dataset",
                 self._step_resolve_raw_bars_dataset,
                 blocking=True,
                 max_attempts=1,
             ),
+            ChainStep("broker_reconciliation", self._step_broker_reconciliation),
             ChainStep("corporate_actions", self._step_corporate_actions, blocking=True),
             ChainStep("features", self._step_features, blocking=True),
+            ChainStep("risk", self._step_risk),
+            ChainStep("governance", self._step_governance),
+            ChainStep("correlation_monitoring", self._step_correlation_monitoring),
+            ChainStep("allocation_rebalance", self._step_allocation_rebalance),
+            ChainStep("operations_health", self._step_operations_health),
         ]
 
     # -- end-of-day steps -------------------------------------------------------------
@@ -323,3 +370,72 @@ class PaperTradingGoldenPathOrchestrator:
         self.session.flush()
         ctx.values["features_dataset_version_id"] = features_version_id
         return {"features_dataset_version_id": features_version_id}
+
+    def _step_final_ingestion(self, ctx: ChainContext) -> dict[str, Any]:
+        """Pick up the closing bars the last intraday tick may have missed."""
+        run_market_ingestion_cycle(now_utc=ctx.now_utc)
+        return {"now_utc": ctx.now_utc.isoformat()}
+
+    def _step_broker_reconciliation(self, ctx: ChainContext) -> dict[str, Any]:
+        """Read-only comparison of platform state with the broker; the report is persisted."""
+        settings = Settings()
+        report = ExternalBrokerReconciliationService(
+            broker_client=self._broker_client_factory(),
+            session=self.session,
+            environment=settings.trading_environment.value,
+        ).reconcile(ctx.parent_job_run_id, now=ctx.now_utc)
+        ReconciliationSnapshotRepository(self.session).append_report(report)
+        self.session.flush()
+        failed_checks = [
+            f"{check.check_type.value}:{check.symbol}" if check.symbol else check.check_type.value
+            for check in report.checks
+            if check.status.value != "passed"
+        ]
+        return {
+            "report_id": str(report.report_id),
+            "overall_status": report.overall_status.value,
+            "check_count": len(report.checks),
+            "failed_checks": failed_checks,
+        }
+
+    def _live_context(self, ctx: ChainContext) -> PlatformReplayContext:
+        """The context the replay hooks take; here it carries the live chain's identity."""
+        context = PlatformReplayContext.create(
+            symbols=list(ctx.values.get("symbols", [])),
+            timestamp=ctx.now_utc,
+            actor="scheduler",
+        )
+        context.dataset_version_id = ctx.values.get("dataset_version_id")
+        return context
+
+    def _step_risk(self, ctx: ChainContext) -> dict[str, Any]:
+        """Risk snapshot → drawdown ladder → advisory risk budget (same code as the replay)."""
+        result = run_risk_at_timestamp(
+            session=self.session, timestamp=ctx.now_utc, replay_context=self._live_context(ctx)
+        )
+        self.session.flush()
+        return {**result.summary, "warnings": list(result.warnings)}
+
+    def _step_governance(self, ctx: ChainContext) -> dict[str, Any]:
+        """Live + shadow metrics → promotion → demotion → health lifecycle (same code as the replay)."""
+        result = run_governance_at_timestamp(
+            session=self.session, timestamp=ctx.now_utc, replay_context=self._live_context(ctx)
+        )
+        self.session.flush()
+        return {**result.summary, "warnings": list(result.warnings)}
+
+    def _step_correlation_monitoring(self, ctx: ChainContext) -> dict[str, Any]:
+        result = run_correlation_monitoring_cycle(trigger_source="scheduler")
+        return dict(result) if isinstance(result, dict) else {"status": str(result)}
+
+    def _step_allocation_rebalance(self, ctx: ChainContext) -> dict[str, Any]:
+        """Interim weekly re-weight trigger until the portfolio review is on (plan 1.3 §4.1);
+        the engine's own interval guard and auto_rebalance_enabled switch gate it."""
+        result = run_allocation_rebalance_cycle(now_utc=ctx.now_utc, trigger_source="scheduler")
+        return dict(result) if isinstance(result, dict) else {"status": str(result)}
+
+    def _step_operations_health(self, ctx: ChainContext) -> dict[str, Any]:
+        result = snapshot_operations_at_timestamp(
+            session=self.session, timestamp=ctx.now_utc, replay_context=self._live_context(ctx)
+        )
+        return {**result.summary, "warnings": list(result.warnings)}

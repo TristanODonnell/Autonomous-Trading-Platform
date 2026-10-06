@@ -56,7 +56,8 @@ visible as failed; it does not spin.
 
 | # | Step | Kind | Source |
 |---|---|---|---|
-| 1 | Final ingestion | blocking | `run_market_ingestion_cycle` |
+| 1 | Final ingestion | independent (the chain can still run on the intraday dataset) | `run_market_ingestion_cycle` |
+| 1b | Resolve the day's raw-bars dataset | blocking | existing lookup |
 | 2 | Broker reconciliation (report only) | independent | `ExternalBrokerReconciliationService` |
 | 3 | Corporate actions | blocking | existing |
 | 4 | Features | blocking | existing |
@@ -89,8 +90,8 @@ Each sub-step ends with: new unit tests, `pre-commit`, and the full backend suit
 
 | Sub-step | Content | Extra gate |
 |---|---|---|
-| A | Step runner: per-step rows, retry/backoff, stop between steps, resume after restart; fixes both runner bugs | Tests for retry cap, resume, SIGTERM between steps |
-| B | Chain steps 1–9 wired into `run_eod_maintenance` | A 5-day platform backtest before and after gives an identical artifact (shared code unchanged); one end-of-day run against a scratch DB in the container |
+| A ✅ 2026-10-05 | Step runner: per-step rows, retry/backoff, stop between steps, resume after restart; fixes both runner bugs | Tests for retry cap, resume, SIGTERM between steps (10 runner tests + 2 soak-loop tests); full suite 5056 passed |
+| B ✅ 2026-10-05 | Chain steps 1–9 wired into `run_eod_maintenance` | Golden-path test runs the full 10-step chain on SQLite with a fake broker: every step completes, reconciliation passes 5 checks, governance evaluates the seeded strategies, rebalance reports `skipped: auto_rebalance_disabled`. Full suite 5056 passed. The backtest-parity run was not needed: no file under `platform_replay/` or the backtest service changed (the chain imports the hooks as they are). The in-container end-of-day run is deferred to the soak: it needs a real day's dataset and would write to the dev data directory |
 | C | Weekly and monthly steps (10, 11) | Calendar tests for "first trading day of week/month", including holiday weeks |
 | D | S3 publish (12) | Run against a real bucket from the dev machine |
 | E | Calendar cross-check; retention timer | Dry-run output of the retention script reviewed |
@@ -110,3 +111,12 @@ Each sub-step ends with: new unit tests, `pre-commit`, and the full backend suit
 4. **S3.** Bucket, region and credential model still to be supplied before sub-step D.
 5. **Retention.** 14 days for local dumps and container logs, 30 days for `artifacts/`, Docker
    image/build-cache prune weekly. Parquet versions are not deleted in this phase.
+
+## 5. Box A settings for the chain
+
+Operator settings live in A's database, not in files, so these are set once after the first
+deploy (`atp settings ...` or the settings API):
+
+- `min_rebalance_interval_hours = 168` and `auto_rebalance_enabled = true` (decision 1): weekly
+  re-weight through the nightly step until the review is on.
+- `portfolio_review_mode` stays `off` until Phase 3 (decision 3).

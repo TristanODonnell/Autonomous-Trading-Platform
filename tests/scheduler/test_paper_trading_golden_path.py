@@ -16,6 +16,7 @@ from autonomous_trading_platform.storage.sor.models.position_snapshot_items impo
 from autonomous_trading_platform.storage.sor.models.position_snapshots import PositionSnapshot
 from autonomous_trading_platform.storage.sor.models.run_manifests import RunManifestRow
 from autonomous_trading_platform.storage.sor.models.runtime_job_runs import RuntimeJobRuns
+from tests.utilities.paper_trading_cycle_fixture import FakePaperBrokerClient
 
 
 def _latest_trading_manifest(db_session, fixture):
@@ -599,7 +600,9 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
 ):
     fixture = seeded_paper_trading_golden_path_fixture
 
-    orchestrator = PaperTradingGoldenPathOrchestrator(db_session)
+    orchestrator = PaperTradingGoldenPathOrchestrator(
+        db_session, broker_client_factory=lambda: FakePaperBrokerClient(None)
+    )
 
     # Seed the daily raw_bars dataset first.
     orchestrator.run_intraday_tick(
@@ -685,14 +688,20 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
     assert eod_jobs != []
     assert eod_jobs[0].status == "completed"
     assert eod_jobs[0].correlation_id == result.correlation_id
-    assert eod_jobs[0].input_summary_json["steps"] == [
+    expected_steps = [
+        "final_ingestion",
         "resolve_raw_bars_dataset",
+        "broker_reconciliation",
         "corporate_actions",
         "features",
+        "risk",
+        "governance",
+        "correlation_monitoring",
+        "allocation_rebalance",
+        "operations_health",
     ]
-    assert eod_jobs[0].output_summary_json["completed_steps"] == [
-        "resolve_raw_bars_dataset",
-        "corporate_actions",
-        "features",
-    ]
-    assert result.chain is not None and result.chain.status.value == "completed"
+    assert eod_jobs[0].input_summary_json["steps"] == expected_steps
+    assert result.chain is not None
+    assert result.chain.failed_steps == (), eod_jobs[0].output_summary_json
+    assert list(result.chain.completed_steps) == expected_steps
+    assert result.chain.status.value == "completed"
