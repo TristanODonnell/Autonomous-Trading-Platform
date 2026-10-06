@@ -18,6 +18,16 @@ from autonomous_trading_platform.application.services.platform_replay.operations
 from autonomous_trading_platform.application.services.platform_replay.risk_hooks import (
     run_risk_at_timestamp,
 )
+from autonomous_trading_platform.application.services.platform_replay.universe_hooks import (
+    run_universe_at_timestamp,
+)
+from autonomous_trading_platform.application.services.portfolio_review_service import (
+    PortfolioReviewService,
+    review_mode,
+)
+from autonomous_trading_platform.application.services.portfolio_scorecard_service import (
+    PortfolioScorecardService,
+)
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
 from autonomous_trading_platform.contracts.runtime.platform_replay import PlatformReplayContext
@@ -26,6 +36,7 @@ from autonomous_trading_platform.execution.services.external_broker_reconciliati
     BrokerClient,
     ExternalBrokerReconciliationService,
 )
+from autonomous_trading_platform.runtime.clock import MarketCalendar, RealMarketCalendar
 from autonomous_trading_platform.runtime.interruptible_sleep import InterruptibleSleeper
 from autonomous_trading_platform.runtime.services.pipeline_failure_notification_service import (
     PipelineFailureNotificationService,
@@ -83,8 +94,10 @@ class PaperTradingGoldenPathOrchestrator:
         session: Session,
         *,
         broker_client_factory: Callable[[], BrokerClient] | None = None,
+        calendar: MarketCalendar | None = None,
     ) -> None:
         self.session = session
+        self._calendar = calendar or RealMarketCalendar()
         self._broker_client_factory = broker_client_factory or (
             lambda: AlpacaBrokerClient(Settings())
         )
@@ -283,6 +296,16 @@ class PaperTradingGoldenPathOrchestrator:
             ChainStep("governance", self._step_governance),
             ChainStep("correlation_monitoring", self._step_correlation_monitoring),
             ChainStep("allocation_rebalance", self._step_allocation_rebalance),
+            ChainStep(
+                "weekly_portfolio_review",
+                self._step_weekly_portfolio_review,
+                applies=lambda ctx: self._calendar.is_first_trading_day_of_week(ctx.trading_date),
+            ),
+            ChainStep(
+                "monthly_universe_rotation",
+                self._step_monthly_universe_rotation,
+                applies=lambda ctx: self._calendar.is_last_trading_day_of_month(ctx.trading_date),
+            ),
             ChainStep("operations_health", self._step_operations_health),
         ]
 
@@ -439,3 +462,46 @@ class PaperTradingGoldenPathOrchestrator:
             session=self.session, timestamp=ctx.now_utc, replay_context=self._live_context(ctx)
         )
         return {**result.summary, "warnings": list(result.warnings)}
+
+    def _step_weekly_portfolio_review(self, ctx: ChainContext) -> dict[str, Any]:
+        """Weekly re-weight / monthly swap review. Does nothing while
+        ``portfolio_review_mode`` is off; Phase 3 supplies the worker's re-sim outcomes."""
+        mode = review_mode(self.session)
+        if mode.value == "off":
+            return {"mode": mode.value, "review_id": None}
+        result = PortfolioReviewService(
+            self.session, scorecards=PortfolioScorecardService(self.session)
+        ).run(now=ctx.now_utc)
+        self.session.flush()
+        if result is None:
+            return {"mode": mode.value, "review_id": None}
+        return {
+            "mode": result.mode.value,
+            "review_id": result.review_id,
+            "swap_eligible": result.swap_eligible,
+            "decisions": [
+                {
+                    "type": d.decision_type.value,
+                    "strategy_id": d.strategy_id,
+                    "applied": d.applied,
+                    "reason": d.reason,
+                }
+                for d in result.decisions
+            ],
+        }
+
+    def _step_monthly_universe_rotation(self, ctx: ChainContext) -> dict[str, Any]:
+        """Raw pool refresh → candidates → rotation, at the close of the month's last
+        session so the new universe is in force for the first. Unlike replays the churn
+        guard stays on."""
+        result = run_universe_at_timestamp(
+            session=self.session,
+            timestamp=ctx.now_utc,
+            replay_context=self._live_context(ctx),
+            force_rotation=False,
+            rotation_reason="scheduler_monthly",
+        )
+        self.session.flush()
+        if result.status == "failed":
+            raise RuntimeError("; ".join(result.errors) or "universe rotation failed")
+        return {**result.summary, "status": result.status, "warnings": list(result.warnings)}

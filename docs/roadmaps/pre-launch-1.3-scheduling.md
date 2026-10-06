@@ -67,7 +67,7 @@ visible as failed; it does not spin.
 | 8 | Allocation rebalance (`run_allocation_rebalance_cycle`), gated by `auto_rebalance_enabled`; `min_rebalance_interval_hours=168` so it re-weights weekly | independent | existing |
 | 9 | Operations health snapshot | independent | same code as the replay hook |
 | 10 | Weekly (first trading day of the week): portfolio review, per `portfolio_review_mode` (off until Phase 3) | independent | `PortfolioReviewService` |
-| 11 | Monthly (first trading day of the month): raw pool refresh → candidates → rotation | independent | same code as `run_universe_at_timestamp` |
+| 11 | Monthly (close of the month's last session): raw pool refresh → candidates → rotation, churn guard on | independent | same code as `run_universe_at_timestamp` |
 | 12 | Publish Parquet to S3 | independent | new |
 
 Steps 5, 6, 9 and 11 call the same functions the replay hooks call, so live and backtest cannot drift.
@@ -92,7 +92,7 @@ Each sub-step ends with: new unit tests, `pre-commit`, and the full backend suit
 |---|---|---|
 | A ✅ 2026-10-05 | Step runner: per-step rows, retry/backoff, stop between steps, resume after restart; fixes both runner bugs | Tests for retry cap, resume, SIGTERM between steps (10 runner tests + 2 soak-loop tests); full suite 5056 passed |
 | B ✅ 2026-10-05 | Chain steps 1–9 wired into `run_eod_maintenance` | Golden-path test runs the full 10-step chain on SQLite with a fake broker: every step completes, reconciliation passes 5 checks, governance evaluates the seeded strategies, rebalance reports `skipped: auto_rebalance_disabled`. Full suite 5056 passed. The backtest-parity run was not needed: no file under `platform_replay/` or the backtest service changed (the chain imports the hooks as they are). The in-container end-of-day run is deferred to the soak: it needs a real day's dataset and would write to the dev data directory |
-| C | Weekly and monthly steps (10, 11) | Calendar tests for "first trading day of week/month", including holiday weeks |
+| C ✅ 2026-10-05 | Weekly and monthly steps (10, 11) | Calendar tests for the week's first session (Labor Day week) and the month's last session (weekend month-ends); weekly step verified a no-op with the review off; full suite 5068 passed. The monthly step runs at the close of the month's **last** session (the backtester rotates at the start of the first), with the churn guard on; `run_universe_at_timestamp` gained `force_rotation`/`rotation_reason` parameters whose defaults keep replay behaviour |
 | D | S3 publish (12) | Run against a real bucket from the dev machine |
 | E | Calendar cross-check; retention timer | Dry-run output of the retention script reviewed |
 

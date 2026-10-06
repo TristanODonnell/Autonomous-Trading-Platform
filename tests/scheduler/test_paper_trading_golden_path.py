@@ -698,10 +698,16 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
         "governance",
         "correlation_monitoring",
         "allocation_rebalance",
+        "weekly_portfolio_review",
+        "monthly_universe_rotation",
         "operations_health",
     ]
     assert eod_jobs[0].input_summary_json["steps"] == expected_steps
     assert result.chain is not None
     assert result.chain.failed_steps == (), eod_jobs[0].output_summary_json
-    assert list(result.chain.completed_steps) == expected_steps
+    # 2025-02-14 is a Friday and not the month's last session, so neither periodic step applies.
+    assert result.chain.skipped_steps == ("weekly_portfolio_review", "monthly_universe_rotation")
+    assert list(result.chain.completed_steps) == [
+        s for s in expected_steps if s not in result.chain.skipped_steps
+    ]
     assert result.chain.status.value == "completed"

@@ -329,3 +329,16 @@ def test_chains_for_different_dates_are_independent(db_session: Session) -> None
     )
     assert result.status is ChainStatus.COMPLETED
     assert calls == ["a", "a"]
+
+
+def test_weekly_review_step_is_a_no_op_while_the_review_mode_is_off(db_session: Session) -> None:
+    from autonomous_trading_platform.scheduler.orchestration.paper_trading_golden_path_orchestrator import (
+        PaperTradingGoldenPathOrchestrator,
+    )
+
+    orchestrator = PaperTradingGoldenPathOrchestrator(db_session)
+    ctx = ChainContext(
+        chain_name=CHAIN, trading_date=DAY, now_utc=NOW, session=db_session, parent_job_run_id="p"
+    )
+
+    assert orchestrator._step_weekly_portfolio_review(ctx) == {"mode": "off", "review_id": None}

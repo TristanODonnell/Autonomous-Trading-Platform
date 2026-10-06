@@ -162,7 +162,7 @@ and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `
 - [x] Extend `PaperTradingGoldenPathOrchestrator.run_eod_maintenance` past features: final ingestion, broker reconciliation, then the governance stack and rebalance **in the backtester's hook order** (§3 end-of-day row), passing `dataset_version_id` along the chain. Done 2026-10-05; the backtester's actual order differs from the §3 row and was followed, see `pre-launch-1.3-scheduling.md` §1–2
 - [x] Per-step retry wrapper; every step recorded in `job_runs` (`EodChainRunner`: per-step rows under one parent per trading date, retry cap, stop between steps, resume after restart)
 - [ ] Parquet publish to S3 at the end of the end-of-day chain
-- [ ] Weekly review and monthly universe steps in the runner (roadmap Step 6, without Airflow)
+- [x] Weekly review and monthly universe steps in the runner (roadmap Step 6, without Airflow). Done 2026-10-05: weekly review on the week's first session (a no-op until `portfolio_review_mode` is switched on in Phase 3), universe rotation at the close of the month's last session with the churn guard on
 - [ ] Host timers: nightly Postgres backup (1.2), weekly retention job
 
 **1.4 Observability (before the worker exists)**
