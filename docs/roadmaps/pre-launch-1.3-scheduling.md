@@ -56,6 +56,7 @@ visible as failed; it does not spin.
 
 | # | Step | Kind | Source |
 |---|---|---|---|
+| 0 | Calendar cross-check (next 14 days vs Alpaca, report only) | independent | new |
 | 1 | Final ingestion | independent (the chain can still run on the intraday dataset) | `run_market_ingestion_cycle` |
 | 1b | Resolve the day's raw-bars dataset | blocking | existing lookup |
 | 2 | Broker reconciliation (report only) | independent | `ExternalBrokerReconciliationService` |
@@ -94,7 +95,7 @@ Each sub-step ends with: new unit tests, `pre-commit`, and the full backend suit
 | B ✅ 2026-10-05 | Chain steps 1–9 wired into `run_eod_maintenance` | Golden-path test runs the full 10-step chain on SQLite with a fake broker: every step completes, reconciliation passes 5 checks, governance evaluates the seeded strategies, rebalance reports `skipped: auto_rebalance_disabled`. Full suite 5056 passed. The backtest-parity run was not needed: no file under `platform_replay/` or the backtest service changed (the chain imports the hooks as they are). The in-container end-of-day run is deferred to the soak: it needs a real day's dataset and would write to the dev data directory |
 | C ✅ 2026-10-05 | Weekly and monthly steps (10, 11) | Calendar tests for the week's first session (Labor Day week) and the month's last session (weekend month-ends); weekly step verified a no-op with the review off; full suite 5068 passed. The monthly step runs at the close of the month's **last** session (the backtester rotates at the start of the first), with the churn guard on; `run_universe_at_timestamp` gained `force_rotation`/`rotation_reason` parameters whose defaults keep replay behaviour |
 | D | S3 publish (12) | Run against a real bucket from the dev machine |
-| E | Calendar cross-check; retention timer | Dry-run output of the retention script reviewed |
+| E ✅ 2026-10-05 | Calendar cross-check; retention timer | Cross-check is the chain's first step (report only); run live against Alpaca for the next 60 days: 43 sessions, 0 mismatches. Retention dry run on the dev checkout listed 8 old artifact files and nothing else. Container logs are capped in `docker-compose.yml` (50 MB × 5 per service) instead of by the script. Full suite 5072 passed |
 
 ## 4. Decisions (taken 2026-10-05)
 

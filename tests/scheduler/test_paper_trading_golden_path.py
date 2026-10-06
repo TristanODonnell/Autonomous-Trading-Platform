@@ -1,3 +1,4 @@
+from datetime import date, time
 from decimal import Decimal
 
 import autonomous_trading_platform.scheduler.cycles.run_trading_cycle as cycle_module
@@ -603,6 +604,11 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
     orchestrator = PaperTradingGoldenPathOrchestrator(
         db_session, broker_client_factory=lambda: FakePaperBrokerClient(None)
     )
+    # The calendar step would otherwise call Alpaca: hand it a broker calendar that agrees.
+    orchestrator._broker_sessions = lambda: {  # type: ignore[method-assign]
+        d: (time(9, 30), time(16, 0))
+        for d in orchestrator._calendar.trading_days(date(2025, 2, 15), date(2025, 3, 1))
+    }
 
     # Seed the daily raw_bars dataset first.
     orchestrator.run_intraday_tick(
@@ -689,6 +695,7 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
     assert eod_jobs[0].status == "completed"
     assert eod_jobs[0].correlation_id == result.correlation_id
     expected_steps = [
+        "calendar_cross_check",
         "final_ingestion",
         "resolve_raw_bars_dataset",
         "broker_reconciliation",

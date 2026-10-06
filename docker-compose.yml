@@ -1,5 +1,13 @@
+# Container logs are capped here; the weekly retention timer does not touch them.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 # Shared by every service built from the app image (migrate, app, scheduler).
 x-app-base: &app-base
+  logging: *logging
   build:
     context: .
     dockerfile: Dockerfile
@@ -23,6 +31,7 @@ services:
   # ----------------------------
   postgres:
     image: postgres:16
+    logging: *logging
     container_name: ratp_postgres
     restart: unless-stopped
     command: postgres -c max_connections=300 -c shared_buffers=256MB
@@ -92,6 +101,7 @@ services:
   # ----------------------------
   lgtm:
     image: grafana/otel-lgtm:latest
+    logging: *logging
     container_name: ratp_lgtm
     restart: unless-stopped
     ports:
@@ -113,6 +123,7 @@ services:
   # ----------------------------
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
+    logging: *logging
     container_name: ratp_otel_collector
     command: [ "--config=/etc/otelcol/config.yaml" ]
     volumes:

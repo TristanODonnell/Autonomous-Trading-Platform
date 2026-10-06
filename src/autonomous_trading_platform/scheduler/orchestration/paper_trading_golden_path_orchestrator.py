@@ -64,6 +64,9 @@ from autonomous_trading_platform.scheduler.orchestration.eod_chain_runner import
     ChainStep,
     EodChainRunner,
 )
+from autonomous_trading_platform.scheduler.services.market_calendar_cross_check import (
+    run_calendar_cross_check,
+)
 from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
 from autonomous_trading_platform.storage.sor.repositories.core.reconciliation_snapshot_repository import (
@@ -282,6 +285,7 @@ class PaperTradingGoldenPathOrchestrator:
         replay hooks swallow per-service errors into warnings.
         """
         return [
+            ChainStep("calendar_cross_check", self._step_calendar_cross_check, max_attempts=2),
             ChainStep("final_ingestion", self._step_final_ingestion),
             ChainStep(
                 "resolve_raw_bars_dataset",
@@ -505,3 +509,13 @@ class PaperTradingGoldenPathOrchestrator:
         if result.status == "failed":
             raise RuntimeError("; ".join(result.errors) or "universe rotation failed")
         return {**result.summary, "status": result.status, "warnings": list(result.warnings)}
+
+    def _step_calendar_cross_check(self, ctx: ChainContext) -> dict[str, Any]:
+        """Compare the next two weeks of the local calendar with the broker's; report only."""
+        return run_calendar_cross_check(
+            self._calendar, now_utc=ctx.now_utc, broker_sessions=self._broker_sessions()
+        )
+
+    def _broker_sessions(self) -> Any:
+        """Hook for tests; None makes the step fetch Alpaca's calendar."""
+        return None
