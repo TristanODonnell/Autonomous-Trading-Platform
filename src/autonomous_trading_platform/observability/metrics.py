@@ -1930,3 +1930,107 @@ governance_superseded_events_total = meter.create_counter(
     description="Total number of governance audit events marked as superseded by an amendment",
     unit="1",
 )
+
+
+# =========================
+# SCHEDULER HEARTBEAT (pre-launch plan 1.4)
+# =========================
+# Set by the soak-loop scheduler on every loop iteration. Prometheus cannot see the
+# market calendar, so the process says whether the market is open and whether the
+# end-of-day chain is overdue; the alert rules only compare timestamps.
+
+
+@dataclass
+class SchedulerHeartbeatState:
+    heartbeat_at: float | None = None
+    market_open: bool | None = None
+    trading_cycle_last_success_at: float | None = None
+    eod_chain_completed_at: float | None = None
+    eod_chain_overdue: bool | None = None
+
+
+_scheduler_heartbeat_state = SchedulerHeartbeatState()
+
+
+def record_scheduler_heartbeat(
+    *,
+    heartbeat_at: float,
+    market_open: bool,
+    eod_chain_overdue: bool,
+    trading_cycle_last_success_at: float | None = None,
+    eod_chain_completed_at: float | None = None,
+) -> None:
+    st = _scheduler_heartbeat_state
+    st.heartbeat_at = heartbeat_at
+    st.market_open = market_open
+    st.eod_chain_overdue = eod_chain_overdue
+    if trading_cycle_last_success_at is not None:
+        st.trading_cycle_last_success_at = trading_cycle_last_success_at
+    if eod_chain_completed_at is not None:
+        st.eod_chain_completed_at = eod_chain_completed_at
+
+
+def _heartbeat_callback(options):
+    if _scheduler_heartbeat_state.heartbeat_at is None:
+        return []
+    return [metrics.Observation(_scheduler_heartbeat_state.heartbeat_at)]
+
+
+def _market_open_callback(options):
+    if _scheduler_heartbeat_state.market_open is None:
+        return []
+    return [metrics.Observation(1 if _scheduler_heartbeat_state.market_open else 0)]
+
+
+def _trading_cycle_last_success_callback(options):
+    if _scheduler_heartbeat_state.trading_cycle_last_success_at is None:
+        return []
+    return [metrics.Observation(_scheduler_heartbeat_state.trading_cycle_last_success_at)]
+
+
+def _eod_chain_completed_callback(options):
+    if _scheduler_heartbeat_state.eod_chain_completed_at is None:
+        return []
+    return [metrics.Observation(_scheduler_heartbeat_state.eod_chain_completed_at)]
+
+
+def _eod_chain_overdue_callback(options):
+    if _scheduler_heartbeat_state.eod_chain_overdue is None:
+        return []
+    return [metrics.Observation(1 if _scheduler_heartbeat_state.eod_chain_overdue else 0)]
+
+
+scheduler_heartbeat_timestamp = meter.create_observable_gauge(
+    name="ratp_scheduler_heartbeat_timestamp_seconds",
+    description="Unix time of the scheduler loop's last iteration",
+    callbacks=[_heartbeat_callback],
+    unit="s",
+)
+
+market_open = meter.create_observable_gauge(
+    name="ratp_market_open",
+    description="1 while the scheduler's market calendar says the market is open",
+    callbacks=[_market_open_callback],
+    unit="",
+)
+
+trading_cycle_last_success_timestamp = meter.create_observable_gauge(
+    name="ratp_trading_cycle_last_success_timestamp_seconds",
+    description="Unix time of the last intraday tick that completed",
+    callbacks=[_trading_cycle_last_success_callback],
+    unit="s",
+)
+
+eod_chain_completed_timestamp = meter.create_observable_gauge(
+    name="ratp_eod_chain_completed_timestamp_seconds",
+    description="Unix time the end-of-day chain last finished (with or without step errors)",
+    callbacks=[_eod_chain_completed_callback],
+    unit="s",
+)
+
+eod_chain_overdue = meter.create_observable_gauge(
+    name="ratp_eod_chain_overdue",
+    description="1 after 19:00 ET on a trading day while the end-of-day chain has not completed",
+    callbacks=[_eod_chain_overdue_callback],
+    unit="",
+)

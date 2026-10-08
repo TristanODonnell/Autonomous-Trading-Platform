@@ -80,6 +80,13 @@ class RealTradingClock(TradingClock):
         raise RuntimeError("RealTradingClock cannot be advanced")
 
 
+def _days(start: date, end_exclusive: date) -> Iterator[date]:
+    current = start
+    while current < end_exclusive:
+        yield current
+        current += timedelta(days=1)
+
+
 class MarketCalendar:
     @property
     def calendar_source(self) -> str:
@@ -103,6 +110,25 @@ class MarketCalendar:
             if self.is_trading_day(current):
                 yield current
             current += timedelta(days=1)
+
+    def is_first_trading_day_of_week(self, value: date) -> bool:
+        """The week's first session: Monday, or the next session when Monday is a holiday.
+        Matches the backtester's ``weekly`` cadence."""
+        if not self.is_trading_day(value):
+            return False
+        monday = value - timedelta(days=value.weekday())
+        return not any(self.is_trading_day(d) for d in _days(monday, value))
+
+    def is_last_trading_day_of_month(self, value: date) -> bool:
+        """The month's last session. The backtester rotates the universe at the start of a
+        month's first session; running at this day's close has the same effect live."""
+        if not self.is_trading_day(value):
+            return False
+        month_end = (value.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        return not any(
+            self.is_trading_day(d)
+            for d in _days(value + timedelta(days=1), month_end + timedelta(days=1))
+        )
 
     def scheduled_times(
         self,

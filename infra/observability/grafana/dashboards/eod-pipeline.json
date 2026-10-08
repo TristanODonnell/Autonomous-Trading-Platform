@@ -1,0 +1,208 @@
+{
+  "uid": "ratp-eod-pipeline",
+  "title": "RATP End-of-Day Pipeline",
+  "tags": [
+    "ratp",
+    "eod",
+    "scheduler"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-14d",
+    "to": "now"
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Annotations & Alerts",
+        "type": "dashboard",
+        "builtIn": 1,
+        "hide": true,
+        "enable": true
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Tempo by correlation_id",
+      "type": "link",
+      "url": "/explore?left={\"datasource\":\"tempo\",\"queries\":[{\"query\":\"{ratp.correlation_id=\\\"${correlation_id}\\\"}\"}]}"
+    },
+    {
+      "title": "Loki by correlation_id",
+      "type": "link",
+      "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{} | json | correlation_id=\\\"${correlation_id}\\\"\"}]}"
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 18,
+      "title": "Chain runs (one row per start; a date can have several after a restart)",
+      "type": "table",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT input_summary_json->>'trading_date' AS trading_date, started_at, completed_at, status, duration_ms, error_message, jsonb_array_length(coalesce(output_summary_json->'failed_steps', '[]'::jsonb)) AS failed_steps, output_summary_json->'resumed_steps' AS resumed_steps, correlation_id FROM runtime_job_runs WHERE job_name = 'paper_trading_eod_maintenance' AND $__timeFilter(started_at) ORDER BY started_at DESC LIMIT 60",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 19,
+      "title": "Steps per trading date (latest outcome per step)",
+      "type": "table",
+      "description": "completed / failed / skipped / interrupted per step. A step skipped with 'blocked by \u2026' sits behind a failed blocking step.",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 12
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "WITH parents AS (\n  SELECT job_run_id, input_summary_json->>'trading_date' AS trading_date\n  FROM runtime_job_runs\n  WHERE job_name = 'paper_trading_eod_maintenance' AND $__timeFilter(started_at)\n), steps AS (\n  SELECT p.trading_date, s.step_name, s.status, s.duration_ms, s.error_message, s.completed_at, s.sequence_number,\n         row_number() OVER (PARTITION BY p.trading_date, s.step_name ORDER BY s.completed_at DESC) AS rn\n  FROM runtime_job_run_steps s JOIN parents p ON p.job_run_id = s.job_run_id\n)\nSELECT trading_date, sequence_number, step_name, status, duration_ms, error_message, completed_at\nFROM steps WHERE rn = 1\nORDER BY trading_date DESC, sequence_number",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 20,
+      "title": "Step duration (seconds), last 30 chain runs",
+      "type": "barchart",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT s.step_name, round(avg(s.duration_ms) / 1000.0, 1) AS avg_s, round(max(s.duration_ms) / 1000.0, 1) AS max_s FROM runtime_job_run_steps s JOIN runtime_job_runs r ON r.job_run_id = s.job_run_id WHERE r.job_name = 'paper_trading_eod_maintenance' AND s.status = 'completed' AND $__timeFilter(r.started_at) GROUP BY s.step_name ORDER BY avg_s DESC",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "step_name"
+      }
+    },
+    {
+      "id": 21,
+      "title": "Step attempts and failures",
+      "type": "table",
+      "description": "Every retry is one attempt row",
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT replace(job_name, 'paper_trading_eod_maintenance.', '') AS step, count(*) AS attempts, count(*) FILTER (WHERE status = 'failed') AS failed_attempts, max(started_at) FILTER (WHERE status = 'failed') AS last_failure, max(error_message) FILTER (WHERE status = 'failed') AS last_error FROM runtime_job_runs WHERE job_name LIKE 'paper_trading_eod_maintenance.%' AND $__timeFilter(started_at) GROUP BY job_name ORDER BY failed_attempts DESC, step",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 22,
+      "title": "Published dataset versions (publish_datasets step output)",
+      "type": "table",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 24,
+        "h": 7
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT started_at, status, output_summary_json->>'published' AS published, output_summary_json->>'files_uploaded' AS files_uploaded, output_summary_json->>'bytes_uploaded' AS bytes_uploaded, output_summary_json->>'index_key' AS index_key FROM runtime_job_runs WHERE job_name = 'paper_trading_eod_maintenance.publish_datasets' AND $__timeFilter(started_at) ORDER BY started_at DESC LIMIT 30",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    }
+  ]
+}

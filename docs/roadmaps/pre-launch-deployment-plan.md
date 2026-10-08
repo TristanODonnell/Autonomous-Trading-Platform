@@ -139,32 +139,38 @@ publish works.
 ### Phase 1: Box A runs unattended on paper
 
 **1.1 P0: blocks deploy**
-- [ ] `JWT_SECRET` in env (API crashes without it); add to `.env.example`
-- [ ] `DATABASE_URL` uses `postgres:5432` inside Compose, not `localhost:5433`
-- [ ] `alembic upgrade head` runs on deploy, before the app starts
-- [ ] API `app` service added to `docker-compose.yml`
-- [ ] `scheduler` service (soak-loop runner, `restart: unless-stopped`) added; Box A's compose has no Airflow services
+- [x] `JWT_SECRET` in env (API crashes without it); add to `.env.example`
+- [x] `DATABASE_URL` uses `postgres:5432` inside Compose, not `localhost:5433` (set in `docker-compose.yml`, so `.env` keeps the host-side URL; same for the OTel endpoints)
+- [x] `alembic upgrade head` runs on deploy, before the app starts (one-shot `migrate` service; `app` and `scheduler` wait for it to succeed)
+- [x] API `app` service added to `docker-compose.yml`
+- [x] `scheduler` service (soak-loop runner, `restart: unless-stopped`) added; Box A's compose has no Airflow services (moved to the dev-only overlay `docker-compose.airflow.yml`; the deploy uses `--remove-orphans` to stop the old Airflow containers)
+- [x] Found while building the image: `alembic`, `pyjwt` and `pytz` were imported but never declared, so the image could not migrate, serve the API or run `atp`. Added to `pyproject.toml` / `requirements.txt`
+
+_Done 2026-10-04. Verified locally against a scratch database: migrations from empty to head, API
+healthy and JWT-gated, scheduler starts, sleeps until the next open and exits cleanly on SIGTERM.
+Not yet run on the EC2 box. Before the first deploy the box's `.env` needs `JWT_SECRET`, `APP_ENV=paper`
+and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `required: false`)._
 
 **1.2 Before running unattended: backups + deploy freeze**
-- [ ] Nightly Postgres backup → S3
-- [ ] Auto-deploy (`.github/workflows/deploy.yml`) skips 9:00–16:30 ET on weekdays (and checks the market calendar)
-- [ ] Emergency override: manual `workflow_dispatch` with a required `reason`, logged
-- [ ] Scheduler stops gracefully on deploy: finishes the in-flight step and doesn't start a new one (matters for the post-close end-of-day chain, which falls outside the freeze)
+- [x] Nightly Postgres backup → S3 (`infra/ops/backup_postgres.sh`, systemd timer at 23:30 ET via `infra/ops/install_timers.sh`; runbook `docs/operations/runbooks/postgres-backup-restore.md`). Dump and restore tested locally (row counts match on all 90 tables); the S3 upload has only run against a stand-in. **Box setup still to do:** AWS CLI, bucket + lifecycle rule, instance role, `BACKUP_S3_BUCKET` in `infra/.env`, run the installer
+- [x] Auto-deploy (`.github/workflows/deploy.yml`) skips 9:00–16:30 ET on weekdays (and checks the market calendar): `scripts/deploy_window.py`, frozen from 30 min before the open to 30 min after the close, so half days and holidays follow the exchange calendar. A skipped deploy is **not** retried automatically: re-run the workflow after the close
+- [x] Emergency override: manual `workflow_dispatch` with a required `reason`, logged (job summary + `~/ratp-deploy.log` on the box, which records every deploy)
+- [x] Scheduler stops gracefully on deploy: finishes the in-flight step and doesn't start a new one (matters for the post-close end-of-day chain, which falls outside the freeze). An in-flight intraday tick or end-of-day step finishes on SIGTERM (6 min grace, tested) and no new one starts; `EodChainRunner` (1.3) stops *between* end-of-day steps and resumes the chain after the last completed step on restart, with completion held in `job_runs` rather than in memory (2026-10-05)
 
 **1.3 Scheduling (soak-loop runner, no Airflow; see §3.1)**
-- [ ] Market calendar refresh (holidays, half days)
-- [ ] Extend `PaperTradingGoldenPathOrchestrator.run_eod_maintenance` past features: final ingestion, broker reconciliation, then the governance stack and rebalance **in the backtester's hook order** (§3 end-of-day row), passing `dataset_version_id` along the chain
-- [ ] Per-step retry wrapper; every step recorded in `job_runs`
-- [ ] Parquet publish to S3 at the end of the end-of-day chain
-- [ ] Weekly review and monthly universe steps in the runner (roadmap Step 6, without Airflow)
-- [ ] Host timers: nightly Postgres backup (1.2), weekly retention job
+- [x] Market calendar refresh (holidays, half days): `exchange_calendars` already supplies them; a daily cross-check of the next two weeks against Alpaca's calendar is the chain's first step and reports any mismatch (2026-10-05)
+- [x] Extend `PaperTradingGoldenPathOrchestrator.run_eod_maintenance` past features: final ingestion, broker reconciliation, then the governance stack and rebalance **in the backtester's hook order** (§3 end-of-day row), passing `dataset_version_id` along the chain. Done 2026-10-05; the backtester's actual order differs from the §3 row and was followed, see `pre-launch-1.3-scheduling.md` §1–2
+- [x] Per-step retry wrapper; every step recorded in `job_runs` (`EodChainRunner`: per-step rows under one parent per trading date, retry cap, stop between steps, resume after restart)
+- [x] Parquet publish to S3 at the end of the end-of-day chain (code done 2026-10-05; off until `DATASET_S3_BUCKET` is set; **not yet run against a real bucket**; EC2 metadata hop limit must be 2 for the containers to use the instance role)
+- [x] Weekly review and monthly universe steps in the runner (roadmap Step 6, without Airflow). Done 2026-10-05: weekly review on the week's first session (a no-op until `portfolio_review_mode` is switched on in Phase 3), universe rotation at the close of the month's last session with the churn guard on
+- [x] Host timers: nightly Postgres backup (1.2), weekly retention job (`infra/ops/retention.sh`, Sunday 03:00 ET: dumps > 14 d, `artifacts/` > 30 d, Docker prune; Parquet untouched; container logs capped in compose)
 
 **1.4 Observability (before the worker exists)**
-- [ ] Resource tags: `deployment.environment` (paper/live/backtest, from `APP_ENV`), `service.name` per role, `host.name`
-- [ ] All alert rules (`infra/observability/prometheus/alerts/ratp-alerts.yaml`) exclude `deployment_environment="backtest"`
-- [ ] `hostmetrics` + container stats on A; watch memory and upsize to t4g.medium if needed
-- [ ] Dashboards: Infra (host dropdown) · Trading ops · End-of-day pipeline · Research pipeline (exists)
-- [ ] Heartbeat panel: "no trading cycle in 15 min during market hours" and "end-of-day chain not finished by ~19:00 ET" (stands in for Airflow's missed-run visibility)
+- [x] Resource tags: `deployment.environment` (paper/live/backtest, from `APP_ENV`), `service.name` per role (`OTEL_SERVICE_NAME` per compose service: ratp-api / ratp-scheduler / ratp-migrate; the API now starts through `create_production_app`, which sets telemetry up), `host.name` (`HOST_NAME` from the box's `$HOSTNAME`). The collector's Prometheus exporter converts them to labels (`resource_to_telemetry_conversion`), verified end to end on the dev stack 2026-10-05
+- [x] All alert rules (`infra/observability/prometheus/alerts/ratp-alerts.yaml`) exclude `deployment_environment="backtest"` (promtool: 18 rules OK)
+- [x] `hostmetrics` + container stats on A (collector receivers `hostmetrics` via `/hostfs` and `docker_stats` via the Docker socket; collector runs as root for the socket); **watch memory on the Infra dashboard and upsize to t4g.medium if needed** (still to observe on the box)
+- [x] Dashboards: Infra (host dropdown) · Trading ops · End-of-day pipeline · Research pipeline (exists). The Grafana Postgres datasource uses the default `ratp_password`; if the box's `infra/.env` differs, update `infra/observability/grafana/provisioning/datasources/datasources.yaml` or the SQL panels stay empty
+- [x] Heartbeat panel: "no trading cycle in 15 min during market hours" and "end-of-day chain not finished by ~19:00 ET" (stands in for Airflow's missed-run visibility). The scheduler exports `ratp_scheduler_heartbeat_timestamp_seconds`, `ratp_market_open`, `ratp_trading_cycle_last_success_timestamp_seconds`, `ratp_eod_chain_overdue`, `ratp_eod_chain_completed_timestamp_seconds`; alerts `RATPSchedulerDown`, `RATPTradingCycleStale`, `RATPEodChainOverdue` replace the two `absent_over_time` rules that fired every night and weekend; stat panels on Trading Ops
 
 **1.5 Soak**
 - [ ] 1–2 weeks of unattended paper running before relying on it
@@ -235,4 +241,4 @@ publish works.
 - [ ] Verify free-plan SIP historical access (affects backtest realism)
 - [ ] Exact API contract for worker → A publishing (design doc once 5c lands)
 - [ ] Settlement/T+1: does the live ledger need a daily pass, or is it simulation only?
-- [ ] Confirm risk/sleeve snapshots run inside the trading cycle or need their own schedule
+- [x] Confirm risk/sleeve snapshots run inside the trading cycle or need their own schedule: they run inside every trading cycle, with order reconciliation and portfolio drawdown governance; no separate schedule (see `pre-launch-1.3-scheduling.md` §1)

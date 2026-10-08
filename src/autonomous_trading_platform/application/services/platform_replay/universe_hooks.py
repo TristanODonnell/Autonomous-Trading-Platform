@@ -33,14 +33,16 @@ def run_universe_at_timestamp(
     timestamp: datetime,
     replay_context: PlatformReplayContext,
     skip_cadence_check: bool = True,
-    force_rotation: bool = False,
+    force_rotation: bool = True,
     dry_run: bool = False,
     screener_source: str = "alpaca_active",
+    rotation_reason: str = "platform_replay",
 ) -> UniverseReplayResult:
     """Run universe selection/rotation at timestamp T.
 
     Uses skip_cadence_check=True by default so the replay clock drives
-    scheduling rather than wall-clock cadences.
+    scheduling rather than wall-clock cadences. force_rotation defaults to True for
+    replays (see step 3); the live scheduler passes False to keep the churn guard.
 
     screener_source picks the candidate pool: "alpaca_active" ranks today's
     active assets (misses since-delisted names); "sp500_point_in_time" ranks
@@ -98,7 +100,7 @@ def run_universe_at_timestamp(
         run_candidate_generation(
             as_of=timestamp,
             config=CandidateGenerationConfig(as_of=timestamp, lookback_days=20, max_symbols=500),
-            rebalance_reason="platform_replay_monthly",
+            rebalance_reason=f"{rotation_reason}_monthly",
             dataset_version_id=replay_context.dataset_version_id,
         )
     except Exception as exc:
@@ -106,15 +108,15 @@ def run_universe_at_timestamp(
 
     # ── Step 3: rotate — select best 20 from scored candidates ──────────────
     try:
-        # Always force rotation in a platform replay: the churn guard (max_churn_pct=0.30)
-        # is designed for live trading where real capital is at risk. In a historical
-        # backtest the universe should rotate freely so the simulation reflects real
-        # month-over-month composition changes. config_hash_unchanged still gates no-op skips.
+        # Replays force rotation: the churn guard (max_churn_pct=0.30) is designed for
+        # live trading where real capital is at risk. In a historical backtest the
+        # universe should rotate freely so the simulation reflects real month-over-month
+        # composition changes. config_hash_unchanged still gates no-op skips.
         result = run_universe_rotation(
             candidate_version_id=None,
             config=UniverseRebalanceConfig(),
-            rotation_reason="platform_replay",
-            force_rotation=True,
+            rotation_reason=rotation_reason,
+            force_rotation=force_rotation,
             approved_by=replay_context.actor,
             as_of=timestamp,
             skip_cadence_check=skip_cadence_check,

@@ -4,6 +4,8 @@
 #
 #    pip-compile --output-file=requirements.txt pyproject.toml
 #
+alembic==1.20.0
+    # via retail-autonomous-trading-platform (pyproject.toml)
 alpaca-py==0.43.2
     # via retail-autonomous-trading-platform (pyproject.toml)
 annotated-doc==0.0.4
@@ -14,6 +16,12 @@ anyio==4.13.0
     # via
     #   httpx
     #   starlette
+boto3==1.43.108
+    # via retail-autonomous-trading-platform (pyproject.toml)
+botocore==1.43.108
+    # via
+    #   boto3
+    #   s3transfer
 certifi==2026.2.25
     # via
     #   httpcore
@@ -64,12 +72,20 @@ importlib-metadata==8.7.1
     # via opentelemetry-api
 jinja2==3.1.6
     # via osqp
+jmespath==1.1.0
+    # via
+    #   boto3
+    #   botocore
 joblib==1.5.3
     # via osqp
 korean-lunar-calendar==0.4.0
     # via exchange-calendars
+mako==1.4.3
+    # via alembic
 markupsafe==3.0.3
-    # via jinja2
+    # via
+    #   jinja2
+    #   mako
 msgpack==1.1.2
     # via alpaca-py
 numpy==2.4.4
@@ -141,13 +157,18 @@ pydantic==2.13.2
     #   retail-autonomous-trading-platform (pyproject.toml)
 pydantic-core==2.46.2
     # via pydantic
+pyjwt==2.15.1
+    # via retail-autonomous-trading-platform (pyproject.toml)
 pyluach==2.3.0
     # via exchange-calendars
 python-dateutil==2.9.0.post0
     # via
+    #   botocore
     #   pandas
     #   retail-autonomous-trading-platform (pyproject.toml)
 python-dotenv==1.2.2
+    # via retail-autonomous-trading-platform (pyproject.toml)
+pytz==2026.5
     # via retail-autonomous-trading-platform (pyproject.toml)
 pyyaml==6.0.3
     # via retail-autonomous-trading-platform (pyproject.toml)
@@ -158,6 +179,8 @@ requests==2.33.1
     #   alpaca-py
     #   opentelemetry-exporter-otlp-proto-http
     #   retail-autonomous-trading-platform (pyproject.toml)
+s3transfer==0.19.2
+    # via boto3
 scipy==1.17.1
     # via
     #   clarabel
@@ -172,7 +195,9 @@ six==1.17.0
 sparsediffpy==0.3.0
     # via cvxpy
 sqlalchemy==2.0.49
-    # via retail-autonomous-trading-platform (pyproject.toml)
+    # via
+    #   alembic
+    #   retail-autonomous-trading-platform (pyproject.toml)
 sseclient-py==1.9.0
     # via alpaca-py
 starlette==1.0.0
@@ -183,6 +208,7 @@ toolz==1.1.0
     # via exchange-calendars
 typing-extensions==4.15.0
     # via
+    #   alembic
     #   anyio
     #   fastapi
     #   grpcio
@@ -207,7 +233,9 @@ tzdata==2026.1
     #   pandas
     #   psycopg
 urllib3==2.6.3
-    # via requests
+    # via
+    #   botocore
+    #   requests
 uvicorn==0.51.0
     # via retail-autonomous-trading-platform (pyproject.toml)
 websockets==16.0

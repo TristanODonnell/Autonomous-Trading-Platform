@@ -1,3 +1,4 @@
+from datetime import date, time
 from decimal import Decimal
 
 import autonomous_trading_platform.scheduler.cycles.run_trading_cycle as cycle_module
@@ -16,6 +17,7 @@ from autonomous_trading_platform.storage.sor.models.position_snapshot_items impo
 from autonomous_trading_platform.storage.sor.models.position_snapshots import PositionSnapshot
 from autonomous_trading_platform.storage.sor.models.run_manifests import RunManifestRow
 from autonomous_trading_platform.storage.sor.models.runtime_job_runs import RuntimeJobRuns
+from tests.utilities.paper_trading_cycle_fixture import FakePaperBrokerClient
 
 
 def _latest_trading_manifest(db_session, fixture):
@@ -599,7 +601,14 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
 ):
     fixture = seeded_paper_trading_golden_path_fixture
 
-    orchestrator = PaperTradingGoldenPathOrchestrator(db_session)
+    orchestrator = PaperTradingGoldenPathOrchestrator(
+        db_session, broker_client_factory=lambda: FakePaperBrokerClient(None)
+    )
+    # The calendar step would otherwise call Alpaca: hand it a broker calendar that agrees.
+    orchestrator._broker_sessions = lambda: {  # type: ignore[method-assign]
+        d: (time(9, 30), time(16, 0))
+        for d in orchestrator._calendar.trading_days(date(2025, 2, 15), date(2025, 3, 1))
+    }
 
     # Seed the daily raw_bars dataset first.
     orchestrator.run_intraday_tick(
@@ -683,10 +692,36 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
     assert feature_jobs[0].status in ("completed", "failed")
 
     assert eod_jobs != []
+    assert result.chain is not None
+    # Checked first so a failing step is named, not just the chain's overall status.
+    assert result.chain.failed_steps == (), eod_jobs[0].output_summary_json
     assert eod_jobs[0].status == "completed"
     assert eod_jobs[0].correlation_id == result.correlation_id
-    assert eod_jobs[0].input_summary_json["mode"] == "eod_maintenance"
-    assert eod_jobs[0].input_summary_json["steps"] == [
-        "corporate_action_ingestion_cycle",
-        "feature_pipeline_cycle",
+    expected_steps = [
+        "calendar_cross_check",
+        "final_ingestion",
+        "resolve_raw_bars_dataset",
+        "broker_reconciliation",
+        "corporate_actions",
+        "features",
+        "risk",
+        "governance",
+        "correlation_monitoring",
+        "allocation_rebalance",
+        "weekly_portfolio_review",
+        "monthly_universe_rotation",
+        "operations_health",
+        "publish_datasets",
     ]
+    assert eod_jobs[0].input_summary_json["steps"] == expected_steps
+    # 2025-02-14 is a Friday and not the month's last session, so neither periodic step
+    # applies; publishing is off without DATASET_S3_BUCKET.
+    assert result.chain.skipped_steps == (
+        "weekly_portfolio_review",
+        "monthly_universe_rotation",
+        "publish_datasets",
+    )
+    assert list(result.chain.completed_steps) == [
+        s for s in expected_steps if s not in result.chain.skipped_steps
+    ]
+    assert result.chain.status.value == "completed"

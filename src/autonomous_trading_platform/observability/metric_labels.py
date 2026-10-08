@@ -4,7 +4,7 @@ import os
 
 from autonomous_trading_platform.observability.runtime_context import get_runtime_context
 
-_ENVIRONMENT = os.getenv("RATP_ENVIRONMENT", "unknown")
+_ENVIRONMENT = os.getenv("RATP_ENVIRONMENT") or os.getenv("APP_ENV") or "unknown"
 
 
 def observability_environment() -> str:

@@ -38,6 +38,9 @@ artifacts/
 !.env.example
 infra/.env
 
+# Frontend dependencies (the image only runs the backend)
+**/node_modules/
+
 # Editor/IDE
 .idea/
 .vscode/

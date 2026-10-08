@@ -157,6 +157,13 @@ class Settings:
             default=True,
         )
 
+        # Parquet publish to the object store the worker pulls from (pre-launch plan 1.3).
+        # Unset = publishing off.
+        self.dataset_s3_bucket = os.getenv("DATASET_S3_BUCKET") or None
+        self.dataset_s3_prefix = os.getenv("DATASET_S3_PREFIX", "datasets")
+        self.dataset_s3_region = os.getenv("DATASET_S3_REGION") or None
+        self.git_sha = os.getenv("GIT_SHA") or None
+
         # ----------------------------------------------------
         # VALIDATE AFTER LOAD
         # ----------------------------------------------------

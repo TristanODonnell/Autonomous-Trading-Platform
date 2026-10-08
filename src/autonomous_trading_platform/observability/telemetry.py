@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import logging
 import os
+import socket
 
 from opentelemetry import metrics, trace
 from opentelemetry._logs import set_logger_provider
@@ -25,11 +26,14 @@ def setup_telemetry(service_name: str) -> None:
         "http://localhost:4318/v1/logs",
     )
 
+    # OTEL_SERVICE_NAME lets one image run as ratp-api / ratp-scheduler / ratp-worker
+    # (set per service in docker-compose.yml); HOST_NAME is the box, not the container.
     resource = Resource.create(
         {
-            "service.name": service_name,
+            "service.name": os.getenv("OTEL_SERVICE_NAME") or service_name,
             "service.namespace": "autonomous_trading_platform",
             "deployment.environment": os.getenv("APP_ENV", "dev"),
+            "host.name": os.getenv("HOST_NAME") or socket.gethostname(),
         }
     )
 
