@@ -692,6 +692,9 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
     assert feature_jobs[0].status in ("completed", "failed")
 
     assert eod_jobs != []
+    assert result.chain is not None
+    # Checked first so a failing step is named, not just the chain's overall status.
+    assert result.chain.failed_steps == (), eod_jobs[0].output_summary_json
     assert eod_jobs[0].status == "completed"
     assert eod_jobs[0].correlation_id == result.correlation_id
     expected_steps = [
@@ -711,8 +714,6 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
         "publish_datasets",
     ]
     assert eod_jobs[0].input_summary_json["steps"] == expected_steps
-    assert result.chain is not None
-    assert result.chain.failed_steps == (), eod_jobs[0].output_summary_json
     # 2025-02-14 is a Friday and not the month's last session, so neither periodic step
     # applies; publishing is off without DATASET_S3_BUCKET.
     assert result.chain.skipped_steps == (

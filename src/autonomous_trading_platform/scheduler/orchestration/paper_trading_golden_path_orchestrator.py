@@ -467,13 +467,15 @@ class PaperTradingGoldenPathOrchestrator:
         return {**result.summary, "warnings": list(result.warnings)}
 
     def _step_correlation_monitoring(self, ctx: ChainContext) -> dict[str, Any]:
-        result = run_correlation_monitoring_cycle(trigger_source="scheduler")
+        result = run_correlation_monitoring_cycle(trigger_source="scheduler", session=self.session)
         return dict(result) if isinstance(result, dict) else {"status": str(result)}
 
     def _step_allocation_rebalance(self, ctx: ChainContext) -> dict[str, Any]:
         """Interim weekly re-weight trigger until the portfolio review is on (plan 1.3 §4.1);
         the engine's own interval guard and auto_rebalance_enabled switch gate it."""
-        result = run_allocation_rebalance_cycle(now_utc=ctx.now_utc, trigger_source="scheduler")
+        result = run_allocation_rebalance_cycle(
+            now_utc=ctx.now_utc, trigger_source="scheduler", session=self.session
+        )
         return dict(result) if isinstance(result, dict) else {"status": str(result)}
 
     def _step_operations_health(self, ctx: ChainContext) -> dict[str, Any]:

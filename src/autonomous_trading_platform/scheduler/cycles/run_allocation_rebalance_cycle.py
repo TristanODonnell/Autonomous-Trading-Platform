@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
 
+from sqlalchemy.orm import Session
+
 from autonomous_trading_platform.application.services.quality_based_reallocation_service import (
     QualityBasedReallocationService,
     QualityReallocationResult,
@@ -77,18 +79,29 @@ logger = get_logger(__name__)
 def run_allocation_rebalance_cycle(
     now_utc: datetime | None = None,
     trigger_source: str = "scheduler",
+    session: Session | None = None,
 ) -> dict:
-    return run_strategy_allocation_rebalance_cycle(now_utc=now_utc, trigger_source=trigger_source)
+    return run_strategy_allocation_rebalance_cycle(
+        now_utc=now_utc, trigger_source=trigger_source, session=session
+    )
 
 
 def run_strategy_allocation_rebalance_cycle(
     now_utc: datetime | None = None,
     trigger_source: str = "scheduler",
+    session: Session | None = None,
 ) -> dict:
+    """Re-weight the active strategies when the interval guard and operator switch allow.
+
+    ``session``: run inside this session (the end-of-day chain passes its own so the step
+    shares the chain's transaction); when omitted the cycle opens and closes one of its own.
+    """
     if now_utc is None:
         now_utc = datetime.now(UTC)
 
-    session = get_session()
+    owns_session = session is None
+    if session is None:
+        session = get_session()
     run_id = uuid4()
     cycle_wall_start = perf_counter()
     settings = OperatorSettingsRepository(session).get_or_create_default()
@@ -213,7 +226,8 @@ def run_strategy_allocation_rebalance_cycle(
                 session.commit()
                 raise
     finally:
-        session.close()
+        if owns_session:
+            session.close()
 
 
 def _emit_rebalance_stability_metrics(result: QualityReallocationResult) -> None:

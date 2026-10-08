@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
 
+from sqlalchemy.orm import Session
+
 from autonomous_trading_platform.application.services.correlation_monitoring_service import (
     CorrelationMonitoringConfig,
     CorrelationMonitoringService,
@@ -54,6 +56,7 @@ def run_correlation_monitoring_cycle(
     strategy_ids: list[str] | None = None,
     sector_map: dict[str, str] | None = None,
     symbol_windows: list[int] | None = None,
+    session: Session | None = None,
 ) -> dict:
     """Compute and persist rolling correlation/covariance snapshots.
 
@@ -67,11 +70,16 @@ def run_correlation_monitoring_cycle(
         strategy_ids: Strategy IDs for strategy-level correlations.
         sector_map: {symbol: sector} mapping for sector aggregation.
         symbol_windows: Override default lookback windows.
+        session: Run inside this session (the end-of-day chain passes its own so the
+            step shares the chain's transaction); when omitted the cycle opens and
+            closes one of its own.
     """
     if now_utc is None:
         now_utc = datetime.now(UTC)
 
-    session = get_session()
+    owns_session = session is None
+    if session is None:
+        session = get_session()
     run_id = uuid4()
     cycle_wall_start = perf_counter()
 
@@ -178,7 +186,8 @@ def run_correlation_monitoring_cycle(
                 session.commit()
                 raise
     finally:
-        session.close()
+        if owns_session:
+            session.close()
 
 
 if __name__ == "__main__":
