@@ -38,6 +38,11 @@ class Settings:
         self.live_broker_api_key = os.getenv("LIVE_BROKER_API_KEY")
         self.live_broker_api_secret = os.getenv("LIVE_BROKER_API_SECRET")
 
+        # Alpaca market-data feed for bar requests. The API defaults to "sip", which the free
+        # plan cannot query for the last 15 minutes ("subscription does not permit querying
+        # recent SIP data"), so every intraday and end-of-day ingestion fails. "iex" is free.
+        self.alpaca_data_feed = (os.getenv("ALPACA_DATA_FEED") or "iex").strip().lower()
+
         self.universe_rebalance_cadence = os.getenv(
             "UNIVERSE_REBALANCE_CADENCE",
             "daily",

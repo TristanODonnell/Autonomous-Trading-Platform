@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import datetime
 
+from alpaca.data.enums import DataFeed
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.models.bars import Bar
 from alpaca.data.requests import StockBarsRequest
@@ -14,8 +15,13 @@ class AlpacaHistoricalBarsClient:
     Client responsible for retrieving historical minute bars from Alpaca.
     """
 
-    def __init__(self, client: StockHistoricalDataClient) -> None:
+    def __init__(
+        self,
+        client: StockHistoricalDataClient,
+        feed: DataFeed = DataFeed.IEX,
+    ) -> None:
         self.client = client
+        self.feed = feed
 
     def fetch_bars(
         self,
@@ -28,6 +34,7 @@ class AlpacaHistoricalBarsClient:
             timeframe=TimeFrame.Minute,
             start=start,
             end=end,
+            feed=self.feed,
         )
 
         response = self.client.get_stock_bars(request)
