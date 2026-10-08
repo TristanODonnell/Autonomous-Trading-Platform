@@ -42,7 +42,7 @@ class FakeRawHistoricalClient:
 
 
 class FakeAlpacaHistoricalBarsClient:
-    def __init__(self, _raw_client: Any):
+    def __init__(self, _raw_client: Any, feed: Any = None):
         pass
 
     def fetch_bars(self, *, symbols, start, end, timeframe="1Min", **kwargs):

@@ -20,6 +20,7 @@ from autonomous_trading_platform.ingestion.market_data.clients.alpaca_historical
     AlpacaHistoricalBarsClient,
 )
 from autonomous_trading_platform.ingestion.market_data.clients.alpaca_market_data_client import (
+    get_data_feed,
     get_stock_historical_client,
 )
 from autonomous_trading_platform.ingestion.market_data.jobs.backfill_market_bars_job import (
@@ -266,7 +267,7 @@ def run_market_backfill_cycle(
             ingestion_run = ingestion_run_registration_service.register(ingestion_run_contract)
 
             raw_client = get_stock_historical_client()
-            historical_client = AlpacaHistoricalBarsClient(raw_client)
+            historical_client = AlpacaHistoricalBarsClient(raw_client, feed=get_data_feed())
 
             job = BackfillMarketBarsJob(
                 session=session,

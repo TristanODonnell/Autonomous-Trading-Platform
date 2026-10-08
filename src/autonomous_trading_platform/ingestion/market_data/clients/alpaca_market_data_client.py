@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from alpaca.data.enums import DataFeed
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.live import StockDataStream
 from alpaca.data.requests import StockBarsRequest
@@ -40,10 +41,21 @@ def get_stock_historical_client() -> StockHistoricalDataClient:
     return StockHistoricalDataClient(api_key, secret_key)
 
 
+def get_data_feed() -> DataFeed:
+    """
+    The feed bar requests are made against (``ALPACA_DATA_FEED``, default IEX).
+
+    Left unset, Alpaca serves SIP, which the free plan cannot query for the most recent
+    15 minutes, so live ingestion fails on every cycle.
+    """
+    return DataFeed(Settings().alpaca_data_feed)
+
+
 def fetch_minute_bars(
     symbols: list[str],
     start: datetime,
     end: datetime,
+    feed: DataFeed | None = None,
 ):
     """
     Fetch minute bars for the provided symbols and time window.
@@ -55,6 +67,7 @@ def fetch_minute_bars(
         timeframe=TimeFrame.Minute,
         start=start,
         end=end,
+        feed=feed or get_data_feed(),
     )
 
     return client.get_stock_bars(request)
