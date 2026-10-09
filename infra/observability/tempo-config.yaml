@@ -1,3 +1,10 @@
+# Tempo config for the grafana/otel-lgtm bundle (mounted over /otel-lgtm/tempo-config.yaml).
+#
+# This is the image's own config (docker-otel-lgtm/docker/tempo-config.yaml for 0.33.x) plus
+# the block_retention override at the bottom. Keep it in step with the pinned image version in
+# docker-compose.yml. Tempo must listen on 127.0.0.1:4417/4418: the bundle's collector owns
+# 0.0.0.0:4317/4318 and forwards traces to Tempo on 4418. An earlier version of this file put
+# Tempo on 4317/4318, so the collector could not bind and the container restart-looped.
 server:
   http_listen_port: 3200
   grpc_listen_port: 9096
@@ -7,21 +14,43 @@ distributor:
     otlp:
       protocols:
         grpc:
-          endpoint: "0.0.0.0:4317"
+          endpoint: "127.0.0.1:4417"
         http:
-          endpoint: "0.0.0.0:4318"
+          endpoint: "127.0.0.1:4418"
+
+memberlist:
+  bind_addr: [127.0.0.1]
+  bind_port: 7947
+
+querier:
+  frontend_worker:
+    frontend_address: 127.0.0.1:9096
 
 storage:
   trace:
     backend: local
     wal:
-      path: /tmp/tempo/wal
+      path: /data/tempo/wal
     local:
-      path: /tmp/tempo/blocks
+      path: /data/tempo/blocks
 
-# Tempo 3.0 (grafana/otel-lgtm 0.33+) removed the compactor block; a config that still has
-# it fails to parse and the whole LGTM container restart-loops. Retention lives in overrides.
+metrics_generator:
+  processor:
+    span_metrics:
+      dimensions:
+        - service_name
+        - operation
+        - status_code
+  storage:
+    path: /data/tempo/generator/wal
+    remote_write:
+      - url: http://127.0.0.1:9090/api/v1/write
+        send_exemplars: true
+
 overrides:
   defaults:
+    metrics_generator:
+      processors: [service-graphs, span-metrics]
+    # Tempo 3.0 removed the compactor block; retention is set here (read by 2.x and 3.x).
     compaction:
       block_retention: 168h
