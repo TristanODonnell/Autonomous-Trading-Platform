@@ -118,7 +118,8 @@ services:
   # Observability (Grafana LGTM)
   # ----------------------------
   lgtm:
-    image: grafana/otel-lgtm:latest
+    # Pinned: `latest` moved to Tempo 3.0 under us and broke the mounted tempo-config.yaml.
+    image: grafana/otel-lgtm:0.33.1
     logging: *logging
     container_name: ratp_lgtm
     restart: unless-stopped

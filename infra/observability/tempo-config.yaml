@@ -19,6 +19,9 @@ storage:
     local:
       path: /tmp/tempo/blocks
 
-compactor:
-  compaction:
-    block_retention: 168h
+# Tempo 3.0 (grafana/otel-lgtm 0.33+) removed the compactor block; a config that still has
+# it fails to parse and the whole LGTM container restart-loops. Retention lives in overrides.
+overrides:
+  defaults:
+    compaction:
+      block_retention: 168h
