@@ -141,7 +141,7 @@ services:
   # OpenTelemetry Collector
   # ----------------------------
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
+    image: otel/opentelemetry-collector-contrib:0.161.0
     logging: *logging
     container_name: ratp_otel_collector
     command: [ "--config=/etc/otelcol/config.yaml" ]
