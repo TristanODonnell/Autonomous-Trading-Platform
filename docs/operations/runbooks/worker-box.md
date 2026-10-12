@@ -86,6 +86,33 @@ AWS credentials with write access to the bucket, `atp datasets publish --trading
 uploads the same way the box does. Dev versions are then visible to the worker like any
 other; A skips versions that already have a manifest.
 
+## Running a fixture: `atp worker run`
+
+The job runner does the whole sequence and leaves a summary whatever happens:
+
+```
+pull datasets (pinned with --as-of) → reset DB state → drop the stale checkpoint
+→ atp platform backtest run → upload the bundle → write + upload summary.json
+```
+
+```bash
+infra/ops/worker_job.sh worker run --fixture fixtures/platform/replays/short/smoke_minimal.yaml
+infra/ops/worker_job.sh worker run --fixture fixtures/platform/replays/long/six_month_regression.yaml   --name six_month_2026w42 --as-of 2026-10-12
+infra/ops/worker_job.sh worker run --fixture ... --name six_month_2026w42 --resume   # after a crash
+infra/ops/worker_job.sh worker reset                                                 # state wipe only
+```
+
+- The run name (default: the fixture file's stem) names the bundle
+  `artifacts/platform/backtests/<name>.json`, its checkpoint, and the S3 folder
+  `s3://<bucket>/artifacts/worker/<name>/<UTC stamp>/` holding `<name>.json` and `summary.json`.
+- `summary.json` (also at `artifacts/worker/runs/<name>/<stamp>/`) records each step's status
+  and duration, the dataset pin, git SHA, host, exit code and the bundle's headline numbers
+  (ticks, orders, error count). A run that fails at the pull step still produces one.
+- Status is `ok`, `completed_with_errors` (bundle written, backtest exit 1) or `failed`.
+- The reset keeps the `dataset_versions` rows the pull registered and never touches Parquet.
+  Both `worker run` and `worker reset` refuse to run unless `APP_ENV` is backtest, dev or test.
+- `--resume` keeps the checkpoint and skips the reset; `--no-pull` / `--no-upload` for offline work.
+
 ## Checking it
 
 ```bash

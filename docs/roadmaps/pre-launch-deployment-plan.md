@@ -188,7 +188,7 @@ and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `
 - [x] S3 dataset pull, pinned to the dataset versions A published (`DatasetPullService` + `atp datasets pull [--as-of DATE | --version ID]`, nightly timer 20:30 ET via `infra/ops/install_worker_timers.sh`; verifies size + SHA-256, registers rows in the worker's own `dataset_versions`; manifests now carry `source_manifest`/`metadata_json` so the worker can select versions the way A does; `atp datasets publish` allows a one-time seed from the dev machine). **Not yet run against the real bucket**: first chance after A's first publish on Mon 2026-10-12
 
 **2.3 On-demand runs only (nothing touches A yet)**
-- [ ] Runner wrapper: reset → delete stale checkpoint → run → artifact to S3 → run summary
+- [x] Runner wrapper: reset → delete stale checkpoint → run → artifact to S3 → run summary (`atp worker run`, `WorkerRunService` + `WorkerStateResetService`; summary.json per run locally and in S3 under `artifacts/worker/<name>/<stamp>/`; pulled dataset registrations survive the reset; refuses outside `APP_ENV=backtest|dev|test`; `scripts/reset_backtest_state.py` now calls the same service). Done 2026-10-12. **Open:** replay ingestion still fetches bars from Alpaca, so the worker needs market-data keys until replay can ingest from the pulled Parquet
 - [ ] Span/log attributes: `run.mode`, `backtest.run_id`, `fixture`, `sim_timestamp`; keep `run_id` off metric labels
 - [ ] Sample backtest traces heavily (or don't export them)
 - [ ] Dashboard: Worker/research runs

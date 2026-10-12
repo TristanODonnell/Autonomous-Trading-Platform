@@ -22,6 +22,7 @@ from autonomous_trading_platform.cli.commands import (
     settings,
     strategy,
     universe,
+    worker,
 )
 from autonomous_trading_platform.cli.runner import run_handler
 
@@ -49,6 +50,7 @@ def build_parser():
     governance.register(subparsers)
     platform.register(subparsers)
     datasets.register(subparsers)
+    worker.register(subparsers)
     return parser
 
 
