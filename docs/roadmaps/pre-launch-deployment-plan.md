@@ -188,7 +188,7 @@ and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `
 - [x] S3 dataset pull, pinned to the dataset versions A published (`DatasetPullService` + `atp datasets pull [--as-of DATE | --version ID]`, nightly timer 20:30 ET via `infra/ops/install_worker_timers.sh`; verifies size + SHA-256, registers rows in the worker's own `dataset_versions`; manifests now carry `source_manifest`/`metadata_json` so the worker can select versions the way A does; `atp datasets publish` allows a one-time seed from the dev machine). **Not yet run against the real bucket**: first chance after A's first publish on Mon 2026-10-12
 
 **2.3 On-demand runs only (nothing touches A yet)**
-- [ ] Runner wrapper: reset → delete stale checkpoint → run → artifact to S3 → run summary
+- [x] Runner wrapper: reset → delete stale checkpoint → run → artifact to S3 → run summary (`atp worker run`, `WorkerRunService` + `WorkerStateResetService`; summary.json per run locally and in S3 under `artifacts/worker/<name>/<stamp>/`; pulled dataset registrations survive the reset; refuses outside `APP_ENV=backtest|dev|test`; `scripts/reset_backtest_state.py` now calls the same service). Done 2026-10-12. **Note:** fixture replays fetch bars through the real Alpaca ingestion path by design (5c parity), so B needs a market-data key pair from a separate paper account for replays; the pulled Parquet is for the research jobs. Recorded-dataset replay is 3.4
 - [ ] Span/log attributes: `run.mode`, `backtest.run_id`, `fixture`, `sim_timestamp`; keep `run_id` off metric labels
 - [ ] Sample backtest traces heavily (or don't export them)
 - [ ] Dashboard: Worker/research runs
@@ -210,6 +210,23 @@ and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `
 - [ ] (a) Weekly bench re-sims + scorecards from B, plus the weekly review DAG on A
 - [ ] (b) Monthly research / strategy generation → bench
 - [ ] (c) Allocation/governance parameter changes, last (riskiest)
+
+**3.4 Data fetching restructure: recorded-dataset replay (before any scheduled replay)**
+
+Today a fixture replay fetches its bars from Alpaca through the real ingestion path. That is
+the right regression and parity tool (5c) and stays. It is the wrong input for *scheduled*
+replays: a fresh fetch months later can differ (corrections, backfills, IEX thinness), so
+two runs of the same fixture are not guaranteed to match; every run re-downloads months of
+5-minute bars for the whole universe; and it needs a trading-capable key pair on B.
+
+- [ ] A recorded-bars source for the ingestion step: the replay's ingestion job reads the
+      Parquet dataset versions B pulled from A (the exact bars A traded on) instead of calling
+      Alpaca, and everything downstream (corp actions, features, trading cycle) runs unchanged
+- [ ] Fixture flag to choose the source (`alpaca` = today's behaviour, `recorded` = pulled
+      datasets pinned with `--as-of`), recorded in the bundle and the run summary
+- [ ] Parity check: the same fixture run both ways over a recent window agrees within the 5c
+      tolerance (re-sim vs platform corr ≥ 0.99); keep one `alpaca`-sourced regression in CI
+- [ ] Only then: scheduled fixture runs on B use `recorded`; `.env.worker` can drop the Alpaca keys
 
 ### Phase 4: scheduled campaigns
 - [ ] Freeze `suite_v1` windows (section 5)

@@ -87,6 +87,33 @@ AWS credentials with write access to the bucket, `atp datasets publish --trading
 uploads the same way the box does. Dev versions are then visible to the worker like any
 other; A skips versions that already have a manifest.
 
+## Running a fixture: `atp worker run`
+
+The job runner does the whole sequence and leaves a summary whatever happens:
+
+```
+pull datasets (pinned with --as-of) → reset DB state → drop the stale checkpoint
+→ atp platform backtest run → upload the bundle → write + upload summary.json
+```
+
+```bash
+infra/ops/worker_job.sh worker run --fixture fixtures/platform/replays/short/smoke_minimal.yaml
+infra/ops/worker_job.sh worker run --fixture fixtures/platform/replays/long/six_month_regression.yaml   --name six_month_2026w42 --as-of 2026-10-12
+infra/ops/worker_job.sh worker run --fixture ... --name six_month_2026w42 --resume   # after a crash
+infra/ops/worker_job.sh worker reset                                                 # state wipe only
+```
+
+- The run name (default: the fixture file's stem) names the bundle
+  `artifacts/platform/backtests/<name>.json`, its checkpoint, and the S3 folder
+  `s3://<bucket>/artifacts/worker/<name>/<UTC stamp>/` holding `<name>.json` and `summary.json`.
+- `summary.json` (also at `artifacts/worker/runs/<name>/<stamp>/`) records each step's status
+  and duration, the dataset pin, git SHA, host, exit code and the bundle's headline numbers
+  (ticks, orders, error count). A run that fails at the pull step still produces one.
+- Status is `ok`, `completed_with_errors` (bundle written, backtest exit 1) or `failed`.
+- The reset keeps the `dataset_versions` rows the pull registered and never touches Parquet.
+  Both `worker run` and `worker reset` refuse to run unless `APP_ENV` is backtest, dev or test.
+- `--resume` keeps the checkpoint and skips the reset; `--no-pull` / `--no-upload` for offline work.
+
 ## Checking it
 
 ```bash
@@ -105,6 +132,16 @@ Grafana on Box A: host and container panels filter by `host_name`; the worker's 
 - `atp` needs `JWT_SECRET` and `VALIDATE_BROKER_CONFIG=false` on a box with no API and no
   broker, because the CLI imports the REST app and `Settings()` checks broker keys at start-up.
   Both are in `.env.worker.example`; untangling the import is a small follow-up.
-- No runner wrapper yet (reset → delete stale checkpoint → run → artifact to S3 → summary).
-- No weekly/monthly research timers; add them to `install_worker_timers.sh` via `worker_job.sh`.
+- **Fixture replays need a market-data key pair.** By design (Step 5c parity) the platform
+  backtester runs the real ingestion and trading-cycle code, so a replay fetches its bars
+  through the Alpaca data API exactly as Box A does; that is what makes a backtest result
+  carry over to paper and live. Put a key pair from a separate paper account in
+  `.env.worker` (`PAPER_BROKER_API_KEY/SECRET`, data access only; the box never submits
+  orders). The pulled Parquet feeds the research jobs (bench re-sims, strategy generation,
+  regime suites), which are the worker's main work. A recorded-dataset replay mode is
+  planned before scheduled replays (deployment plan, 3.4).
+- No weekly/monthly research timers; add them to `install_worker_timers.sh` via `worker_job.sh`
+  calling `worker run`.
+- Span/log attributes for runs (`run.mode`, `backtest.run_id`, `fixture`) and the Worker
+  dashboard are not done.
 - Backtest traces are sampled at 10% by the collector; revisit once the Worker dashboard exists.
