@@ -87,7 +87,13 @@ jobs:
             cd ~/Autonomous-Trading-Platform
             git pull origin main
             export GIT_SHA=$(git rev-parse HEAD)
+            # The Bake builder builds the shared ratp-app image once per service (3x the
+            # disk and time); the classic builder builds it once.
+            export COMPOSE_BAKE=false
             # migrate runs first (app and scheduler wait on it); --remove-orphans stops
             # services no longer in docker-compose.yml (the old Airflow containers)
             docker compose up -d --build --remove-orphans
+            # Drop the image this deploy replaced; the weekly retention timer is too slow
+            # to keep a 29 GB disk clear across several deploys in one week.
+            docker image prune -f
             echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) sha=$(git rev-parse --short HEAD) trigger=$DEPLOY_TRIGGER actor=$DEPLOY_ACTOR reason=$DEPLOY_REASON" >> ~/ratp-deploy.log

@@ -20,6 +20,8 @@ x-app-env: &app-env
   HOST_NAME: ${HOSTNAME:-unknown}
   PYTHONUNBUFFERED: "1"
 
+# Deploy with COMPOSE_BAKE=false: the Bake builder builds this shared image once per
+# service instead of once. .dockerignore keeps data/, artifacts/, tests/ and docs out.
 x-app-base: &app-base
   logging: *logging
   build:
