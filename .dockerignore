@@ -53,3 +53,22 @@ infra/.env
 *.dump
 private-notes/
 .claude/
+
+# Not needed at runtime. data/ and artifacts/ are bind-mounted by compose; on the box they
+# hold every Parquet file ingested so far, and copying them into the image once filled the
+# disk (2026-10-12). tests/, docs/ and screenshots just bloat the layers.
+data/
+artifacts/
+tests/
+visualization/
+frontend/
+docs/*
+!docs/operations
+.github/
+.idea/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+orchestration/
+*.dump
+dump.sql
