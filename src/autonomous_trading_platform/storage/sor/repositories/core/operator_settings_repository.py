@@ -69,6 +69,9 @@ class OperatorSettingsRepository:
             review_min_shadow_trades=10,
             review_score_floor=1.0,
             review_on_deck_min_tenure_days=21,
+            worker_results_enabled=False,
+            worker_result_max_age_days=3,
+            worker_result_require_matching_git_sha=True,
         )
         self._session.add(row)
         self._session.flush()

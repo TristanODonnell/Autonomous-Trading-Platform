@@ -37,6 +37,11 @@ def test_get_settings_returns_default_operator_settings(client: TestClient) -> N
         "slippage_model": "fixed",
         "transaction_cost_model": "per_share",
         "max_total_strategy_allocation_pct": "1.0",
+        "portfolio_review_mode": "off",
+        "min_rebalance_interval_hours": "24.0",
+        "worker_results_enabled": False,
+        "worker_result_max_age_days": 3,
+        "worker_result_require_matching_git_sha": True,
         "metadata": {
             "source_of_truth": {
                 "automation_controls_source": "settings",

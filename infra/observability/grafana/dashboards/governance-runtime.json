@@ -7,7 +7,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": {
     "from": "now-6h",
@@ -333,7 +333,7 @@
       "description": "",
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 28,
         "w": 24,
         "h": 8
       },
@@ -368,6 +368,153 @@
         "overrides": []
       },
       "options": {}
+    },
+    {
+      "id": 7,
+      "title": "Automated decisions (7d)",
+      "description": "Every decision an automation took or recorded in the last 7 days: governance (auto promotion/demotion), portfolio review decisions, allocation rebalances. worker_run_id links a review to the worker run it consumed (plan 3.1).",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 14,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT ts, automation, strategy_id, outcome, reason, worker_run_id FROM (\n  SELECT recorded_at AS ts, 'governance:' || event_type AS automation, strategy_id,\n         decision_outcome AS outcome, left(coalesce(decision_rationale, ''), 120) AS reason,\n         NULL::text AS worker_run_id\n  FROM governance_audit_events\n  WHERE trigger_source IN ('scheduler', 'auto_promotion', 'auto_demotion', 'automated')\n  UNION ALL\n  SELECT d.reviewed_at, 'review:' || d.decision_type, d.strategy_id,\n         CASE WHEN d.applied THEN 'applied' ELSE 'advisory' END, d.reason, r.worker_run_id\n  FROM portfolio_review_decisions d\n  LEFT JOIN portfolio_reviews r ON r.review_id = d.review_id\n  UNION ALL\n  SELECT started_at, 'rebalance', coalesce(trigger_source, 'scheduler'), status,\n         coalesce(skipped_reason, 'changes=' || coalesce(allocation_changes_count, 0)::text), run_id\n  FROM allocation_rebalance_history\n  WHERE actor <> 'operator'\n) x\nWHERE ts > now() - interval '7 days'\nORDER BY ts DESC\nLIMIT 200",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "ts",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "title": "Worker results (7d): accepted / rejected",
+      "description": "Results the research worker handed over and what Box A decided. Rejections name the reason: switch off, kill switch, stale dataset, git SHA mismatch (plan 3.1).",
+      "type": "table",
+      "gridPos": {
+        "x": 14,
+        "y": 16,
+        "w": 10,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT received_at, run_id, result_type, status, coalesce(rejection_reason, '') AS reason,\n       dataset_as_of, left(coalesce(git_sha, ''), 9) AS git_sha, worker_host\nFROM worker_result_submissions\nWHERE received_at > now() - interval '7 days'\nORDER BY received_at DESC\nLIMIT 100",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "rejected": {
+                        "color": "red",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "accepted": {
+                        "color": "green",
+                        "index": 1
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "applied": {
+                        "color": "blue",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "title": "Automation switches",
+      "description": "Effective switches right now. The kill switch overrides every automation (`atp controls automation` prints the same).",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 4
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "ratp-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ratp-postgres"
+          },
+          "rawSql": "SELECT\n  (SELECT is_enabled FROM kill_switch_state WHERE id = 'current') AS kill_switch,\n  auto_promote_enabled, auto_demote_on_breach, auto_rebalance_enabled,\n  portfolio_review_mode, worker_results_enabled, worker_result_max_age_days,\n  worker_result_require_matching_git_sha, updated_at\nFROM operator_settings\nORDER BY updated_at DESC\nLIMIT 1",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true
+      }
     }
   ]
 }

@@ -195,13 +195,13 @@ and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `
 
 ### Phase 3: connect worker → A (guardrails before automation)
 
-**3.1 Guardrails first**
-- [ ] Every automated decision is audited (`governance_audit_events`, `portfolio_review_decisions`): what, why, which worker run
-- [ ] A per-automation off switch (research publish, review swaps, rebalance, promotion/demotion) that works without a deploy
-- [ ] Rate caps stay on (max swaps per review, tenure, swap interval, turnover cost)
-- [ ] A refuses worker results built on data older than N days
-- [ ] Kill switch overrides all automation
-- [ ] Dashboard panel: "automated decisions in the last 7 days" plus "worker results rejected"
+**3.1 Guardrails first** (code done 2026-10-12 on `guardrails`; migration `cc77dd88ee99`)
+- [x] Every automated decision is audited (`governance_audit_events`, `portfolio_review_decisions`): what, why, which worker run (`portfolio_reviews.worker_run_id` + `PortfolioReviewResult.worker_run_id`; promotion/demotion audit rows already carry `source_run_id`; every worker hand-off lands in `worker_result_submissions` with its decision and reason)
+- [x] A per-automation off switch (research publish, review swaps, rebalance, promotion/demotion) that works without a deploy (`worker_results_enabled` added; `portfolio_review_mode`, `auto_rebalance_enabled`, `auto_promote_enabled`, `auto_demote_on_breach` and `min_rebalance_interval_hours` are all in `OperatorSettingsUpdateRequest`, so `atp settings set` / the settings API flip them; `atp controls automation` shows the effective state)
+- [x] Rate caps stay on (max swaps per review, tenure, swap interval, turnover cost): unchanged, still enforced by `PortfolioReviewService` whatever the switches say
+- [x] A refuses worker results built on data older than N days (`WorkerResultGateService`: switch, kill switch, `dataset_as_of` age ≤ `worker_result_max_age_days`, git SHA match unless `worker_result_require_matching_git_sha=false`, empty payload, idempotent by run id)
+- [x] Kill switch overrides all automation (`AutomationGateService`; auto-promotion, auto-demotion and rebalance record `kill_switch_enabled` skips, an `auto` review runs as advisory, worker results are rejected)
+- [x] Dashboard panel: "automated decisions in the last 7 days" plus "worker results rejected" (governance-runtime dashboard: "Automated decisions (7d)", "Worker results (7d)", "Automation switches"; metrics `ratp_automation_blocked_total`, `ratp_worker_results_total`)
 
 **3.2 Hand-off**
 - [ ] **API hand-off contract**: results carry `dataset_version`, code version (git SHA), run ID and fixture; A rejects stale or mismatched results; calls are idempotent by run ID

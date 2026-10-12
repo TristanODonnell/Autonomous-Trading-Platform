@@ -29,6 +29,10 @@ from sqlalchemy.orm import Session
 from autonomous_trading_platform.application.services.active_portfolio_service import (
     ActivePortfolioService,
 )
+from autonomous_trading_platform.application.services.automation_gate_service import (
+    Automation,
+    AutomationGateService,
+)
 from autonomous_trading_platform.application.services.bench_resimulation_service import (
     ResimOutcome,
 )
@@ -127,11 +131,23 @@ class PortfolioReviewService:
         window_start: date | None = None,
         window_end: date | None = None,
         market_returns: pd.Series | None = None,
+        worker_run_id: str | None = None,
     ) -> PortfolioReviewResult | None:
-        """Run one review as of `now`. Returns None when the review mode is off."""
+        """Run one review as of `now`. Returns None when the review mode is off.
+
+        While the kill switch is on an `auto` review runs as `advisory`: scorecards and
+        decisions are recorded, nothing is applied (plan 3.1: kill switch overrides all
+        automation).
+        """
         mode = review_mode(self._session)
         if mode == PortfolioReviewMode.OFF:
             return None
+        kill_switch_blocked = False
+        if mode == PortfolioReviewMode.AUTO and AutomationGateService(
+            self._session
+        ).blocked_by_kill_switch(Automation.REVIEW_SWAPS):
+            mode = PortfolioReviewMode.ADVISORY
+            kill_switch_blocked = True
         row = OperatorSettingsRepository(self._session).get_or_create_default()
         settings = ReviewSettings.from_row(row)
         review_id = f"review_{now:%Y%m%dT%H%M%S}"
@@ -181,6 +197,8 @@ class PortfolioReviewService:
             window_start=window_start,
             window_end=window_end,
             bench_review_id=bench_review_id,
+            worker_run_id=worker_run_id,
+            kill_switch_blocked=kill_switch_blocked,
             scorecards=scorecards.ranked(),
             decisions=decisions,
         )
@@ -355,6 +373,7 @@ class PortfolioReviewService:
                 window_start=result.window_start,
                 window_end=result.window_end,
                 bench_review_id=result.bench_review_id,
+                worker_run_id=result.worker_run_id,
                 scorecard_count=len(result.scorecards),
                 decision_count=len(result.decisions),
             )

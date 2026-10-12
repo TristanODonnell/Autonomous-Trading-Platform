@@ -7,6 +7,10 @@ from typing import Any, cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.automation_gate_service import (
+    Automation,
+    AutomationGateService,
+)
 from autonomous_trading_platform.application.services.governance_audit_service import (
     GovernanceAuditService,
 )
@@ -179,6 +183,24 @@ class AutoPromotionService:
                 candidates=candidates,
                 promotions_executed=[],
                 skipped_reason="auto_promote_disabled",
+                audit_event_type="STRATEGY_AUTO_PROMOTION_SKIPPED",
+            )
+            self._audit(result=result, actor=actor, occurred_at=now)
+            self._session.flush()
+            self._session.commit()
+            return result
+
+        # Kill switch overrides every automation (plan 3.1), whatever auto_promote_enabled says.
+        if enforce_enabled and AutomationGateService(self._session).blocked_by_kill_switch(
+            Automation.PROMOTION
+        ):
+            result = AutoPromotionRunResult(
+                run_id=run_id,
+                auto_promote_enabled=bool(settings.auto_promote_enabled),
+                promotion_rules_used=self._active_rule_payloads(),
+                candidates=candidates,
+                promotions_executed=[],
+                skipped_reason="kill_switch_enabled",
                 audit_event_type="STRATEGY_AUTO_PROMOTION_SKIPPED",
             )
             self._audit(result=result, actor=actor, occurred_at=now)

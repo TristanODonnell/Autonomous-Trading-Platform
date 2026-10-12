@@ -31,10 +31,15 @@ class PortfolioReviewRow(Base):
     window_end: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Bench review whose re-sims this review reused.
     bench_review_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Worker run whose re-sims / scorecards this review consumed (plan 3.1 lineage).
+    worker_run_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     scorecard_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     decision_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    __table_args__ = (Index("ix_portfolio_reviews_reviewed_at", "reviewed_at"),)
+    __table_args__ = (
+        Index("ix_portfolio_reviews_reviewed_at", "reviewed_at"),
+        Index("ix_portfolio_reviews_worker_run_id", "worker_run_id"),
+    )
 
 
 class PortfolioScorecardRow(Base):
