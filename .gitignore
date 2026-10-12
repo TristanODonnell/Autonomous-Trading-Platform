@@ -151,6 +151,7 @@ celerybeat.pid
 # Environments
 .env*
 !.env.example
+!.env.worker.example
 
 .venv-*/
 orchestration/logs/

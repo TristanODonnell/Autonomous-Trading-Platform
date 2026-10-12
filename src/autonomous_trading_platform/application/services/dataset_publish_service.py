@@ -166,6 +166,10 @@ class DatasetPublishService:
             "validation_status": row.validation_status,
             "checksum": row.checksum,
             "source_dataset_version": row.source_dataset_version,
+            # The worker selects versions by these (dataset_lifecycle, declared symbols), so
+            # they travel with the manifest and are registered in its own dataset_versions.
+            "source_manifest": row.source_manifest,
+            "metadata_json": row.metadata_json,
         }
 
 

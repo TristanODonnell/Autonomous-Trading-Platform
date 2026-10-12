@@ -152,7 +152,7 @@ Not yet run on the EC2 box. Before the first deploy the box's `.env` needs `JWT_
 and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `required: false`)._
 
 **1.2 Before running unattended: backups + deploy freeze**
-- [x] Nightly Postgres backup → S3 (`infra/ops/backup_postgres.sh`, systemd timer at 23:30 ET via `infra/ops/install_timers.sh`; runbook `docs/operations/runbooks/postgres-backup-restore.md`). Dump and restore tested locally (row counts match on all 90 tables); the S3 upload has only run against a stand-in. **Box setup still to do:** AWS CLI, bucket + lifecycle rule, instance role, `BACKUP_S3_BUCKET` in `infra/.env`, run the installer
+- [x] Nightly Postgres backup → S3 (`infra/ops/backup_postgres.sh`, systemd timer at 23:30 ET via `infra/ops/install_timers.sh`; runbook `docs/operations/runbooks/postgres-backup-restore.md`). Dump and restore tested locally (row counts match on all 90 tables); Box setup done 2026-10-11: bucket `ratp-tristan-prod` (us-east-2, 30-day expiry on `postgres/` only), policy `ratp-box-a-s3` + instance role `ratp-box-a`, IMDS hop limit 2, AWS CLI, `BACKUP_S3_BUCKET` in `infra/.env`, timers installed; first real upload verified (234 MB, 90 tables)
 - [x] Auto-deploy (`.github/workflows/deploy.yml`) skips 9:00–16:30 ET on weekdays (and checks the market calendar): `scripts/deploy_window.py`, frozen from 30 min before the open to 30 min after the close, so half days and holidays follow the exchange calendar. A skipped deploy is **not** retried automatically: re-run the workflow after the close
 - [x] Emergency override: manual `workflow_dispatch` with a required `reason`, logged (job summary + `~/ratp-deploy.log` on the box, which records every deploy)
 - [x] Scheduler stops gracefully on deploy: finishes the in-flight step and doesn't start a new one (matters for the post-close end-of-day chain, which falls outside the freeze). An in-flight intraday tick or end-of-day step finishes on SIGTERM (6 min grace, tested) and no new one starts; `EodChainRunner` (1.3) stops *between* end-of-day steps and resumes the chain after the last completed step on restart, with completion held in `job_runs` rather than in memory (2026-10-05)
@@ -161,7 +161,7 @@ and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `
 - [x] Market calendar refresh (holidays, half days): `exchange_calendars` already supplies them; a daily cross-check of the next two weeks against Alpaca's calendar is the chain's first step and reports any mismatch (2026-10-05)
 - [x] Extend `PaperTradingGoldenPathOrchestrator.run_eod_maintenance` past features: final ingestion, broker reconciliation, then the governance stack and rebalance **in the backtester's hook order** (§3 end-of-day row), passing `dataset_version_id` along the chain. Done 2026-10-05; the backtester's actual order differs from the §3 row and was followed, see `pre-launch-1.3-scheduling.md` §1–2
 - [x] Per-step retry wrapper; every step recorded in `job_runs` (`EodChainRunner`: per-step rows under one parent per trading date, retry cap, stop between steps, resume after restart)
-- [x] Parquet publish to S3 at the end of the end-of-day chain (code done 2026-10-05; off until `DATASET_S3_BUCKET` is set; **not yet run against a real bucket**; EC2 metadata hop limit must be 2 for the containers to use the instance role)
+- [x] Parquet publish to S3 at the end of the end-of-day chain (code done 2026-10-05; `DATASET_S3_BUCKET`/`DATASET_S3_REGION` set on the box 2026-10-11 and the role verified from inside the `app` container; **first real publish expected at the close of Mon 2026-10-12**)
 - [x] Weekly review and monthly universe steps in the runner (roadmap Step 6, without Airflow). Done 2026-10-05: weekly review on the week's first session (a no-op until `portfolio_review_mode` is switched on in Phase 3), universe rotation at the close of the month's last session with the churn guard on
 - [x] Host timers: nightly Postgres backup (1.2), weekly retention job (`infra/ops/retention.sh`, Sunday 03:00 ET: dumps > 14 d, `artifacts/` > 30 d, Docker prune; Parquet untouched; container logs capped in compose)
 
@@ -177,14 +177,15 @@ and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `
 
 ### Phase 2: worker bootstrap (can overlap with A's soak)
 
-**2.1 Box**
-- [ ] `docker-compose.worker.yml`, own Postgres, migrations
-- [ ] `.env.worker`: `APP_ENV=backtest`, `NO_LIVE_TRADING=true`, market-data keys only
-- [ ] Separate deploy target for B
-- [ ] OTel collector on B → A, with `hostmetrics` + container stats
+**2.1 Box** (code done 2026-10-11 on `worker-bootstrap`; runbook `docs/operations/runbooks/worker-box.md`; box not provisioned yet)
+- [x] `docker-compose.worker.yml`, own Postgres, migrations (standalone compose; jobs run as `docker compose run --rm worker atp ...` through `infra/ops/worker_job.sh`, which holds a one-job-at-a-time host lock)
+- [x] `.env.worker`: `APP_ENV=backtest`, `NO_LIVE_TRADING=true`, market-data keys only (`.env.worker.example`; keys left empty, the worker reads S3 datasets)
+- [x] Separate deploy target for B (`.github/workflows/deploy-worker.yml`: CI green on main, no market-hours freeze, takes the job lock around migrate, skips itself until the `WORKER_HOST` secret exists)
+- [x] OTel collector on B → A, with `hostmetrics` + container stats (`infra/observability/otel-collector-worker.yaml`, forwards OTLP to A's collector over the VPC with a retry queue; traces sampled 10%; **A's security group needs 4317 from B**)
+- [ ] Provision the instance, role `ratp-worker`, hop limit 2, secrets, first `up -d` (user; AWS steps in the runbook)
 
 **2.2 Data**
-- [ ] S3 dataset pull, pinned to the dataset versions A published (needs 1.3's publish, **or** a one-time seed of S3 from the dev machine's Parquet to start sooner)
+- [x] S3 dataset pull, pinned to the dataset versions A published (`DatasetPullService` + `atp datasets pull [--as-of DATE | --version ID]`, nightly timer 20:30 ET via `infra/ops/install_worker_timers.sh`; verifies size + SHA-256, registers rows in the worker's own `dataset_versions`; manifests now carry `source_manifest`/`metadata_json` so the worker can select versions the way A does; `atp datasets publish` allows a one-time seed from the dev machine). **Not yet run against the real bucket**: first chance after A's first publish on Mon 2026-10-12
 
 **2.3 On-demand runs only (nothing touches A yet)**
 - [ ] Runner wrapper: reset → delete stale checkpoint → run → artifact to S3 → run summary

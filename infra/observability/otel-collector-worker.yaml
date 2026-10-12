@@ -1,0 +1,103 @@
+# Box B collector: receives the worker's OTLP, scrapes this box's host and container metrics,
+# and forwards everything to Box A's collector (BOX_A_OTLP_ENDPOINT), which exports to the
+# LGTM stack there. Nothing is stored or served on this box.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  hostmetrics:
+    collection_interval: 30s
+    root_path: /hostfs
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+      load:
+      disk:
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+      network:
+
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 30s
+    metrics:
+      container.cpu.utilization:
+        enabled: true
+      container.memory.percent:
+        enabled: true
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 192
+
+  # Everything leaving this box is the backtest environment on this host, so Box A's
+  # alert rules (deployment_environment!="backtest") ignore it and dashboards can pick it.
+  resource/worker:
+    attributes:
+      - key: host.name
+        value: ${env:HOST_NAME}
+        action: upsert
+      - key: deployment.environment
+        value: backtest
+        action: upsert
+      - key: service.name
+        value: otel-collector
+        action: insert
+
+  # Backtest traces are high-volume and low-value; keep a sample (Phase 2.3 may drop them).
+  probabilistic_sampler:
+    sampling_percentage: 10
+
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+exporters:
+  # Queued + retried so a Box A restart or deploy delays telemetry instead of dropping it.
+  otlp/box_a:
+    endpoint: ${env:BOX_A_OTLP_ENDPOINT}
+    tls:
+      insecure: true
+    sending_queue:
+      enabled: true
+      queue_size: 2000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 60s
+      max_elapsed_time: 900s
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, probabilistic_sampler, batch]
+      exporters: [otlp/box_a]
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/box_a]
+
+    metrics/host:
+      receivers: [hostmetrics, docker_stats]
+      processors: [memory_limiter, resource/worker, batch]
+      exporters: [otlp/box_a]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/box_a]

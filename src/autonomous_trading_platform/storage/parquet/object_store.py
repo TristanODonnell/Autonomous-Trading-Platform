@@ -1,8 +1,8 @@
-"""Object-store access for publishing Parquet dataset versions.
+"""Object-store access for publishing and pulling Parquet dataset versions.
 
-A tiny protocol so the publisher can be tested without S3; ``S3ObjectStore`` is the
-production implementation and imports boto3 lazily, so the dependency is only needed
-where publishing is switched on.
+A tiny protocol so the publisher (Box A) and the puller (worker) can be tested without
+S3; ``S3ObjectStore`` is the production implementation and imports boto3 lazily, so the
+dependency is only needed where S3 is switched on.
 """
 
 from __future__ import annotations
@@ -23,6 +23,10 @@ class ObjectStore(Protocol):
 
     def list_keys(self, prefix: str) -> Iterator[str]: ...
 
+    def get_bytes(self, key: str) -> bytes: ...
+
+    def get_file(self, key: str, local_path: Path) -> None: ...
+
 
 class InMemoryObjectStore:
     """Test double: keys → bytes."""
@@ -41,6 +45,12 @@ class InMemoryObjectStore:
 
     def list_keys(self, prefix: str) -> Iterator[str]:
         return iter(sorted(k for k in self.objects if k.startswith(prefix)))
+
+    def get_bytes(self, key: str) -> bytes:
+        return self.objects[key]
+
+    def get_file(self, key: str, local_path: Path) -> None:
+        local_path.write_bytes(self.objects[key])
 
 
 class S3ObjectStore:
@@ -76,3 +86,10 @@ class S3ObjectStore:
         for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix):
             for obj in page.get("Contents", []):
                 yield obj["Key"]
+
+    def get_bytes(self, key: str) -> bytes:
+        body = self._client.get_object(Bucket=self._bucket, Key=key)["Body"]
+        return bytes(body.read())
+
+    def get_file(self, key: str, local_path: Path) -> None:
+        self._client.download_file(self._bucket, key, str(local_path))
