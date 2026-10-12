@@ -8,6 +8,7 @@ Order of checks, first failure wins and is recorded:
 4. ``dataset_as_of`` is present and no older than ``worker_result_max_age_days`` sessions
    ago (calendar days; the worker pins to Box A's publish index, which exists per session)
 5. ``git_sha`` matches this box's ``GIT_SHA`` when ``worker_result_require_matching_git_sha``
+6. a typed payload (``bench_resims``) parses as its schema
 
 Every submission, accepted or rejected, is persisted in ``worker_result_submissions`` with
 the reason, so the dashboard can show what was refused and why. Applying an accepted
@@ -19,6 +20,7 @@ from __future__ import annotations
 import os
 from datetime import UTC, date, datetime
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.application.services.automation_gate_service import (
@@ -26,10 +28,12 @@ from autonomous_trading_platform.application.services.automation_gate_service im
     AutomationGateService,
 )
 from autonomous_trading_platform.contracts.governance.worker_results import (
+    BenchResimsPayload,
     WorkerResultDecision,
     WorkerResultRejection,
     WorkerResultStatus,
     WorkerResultSubmission,
+    WorkerResultType,
 )
 from autonomous_trading_platform.observability import metrics as _metrics
 from autonomous_trading_platform.observability.logging import get_logger
@@ -139,6 +143,15 @@ class WorkerResultGateService:
             return WorkerResultRejection.AUTOMATION_DISABLED
         if not submission.payload:
             return WorkerResultRejection.EMPTY_PAYLOAD
+        if submission.result_type is WorkerResultType.BENCH_RESIMS:
+            try:
+                BenchResimsPayload.model_validate(submission.payload)
+            except ValidationError as exc:
+                logger.warning(
+                    "worker_result.invalid_payload",
+                    extra={"run_id": submission.run_id, "errors": exc.error_count()},
+                )
+                return WorkerResultRejection.INVALID_PAYLOAD
         settings = self._settings.get_or_create_default()
         if submission.dataset_as_of is None:
             return WorkerResultRejection.MISSING_DATASET_AS_OF

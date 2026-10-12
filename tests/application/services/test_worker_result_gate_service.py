@@ -25,6 +25,11 @@ from autonomous_trading_platform.storage.sor.repositories.core.worker_result_sub
 
 NOW = datetime(2026, 10, 16, 23, 30, tzinfo=UTC)  # Friday night ET
 LOCAL_SHA = "0f71e8627abcdef0123456789abcdef012345678"
+VALID_PAYLOAD = {
+    "window_start": "2026-07-20",
+    "window_end": "2026-10-15",
+    "outcomes": [{"strategy_id": "momentum_v1", "score": "1.2", "daily_returns": {}}],
+}
 
 
 def _submission(**overrides) -> WorkerResultSubmission:
@@ -37,7 +42,7 @@ def _submission(**overrides) -> WorkerResultSubmission:
         fixture="fixtures/platform/replays/long/six_month_regression.yaml",
         dataset_as_of=date(2026, 10, 15),
         dataset_versions=["raw_bars_20261015"],
-        payload={"scorecards": [{"strategy_id": "momentum_v1", "score": 1.2}]},
+        payload=VALID_PAYLOAD,
     )
     base.update(overrides)
     return WorkerResultSubmission(**base)
@@ -61,7 +66,7 @@ def test_rejected_while_the_switch_is_off(db_session: Session) -> None:
     row = WorkerResultSubmissionsRepository(db_session).get("six_month_2026w42")
     assert row is not None and row.status == "rejected"
     assert row.rejection_reason == "worker_results_disabled"
-    assert row.payload == {"scorecards": [{"strategy_id": "momentum_v1", "score": 1.2}]}
+    assert row.payload == VALID_PAYLOAD
 
 
 def test_accepted_when_switch_on_fresh_and_same_code(db_session: Session) -> None:
@@ -180,3 +185,21 @@ def test_mark_applied_and_list_since(db_session: Session) -> None:
     assert latest is not None and latest.run_id == "a"  # applied still counts
     with pytest.raises(KeyError):
         repo.mark_applied("missing", applied_at=NOW, review_id=None)
+
+
+def test_bench_resims_payload_must_match_its_schema(db_session: Session) -> None:
+    _enable(db_session)
+    gate = _gate(db_session)
+
+    bad = gate.evaluate(_submission(run_id="bad", payload={"scorecards": []}), now=NOW)
+    other_type = gate.evaluate(
+        _submission(
+            run_id="other",
+            result_type=WorkerResultType.RESEARCH_CANDIDATES,
+            payload={"candidates": []},
+        ),
+        now=NOW,
+    )
+
+    assert bad.reason == "invalid_payload"
+    assert other_type.status == WorkerResultStatus.ACCEPTED  # no schema yet for this type

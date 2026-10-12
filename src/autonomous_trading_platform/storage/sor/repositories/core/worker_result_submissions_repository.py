@@ -32,6 +32,20 @@ class WorkerResultSubmissionsRepository(BaseRepository):
         )
         return cast(WorkerResultSubmissionRow | None, self.session.scalars(stmt).first())
 
+    def accepted_unapplied(self, result_type: str) -> list[WorkerResultSubmissionRow]:
+        """Accepted, not yet applied results of one type, newest first."""
+        stmt = (
+            select(WorkerResultSubmissionRow)
+            .where(WorkerResultSubmissionRow.result_type == result_type)
+            .where(WorkerResultSubmissionRow.status == "accepted")
+            .order_by(
+                WorkerResultSubmissionRow.received_at.desc(),
+                WorkerResultSubmissionRow.produced_at.desc(),
+                WorkerResultSubmissionRow.run_id.desc(),
+            )
+        )
+        return list(self.session.scalars(stmt).all())
+
     def list_since(
         self, since: datetime, *, status: str | None = None
     ) -> list[WorkerResultSubmissionRow]:

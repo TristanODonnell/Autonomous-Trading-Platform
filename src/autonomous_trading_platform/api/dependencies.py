@@ -55,3 +55,15 @@ def require_admin(request: Request) -> str:
         )
 
     return str(getattr(request.state, "user_id", None) or "unknown")
+
+
+def require_worker_or_admin(request: Request) -> str:
+    """The research worker's hand-off (plan 3.2): post results, nothing else."""
+    role = getattr(request.state, "role", None)
+    if role not in {"worker", "admin"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Worker or admin role required.",
+        )
+
+    return str(getattr(request.state, "user_id", None) or "unknown")

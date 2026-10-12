@@ -8,7 +8,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-VALID_ROLES = {"operator", "researcher", "risk_manager", "admin"}
+# "worker" is Box B: it may only post results (see worker_routes).
+VALID_ROLES = {"operator", "researcher", "risk_manager", "admin", "worker"}
 
 JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")

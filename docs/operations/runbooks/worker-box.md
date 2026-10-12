@@ -114,6 +114,32 @@ infra/ops/worker_job.sh worker reset                                            
   Both `worker run` and `worker reset` refuse to run unless `APP_ENV` is backtest, dev or test.
 - `--resume` keeps the checkpoint and skips the reset; `--no-pull` / `--no-upload` for offline work.
 
+## Handing results to Box A: `atp worker publish-result`
+
+Box A accepts results through `POST /api/v1/worker/results` (plan 3.2). The worker posts a
+typed payload with its lineage; A answers `accepted`, `rejected` (with the reason) or the
+stored decision for a run id it has already seen. Rejections never raise: the exit code is
+2 and the reason is printed, so a timer job records it in its summary.
+
+```bash
+infra/ops/worker_job.sh worker publish-result --run-id six_month_2026w42 --type bench_resims \
+  --payload artifacts/worker/runs/six_month_2026w42/<stamp>/bench_resims.json \
+  --summary artifacts/worker/runs/six_month_2026w42/<stamp>/summary.json
+```
+
+- `--summary` fills git SHA, host, fixture and dataset as-of from the run summary.
+- Needs `BOX_A_API_URL` (A's private IP, port 8000; A's security group must allow 8000 from
+  this box) and `BOX_A_API_TOKEN` (a `worker`-role JWT minted on A with
+  `python scripts/generate_dev_jwt.py --role worker --sub box-b`) in `.env.worker`.
+- What A checks, in order: `worker_results_enabled`, the kill switch, non-empty payload,
+  `bench_resims` payload schema, `dataset_as_of` no older than `worker_result_max_age_days`,
+  git SHA equal to A's unless `worker_result_require_matching_git_sha=false`.
+- `bench_resims` payloads are consumed by A's next weekly review (if still fresh at that
+  point) and then marked `applied` with the review id. Other result types are stored only
+  until Phase 3.3 wires them in.
+- On A: `atp controls automation` shows the switches; `GET /api/v1/worker/results` and the
+  governance dashboard's "Worker results (7d)" panel show what arrived.
+
 ## Checking it
 
 ```bash

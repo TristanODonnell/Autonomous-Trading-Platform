@@ -203,8 +203,8 @@ and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `
 - [x] Kill switch overrides all automation (`AutomationGateService`; auto-promotion, auto-demotion and rebalance record `kill_switch_enabled` skips, an `auto` review runs as advisory, worker results are rejected)
 - [x] Dashboard panel: "automated decisions in the last 7 days" plus "worker results rejected" (governance-runtime dashboard: "Automated decisions (7d)", "Worker results (7d)", "Automation switches"; metrics `ratp_automation_blocked_total`, `ratp_worker_results_total`)
 
-**3.2 Hand-off**
-- [ ] **API hand-off contract**: results carry `dataset_version`, code version (git SHA), run ID and fixture; A rejects stale or mismatched results; calls are idempotent by run ID
+**3.2 Hand-off** (code done 2026-10-12 on `guardrails`)
+- [x] **API hand-off contract**: results carry `dataset_version`, code version (git SHA), run ID and fixture; A rejects stale or mismatched results; calls are idempotent by run ID (`POST /api/v1/worker/results` + `GET` list/one, `worker` JWT role, `WorkerResultSubmission`/`WorkerResultDecision` contracts, typed `BenchResimsPayload`; worker side `WorkerResultClient` + `atp worker publish-result`; A's weekly review consumes the latest accepted still-fresh `bench_resims` and marks it `applied` with the review id). **Open for 3.3(a):** the worker job that produces bench re-sims needs A's bench membership + strategy configs as input
 
 **3.3 Switch automation on in order of risk, one at a time with a few cycles between**
 - [ ] (a) Weekly bench re-sims + scorecards from B, plus the weekly review DAG on A
