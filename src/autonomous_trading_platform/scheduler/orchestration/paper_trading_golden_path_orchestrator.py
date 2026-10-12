@@ -31,6 +31,9 @@ from autonomous_trading_platform.application.services.portfolio_review_service i
 from autonomous_trading_platform.application.services.portfolio_scorecard_service import (
     PortfolioScorecardService,
 )
+from autonomous_trading_platform.application.services.worker_result_apply_service import (
+    WorkerResultApplyService,
+)
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
 from autonomous_trading_platform.contracts.runtime.platform_replay import PlatformReplayContext
@@ -486,19 +489,35 @@ class PaperTradingGoldenPathOrchestrator:
 
     def _step_weekly_portfolio_review(self, ctx: ChainContext) -> dict[str, Any]:
         """Weekly re-weight / monthly swap review. Does nothing while
-        ``portfolio_review_mode`` is off; Phase 3 supplies the worker's re-sim outcomes."""
+        ``portfolio_review_mode`` is off. Uses the worker's latest accepted, still-fresh
+        bench re-sims when there are any (plan 3.2) and marks that result applied;
+        without one the review runs on forward and backtest evidence alone."""
         mode = review_mode(self.session)
         if mode.value == "off":
             return {"mode": mode.value, "review_id": None}
+        apply = WorkerResultApplyService(self.session)
+        resims = apply.latest_bench_resims(now=ctx.now_utc)
         result = PortfolioReviewService(
             self.session, scorecards=PortfolioScorecardService(self.session)
-        ).run(now=ctx.now_utc)
+        ).run(
+            now=ctx.now_utc,
+            resim_outcomes=resims.outcomes if resims else None,
+            window_start=resims.window_start if resims else None,
+            window_end=resims.window_end if resims else None,
+            market_returns=resims.market_returns if resims else None,
+            worker_run_id=resims.run_id if resims else None,
+        )
         self.session.flush()
         if result is None:
             return {"mode": mode.value, "review_id": None}
+        if resims is not None:
+            apply.mark_applied(resims.run_id, review_id=result.review_id, now=ctx.now_utc)
+            self.session.flush()
         return {
             "mode": result.mode.value,
             "review_id": result.review_id,
+            "worker_run_id": resims.run_id if resims else None,
+            "kill_switch_blocked": result.kill_switch_blocked,
             "swap_eligible": result.swap_eligible,
             "decisions": [
                 {
