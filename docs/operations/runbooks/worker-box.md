@@ -47,6 +47,7 @@ git clone https://github.com/TristanODonnell/Autonomous-Trading-Platform.git ~/A
 cd ~/Autonomous-Trading-Platform
 cp infra/.env.example infra/.env           # set a password of its own
 cp .env.worker.example .env.worker         # set DATASET_S3_BUCKET, BOX_A_OTLP_ENDPOINT (A's private IP)
+echo "JWT_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> .env.worker
 
 aws sts get-caller-identity                # must show the ratp-worker role
 docker compose -f docker-compose.worker.yml up -d --build
@@ -101,6 +102,9 @@ Grafana on Box A: host and container panels filter by `host_name`; the worker's 
 
 ## Known gaps (Phase 2.3+)
 
+- `atp` needs `JWT_SECRET` and `VALIDATE_BROKER_CONFIG=false` on a box with no API and no
+  broker, because the CLI imports the REST app and `Settings()` checks broker keys at start-up.
+  Both are in `.env.worker.example`; untangling the import is a small follow-up.
 - No runner wrapper yet (reset → delete stale checkpoint → run → artifact to S3 → summary).
 - No weekly/monthly research timers; add them to `install_worker_timers.sh` via `worker_job.sh`.
 - Backtest traces are sampled at 10% by the collector; revisit once the Worker dashboard exists.
