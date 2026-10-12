@@ -5,12 +5,16 @@
 
 Run on the machine that holds Box A's JWT_SECRET (Box A itself, or a dev box with the same
 .env). The worker role may only post results; it cannot read or change anything else.
+Every call mints a different token (iat + jti claims), so re-minting replaces a leaked one
+once the old string is removed from wherever it was stored; tokens do not expire on their own.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import time
+import uuid
 
 import jwt
 from dotenv import load_dotenv
@@ -27,7 +31,14 @@ def main() -> None:
     load_dotenv()
     secret = os.environ["JWT_SECRET"]
 
-    claims: dict[str, object] = {"sub": args.sub or f"local-dev-{args.role}", "role": args.role}
+    # iat + jti make every token unique, so a leaked one can be replaced by re-minting
+    # (the middleware ignores both; they only change the string).
+    claims: dict[str, object] = {
+        "sub": args.sub or f"local-dev-{args.role}",
+        "role": args.role,
+        "iat": int(time.time()),
+        "jti": uuid.uuid4().hex,
+    }
     if args.role == "admin":
         claims["roles"] = ["admin", "operator", "risk_manager"]
 
