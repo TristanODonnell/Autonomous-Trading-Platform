@@ -43,6 +43,12 @@ class OperatorSettingsResponse(BaseModel):
     slippage_model: SlippageModel
     transaction_cost_model: TransactionCostModel
     max_total_strategy_allocation_pct: Decimal = Decimal("1")
+    # Automation switches (pre-launch plan 3.1), all flippable here without a deploy.
+    portfolio_review_mode: Literal["off", "advisory", "auto"] = "off"
+    min_rebalance_interval_hours: Decimal = Decimal("168")
+    worker_results_enabled: bool = False
+    worker_result_max_age_days: int = 3
+    worker_result_require_matching_git_sha: bool = True
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -88,6 +94,15 @@ class OperatorSettingsUpdateRequest(BaseModel):
         gt=Decimal("0"),
         le=Decimal("10"),
     )
+    # Automation switches (pre-launch plan 3.1): per-automation off switches that work
+    # without a deploy. The kill switch overrides all of them.
+    portfolio_review_mode: Literal["off", "advisory", "auto"] | None = None
+    min_rebalance_interval_hours: Decimal | None = Field(
+        default=None, ge=Decimal("0"), le=Decimal("8760")
+    )
+    worker_results_enabled: bool | None = None
+    worker_result_max_age_days: int | None = Field(default=None, ge=0, le=60)
+    worker_result_require_matching_git_sha: bool | None = None
     reason: str | None = Field(default=None, max_length=500)
 
 

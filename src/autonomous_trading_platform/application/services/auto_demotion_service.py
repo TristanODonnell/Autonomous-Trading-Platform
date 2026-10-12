@@ -9,6 +9,10 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.automation_gate_service import (
+    Automation,
+    AutomationGateService,
+)
 from autonomous_trading_platform.application.services.governance_audit_service import (
     GovernanceAuditService,
 )
@@ -242,6 +246,36 @@ class AutoDemotionService:
                     from_state=candidate.old_state,
                     to_state=candidate.recommended_state,
                     status="auto_demote_disabled",
+                    run_id=run_id,
+                    now=now,
+                )
+            self._emit_drawdown_alerts_if_enabled(settings=settings, candidates=candidates, now=now)
+            self._session.flush()
+            self._session.commit()
+            return result
+
+        # Kill switch overrides every automation (plan 3.1).
+        if enforce_enabled and AutomationGateService(self._session).blocked_by_kill_switch(
+            Automation.DEMOTION
+        ):
+            result = AutoDemotionRunResult(
+                run_id=run_id,
+                auto_demote_on_breach=bool(settings.auto_demote_on_breach),
+                max_strategy_drawdown=float(settings.max_strategy_drawdown),
+                candidates=candidates,
+                demotions_executed=[],
+                skipped_reason="kill_switch_enabled",
+                audit_event_type=AUTO_DEMOTION_SKIPPED_EVENT,
+                dry_run=dry_run,
+            )
+            self._audit_run(result=result, actor=actor, occurred_at=now)
+            for candidate in candidates:
+                self._record_governance_demotion_evidence(
+                    candidate=candidate,
+                    actor=actor,
+                    from_state=candidate.old_state,
+                    to_state=candidate.recommended_state,
+                    status="kill_switch_enabled",
                     run_id=run_id,
                     now=now,
                 )

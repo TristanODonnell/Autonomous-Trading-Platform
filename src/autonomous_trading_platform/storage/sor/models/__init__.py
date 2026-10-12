@@ -62,6 +62,7 @@ from . import tracked_orders as tracked_orders
 from . import universe_rotation_records as universe_rotation_records
 from . import universe_snapshots as universe_snapshots
 from . import universe_versions as universe_versions
+from . import worker_result_submissions as worker_result_submissions
 from .base import Base as Base
 
 __all__ = [

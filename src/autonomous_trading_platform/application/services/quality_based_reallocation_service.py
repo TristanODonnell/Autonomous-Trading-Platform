@@ -10,6 +10,10 @@ from uuid import uuid4
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.automation_gate_service import (
+    Automation,
+    AutomationGateService,
+)
 from autonomous_trading_platform.application.services.live_performance_metrics_service import (
     LivePerformanceMetricsService,
     compute_alpha,
@@ -232,6 +236,21 @@ class QualityBasedReallocationService:
                 settings=settings,
                 skipped_reason="auto_rebalance_disabled",
                 status="skipped_disabled",
+                now=now,
+            )
+
+        # Kill switch overrides every automation (plan 3.1).
+        if enforce_enabled and AutomationGateService(self._session).blocked_by_kill_switch(
+            Automation.REBALANCE
+        ):
+            return self._record_skipped(
+                run_id=run_id,
+                rebalance_id=rebalance_id,
+                actor=actor,
+                trigger_source=trigger_source,
+                settings=settings,
+                skipped_reason="kill_switch_enabled",
+                status="skipped_kill_switch",
                 now=now,
             )
 

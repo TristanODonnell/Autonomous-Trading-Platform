@@ -137,5 +137,9 @@ class PortfolioReviewResult(BaseModel):
     window_start: date | None = None
     window_end: date | None = None
     bench_review_id: str | None = None
+    # Worker run whose re-sims / scorecards this review consumed (plan 3.1 lineage).
+    worker_run_id: str | None = None
+    # True when an `auto` review was downgraded to advisory because the kill switch was on.
+    kill_switch_blocked: bool = False
     scorecards: list[Scorecard] = []
     decisions: list[ReviewDecision] = []

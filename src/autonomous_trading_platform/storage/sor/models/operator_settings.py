@@ -110,6 +110,14 @@ class OperatorSettingsRow(Base):
         String(32), nullable=True, default="manual_resume_required"
     )
 
+    # Worker hand-off guardrails (pre-launch plan 3.1): accept results the research worker
+    # posts, refuse ones built on data older than N days or by other code.
+    worker_results_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    worker_result_max_age_days: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    worker_result_require_matching_git_sha: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+
     updated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(

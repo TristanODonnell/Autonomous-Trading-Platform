@@ -65,6 +65,12 @@ def register(subparsers) -> None:
     controls_subparsers = parser.add_subparsers(dest="controls_command", required=True)
 
     state_parser = controls_subparsers.add_parser("state", help="Show current controls.")
+
+    automation_parser = controls_subparsers.add_parser(
+        "automation",
+        help="Show every automation's effective state: kill switch + its own switch.",
+    )
+    automation_parser.set_defaults(func=handle_automation)
     state_parser.add_argument("--json", action="store_true")
     state_parser.set_defaults(func=handle_state)
 
@@ -864,3 +870,17 @@ def _positive_int(raw: str) -> int:
     if value <= 0:
         raise argparse.ArgumentTypeError("must be positive")
     return value
+
+
+def handle_automation(args: argparse.Namespace) -> int:
+    """Which automations may act right now, and what is blocking the rest (plan 3.1)."""
+    from autonomous_trading_platform.application.services.automation_gate_service import (
+        AutomationGateService,
+    )
+
+    session = get_session()
+    try:
+        print_json(AutomationGateService(session).status())
+        return 0
+    finally:
+        session.close()

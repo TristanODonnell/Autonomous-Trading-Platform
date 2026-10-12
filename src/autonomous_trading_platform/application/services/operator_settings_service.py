@@ -31,6 +31,12 @@ class OperatorSettingsDTO:
     portfolio_max_drawdown_pct: float
     portfolio_drawdown_action: str
     portfolio_drawdown_recovery_mode: str
+    # Automation switches readable/writable without a deploy (plan 3.1)
+    portfolio_review_mode: str = "off"
+    min_rebalance_interval_hours: float = 168.0
+    worker_results_enabled: bool = False
+    worker_result_max_age_days: int = 3
+    worker_result_require_matching_git_sha: bool = True
 
 
 class OperatorSettingsService:
@@ -139,5 +145,14 @@ class OperatorSettingsService:
             ),
             portfolio_drawdown_recovery_mode=str(
                 getattr(row, "portfolio_drawdown_recovery_mode", None) or "manual_resume_required"
+            ),
+            portfolio_review_mode=str(getattr(row, "portfolio_review_mode", None) or "off"),
+            min_rebalance_interval_hours=float(
+                getattr(row, "min_rebalance_interval_hours", None) or 168.0
+            ),
+            worker_results_enabled=bool(getattr(row, "worker_results_enabled", False)),
+            worker_result_max_age_days=int(getattr(row, "worker_result_max_age_days", 3)),
+            worker_result_require_matching_git_sha=bool(
+                getattr(row, "worker_result_require_matching_git_sha", True)
             ),
         )

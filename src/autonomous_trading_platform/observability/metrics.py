@@ -1925,6 +1925,18 @@ governance_auto_actions_total = meter.create_counter(
     unit="1",
 )
 
+automation_blocked_total = meter.create_counter(
+    name="ratp_automation_blocked_total",
+    description="Automated actions not taken, by automation and reason (kill switch, switch off)",
+    unit="1",
+)
+
+worker_results_total = meter.create_counter(
+    name="ratp_worker_results_total",
+    description="Results handed over by the research worker, by type, outcome and rejection reason",
+    unit="1",
+)
+
 governance_superseded_events_total = meter.create_counter(
     name="ratp_governance_superseded_events_total",
     description="Total number of governance audit events marked as superseded by an amendment",
