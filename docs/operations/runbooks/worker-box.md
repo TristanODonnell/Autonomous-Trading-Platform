@@ -128,6 +128,16 @@ Grafana on Box A: host and container panels filter by `host_name`; the worker's 
 
 ## Known gaps (Phase 2.3+)
 
-- No runner wrapper yet (reset → delete stale checkpoint → run → artifact to S3 → summary).
-- No weekly/monthly research timers; add them to `install_worker_timers.sh` via `worker_job.sh`.
+- **Fixture replays need a market-data key pair.** By design (Step 5c parity) the platform
+  backtester runs the real ingestion and trading-cycle code, so a replay fetches its bars
+  through the Alpaca data API exactly as Box A does; that is what makes a backtest result
+  carry over to paper and live. Put a key pair from a separate paper account in
+  `.env.worker` (`PAPER_BROKER_API_KEY/SECRET`, data access only; the box never submits
+  orders). The pulled Parquet feeds the research jobs (bench re-sims, strategy generation,
+  regime suites), which are the worker's main work. A recorded-dataset replay mode is
+  planned before scheduled replays (deployment plan, 3.4).
+- No weekly/monthly research timers; add them to `install_worker_timers.sh` via `worker_job.sh`
+  calling `worker run`.
+- Span/log attributes for runs (`run.mode`, `backtest.run_id`, `fixture`) and the Worker
+  dashboard are not done.
 - Backtest traces are sampled at 10% by the collector; revisit once the Worker dashboard exists.
