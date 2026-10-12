@@ -1,0 +1,107 @@
+# Box B: the research worker. Standalone (not an overlay on docker-compose.yml):
+#
+#   docker compose -f docker-compose.worker.yml up -d          # postgres + migrate + collector
+#   infra/ops/worker_job.sh datasets pull                      # any job: one at a time per DB
+#
+# Own Postgres (never Box A's: backtest resets wipe shared tables), no API, no scheduler.
+# Jobs run as one-shot `docker compose run --rm worker atp ...` containers, so a deploy that
+# recreates the long-running services never kills a job in flight, and the host lock in
+# infra/ops/worker_job.sh keeps it to one job at a time. Telemetry goes to Box A's collector.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ratp}:${POSTGRES_PASSWORD:-ratp_password}@postgres:5432/${POSTGRES_DB:-ratp}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: http://otel-collector:4318/v1/logs
+  HOST_NAME: ${HOSTNAME:-unknown}
+  PYTHONUNBUFFERED: "1"
+
+x-app-base: &app-base
+  logging: *logging
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      GIT_SHA: ${GIT_SHA:-unknown}
+  image: ratp-app
+  env_file:
+    - path: .env.worker
+      required: true
+  environment:
+    <<: *app-env
+  volumes:
+    - ./data:/app/data
+    - ./artifacts:/app/artifacts
+
+services:
+  postgres:
+    image: postgres:16
+    logging: *logging
+    container_name: ratp_worker_postgres
+    restart: unless-stopped
+    command: postgres -c max_connections=300 -c shared_buffers=256MB
+    env_file:
+      - infra/.env
+    ports:
+      # host-side access for psql / the dev DATABASE_URL only; not reachable from outside
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - ratp_worker_pgdata:/var/lib/postgresql/data
+      - ./sql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ratp -d ratp"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    <<: *app-base
+    container_name: ratp_worker_migrate
+    restart: "no"
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: ratp-worker-migrate
+    command: alembic -c infra/db/alembic.ini upgrade head
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Job template. Not started by `up`; run with `docker compose run --rm worker atp ...`
+  # (always through infra/ops/worker_job.sh, which holds the one-job-at-a-time lock).
+  worker:
+    <<: *app-base
+    profiles: ["job"]
+    restart: "no"
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: ratp-worker
+    command: atp --help
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Forwards everything to Box A's collector (BOX_A_OTLP_ENDPOINT in .env.worker) and adds
+  # this box's host + container metrics. Box A's security group must allow 4317 from here.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.161.0
+    logging: *logging
+    container_name: ratp_worker_otel_collector
+    command: [ "--config=/etc/otelcol/config.yaml" ]
+    user: "0:0"
+    env_file:
+      - path: .env.worker
+        required: true
+    environment:
+      HOST_NAME: ${HOSTNAME:-unknown}
+    volumes:
+      - ./infra/observability/otel-collector-worker.yaml:/etc/otelcol/config.yaml:ro
+      - /:/hostfs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+volumes:
+  ratp_worker_pgdata:

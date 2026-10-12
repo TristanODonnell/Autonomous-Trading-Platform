@@ -1,0 +1,60 @@
+name: Deploy worker (Box B)
+
+# Same trigger as the Box A deploy (CI green on main), but no market-hours freeze: the worker
+# never trades. It does wait for any running job, since the migrate step must not run under
+# a job's feet (shared lock with infra/ops/worker_job.sh). Skips quietly until WORKER_HOST is
+# set, so the workflow can be merged before the box exists.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the worker is configured
+        id: configured
+        env:
+          WORKER_HOST: ${{ secrets.WORKER_HOST }}
+        run: |
+          if [ -z "$WORKER_HOST" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "### Worker deploy skipped" >> "$GITHUB_STEP_SUMMARY"
+            echo "No WORKER_HOST secret yet (Box B not provisioned)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy via SSH
+        if: steps.configured.outputs.configured == 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_ACTOR: ${{ github.actor }}
+        with:
+          host: ${{ secrets.WORKER_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.WORKER_SSH_KEY }}
+          envs: DEPLOY_ACTOR
+          # Waits up to the lock timeout for a running job, then builds
+          command_timeout: 90m
+          script: |
+            set -e
+            cd ~/Autonomous-Trading-Platform
+            git pull origin main
+            export GIT_SHA=$(git rev-parse HEAD)
+            # Hold the job lock so migrate never runs while a job is mid-flight. A job that
+            # started on the old image keeps running in its own container regardless.
+            flock -w 5400 /var/lock/ratp-worker-job.lock \
+              docker compose -f docker-compose.worker.yml up -d --build --remove-orphans
+            echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) sha=$(git rev-parse --short HEAD) actor=$DEPLOY_ACTOR" >> ~/ratp-deploy.log

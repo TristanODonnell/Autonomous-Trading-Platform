@@ -144,6 +144,8 @@ Docker Compose services (`docker-compose.yml`, the Box A deployment; see `docs/r
 - **lgtm** port 3000 — Grafana observability (metrics + traces)
 - **otel-collector** ports 4317/4318 — OpenTelemetry ingestion
 
+Box B, the research worker, has its own standalone compose file (`docker-compose.worker.yml`, env in `.env.worker`): own Postgres, no API or scheduler, jobs run one at a time via `infra/ops/worker_job.sh`, datasets pulled from S3 with `atp datasets pull`. Runbook: `docs/operations/runbooks/worker-box.md`.
+
 Airflow is a dev-only overlay (`docker compose -f docker-compose.yml -f docker-compose.airflow.yml up -d`, webserver on port 8080). Never run its DAGs against a DB the `scheduler` service is driving.
 
 ## Docs

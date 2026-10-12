@@ -4,6 +4,11 @@ Status: DRAFT
 
 Use `docs/backend/cli/cli.md` as the central CLI index.
 
+## Box runbooks
+
+- `postgres-backup-restore.md` — Box A nightly backup and restore
+- `worker-box.md` — Box B (research worker): setup, dataset pull, jobs, deploy
+
 ## CLI Entry Points
 
 - Runtime verification: `operations verify-runtime-soak`, `diagnostics snapshot`

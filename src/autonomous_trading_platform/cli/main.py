@@ -6,6 +6,7 @@ from autonomous_trading_platform.cli.commands import (
     admin,
     backtesting,
     controls,
+    datasets,
     diagnostics,
     execution,
     features,
@@ -47,6 +48,7 @@ def build_parser():
     risk.register(subparsers)
     governance.register(subparsers)
     platform.register(subparsers)
+    datasets.register(subparsers)
     return parser
 
 
