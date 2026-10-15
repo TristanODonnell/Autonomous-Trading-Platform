@@ -189,6 +189,15 @@ only ran ~09:30–11:00 ET each day, so those days do not count. Causes and fixe
   tick failed four times (no features, no trading). The 20% level is now only the SLA
   record; the tick fails above `INGESTION_MISSING_BAR_FAIL_RATIO` (default 0.5).
   Incidents per day were 43 / 9 / 28, so this is routine, not a feed outage.
+- **Late bars were dropped, silently.** A 5-minute bar validated more than 30 s after its
+  window ended was flagged LATE and then thrown away (not stored, not counted received);
+  once every symbol of a tick was late the cycle had nothing to finalize, so no missing-bar
+  record, no error, `job_completed`. With the drift that was every tick from ~10:30 ET:
+  1055/1146/1197 BAR_LATE audit rows per day, and the stored day was 167 / 192 bars
+  (9:30–11:00 ET) instead of ~1700, so strategies ran on stale data and the S3 datasets
+  are 90% empty for those days. Late bars are now kept with the LATE flag (freshness for
+  trading is the readiness deadline's job), the window is `INGESTION_LATE_BAR_SECONDS`
+  (default 120), and each tick with late bars logs one `ingest_bars.late_bars` warning.
 - **Worker deploy never ran.** `Deploy worker (Box B)` reported success while skipping:
   the `WORKER_HOST` secret is not visible to the workflow (B had no runner logins and sat
   12 commits behind main). Fix the repository secret, then `workflow_dispatch`.

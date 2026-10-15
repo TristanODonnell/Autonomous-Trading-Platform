@@ -233,8 +233,8 @@ async def test_handle_minute_bar_stream_writes_completed_bars_and_logs_late_and_
     # first complete bar returns the bar
     assert returned[4] == bar_1
 
-    # late bars are persisted/logged, but service returns None afterward
-    assert returned[9] is None
+    # late bars are kept (flagged + logged) and returned like any completed bar
+    assert returned[9] == bar_2
 
     assert audit_logger.late_calls == [
         {
@@ -257,8 +257,8 @@ async def test_handle_minute_bar_stream_writes_completed_bars_and_logs_late_and_
     assert BarQualityFlag.LATE in bar_2.quality_flags
     assert BarQualityFlag.SUSPECTED_OUTLIER in bar_2.quality_flags
 
-    # late bars should not advance the last_bar cache
-    assert service.last_bar_by_symbol[bar_1.symbol] == bar_1
+    # late bars advance the last_bar cache like any stored bar
+    assert service.last_bar_by_symbol[bar_2.symbol] == bar_2
 
 
 @pytest.mark.asyncio
@@ -291,7 +291,7 @@ async def test_handle_minute_bar_returns_completed_bar_on_success(
 
 
 @pytest.mark.asyncio
-async def test_handle_minute_bar_returns_none_for_late_bar(
+async def test_handle_minute_bar_keeps_late_bar_but_does_not_schedule_evaluation(
     service: BarIngestionService,
     audit_logger: FakeAuditLogger,
 ) -> None:
@@ -312,12 +312,14 @@ async def test_handle_minute_bar_returns_none_for_late_bar(
         make_provider_bar(timestamp=datetime(2025, 1, 1, 15, 30, tzinfo=UTC))
     )
 
-    assert result is None
+    # Kept: the bar is what the market did in its window, only our fetch was slow.
+    # Box A 2026-10-12..14 dropped every late bar and silently lost ~90% of each day.
+    assert result == completed_bar
     assert service.next_bar_decision.should_schedule_evaluation is False
     assert service.next_bar_decision.reason == "late_bar"
     assert service.next_bar_decision.bar == completed_bar
     assert BarQualityFlag.LATE in completed_bar.quality_flags
-    assert completed_bar.symbol not in service.last_bar_by_symbol
+    assert service.last_bar_by_symbol[completed_bar.symbol] == completed_bar
 
     assert audit_logger.late_calls == [
         {
@@ -363,3 +365,52 @@ async def test_next_bar_decision_triggers_evaluation_only_on_complete_bars(
     assert service.next_bar_decision.should_schedule_evaluation is True
     assert service.next_bar_decision.reason == "complete_valid_bar"
     assert service.next_bar_decision.bar == bar
+
+
+def test_late_bar_window_defaults_to_120s_and_reads_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autonomous_trading_platform.ingestion.market_data.services.bar_ingestion_service import (
+        DEFAULT_LATE_BAR_ALLOWED_SECONDS,
+        LATE_BAR_ALLOWED_SECONDS_ENV,
+        resolve_late_bar_allowed_delay,
+    )
+
+    monkeypatch.delenv(LATE_BAR_ALLOWED_SECONDS_ENV, raising=False)
+    assert DEFAULT_LATE_BAR_ALLOWED_SECONDS == 120
+    assert resolve_late_bar_allowed_delay() == timedelta(seconds=120)
+    # above the trading cycle's 60 s ingestion grace, so a healthy day logs no BAR_LATE
+    from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
+        build_trading_cycle_window,
+    )
+
+    window = build_trading_cycle_window(now_utc=datetime(2026, 10, 15, 13, 40, tzinfo=UTC))
+    assert window.ingestion_deadline - window.cycle_end < resolve_late_bar_allowed_delay()
+
+    monkeypatch.setenv(LATE_BAR_ALLOWED_SECONDS_ENV, "45")
+    assert resolve_late_bar_allowed_delay() == timedelta(seconds=45)
+    monkeypatch.setenv(LATE_BAR_ALLOWED_SECONDS_ENV, "-1")
+    with pytest.raises(ValueError, match=">= 0"):
+        resolve_late_bar_allowed_delay()
+    monkeypatch.setenv(LATE_BAR_ALLOWED_SECONDS_ENV, "soon")
+    with pytest.raises(ValueError, match="number of seconds"):
+        resolve_late_bar_allowed_delay()
+
+
+def test_service_uses_the_configured_late_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    from autonomous_trading_platform.ingestion.market_data.services.bar_ingestion_service import (
+        LATE_BAR_ALLOWED_SECONDS_ENV,
+    )
+
+    monkeypatch.setenv(LATE_BAR_ALLOWED_SECONDS_ENV, "90")
+    svc = BarIngestionService(
+        session=cast(Any, None), run_id="r", audit_logger=cast(Any, FakeAuditLogger())
+    )
+    assert svc.late_bar_allowed_delay == timedelta(seconds=90)
+    explicit = BarIngestionService(
+        session=cast(Any, None),
+        run_id="r",
+        audit_logger=cast(Any, FakeAuditLogger()),
+        late_bar_allowed_delay=timedelta(seconds=5),
+    )
+    assert explicit.late_bar_allowed_delay == timedelta(seconds=5)

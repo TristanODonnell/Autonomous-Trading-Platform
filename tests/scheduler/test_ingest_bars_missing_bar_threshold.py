@@ -131,3 +131,22 @@ def test_job_reads_the_environment_when_not_given_a_ratio(
     assert job.missing_bar_fail_ratio > module.MISSING_BAR_SLA_RATIO
 
     job.finalize_cycle(CYCLE_TS)  # 100% missing, no raise
+
+
+def test_late_bars_count_as_received_and_warn_once_per_cycle(
+    db_session: Session, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Late bars are stored and received (no false missing-bar record); the cycle logs
+    one summary warning naming the late symbols."""
+    job, audit = _job(db_session, expected=4, received=4)
+    job.late_symbols = {"S01", "S03"}
+
+    with caplog.at_level("WARNING", logger=module.logger.name):
+        job.finalize_cycle(CYCLE_TS)
+
+    assert audit.missing == []
+    assert audit.sla_breaches == []
+    late = [r for r in caplog.records if r.getMessage() == "ingest_bars.late_bars"]
+    assert len(late) == 1
+    assert late[0].late_symbols == ["S01", "S03"]  # type: ignore[attr-defined]
+    assert late[0].late_count == 2  # type: ignore[attr-defined]
