@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -32,6 +33,27 @@ class NextBarDecision:
     bar: MarketBar | None = None
 
 
+# A completed 5-minute bar validated more than this long after its window ended is
+# flagged LATE and audited (BAR_LATE). It is still stored. Overridable with
+# INGESTION_LATE_BAR_SECONDS. Keep it above the trading cycle's ingestion grace (60 s)
+# so a healthy day is quiet and the flag means "the pipeline is slow", not "normal".
+DEFAULT_LATE_BAR_ALLOWED_SECONDS = 120
+LATE_BAR_ALLOWED_SECONDS_ENV = "INGESTION_LATE_BAR_SECONDS"
+
+
+def resolve_late_bar_allowed_delay() -> timedelta:
+    raw = os.getenv(LATE_BAR_ALLOWED_SECONDS_ENV)
+    if raw is None or not raw.strip():
+        return timedelta(seconds=DEFAULT_LATE_BAR_ALLOWED_SECONDS)
+    try:
+        seconds = float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{LATE_BAR_ALLOWED_SECONDS_ENV} must be a number of seconds") from exc
+    if seconds < 0:
+        raise ValueError(f"{LATE_BAR_ALLOWED_SECONDS_ENV} must be >= 0, got {seconds}")
+    return timedelta(seconds=seconds)
+
+
 class BarIngestionService:
     """
     Handle incoming provider minute bars and convert them into the
@@ -48,8 +70,14 @@ class BarIngestionService:
         validation_service: BarValidationService | None = None,
         now_provider: Callable[[], datetime] | None = None,
         enforce_lateness: bool = True,
+        late_bar_allowed_delay: timedelta | None = None,
     ) -> None:
         self.enforce_lateness = enforce_lateness
+        self.late_bar_allowed_delay = (
+            late_bar_allowed_delay
+            if late_bar_allowed_delay is not None
+            else resolve_late_bar_allowed_delay()
+        )
         self.last_bar_by_symbol: dict[str, MarketBar] = {}
         self.aggregator = aggregator or BarAggregationService()
         self.validation_service = validation_service or BarValidationService()
@@ -108,7 +136,7 @@ class BarIngestionService:
                 is_late = self.validation_service.is_late_bar(
                     five_min_bar,
                     now_utc=self.now_provider(),
-                    allowed_delay=timedelta(seconds=30),
+                    allowed_delay=self.late_bar_allowed_delay,
                 )
             else:
                 is_late = False
@@ -149,19 +177,17 @@ class BarIngestionService:
                 "ratp.bar_timestamp", five_min_bar.timestamp.isoformat()
             )
 
-            if is_late:
-                self.next_bar_decision = NextBarDecision(
-                    should_schedule_evaluation=False,
-                    reason="late_bar",
-                    bar=five_min_bar,
-                )
-                return None
-
+            # A late bar is still what the market did in its window; only our fetch was
+            # slow. It is kept (flagged LATE, audited above) so the record stays complete.
+            # Whether it is fresh enough to trade on is the trading cycle's call
+            # (check_ingestion_readiness_job), not ingestion's. Before 2026-10-15 late
+            # bars were dropped here, and once every symbol of a tick was late the cycle
+            # had nothing to finalize: no missing-bar record, no error, no Parquet write.
             self.last_bar_by_symbol[five_min_bar.symbol] = five_min_bar
 
             self.next_bar_decision = NextBarDecision(
-                should_schedule_evaluation=True,
-                reason="complete_valid_bar",
+                should_schedule_evaluation=not is_late,
+                reason="late_bar" if is_late else "complete_valid_bar",
                 bar=five_min_bar,
             )
             return five_min_bar

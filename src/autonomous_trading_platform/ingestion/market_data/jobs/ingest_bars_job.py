@@ -7,6 +7,7 @@ from time import perf_counter
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.contracts.common.enums import BarQualityFlag
 from autonomous_trading_platform.contracts.market.market_bar import MarketBar
 from autonomous_trading_platform.ingestion.market_data.clients import (
     alpaca_market_data_client as client,
@@ -99,6 +100,7 @@ class IngestBarsJob:
         self.dataset_version_id = dataset_version_id
         self.expected_symbols = expected_symbols
         self.received_symbols: set[str] = set()
+        self.late_symbols: set[str] = set()
         self.completed_cycle_bars: list[MarketBar] = []
         self.current_cycle_timestamp: datetime | None = None
         self.enforce_lateness = enforce_lateness
@@ -132,15 +134,31 @@ class IngestBarsJob:
         if cycle_timestamp > self.current_cycle_timestamp:
             self.finalize_cycle(self.current_cycle_timestamp)
             self.received_symbols.clear()
+            self.late_symbols.clear()
             self.current_cycle_timestamp = cycle_timestamp
 
         self.completed_cycle_bars.append(five_min_bar)
         self.received_symbols.add(five_min_bar.symbol)
+        if BarQualityFlag.LATE in five_min_bar.quality_flags:
+            self.late_symbols.add(five_min_bar.symbol)
 
     def finalize_cycle(self, cycle_timestamp: datetime) -> None:
         component = "ingestion.ingest_bars_job"
 
         missing_symbols = self.expected_symbols - self.received_symbols
+        if self.late_symbols:
+            # One line per tick, not one per symbol: the per-symbol BAR_LATE audit rows
+            # exist already. A steady stream of these means the tick runs too long after
+            # the boundary (see the soak runner's tick offset) or the provider is slow.
+            logger.warning(
+                "ingest_bars.late_bars",
+                extra={
+                    "cycle_timestamp": cycle_timestamp.isoformat(),
+                    "late_count": len(self.late_symbols),
+                    "expected_count": len(self.expected_symbols),
+                    "late_symbols": sorted(self.late_symbols),
+                },
+            )
         record_runtime_freshness(
             symbols_expected=len(self.expected_symbols),
             symbols_received=len(self.received_symbols),
