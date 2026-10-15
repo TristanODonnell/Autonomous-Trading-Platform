@@ -205,10 +205,57 @@ only ran ~09:30–11:00 ET each day, so those days do not count. Causes and fixe
   `dataset_versions` row; returns/regime versions live in `feature_dataset_versions`, so B
   logged `no_registry_row` for each. Manifests now also carry `feature_dataset_version`
   and the pull registers it.
-- Still to do from the soak: container logs print only event names (the formatter drops
-  `extra` fields; they are in Loki), and Box A's root volume (79% of 29 GB) needs the
-  planned grow to 50 GB. **The soak clock restarts at the first full session after these
-  fixes are deployed.**
+- Box A's root volume was grown 29 → 50 GB online the same night (growpart + resize2fs).
+  All four fixes merged (PRs #150, #151) and deployed to A and B 2026-10-15 ~04:10 UTC.
+  **The soak clock restarts with the Thu 2026-10-15 session.**
+- Why there were **0 signals, 0 order intents, 0 fills** in the three days (A's DB, checked
+  2026-10-15): `portfolio_memberships` is empty, so the cycle runs the legacy single-strategy
+  path and picks one approved row by name (`macd_crossover_v1`, a moving-average crossover
+  with default parameters = 31-bar warm-up). With ~8 stored bars per symbol per day it never
+  warmed up before 11:00 ET. Not a strategy or governance fault. The nightly rebalance is a
+  no-op and auto-promotion logs `missing governance evidence` because the three approved
+  rows came from the dev dump without a research run behind them, and the nine candidates
+  have no bench evidence yet (that is 3.3(a)'s job).
+
+**1.6 Next session checklist (after the first clean day)**
+
+*Verify Thu 2026-10-15 was a clean soak day (Box A):*
+- [ ] Scheduler log: ticks at HH:M5:10 all session; no `ingestion_deadline_missed`, no
+      `Too many missing bars`, few or no `ingest_bars.late_bars`
+      (`docker compose logs scheduler --since 24h | grep -c trading_cycle_degraded` → 0)
+- [ ] Stored bars for the day ≈ 1,700 (22 symbols × 78), not ~170: count rows in
+      `data/bars/raw/dataset_version=raw_bars_<date>T133000Z_*/`
+- [ ] `audit_logs`: `BAR_LATE` near 0, `BAR_MISSING` small, no `RUN_FAILED`
+- [ ] `strategy_runtime_states.last_evaluated_bar_timestamp` = the last tick before close
+- [ ] `signals` has rows from ~12:05 ET on (31-bar warm-up met); `order_intents` / `fills`
+      non-empty if the crossover fired
+- [ ] EOD chain finished; S3 `datasets/published/<date>.json` lists the day's versions
+- [ ] Box B's 20:30 ET pull (`journalctl -u ratp-worker-pull.service`) registered the
+      returns/regime versions with no `no_registry_row` warnings
+- [ ] Grafana Trading Ops / Infra: memory flat on t4g.medium, no heartbeat gaps
+
+*Log formatter (small, do before anything else):*
+- [ ] `observability/logging.py`: append the record's `extra` fields to the console line
+      as `key=value` (JSON for dicts/lists), so `docker compose logs` shows strategy id,
+      warm-up bars, signal/order counts, late/missing symbols without opening Loki
+- [ ] Test: a log call with `extra={...}` renders the fields; a call without renders as today
+- [ ] Deploy and confirm one scheduler tick's lines on Box A read end to end
+
+*Seed an initial active set (exercise the portfolio path during the soak):*
+- [ ] Decide the members: proposal = the three paper-approved rows (`momentum_v1`,
+      `mean_reversion_v1`, `macd_crossover_v1`) as ACTIVE, equal budgets, no on-deck yet
+- [ ] Confirm `operator_settings.portfolio_mode_enabled` is on; keep
+      `portfolio_review_mode=off` and `worker_results_enabled=false` until 3.3(a)
+- [ ] Insert the `portfolio_memberships` rows + `portfolio_membership_transitions` audit
+      (via the governance CLI/API if one exists, else a reviewed SQL script committed to
+      `scripts/`); record who/why in the transition reason
+- [ ] Next session's log shows one `trading_cycle.active_strategy_resolved` per member and
+      `portfolio_signal_aggregator.summary` with three inputs; sleeve ledgers populate
+- [ ] Nightly rebalance stops logging `STRATEGY_ALLOCATION_REBALANCE_NOOP` once quality
+      scores exist (weekly interval guard still applies)
+- [ ] Note in this doc which path the soak days before the seed exercised (single-strategy)
+
+*Then start 3.3(a)* (see the Phase 3 checklist below for the sub-steps).
 
 ### Phase 2: worker bootstrap (can overlap with A's soak)
 
@@ -243,6 +290,16 @@ only ran ~09:30–11:00 ET each day, so those days do not count. Causes and fixe
 
 **3.3 Switch automation on in order of risk, one at a time with a few cycles between**
 - [ ] (a) Weekly bench re-sims + scorecards from B, plus the weekly review DAG on A
+  - [ ] Read endpoint on A: bench membership + each strategy's config (and the active set),
+        `worker`-role readable, so B knows what to re-simulate
+  - [ ] Worker job on B: pull that list, re-sim each over a recent window on the pulled
+        datasets (`--as-of` pinned), build a typed `BenchResimsPayload`, post it with
+        `atp worker publish-result`; summary + artifact to S3 under `artifacts/worker/`
+  - [ ] Weekly timer on B (after the nightly pull, before A's weekly review)
+  - [ ] On A: flip `worker_results_enabled=true`; confirm `worker_result_submissions`
+        accepts (not `stale_dataset` / `git_sha_mismatch`)
+  - [ ] `portfolio_review_mode=advisory`; read two or three weekly reviews
+  - [ ] `portfolio_review_mode=auto`; watch the first automatic swap end to end
 - [ ] (b) Monthly research / strategy generation → bench
 - [ ] (c) Allocation/governance parameter changes, last (riskiest)
 
