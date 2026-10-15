@@ -153,3 +153,57 @@ def test_alpaca_broker_client_broker_metrics_use_dashboard_safe_labels(monkeypat
     assert "correlation_id" not in latency_labels
     assert "job_run_id" not in latency_labels
     assert "run_id" not in latency_labels
+
+
+def _market_data_client(monkeypatch, **overrides) -> AlpacaBrokerClient:
+    RequestCapturingHttpClient.init_calls.clear()
+    RequestCapturingHttpClient.requests.clear()
+    monkeypatch.setattr(alpaca_broker_client.httpx, "Client", RequestCapturingHttpClient)
+    return AlpacaBrokerClient(_settings(**overrides))
+
+
+def test_latest_trades_go_to_the_market_data_host(monkeypatch) -> None:
+    """Regression: trades/latest was sent to paper-api.alpaca.markets, which 404s."""
+    client = _market_data_client(monkeypatch)
+
+    client.get_latest_trades(["GOOGL", "META"])
+
+    request = RequestCapturingHttpClient.requests[0]
+    assert request["method"] == "GET"
+    assert request["path"] == "https://data.alpaca.markets/v2/stocks/trades/latest"
+    assert request["params"] == {"symbols": "GOOGL,META", "feed": "iex"}
+
+
+def test_latest_quotes_go_to_the_market_data_host(monkeypatch) -> None:
+    client = _market_data_client(monkeypatch)
+
+    client.get_latest_quotes(["SPY"])
+
+    request = RequestCapturingHttpClient.requests[0]
+    assert request["path"] == "https://data.alpaca.markets/v2/stocks/quotes/latest"
+
+
+def test_market_data_host_and_feed_follow_settings(monkeypatch) -> None:
+    client = _market_data_client(
+        monkeypatch,
+        alpaca_data_base_url="http://mock-data:9000/",
+        alpaca_data_feed="sip",
+    )
+
+    client.get_latest_trades(["SPY"])
+
+    request = RequestCapturingHttpClient.requests[0]
+    assert request["path"] == "http://mock-data:9000/v2/stocks/trades/latest"
+    assert request["params"]["feed"] == "sip"
+
+
+def test_trading_endpoints_still_use_the_trading_host(monkeypatch) -> None:
+    client = _market_data_client(monkeypatch)
+
+    client.submit_order({"symbol": "SPY"})
+
+    request = RequestCapturingHttpClient.requests[0]
+    assert request["path"] == "/v2/orders"
+    assert (
+        RequestCapturingHttpClient.init_calls[0]["base_url"] == "https://paper-api.alpaca.markets"
+    )
