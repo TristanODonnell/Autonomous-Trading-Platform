@@ -32,6 +32,9 @@ from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.parquet.object_store import ObjectStore
 from autonomous_trading_platform.storage.parquet.paths import get_data_root
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from autonomous_trading_platform.storage.sor.models.feature_dataset_versions import (
+    FeatureDatasetVersions,
+)
 
 logger = get_logger(__name__)
 
@@ -193,49 +196,88 @@ class DatasetPullService:
             partial.unlink(missing_ok=True)
 
     def _register(self, version_id: str, manifest: dict[str, Any]) -> bool:
-        """Insert the ``dataset_versions`` row from the manifest unless already present.
+        """Insert the registry row from the manifest unless already present.
 
-        Returns True when a row was inserted. A manifest without a registry row (the
-        version was never in Box A's ``dataset_versions``) is skipped with a warning; its
-        Parquet files are still usable by explicit id.
+        Bar versions carry a ``dataset_version`` block (-> ``dataset_versions``); feature
+        versions carry ``feature_dataset_version`` (-> ``feature_dataset_versions``).
+        Returns True when a row was inserted. A manifest with neither block (the version
+        was never registered on Box A) is skipped with a warning; its Parquet files are
+        still usable by explicit id.
         """
         assert self._session is not None
-        if self._session.get(DatasetVersions, version_id) is not None:
-            return False
         row = manifest.get("dataset_version")
-        if not row:
+        feature_row = manifest.get("feature_dataset_version")
+        if row:
+            if self._session.get(DatasetVersions, version_id) is not None:
+                return False
+            self._session.add(self._bar_row(version_id, manifest, row))
+        elif feature_row:
+            if self._session.get(FeatureDatasetVersions, version_id) is not None:
+                return False
+            self._session.add(self._feature_row(version_id, manifest, feature_row))
+        else:
             logger.warning(
                 "dataset_pull.no_registry_row",
                 extra={"dataset_version_id": version_id},
             )
             return False
-        metadata = dict(row.get("metadata_json") or {})
-        metadata["pulled_from"] = {
+        self._session.flush()
+        return True
+
+    def _pulled_from(self, version_id: str, manifest: dict[str, Any]) -> dict[str, Any]:
+        return {
             "manifest_key": self.manifest_key(version_id),
             "published_at": manifest.get("published_at"),
             "publisher_git_sha": manifest.get("git_sha"),
         }
-        self._session.add(
-            DatasetVersions(
-                dataset_version_id=version_id,
-                dataset_name=row["dataset_name"],
-                created_at=_parse_datetime(row.get("created_at")),
-                source=row["source"],
-                price_basis=PriceBasis(row["price_basis"]),
-                interval=BarInterval(row["interval"]),
-                schema_version=row["schema_version"],
-                symbol_coverage=row.get("symbol_coverage"),
-                date_coverage_start=_parse_date(row.get("date_coverage_start")),
-                date_coverage_end=_parse_date(row.get("date_coverage_end")),
-                validation_status=row["validation_status"],
-                checksum=row.get("checksum"),
-                source_dataset_version=row.get("source_dataset_version"),
-                source_manifest=row.get("source_manifest"),
-                metadata_json=metadata,
-            )
+
+    def _feature_row(
+        self, version_id: str, manifest: dict[str, Any], row: dict[str, Any]
+    ) -> FeatureDatasetVersions:
+        metadata = dict(row.get("metadata_json") or {})
+        metadata["pulled_from"] = self._pulled_from(version_id, manifest)
+        return FeatureDatasetVersions(
+            dataset_version_id=version_id,
+            feature_name=row["feature_name"],
+            dataset_name=row["dataset_name"],
+            created_at=_parse_datetime(row.get("created_at")),
+            schema_version=row["schema_version"],
+            source_dataset_version=row["source_dataset_version"],
+            underlying_price_basis=PriceBasis(row["underlying_price_basis"]),
+            computation_parameters=row.get("computation_parameters"),
+            computation_code_version=row["computation_code_version"],
+            storage_path=row["storage_path"],
+            symbol_coverage=row.get("symbol_coverage"),
+            date_coverage_start=_parse_date(row.get("date_coverage_start")),
+            date_coverage_end=_parse_date(row.get("date_coverage_end")),
+            validation_status=row["validation_status"],
+            checksum=row.get("checksum"),
+            source_manifest=row.get("source_manifest"),
+            metadata_json=metadata,
         )
-        self._session.flush()
-        return True
+
+    def _bar_row(
+        self, version_id: str, manifest: dict[str, Any], row: dict[str, Any]
+    ) -> DatasetVersions:
+        metadata = dict(row.get("metadata_json") or {})
+        metadata["pulled_from"] = self._pulled_from(version_id, manifest)
+        return DatasetVersions(
+            dataset_version_id=version_id,
+            dataset_name=row["dataset_name"],
+            created_at=_parse_datetime(row.get("created_at")),
+            source=row["source"],
+            price_basis=PriceBasis(row["price_basis"]),
+            interval=BarInterval(row["interval"]),
+            schema_version=row["schema_version"],
+            symbol_coverage=row.get("symbol_coverage"),
+            date_coverage_start=_parse_date(row.get("date_coverage_start")),
+            date_coverage_end=_parse_date(row.get("date_coverage_end")),
+            validation_status=row["validation_status"],
+            checksum=row.get("checksum"),
+            source_dataset_version=row.get("source_dataset_version"),
+            source_manifest=row.get("source_manifest"),
+            metadata_json=metadata,
+        )
 
 
 def _sha256(path: Path) -> str:

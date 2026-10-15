@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -39,6 +40,34 @@ _ET = ZoneInfo("America/New_York")
 _INTRADAY_LOCK_KEY = SCHEDULER_REGISTRY["market_ingestion_cycle"].lock_key
 _EOD_LOCK_KEY = SCHEDULER_REGISTRY["corporate_action_ingestion_cycle"].lock_key
 _INTRADAY_INTERVAL_SECONDS = 300
+# Ticks run this many seconds after each 5-minute boundary, not "interval after the
+# previous tick finished": a flat sleep drifts a few seconds per tick and, once the
+# drift passes the trading cycle's ingestion grace (60 s past the boundary), every
+# remaining tick of the session runs in safe mode and skips evaluation. The offset
+# gives the data provider a moment to publish the last minute bar of the window.
+_INTRADAY_TICK_OFFSET_SECONDS = 10
+
+
+def _seconds_until_next_tick(
+    tick_started_at: datetime,
+    now_utc: datetime,
+    interval_seconds: int = _INTRADAY_INTERVAL_SECONDS,
+    offset_seconds: int = _INTRADAY_TICK_OFFSET_SECONDS,
+) -> int:
+    """Seconds from ``now_utc`` to the slot after the one ``tick_started_at`` ran in.
+
+    Slots are each ``interval`` boundary plus ``offset``: a tick that started at
+    13:35:04 sleeps until 13:40:10 whether it took 3 s or 30 s. A tick that overran
+    its next slot skips it (13:50:10) instead of running late inside the window.
+    """
+    window_index = math.floor(tick_started_at.timestamp() / interval_seconds)
+    next_slot = (window_index + 1) * interval_seconds + offset_seconds
+    now = now_utc.timestamp()
+    while next_slot <= now:
+        next_slot += interval_seconds
+    return max(1, math.ceil(next_slot - now))
+
+
 _EOD_ERROR_BACKOFF_SECONDS = 60
 _EOD_OVERDUE_HOUR_ET = 19
 
@@ -267,8 +296,12 @@ class _PaperTradingSoakRunner:
                 if not self._sleeper.is_shutdown and intraday_interval > 0:
                     today_et = now_utc.astimezone(_ET).date()
                     close_utc = self._calendar.market_close(today_et)
-                    secs_to_close = max(0, int((close_utc - self._clock.now()).total_seconds()))
-                    sleep_secs = min(intraday_interval, secs_to_close)
+                    after_tick = self._clock.now()
+                    secs_to_close = max(0, int((close_utc - after_tick).total_seconds()))
+                    sleep_secs = min(
+                        _seconds_until_next_tick(now_utc, after_tick, intraday_interval),
+                        secs_to_close,
+                    )
                     if sleep_secs > 0:
                         next_tick = (_now_et() + timedelta(seconds=sleep_secs)).strftime("%H:%M:%S")
                         print(
