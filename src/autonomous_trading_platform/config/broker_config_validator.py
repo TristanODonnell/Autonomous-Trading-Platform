@@ -4,6 +4,8 @@ from autonomous_trading_platform.config.enums import TradingEnvironment
 
 ALPACA_PAPER_BASE_URL = "https://paper-api.alpaca.markets"
 ALPACA_LIVE_BASE_URL = "https://api.alpaca.markets"
+# Market data (bars, trades, quotes) is a separate API on its own host, shared by paper and live.
+ALPACA_DATA_BASE_URL = "https://data.alpaca.markets"
 
 
 def validate_broker_environment(
