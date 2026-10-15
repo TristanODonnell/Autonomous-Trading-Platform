@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import UTC, datetime
 from time import perf_counter
 
@@ -46,6 +47,28 @@ from autonomous_trading_platform.storage.sor.models.symbol_date_coverage import 
 
 logger = get_logger(__name__)
 
+# Above this share of the universe missing a 5-minute bar, the cycle records an SLA breach
+# (audit log + warning). It never fails the tick by itself.
+MISSING_BAR_SLA_RATIO = 0.2
+# Above this share the tick fails: the feed itself is presumed broken. Overridable with
+# INGESTION_MISSING_BAR_FAIL_RATIO (0..1; 1 disables the hard stop).
+DEFAULT_MISSING_BAR_FAIL_RATIO = 0.5
+MISSING_BAR_FAIL_RATIO_ENV = "INGESTION_MISSING_BAR_FAIL_RATIO"
+
+
+def resolve_missing_bar_fail_ratio() -> float:
+    raw = os.getenv(MISSING_BAR_FAIL_RATIO_ENV)
+    if raw is None or not raw.strip():
+        return DEFAULT_MISSING_BAR_FAIL_RATIO
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{MISSING_BAR_FAIL_RATIO_ENV} must be a number in [0, 1]") from exc
+    if not 0.0 <= value <= 1.0:
+        raise ValueError(f"{MISSING_BAR_FAIL_RATIO_ENV} must be in [0, 1], got {value}")
+    return value
+
+
 INGEST_BARS_JOB_METRICS = JobMetricSet(
     runs=ingestion_job_runs,
     failures=ingestion_job_failures,
@@ -64,8 +87,14 @@ class IngestBarsJob:
         dataset_version_id: str,
         *,
         enforce_lateness: bool = True,
+        missing_bar_fail_ratio: float | None = None,
     ) -> None:
         self.session = session
+        self.missing_bar_fail_ratio = (
+            missing_bar_fail_ratio
+            if missing_bar_fail_ratio is not None
+            else resolve_missing_bar_fail_ratio()
+        )
         self.ingestion_run_id = ingestion_run_id
         self.dataset_version_id = dataset_version_id
         self.expected_symbols = expected_symbols
@@ -190,7 +219,7 @@ class IngestBarsJob:
         else:
             missing_ratio = 0
 
-        if missing_ratio > 0.2:
+        if missing_ratio > MISSING_BAR_SLA_RATIO:
             self.audit_logger.record_sla_breach(
                 run_id=self.run_id,
                 component="market_ingestion",
@@ -200,18 +229,32 @@ class IngestBarsJob:
                     "missing_ratio": missing_ratio,
                     "missing_count": len(missing_symbols),
                     "expected_count": len(self.expected_symbols),
-                    "threshold": 0.2,
+                    "threshold": MISSING_BAR_SLA_RATIO,
+                    "fail_threshold": self.missing_bar_fail_ratio,
                     "missing_symbols": sorted(missing_symbols),
                 },
             )
+            logger.warning(
+                "ingest_bars.missing_bar_sla_breach",
+                extra={
+                    "cycle_timestamp": cycle_timestamp.isoformat(),
+                    "missing_ratio": round(missing_ratio, 4),
+                    "missing_symbols": sorted(missing_symbols),
+                    "fail_threshold": self.missing_bar_fail_ratio,
+                },
+            )
 
-            # In historical replay (enforce_lateness=False) bars arrive per-symbol
-            # sequentially, so early cycle finalizations always look "missing" for
-            # the remaining symbols. The check is only meaningful in live streaming.
-            if self.enforce_lateness:
-                raise RuntimeError(
-                    f"Too many missing bars ({missing_ratio:.2%}) at {cycle_timestamp}"
-                )
+        # The SLA breach above is a record; failing the whole tick is a separate, higher
+        # bar. On the free IEX feed thin names regularly print no trade for a minute, so
+        # 20-25% of the universe missing one 5-minute bar is a data gap for those symbols,
+        # not a dead feed. Only when most of the universe is missing do we stop the tick
+        # (no features, no trading) rather than let strategies run on an empty window.
+        #
+        # In historical replay (enforce_lateness=False) bars arrive per-symbol
+        # sequentially, so early cycle finalizations always look "missing" for
+        # the remaining symbols. The check is only meaningful in live streaming.
+        if missing_ratio > self.missing_bar_fail_ratio and self.enforce_lateness:
+            raise RuntimeError(f"Too many missing bars ({missing_ratio:.2%}) at {cycle_timestamp}")
 
     async def _process_bars(self, provider_bars) -> None:
         for provider_bar in provider_bars:

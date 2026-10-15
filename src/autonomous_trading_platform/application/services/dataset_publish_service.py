@@ -25,6 +25,9 @@ from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.parquet.object_store import ObjectStore
 from autonomous_trading_platform.storage.parquet.paths import get_data_root
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from autonomous_trading_platform.storage.sor.models.feature_dataset_versions import (
+    FeatureDatasetVersions,
+)
 
 logger = get_logger(__name__)
 
@@ -137,6 +140,7 @@ class DatasetPublishService:
             "git_sha": self._git_sha,
             "files": files,
             "dataset_version": self._registry_row(version_id),
+            "feature_dataset_version": self._feature_registry_row(version_id),
         }
         key = self.manifest_key(version_id)
         self._store.put_bytes(_json_bytes(manifest), key)
@@ -168,6 +172,38 @@ class DatasetPublishService:
             "source_dataset_version": row.source_dataset_version,
             # The worker selects versions by these (dataset_lifecycle, declared symbols), so
             # they travel with the manifest and are registered in its own dataset_versions.
+            "source_manifest": row.source_manifest,
+            "metadata_json": row.metadata_json,
+        }
+
+    def _feature_registry_row(self, version_id: str) -> dict[str, Any] | None:
+        """The ``feature_dataset_versions`` row, for feature versions (returns, regime...).
+
+        Feature versions are registered in their own table, not ``dataset_versions``, so
+        without this block the worker pulls their files but cannot register them.
+        """
+        if self._session is None:
+            return None
+        row = self._session.get(FeatureDatasetVersions, version_id)
+        if row is None:
+            return None
+        return {
+            "feature_name": row.feature_name,
+            "dataset_name": row.dataset_name,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "schema_version": row.schema_version,
+            "source_dataset_version": row.source_dataset_version,
+            "underlying_price_basis": getattr(
+                row.underlying_price_basis, "value", row.underlying_price_basis
+            ),
+            "computation_parameters": row.computation_parameters,
+            "computation_code_version": row.computation_code_version,
+            "storage_path": row.storage_path,
+            "symbol_coverage": row.symbol_coverage,
+            "date_coverage_start": _iso(row.date_coverage_start),
+            "date_coverage_end": _iso(row.date_coverage_end),
+            "validation_status": row.validation_status,
+            "checksum": row.checksum,
             "source_manifest": row.source_manifest,
             "metadata_json": row.metadata_json,
         }

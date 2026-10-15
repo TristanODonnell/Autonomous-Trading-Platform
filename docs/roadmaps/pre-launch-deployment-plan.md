@@ -175,6 +175,32 @@ and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `
 **1.5 Soak**
 - [ ] 1–2 weeks of unattended paper running before relying on it
 
+*Soak log.* First attempt Mon–Wed 2026-10-12..14 on t4g.medium: no OOM, every EOD chain
+finished, Parquet published to S3 all three days and Box B pulled it nightly. Trading itself
+only ran ~09:30–11:00 ET each day, so those days do not count. Causes and fixes (branch
+`fix/soak-findings`):
+- **Tick drift.** The runner slept a flat 300 s after each tick, ticks drifted ~3 s per
+  cycle, and once more than 60 s past the 5-minute boundary the trading cycle's readiness
+  check (`ingestion_deadline = boundary + 60 s`) put every remaining tick in safe mode
+  (`trading_cycle_degraded: ingestion_not_ready: ingestion_deadline_missed`; 53/60/58 ticks
+  per day). Ticks are now anchored at each boundary + 10 s (`_seconds_until_next_tick`).
+- **Missing-bars hard stop.** On the free IEX feed thin names print no trade in some minutes;
+  Monday 09:55 ET had 5/22 symbols missing (22.7%), over the 20% threshold, and the whole
+  tick failed four times (no features, no trading). The 20% level is now only the SLA
+  record; the tick fails above `INGESTION_MISSING_BAR_FAIL_RATIO` (default 0.5).
+  Incidents per day were 43 / 9 / 28, so this is routine, not a feed outage.
+- **Worker deploy never ran.** `Deploy worker (Box B)` reported success while skipping:
+  the `WORKER_HOST` secret is not visible to the workflow (B had no runner logins and sat
+  12 commits behind main). Fix the repository secret, then `workflow_dispatch`.
+- **Feature versions not registered on B.** Publish manifests only carried the
+  `dataset_versions` row; returns/regime versions live in `feature_dataset_versions`, so B
+  logged `no_registry_row` for each. Manifests now also carry `feature_dataset_version`
+  and the pull registers it.
+- Still to do from the soak: container logs print only event names (the formatter drops
+  `extra` fields; they are in Loki), and Box A's root volume (79% of 29 GB) needs the
+  planned grow to 50 GB. **The soak clock restarts at the first full session after these
+  fixes are deployed.**
+
 ### Phase 2: worker bootstrap (can overlap with A's soak)
 
 **2.1 Box** (code done 2026-10-11 on `worker-bootstrap`; runbook `docs/operations/runbooks/worker-box.md`; box not provisioned yet)

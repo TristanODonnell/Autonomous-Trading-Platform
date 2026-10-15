@@ -17,6 +17,9 @@ from autonomous_trading_platform.application.services.dataset_pull_service impor
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
 from autonomous_trading_platform.storage.parquet.object_store import InMemoryObjectStore
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from autonomous_trading_platform.storage.sor.models.feature_dataset_versions import (
+    FeatureDatasetVersions,
+)
 
 DAY = date(2026, 10, 12)
 NOW = datetime(2026, 10, 12, 23, 0, tzinfo=UTC)
@@ -239,3 +242,67 @@ def test_registers_versions_in_the_worker_db_from_the_manifest(
     skipped = service.pull(register=False)
     assert skipped.summary()["registered"] == []
     assert db_session.get(DatasetVersions, "raw_bars_v1") is None
+
+
+def test_feature_versions_register_in_feature_dataset_versions(
+    tmp_path: Path, db_session: Session
+) -> None:
+    """Box A registers returns/regime versions in ``feature_dataset_versions``, not
+    ``dataset_versions``; before this the worker pulled their files but logged
+    ``no_registry_row`` for every one of them (3 per day on Box B, 2026-10-12..14)."""
+    db_session.add(
+        FeatureDatasetVersions(
+            dataset_version_id="returns_v1",
+            feature_name="returns",
+            dataset_name="features_returns",
+            created_at=datetime(2026, 10, 12, 13, 35, tzinfo=UTC),
+            schema_version="1.0.0",
+            source_dataset_version="raw_bars_v1",
+            underlying_price_basis=PriceBasis.RAW,
+            computation_parameters={"window": 20},
+            computation_code_version="deadbeef",
+            storage_path="features/returns/dataset_version=returns_v1",
+            symbol_coverage=2,
+            date_coverage_start=DAY,
+            date_coverage_end=DAY,
+            validation_status="validated",
+            checksum="fff",
+            source_manifest={"symbols": ["AAPL", "MSFT"]},
+            metadata_json={"stage": "intraday"},
+        )
+    )
+    db_session.flush()
+    store = _published_store(tmp_path, session=db_session)
+    manifest = json.loads(store.objects["datasets/manifests/returns_v1.json"])
+    assert manifest["dataset_version"] is None
+    assert manifest["feature_dataset_version"]["feature_name"] == "returns"
+    assert manifest["feature_dataset_version"]["underlying_price_basis"] == "raw"
+    assert manifest["feature_dataset_version"]["source_manifest"] == {"symbols": ["AAPL", "MSFT"]}
+    # bar manifests carry no feature block
+    raw = json.loads(store.objects["datasets/manifests/raw_bars_v1.json"])
+    assert raw["feature_dataset_version"] is None
+
+    db_session.query(FeatureDatasetVersions).delete()
+    db_session.flush()
+
+    service = DatasetPullService(
+        store, session=db_session, data_root=tmp_path / "worker", prefix="datasets"
+    )
+    result = service.pull()
+
+    assert result.summary()["registered"] == ["returns_v1"]
+    assert db_session.get(DatasetVersions, "returns_v1") is None
+    row = db_session.get(FeatureDatasetVersions, "returns_v1")
+    assert row is not None
+    assert row.feature_name == "returns"
+    assert row.source_dataset_version == "raw_bars_v1"
+    assert row.underlying_price_basis == PriceBasis.RAW
+    assert row.computation_parameters == {"window": 20}
+    assert row.computation_code_version == "deadbeef"
+    assert row.storage_path == "features/returns/dataset_version=returns_v1"
+    assert row.date_coverage_end == DAY
+    assert row.metadata_json["stage"] == "intraday"
+    assert row.metadata_json["pulled_from"]["publisher_git_sha"] == "a1b2c3"
+
+    again = service.pull()
+    assert again.summary()["registered"] == []
