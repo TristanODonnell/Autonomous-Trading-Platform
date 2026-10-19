@@ -41,6 +41,7 @@ from autonomous_trading_platform.observability.metrics import (
     order_submission_risk_rejection_count,
 )
 from autonomous_trading_platform.observability.tracing import start_span
+from autonomous_trading_platform.safety.errors import SafetyError
 from autonomous_trading_platform.scheduler.common.trading_cycle_common import (
     PORTFOLIO_STRATEGY_ID,
     TradingCycleDependencies,
@@ -105,6 +106,7 @@ def run_order_submission_job(
             job_span.set_attribute("ratp.now_utc", now_utc.isoformat())
 
             order_intents_created = False
+            throttle_rejected_count = 0
             # Portfolio mode: intents come from several strategies, each with its own
             # runtime state and sleeve. Legacy mode: one strategy, manifest.strategy_id.
             portfolio_mode = manifest.strategy_id == PORTFOLIO_STRATEGY_ID
@@ -226,13 +228,31 @@ def run_order_submission_job(
                         )
                         risk_span.set_attribute("ratp.risk_check.allowed", True)
 
-                    except OrderNotAllowedForSubmissionError:
+                    except (SafetyError, OrderNotAllowedForSubmissionError) as risk_exc:
+                        # One intent tripping the throttle (orders per bar / per hour,
+                        # repeat in bar) must not fail the whole tick: that lost every
+                        # intent in the bar when the third BUY hit MAX_ORDERS_PER_BAR=2.
+                        # Record the rejection and carry on with the next intent.
                         risk_span.set_attribute("ratp.risk_check.allowed", False)
                         risk_span.set_attribute("ratp.risk_check.rejected", True)
+                        risk_span.set_attribute("ratp.risk_check.error", str(risk_exc))
                         order_submission_risk_rejection_count.add(
                             1, {"component": component, "job": job}
                         )
-                        raise
+                        throttle_rejected_count += 1
+                        _record_throttle_rejection(
+                            session=session,
+                            execution_context=execution_context,
+                            audit_logger=audit_logger,
+                            intent=intent,
+                            order_status=order_status,
+                            run_id=run_id,
+                            account_id=manifest.broker_account_id,
+                            now_utc=now_utc,
+                            component=component,
+                            exc=risk_exc,
+                        )
+                        continue
 
                 if shadow_mode_enabled:
                     continue
@@ -538,6 +558,19 @@ def run_order_submission_job(
 
                     raise
 
+            job_span.set_attribute(
+                "ratp.order_submission.throttle_rejected_count", throttle_rejected_count
+            )
+            if throttle_rejected_count:
+                logger.warning(
+                    "order_submission_job.intents_rejected_by_throttle",
+                    extra={
+                        "run_id": str(run_id),
+                        "rejected": throttle_rejected_count,
+                        "generated": len(generated_intents),
+                    },
+                )
+
         # If the signal fired but no intents were generated (e.g. holiday gap, missing
         # prices, or allocation denied for all symbols), reset the strategy state to IDLE
         # so the next tick can re-signal cleanly from IDLE.
@@ -622,6 +655,79 @@ def apply_fill_to_sleeve(*, uow: SorUnitOfWork, fill, strategy_id: str) -> None:
         logger.exception(
             "sleeve_ledger.fill_apply_failed",
             extra={"fill_id": fill.fill_id, "strategy_id": strategy_id},
+        )
+
+
+def _record_throttle_rejection(
+    *,
+    session,
+    execution_context,
+    audit_logger,
+    intent,
+    order_status: OrderStatus,
+    run_id: UUID,
+    account_id: str,
+    now_utc: datetime,
+    component: str,
+    exc: Exception,
+) -> None:
+    """Book a pre-trade throttle rejection for one intent: audit row, REJECT transition,
+    rejected tracked order. Best effort: the rejection is already in the logs, the metric
+    and the span, and bookkeeping must not turn a skipped intent into a failed tick."""
+    logger.warning(
+        "order_submission_job.intent_rejected_by_throttle",
+        extra={
+            "run_id": str(run_id),
+            "intent_id": str(intent.intent_id),
+            "symbol": intent.symbol,
+            "strategy_id": intent.strategy_id,
+            "side": intent.side.value,
+            "bar_timestamp": intent.bar_timestamp.isoformat(),
+            "error": str(exc),
+        },
+    )
+    try:
+        if hasattr(audit_logger, "record_event"):
+            audit_logger.record_event(
+                run_id=str(run_id),
+                event_type="ORDER_REJECTED_BY_THROTTLE",
+                component=component,
+                message=f"Order intent for {intent.symbol} rejected by throttle",
+                metadata={
+                    "intent_id": str(intent.intent_id),
+                    "symbol": intent.symbol,
+                    "strategy_id": intent.strategy_id,
+                    "side": intent.side.value,
+                    "bar_timestamp": intent.bar_timestamp.isoformat(),
+                    "error": str(exc),
+                    "severity": "warning",
+                },
+            )
+        execution_context.order_state_machine_service.apply_event(
+            order_id=intent.intent_id,
+            current_status=order_status,
+            event=OrderEvent.REJECT,
+            event_timestamp=now_utc,
+            run_id=str(run_id),
+            metadata={
+                "symbol": intent.symbol,
+                "strategy_id": intent.strategy_id,
+                "error": str(exc),
+            },
+        )
+        with SorUnitOfWork(session) as uow:
+            execution_context.order_runtime_state_service.record_rejected_order(
+                uow=uow,
+                intent=intent,
+                run_id=run_id,
+                strategy_id=intent.strategy_id,
+                account_id=account_id,
+                now_utc=now_utc,
+            )
+    except Exception:
+        logger.exception(
+            "order_submission_job.throttle_rejection_not_recorded",
+            extra={"run_id": str(run_id), "intent_id": str(intent.intent_id)},
         )
 
 
