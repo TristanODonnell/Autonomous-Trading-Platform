@@ -257,6 +257,39 @@ only ran ~09:30–11:00 ET each day, so those days do not count. Causes and fixe
 
 *Then start 3.3(a)* (see the Phase 3 checklist below for the sub-steps).
 
+**1.7 Findings 7–8 and the go-live-on-paper decision (Thu 2026-10-15 → Sat 2026-10-18)**
+
+Thu 2026-10-15 was the first day the order path ran: after the Alpaca data-host fix (PR #152)
+10 BUY signals became 10 `order_intents` with `ORDER_GENERATED` audit rows, but 0 orders reached
+Alpaca and 0 fills landed. Two causes:
+
+- **Finding 7: shadow mode was on.** `SHADOW_MODE_ENABLED` is unset in A's `.env` and defaults to
+  `true`, so the submission job stops after the risk check and never calls the broker. This is the
+  intended pre-paper gate, but nothing in this plan or `.env.example` said to turn it off.
+  `.env.example` now documents it (PR #153). **Decision (Sat 2026-10-18): trade paper for real from
+  Mon 2026-10-20.** Operator step on Box A (check the prompt reads `ip-172-31-42-34`), before 09:30 ET:
+  - [ ] add `SHADOW_MODE_ENABLED=false` to `~/Autonomous-Trading-Platform/.env`
+  - [ ] `docker compose up -d scheduler` (recreates the container so it picks up the new env;
+        the EC2 instance is not touched)
+  - [ ] confirm: `docker compose exec scheduler env | grep SHADOW_MODE` prints `false`
+- **Finding 8: a throttle rejection killed the whole tick.** `MAX_ORDERS_PER_BAR=2` on A; the
+  third BUY intent in the 15:00 ET bar raised `OrdersPerBarLimitExceededError`, which the
+  submission job re-raised, so the tick ended `cycle_failed` and the two allowed intents never
+  went out either. Fixed in PR #153 (merged + deployed to A Sat 2026-10-18): a throttled intent is
+  now audited `ORDER_REJECTED_BY_THROTTLE`, its tracked order goes REJECTED, and the tick carries on.
+- **Limits kept as they are on A** (decided 2026-10-18): 2 orders/bar, 20/hour, $100k gross
+  exposure, $25k per symbol, $100k daily notional. Intents size at ~$25k each, so the gross cap
+  binds after about four open positions; revisit once a week of fills exists.
+
+*Monday 2026-10-20 checklist (first real orders):*
+- [ ] First BUY signal → `order_intents` row → order visible in the Alpaca paper account →
+      `fills` row → position/cash ledgers move (this path has never run live)
+- [ ] `ORDER_REJECTED_BY_THROTTLE` audit rows are expected when >2 BUYs share a bar; no
+      `cycle_failed` ticks from it
+- [ ] EOD broker reconciliation agrees with Alpaca's positions
+- [ ] Fri 2026-10-16's session was never reviewed (shadow mode still on, so no orders expected);
+      the soak clock starts with the first full session that produces fills
+
 ### Phase 2: worker bootstrap (can overlap with A's soak)
 
 **2.1 Box** (code done 2026-10-11 on `worker-bootstrap`; runbook `docs/operations/runbooks/worker-box.md`; box not provisioned yet)
