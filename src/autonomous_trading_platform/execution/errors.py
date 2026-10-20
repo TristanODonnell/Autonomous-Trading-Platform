@@ -28,3 +28,26 @@ class BrokerRuntimeSyncError(ExecutionError):
 
 class BrokerOrderNotFoundError(ExecutionError):
     """Raised when broker returns 404 for a known broker_order_id during reconciliation."""
+
+
+class BrokerOrderRejectedError(ExecutionError):
+    """Raised when the broker refuses an order outright (HTTP 4xx on submit).
+
+    The request was understood and turned down (insufficient buying power, no position
+    to sell, bad parameters), so retrying cannot help and the rest of the tick's intents
+    must still go out. Carries the broker's status code and response body, which is the
+    only place the reason is stated.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int,
+        body: str,
+        symbol: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.body = body
+        self.symbol = symbol

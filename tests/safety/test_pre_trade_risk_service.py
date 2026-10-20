@@ -535,3 +535,95 @@ def test_symbol_exposure_cap_is_the_tightest_configured_limit() -> None:
 
     assert service.symbol_exposure_cap_usd(total_equity=250_000.0) == 12_500.0
     assert service.symbol_exposure_cap_usd(total_equity=None) == 25_000.0
+
+
+# --- Position-aware reader: account-level state (soak finding 9) -------------------
+
+
+def _account_reader(positions: dict[str, tuple[str, str]], *, booked_today: float = 0.0):
+    from autonomous_trading_platform.safety.readers.portfolio_risk_state_reader import (
+        PortfolioRiskStateReader,
+    )
+    from autonomous_trading_platform.safety.readers.risk_state_reader import (
+        PositionAwareRiskStateReader,
+    )
+
+    return PositionAwareRiskStateReader(
+        PortfolioRiskStateReader(
+            {symbol: Decimal(value) for symbol, (_qty, value) in positions.items()},
+            Decimal("100000"),
+            symbol_quantities={symbol: Decimal(qty) for symbol, (qty, _value) in positions.items()},
+        ),
+        daily_notional_traded=lambda _date: booked_today,
+    )
+
+
+def test_position_aware_reader_reports_real_gross_exposure_and_todays_fills() -> None:
+    reader = _account_reader(
+        {"NVDA": ("114", "24726.60"), "SPY": ("32", "24551.04")}, booked_today=704_000.0
+    )
+
+    assert reader.get_gross_exposure() == pytest.approx(49_277.64)
+    assert reader.get_symbol_exposure("nvda") == pytest.approx(24_726.60)
+    assert reader.get_daily_notional_traded(datetime.now(UTC).date()) == pytest.approx(704_000.0)
+    assert reader.get_reserved_cash() == 0.0
+
+
+def test_gross_cap_blocks_a_buy_when_the_ledger_is_already_at_the_cap() -> None:
+    # Soak day 1: 12 positions of ~$25k on a $100k cap were all allowed because the
+    # live path never looked at gross exposure.
+    service = PreTradeRiskService(
+        settings=_settings(
+            max_gross_exposure=100_000.0,
+            max_symbol_exposure=25_000.0,
+            max_daily_notional_traded=1e9,
+            max_reserved_cash=1e9,
+        ),
+        risk_state_reader=_account_reader(
+            {sym: ("100", "24000") for sym in ("A", "B", "C", "D")}  # 96k gross
+        ),
+    )
+
+    with pytest.raises(GrossExposureLimitExceededError):
+        service.assert_order_allowed(
+            order_intent=_order_intent(symbol="IWM", qty=92, limit_price=271.38),
+            now=datetime.now(UTC),
+        )
+    # Selling one of the held names is risk-reducing and still passes.
+    service.assert_order_allowed(
+        order_intent=_order_intent(symbol="A", qty=100, limit_price=240.0, side=Side.SELL),
+        now=datetime.now(UTC),
+    )
+
+
+def test_submitted_orders_count_for_the_rest_of_the_tick() -> None:
+    reader = _account_reader({"MSFT": ("46", "24550.20")})
+
+    reader.record_submitted_order(symbol="AMZN", side=Side.BUY, notional=24_756.78)
+    assert reader.get_gross_exposure() == pytest.approx(24_550.20 + 24_756.78)
+    assert reader.get_symbol_exposure("AMZN") == pytest.approx(24_756.78)
+    assert reader.get_daily_notional_traded(datetime.now(UTC).date()) == pytest.approx(24_756.78)
+
+    # A sell of the whole MSFT position takes it out of exposure but still counts as traded.
+    reader.record_submitted_order(symbol="MSFT", side=Side.SELL, notional=24_550.20)
+    assert reader.get_gross_exposure() == pytest.approx(24_756.78)
+    assert reader.get_symbol_exposure("MSFT") == pytest.approx(0.0)
+    assert reader.get_daily_notional_traded(datetime.now(UTC).date()) == pytest.approx(
+        24_756.78 + 24_550.20
+    )
+
+    # Two buys in one bar: the second is checked against a cap the first already used.
+    service = PreTradeRiskService(
+        settings=_settings(
+            max_gross_exposure=40_000.0,
+            max_symbol_exposure=25_000.0,
+            max_daily_notional_traded=1e9,
+            max_reserved_cash=1e9,
+        ),
+        risk_state_reader=reader,
+    )
+    with pytest.raises(GrossExposureLimitExceededError):
+        service.assert_order_allowed(
+            order_intent=_order_intent(symbol="QQQ", qty=34, limit_price=720.26),
+            now=datetime.now(UTC),
+        )

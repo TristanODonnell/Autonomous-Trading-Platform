@@ -13,7 +13,9 @@ from autonomous_trading_platform.config.broker_config_validator import (
     ALPACA_PAPER_BASE_URL,
 )
 from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.execution.errors import BrokerOrderRejectedError
 from autonomous_trading_platform.observability.enums import SpanTimespan
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metric_labels import broker_labels
 from autonomous_trading_platform.observability.metrics import (
     ratp_broker_api_failures_total,
@@ -23,6 +25,12 @@ from autonomous_trading_platform.observability.metrics import (
 from autonomous_trading_platform.observability.tracing import start_span
 
 COMPONENT = "execution.broker_client"
+
+logger = get_logger(__name__)
+
+# 4xx statuses that mean "try again later", not "this order is refused".
+_RETRYABLE_CLIENT_STATUSES = frozenset({408, 429})
+_REJECTION_BODY_LIMIT = 500
 
 
 class AlpacaBrokerClient:
@@ -57,10 +65,34 @@ class AlpacaBrokerClient:
     # ------------------------------------------------------------------
 
     def submit_order(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return cast(
-            dict[str, Any],
-            self._request("POST", "/v2/orders", endpoint_tag="orders.submit", json=payload),
+        response = self._raw_request(
+            "POST", "/v2/orders", endpoint_tag="orders.submit", json=payload
         )
+        status = response.status_code
+        if 400 <= status < 500 and status not in _RETRYABLE_CLIENT_STATUSES:
+            # The broker understood the order and refused it (insufficient buying power,
+            # nothing to sell, bad parameters). Surface the body: it is the only place
+            # the reason is stated, and raise_for_status() would drop it.
+            body = response.text[:_REJECTION_BODY_LIMIT]
+            symbol = payload.get("symbol")
+            logger.warning(
+                "alpaca_broker_client.order_rejected",
+                extra={
+                    "symbol": symbol,
+                    "side": payload.get("side"),
+                    "qty": payload.get("qty"),
+                    "status_code": status,
+                    "body": body,
+                },
+            )
+            raise BrokerOrderRejectedError(
+                f"Broker rejected order for {symbol}: HTTP {status} {body}",
+                status_code=status,
+                body=body,
+                symbol=str(symbol) if symbol is not None else None,
+            )
+        response.raise_for_status()
+        return cast(dict[str, Any], response.json())
 
     def get_order_by_id(self, order_id: str) -> dict[str, Any]:
         return cast(
