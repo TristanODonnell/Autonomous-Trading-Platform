@@ -39,6 +39,7 @@ from autonomous_trading_platform.scheduler.jobs.apply_corporate_actions_step imp
     apply_due_corporate_actions,
 )
 from autonomous_trading_platform.scheduler.jobs.portfolio_evaluation import (
+    order_limit_rejection_auditor,
     run_portfolio_evaluation,
 )
 from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
@@ -361,6 +362,15 @@ def run_trading_evaluation_job(
                     now=now_utc,
                     recent_closes=recent_closes,
                     hold_symbols=universe_symbols,
+                    # A breach of a dollar limit drops that intent (audited) instead of
+                    # raising: raising degraded the whole tick, so every other intent,
+                    # risk-reducing sells included, was lost with it.
+                    skip_order_limit_breaches=True,
+                    on_order_rejected=order_limit_rejection_auditor(
+                        audit_logger=trading_cycle_dependencies.audit_logger,
+                        run_id=str(manifest.run_id),
+                        component=component,
+                    ),
                 )
             )
 

@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 import pytest
 
+from autonomous_trading_platform.execution.errors import BrokerOrderRejectedError
 from autonomous_trading_platform.execution.services.order_execution_service import (
     OrderExecutionService,
 )
@@ -288,3 +289,39 @@ def test_payload_is_not_regenerated_on_retry() -> None:
 
     first, second = client.submitted_payloads
     assert first == second, "identical payload must be sent on every attempt"
+
+
+# ---------------------------------------------------------------------------
+# Broker refusal (4xx) → no retry, no idempotency lookup
+# ---------------------------------------------------------------------------
+
+
+class _RefusingClient:
+    def __init__(self) -> None:
+        self.submit_calls = 0
+        self.lookup_calls = 0
+
+    def submit_order(self, _payload: Any) -> dict[str, Any]:
+        self.submit_calls += 1
+        raise BrokerOrderRejectedError(
+            "Broker rejected order for AAPL: HTTP 403 insufficient buying power",
+            status_code=403,
+            body="insufficient buying power",
+            symbol="AAPL",
+        )
+
+    def get_order_by_client_order_id(self, _client_order_id: str) -> None:
+        self.lookup_calls += 1
+        return None
+
+
+def test_broker_refusal_is_raised_on_the_first_attempt_without_retry() -> None:
+    client = _RefusingClient()
+    svc = _make_service(client)
+
+    with pytest.raises(BrokerOrderRejectedError) as excinfo:
+        svc.submit(_intent())  # type: ignore[arg-type]
+
+    assert excinfo.value.status_code == 403
+    assert client.submit_calls == 1, "a refusal is final; retrying cannot change it"
+    assert client.lookup_calls == 0

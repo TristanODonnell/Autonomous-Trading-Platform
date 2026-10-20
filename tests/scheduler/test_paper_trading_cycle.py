@@ -691,12 +691,23 @@ def test_pre_trade_risk_rejection_blocks_order_submission(
     manifest = _latest_manifest(db_session)
 
     assert manifest is not None
+    # A dollar-limit breach drops that intent and audits it; it no longer degrades the
+    # tick (soak finding 9: degrading lost every other intent, risk-reducing sells too).
     assert manifest.status == "completed"
-    assert manifest.error_message == "simulated pre-trade risk rejection"
+    assert manifest.error_message is None
 
-    # evaluation never completed successfully
-    assert manifest.last_successful_step == "ingestion_readiness"
-
-    # no downstream trading artifacts produced
+    # no downstream trading artifacts produced for the rejected intent
     assert _order_intents_for_run(db_session, manifest.run_id) == []
     assert _fills_for_run(db_session, manifest.run_id) == []
+
+    from autonomous_trading_platform.storage.sor.models.audit_logs import AuditLogRow
+
+    rejected = (
+        db_session.query(AuditLogRow)
+        .filter(AuditLogRow.run_id == str(manifest.run_id))
+        .filter(AuditLogRow.event_type == "ORDER_REJECTED_BY_RISK_LIMIT")
+        .all()
+    )
+    assert len(rejected) == 1
+    assert rejected[0].event_metadata["error"] == "simulated pre-trade risk rejection"
+    assert rejected[0].event_metadata["stage"] == "evaluation"

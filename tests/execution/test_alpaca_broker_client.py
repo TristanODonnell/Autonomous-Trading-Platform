@@ -1,9 +1,11 @@
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from autonomous_trading_platform.execution.clients import alpaca_broker_client
 from autonomous_trading_platform.execution.clients.alpaca_broker_client import AlpacaBrokerClient
+from autonomous_trading_platform.execution.errors import BrokerOrderRejectedError
 
 
 class CapturingHttpClient:
@@ -207,3 +209,65 @@ def test_trading_endpoints_still_use_the_trading_host(monkeypatch) -> None:
     assert (
         RequestCapturingHttpClient.init_calls[0]["base_url"] == "https://paper-api.alpaca.markets"
     )
+
+
+# --- Submit refusals (soak finding 11) ----------------------------------------------
+
+
+class _StatusResponse:
+    def __init__(self, status_code: int, text: str = "") -> None:
+        self.status_code = status_code
+        self.text = text
+        self.is_error = status_code >= 400
+
+    def raise_for_status(self) -> None:
+        if self.is_error:
+            request = httpx.Request("POST", "https://paper-api.alpaca.markets/v2/orders")
+            response = httpx.Response(self.status_code, request=request)
+            raise httpx.HTTPStatusError(
+                f"HTTP {self.status_code}", request=request, response=response
+            )
+
+    def json(self):
+        return {"id": "order-1"}
+
+
+def _client_answering(monkeypatch, status_code: int, text: str = "") -> AlpacaBrokerClient:
+    class _HttpClient:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        def request(self, method, path, **kwargs):
+            return _StatusResponse(status_code, text)
+
+    monkeypatch.setattr(alpaca_broker_client.httpx, "Client", _HttpClient)
+    return AlpacaBrokerClient(_settings())
+
+
+def test_submit_order_403_raises_a_rejection_carrying_the_broker_body(monkeypatch) -> None:
+    """Regression: Alpaca's 403 (insufficient buying power) surfaced as a bare
+    HTTPStatusError, the body with the reason was dropped and the whole tick failed."""
+    body = '{"code":40310000,"message":"insufficient buying power"}'
+    client = _client_answering(monkeypatch, 403, body)
+
+    with pytest.raises(BrokerOrderRejectedError) as excinfo:
+        client.submit_order({"symbol": "IWM", "side": "buy", "qty": "92"})
+
+    assert excinfo.value.status_code == 403
+    assert excinfo.value.body == body
+    assert excinfo.value.symbol == "IWM"
+    assert "insufficient buying power" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("status_code", [429, 500, 503])
+def test_submit_order_retryable_statuses_still_raise_http_errors(monkeypatch, status_code) -> None:
+    client = _client_answering(monkeypatch, status_code, "busy")
+
+    with pytest.raises(httpx.HTTPStatusError):
+        client.submit_order({"symbol": "IWM"})
+
+
+def test_submit_order_success_still_returns_the_payload(monkeypatch) -> None:
+    client = _client_answering(monkeypatch, 200)
+
+    assert client.submit_order({"symbol": "IWM"}) == {"id": "order-1"}

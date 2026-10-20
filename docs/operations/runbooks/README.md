@@ -8,6 +8,7 @@ Use `docs/backend/cli/cli.md` as the central CLI index.
 
 - `postgres-backup-restore.md` — Box A nightly backup and restore
 - `worker-box.md` — Box B (research worker): setup, dataset pull, jobs, deploy
+- `ledger-resync.md` — Box A: rewrite the ledger's cash/position snapshots from the broker after a flatten or a bad seed
 
 ## CLI Entry Points
 
