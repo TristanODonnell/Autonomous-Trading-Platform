@@ -627,3 +627,114 @@ def test_submitted_orders_count_for_the_rest_of_the_tick() -> None:
             order_intent=_order_intent(symbol="QQQ", qty=34, limit_price=720.26),
             now=datetime.now(UTC),
         )
+
+
+# --- Position-aware reader: broker refresh (soak finding 12) -----------------------
+
+
+class _BrokerWithPositions:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def get_positions(self):
+        return self.rows
+
+
+class _BrokerThatFails:
+    def get_positions(self):
+        raise RuntimeError("alpaca 503")
+
+
+def _alpaca_row(symbol: str, qty: str, price: str, **overrides):
+    row = {
+        "symbol": symbol,
+        "qty": qty,
+        "avg_entry_price": price,
+        "current_price": price,
+        "market_value": str(Decimal(qty) * Decimal(price)),
+        "unrealized_pl": "0",
+    }
+    row.update(overrides)
+    return row
+
+
+def test_refresh_from_broker_replaces_the_stale_ledger_view() -> None:
+    # Soak day 2, 16:10 UTC: the ledger still showed AAPL/META/V ($62.8k) because the
+    # IWM buy from 16:05 had not been booked yet; the broker already held all four.
+    reader = _account_reader(
+        {"AAPL": ("65", "22418.50"), "META": ("28", "18549.45"), "V": ("53", "21787.87")}
+    )
+    assert reader.get_gross_exposure() == pytest.approx(62_755.82)
+
+    refreshed = reader.refresh_from_broker(
+        _BrokerWithPositions(
+            [
+                _alpaca_row("AAPL", "65", "344.90"),
+                _alpaca_row("META", "28", "662.48"),
+                _alpaca_row("V", "53", "411.09"),
+                _alpaca_row("IWM", "90", "276.19"),
+            ]
+        )
+    )
+
+    assert refreshed is True
+    assert reader.get_gross_exposure() == pytest.approx(87_612.81)
+    assert reader.get_symbol_exposure("IWM") == pytest.approx(24_857.10)
+    assert reader.get_position_qty("IWM") == 90.0
+
+    # The GOOGL buy that went through against the stale view is now rejected.
+    service = PreTradeRiskService(
+        settings=_settings(
+            max_gross_exposure=100_000.0,
+            max_symbol_exposure=25_000.0,
+            max_daily_notional_traded=1e9,
+            max_reserved_cash=1e9,
+        ),
+        risk_state_reader=reader,
+    )
+    with pytest.raises(GrossExposureLimitExceededError):
+        service.assert_order_allowed(
+            order_intent=_order_intent(symbol="GOOGL", qty=76, limit_price=327.75),
+            now=datetime.now(UTC),
+        )
+
+
+def test_refresh_from_broker_keeps_same_tick_orders_and_equity() -> None:
+    reader = _account_reader({"MSFT": ("46", "24550.20")})
+    reader.record_submitted_order(symbol="AMZN", side=Side.BUY, notional=24_756.78)
+
+    assert reader.refresh_from_broker(_BrokerWithPositions([_alpaca_row("MSFT", "46", "533.70")]))
+
+    assert reader.get_gross_exposure() == pytest.approx(24_550.20 + 24_756.78)
+    assert reader.get_symbol_exposure("AMZN") == pytest.approx(24_756.78)
+    assert reader._portfolio_reader.total_equity == Decimal("100000")
+
+
+def test_refresh_from_broker_falls_back_to_the_ledger_when_the_broker_cannot_answer() -> None:
+    reader = _account_reader({"MSFT": ("46", "24550.20")})
+
+    assert reader.refresh_from_broker(_BrokerThatFails()) is False
+    assert reader.refresh_from_broker(object()) is False
+    assert reader.refresh_from_broker(_BrokerWithPositions([{"symbol": "X"}])) is False
+
+    assert reader.get_gross_exposure() == pytest.approx(24_550.20)
+    assert reader.get_position_qty("MSFT") == 46.0
+
+
+def test_refresh_from_broker_derives_market_value_when_the_broker_omits_it() -> None:
+    reader = _account_reader({})
+
+    assert reader.refresh_from_broker(
+        _BrokerWithPositions(
+            [
+                _alpaca_row("NVDA", "10", "180.00", market_value=None),
+                {"symbol": "SPY", "qty": "2", "avg_entry_price": "600"},
+                {"symbol": "FLAT", "qty": "0"},
+            ]
+        )
+    )
+
+    assert reader.get_symbol_exposure("NVDA") == pytest.approx(1_800.0)
+    assert reader.get_symbol_exposure("SPY") == pytest.approx(1_200.0)
+    assert reader.get_gross_exposure() == pytest.approx(3_000.0)
+    assert reader.get_symbol_exposure("FLAT") == 0.0
