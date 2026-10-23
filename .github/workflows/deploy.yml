@@ -26,6 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       # Frozen from 30 min before the NYSE open to 30 min after the close (09:00-16:30 ET
       # on a normal day); holidays and half days come from the exchange calendar.
       - name: Check deploy window
