@@ -142,3 +142,82 @@ def test_stale_dataset_is_rejected(client: TestClient, db_session: Session) -> N
     assert response.json()["data"]["reason"] == "stale_dataset"
     assert response.json()["data"]["dataset_age_days"] == 10
     assert date.fromisoformat(old)  # sanity
+
+
+# ---------------------------------------------------------------- bench inputs (3.3a)
+
+
+def test_worker_role_fetches_bench_inputs(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    from autonomous_trading_platform.application.services import bench_resim_inputs_service
+    from autonomous_trading_platform.application.services.bench_resimulation_service import (
+        BenchWindow,
+    )
+    from autonomous_trading_platform.contracts.common.enums import PriceBasis
+    from tests.application.services.test_bench_resim_inputs_service import (
+        seed_tracked_strategy,
+    )
+
+    seed_tracked_strategy(db_session, "momentum_v1", tier="active")
+    seed_tracked_strategy(
+        db_session, "macd_crossover_v1", tier="bench", strategy_type="moving_average_crossover"
+    )
+    monkeypatch.setattr(
+        bench_resim_inputs_service,
+        "resolve_bench_window",
+        lambda **kwargs: BenchWindow(
+            dataset_version="raw_bars_x",
+            price_basis=PriceBasis.RAW,
+            symbols=["AAPL"],
+            start_date=kwargs["as_of"] - timedelta(days=88),
+            end_date=kwargs["as_of"],
+        ),
+    )
+
+    response = client.get(
+        "/api/v1/worker/bench-inputs",
+        params={"as_of": "2026-10-23", "trading_days": 63},
+        headers=auth_headers(role="worker"),
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["as_of"] == "2026-10-23"
+    assert data["trading_days"] == 63
+    assert data["window_start"] == "2026-07-27"
+    assert data["window_end"] == "2026-10-23"
+    assert data["dataset_version"] == "raw_bars_x"
+    assert data["symbols"] == ["AAPL"]
+    assert [(s["strategy_id"], s["tier"]) for s in data["strategies"]] == [
+        ("macd_crossover_v1", "bench"),
+        ("momentum_v1", "active"),
+    ]
+    assert data["strategies"][1]["parameters"] == {"lookback": 5}
+
+
+def test_bench_inputs_default_to_today_and_need_the_worker_role(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    from autonomous_trading_platform.application.services import bench_resim_inputs_service
+
+    monkeypatch.setattr(bench_resim_inputs_service, "resolve_bench_window", lambda **kw: None)
+
+    forbidden = client.get("/api/v1/worker/bench-inputs", headers=auth_headers(role="operator"))
+    assert forbidden.status_code == 403
+
+    response = client.get("/api/v1/worker/bench-inputs", headers=auth_headers(role="admin"))
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["as_of"] == datetime.now(UTC).date().isoformat()
+    assert data["strategies"] == []
+    assert data["window_reason"] == "insufficient_data_for_window"
+
+    assert (
+        client.get(
+            "/api/v1/worker/bench-inputs",
+            params={"trading_days": 1},
+            headers=auth_headers("worker"),
+        ).status_code
+        == 422
+    )

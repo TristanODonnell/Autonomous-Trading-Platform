@@ -243,6 +243,20 @@ only ran ~09:30–11:00 ET each day, so those days do not count. Causes and fixe
 
 **3.3 Switch automation on in order of risk, one at a time with a few cycles between**
 - [ ] (a) Weekly bench re-sims + scorecards from B, plus the weekly review DAG on A
+  - [x] Read endpoint on A: `GET /api/v1/worker/bench-inputs` (`worker` role) returns the
+        ACTIVE / ON_DECK / BENCH strategies with their stored parameters, the shared window
+        (`resolve_bench_window`, `bench_resim_window_days`), dataset version, symbols and A's
+        git SHA (`BenchResimInputsService`, `BenchResimInputs` contract)
+  - [x] Worker job: `atp worker bench-resim [--as-of] [--run-id] [--no-pull] [--no-publish]`
+        fetches the inputs, pulls the datasets, re-simulates every strategy
+        (`BenchResimulationService.resimulate_specs`, same sizing/seed as A's own review),
+        writes the `bench_resims` payload and posts it (exit 0 accepted, 2 rejected)
+  - [ ] Seed `portfolio_memberships` on A (the active set + MACD on the bench); until then
+        the endpoint returns no strategies and the job exits with `nothing_to_do`
+  - [ ] Dry run on B: `atp worker bench-resim --no-publish`, compare against A's own
+        bench review numbers for the same window
+  - [ ] Weekly timer on B (`ratp-worker-bench-resim.timer`, Sat after the nightly pull)
+  - [ ] Flip `worker_results_enabled`, then `portfolio_review_mode=advisory`, then `auto`
 - [ ] (b) Monthly research / strategy generation → bench
 - [ ] (c) Allocation/governance parameter changes, last (riskiest)
 

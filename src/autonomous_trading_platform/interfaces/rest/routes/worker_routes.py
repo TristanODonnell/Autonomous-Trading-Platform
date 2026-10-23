@@ -5,11 +5,14 @@ accepts or rejects it (switch, kill switch, payload, dataset age, git SHA) and t
 comes back with HTTP 200 either way, so the worker can record it. Posting the same run id
 again returns the stored decision (``duplicate: true``). The ``worker`` role (or admin)
 is required to post; operators can list what arrived.
+
+``GET /worker/bench-inputs``: what the worker should re-simulate this week (plan 3.3a):
+the tracked strategies with their stored parameters and the shared window.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -20,10 +23,14 @@ from autonomous_trading_platform.api.dependencies import (
     require_worker_or_admin,
 )
 from autonomous_trading_platform.api.envelope import SuccessEnvelope, success_response
+from autonomous_trading_platform.application.services.bench_resim_inputs_service import (
+    BenchResimInputsService,
+)
 from autonomous_trading_platform.application.services.worker_result_gate_service import (
     WorkerResultGateService,
 )
 from autonomous_trading_platform.contracts.governance.worker_results import (
+    BenchResimInputs,
     WorkerResultDecision,
     WorkerResultRecord,
     WorkerResultSubmission,
@@ -77,6 +84,20 @@ def submit_result(
         session.rollback()
         raise
     return success_response(data=decision, request_id=request_id)
+
+
+@router.get("/bench-inputs", response_model=SuccessEnvelope[BenchResimInputs])
+def bench_inputs(
+    as_of: date | None = Query(default=None, description="Window end; default today (UTC)."),
+    trading_days: int | None = Query(default=None, ge=5, le=504),
+    request_id: str = _request_id_dependency,
+    session: Session = _session_dependency,
+    actor: str = Depends(require_worker_or_admin),
+) -> SuccessEnvelope[BenchResimInputs]:
+    inputs = BenchResimInputsService(session).build(
+        as_of=as_of or datetime.now(UTC).date(), trading_days=trading_days
+    )
+    return success_response(data=inputs, request_id=request_id)
 
 
 @router.get("/results", response_model=SuccessEnvelope[list[WorkerResultRecord]])

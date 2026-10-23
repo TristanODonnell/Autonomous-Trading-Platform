@@ -236,3 +236,72 @@ def test_cli_publish_result_exit_codes(monkeypatch: pytest.MonkeyPatch, tmp_path
     monkeypatch.setattr(mod.WorkerResultClient, "from_env", classmethod(boom))
     assert worker_cmd.handle_publish_result(build_parser().parse_args(base)) == 1
     assert isinstance(argparse.Namespace(), argparse.Namespace)
+
+
+# ---------------------------------------------------------------- bench inputs (3.3a)
+
+
+class _GetHttp(_Http):
+    def get(self, url, *, params, headers, timeout):
+        self.calls.append({"url": url, "params": params, "headers": headers, "timeout": timeout})
+        if self.exc:
+            raise self.exc
+        return self.response
+
+
+def _inputs_body() -> dict:
+    return {
+        "data": {
+            "as_of": "2026-10-23",
+            "git_sha": "abc1234",
+            "trading_days": 63,
+            "window_start": "2026-07-27",
+            "window_end": "2026-10-23",
+            "dataset_version": "raw_bars_x",
+            "price_basis": "raw",
+            "symbols": ["AAPL"],
+            "strategies": [
+                {
+                    "strategy_id": "momentum_v1",
+                    "tier": "active",
+                    "strategy_type": "momentum",
+                    "parameters": {"lookback": 5},
+                }
+            ],
+        },
+        "meta": {"request_id": "r"},
+    }
+
+
+def test_fetch_bench_inputs_gets_with_bearer_and_query() -> None:
+    from autonomous_trading_platform.application.services.worker_result_client import (
+        BENCH_INPUTS_PATH,
+    )
+
+    http = _GetHttp(_Response(200, _inputs_body()))
+    client = WorkerResultClient("http://a:8000", "tok", session=http)  # type: ignore[arg-type]
+
+    inputs = client.fetch_bench_inputs(as_of=date(2026, 10, 23), trading_days=63)
+
+    [call] = http.calls
+    assert call["url"] == "http://a:8000" + BENCH_INPUTS_PATH
+    assert call["params"] == {"as_of": "2026-10-23", "trading_days": 63}
+    assert call["headers"] == {"Authorization": "Bearer tok"}
+    assert inputs.dataset_version == "raw_bars_x"
+    assert inputs.strategies[0].parameters == {"lookback": 5}
+    assert inputs.window_start == date(2026, 7, 27)
+
+    bare = _GetHttp(_Response(200, _inputs_body()))
+    WorkerResultClient("http://a", "t", session=bare).fetch_bench_inputs()  # type: ignore[arg-type]
+    assert bare.calls[0]["params"] == {}
+
+
+def test_fetch_bench_inputs_errors_like_publish() -> None:
+    client = WorkerResultClient("http://a", "t", session=_GetHttp(_Response(403, {"detail": "no"})))  # type: ignore[arg-type]
+    with pytest.raises(WorkerResultPublishError) as info:
+        client.fetch_bench_inputs()
+    assert info.value.status_code == 403
+
+    down = WorkerResultClient("http://a", "t", session=_GetHttp(exc=requests.ConnectionError("x")))  # type: ignore[arg-type]
+    with pytest.raises(WorkerResultPublishError, match="unreachable"):
+        down.fetch_bench_inputs()

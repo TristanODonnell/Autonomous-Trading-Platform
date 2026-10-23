@@ -115,3 +115,41 @@ class BenchResimsPayload(BaseModel):
     outcomes: list[ResimOutcomePayload] = Field(min_length=1)
     # ISO date → market (benchmark) daily return, for the review's correlation lens.
     market_returns: dict[str, float] = Field(default_factory=dict)
+
+
+# ---------------------------------------------------------------- bench re-sim inputs
+
+
+class BenchResimStrategyInput(BaseModel):
+    """One strategy the worker must re-simulate: its tier on A and its stored config."""
+
+    strategy_id: str = Field(min_length=1, max_length=128)
+    tier: str = Field(min_length=1, max_length=32)
+    strategy_type: str | None = None
+    config_hash: str | None = None
+    # The research parameters as ``stored_config_parameters`` unwraps them.
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class BenchResimInputs(BaseModel):
+    """What Box A hands the worker for the weekly bench re-sims (plan 3.3a).
+
+    The worker runs every listed strategy over the shared window on the named dataset
+    version it pulled from A, and posts the outcomes back as ``BenchResimsPayload``.
+    ``window_*`` are None when A cannot build a window yet (no validated dataset, or
+    too little history); ``window_reason`` says why.
+    """
+
+    as_of: date
+    git_sha: str | None = None
+    trading_days: int
+    window_start: date | None = None
+    window_end: date | None = None
+    window_reason: str | None = None
+    dataset_version: str | None = None
+    price_basis: str | None = None
+    symbols: list[str] = Field(default_factory=list)
+    # Same sizing the review's own re-sims use, so the worker's numbers are comparable.
+    initial_cash: float = 100_000.0
+    random_seed: int = 42
+    strategies: list[BenchResimStrategyInput] = Field(default_factory=list)
