@@ -34,6 +34,7 @@ from autonomous_trading_platform.execution.contexts.build_execution_context impo
     ExecutionContext,
     build_execution_context,
 )
+from autonomous_trading_platform.execution.mappers.broker_order_mapper import BrokerOrderMapper
 from autonomous_trading_platform.execution.policy.execution_policy_engine import (
     ExecutionPolicyEngine,
 )
@@ -83,19 +84,10 @@ from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUni
 
 
 def to_sor_fill(fill: Fill) -> SorFill:
-    return SorFill(
-        fill_id=fill.fill_id,
-        order_id=fill.order_id,
-        broker_fill_id=fill.broker_fill_id,
-        symbol=fill.symbol,
-        side=fill.side,
-        quantity=fill.quantity,
-        price=fill.price,
-        filled_at=fill.filled_at,
-        commission=fill.commission,
-        fees=fill.fees,
-        liquidity=fill.liquidity,
-    )
+    # Same mapping the in-tick reconciliation job uses. The hand-rolled version
+    # referenced fields the Fill contract never had (order_id, filled_at, ...), so
+    # `reconcile-order` crashed on the first order that had actually filled.
+    return BrokerOrderMapper.to_fill_orm_row(fill)
 
 
 @dataclass
@@ -617,7 +609,7 @@ def handle_reconcile_order(args: argparse.Namespace) -> int:
                 if not args.dry_run:
                     accounting_result = ctx.post_fill_accounting_service.apply_fill(
                         uow=uow,
-                        fill=sor_fill,
+                        fill=fill,
                         now_utc=now_utc,
                     )
                     fill_payload["position_snapshot"] = _model_to_dict(
