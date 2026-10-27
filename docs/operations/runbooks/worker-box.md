@@ -14,6 +14,7 @@ Plan and decisions: `docs/roadmaps/pre-launch-deployment-plan.md` (§1, §2, Pha
 | Migrations | `ratp_worker_migrate` (compose, one-shot) | `alembic upgrade head` on every deploy |
 | Jobs | `docker compose run --rm worker atp ...` | Always via `infra/ops/worker_job.sh`, which holds the one-job-at-a-time lock |
 | Nightly dataset pull | `ratp-worker-pull.timer`, 20:30 ET | `atp datasets pull`; see below |
+| Weekly bench re-sim | `ratp-worker-bench-resim.timer`, Sat 06:00 ET | `atp worker bench-resim`: fetch A's bench inputs, re-sim, post `bench_resims`; payload kept under `artifacts/worker/bench_resims/` |
 | OTel collector | `ratp_worker_otel_collector` | Forwards to Box A's collector over the VPC; host + container metrics tagged `deployment.environment=backtest` |
 | Deploy | `.github/workflows/deploy-worker.yml` | CI green on main → ssh → `up -d --build`; no market-hours freeze; waits for a running job |
 
@@ -166,7 +167,7 @@ Grafana on Box A: host and container panels filter by `host_name`; the worker's 
   orders). The pulled Parquet feeds the research jobs (bench re-sims, strategy generation,
   regime suites), which are the worker's main work. A recorded-dataset replay mode is
   planned before scheduled replays (deployment plan, 3.4).
-- No weekly/monthly research timers; add them to `install_worker_timers.sh` via `worker_job.sh`
+- No monthly research timer yet (Phase 3.3b/4); add it to `install_worker_timers.sh` via `worker_job.sh` like the weekly bench re-sim
   calling `worker run`.
 - Span/log attributes for runs (`run.mode`, `backtest.run_id`, `fixture`) and the Worker
   dashboard are not done.

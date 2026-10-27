@@ -118,6 +118,11 @@ class TestBenchResim:
         assert args.trading_days == 21 and args.no_pull and args.no_publish
         assert args.out == Path("p.json")
 
+    def test_default_payload_path_is_under_the_mounted_artifacts_folder(self) -> None:
+        assert worker_cmd.default_bench_resims_path("bench_resims_2026-10-26") == Path(
+            "artifacts/worker/bench_resims/bench_resims_2026-10-26.json"
+        )
+
     @staticmethod
     def _args(**overrides):
         base = dict(
