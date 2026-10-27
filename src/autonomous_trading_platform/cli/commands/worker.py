@@ -31,6 +31,14 @@ from autonomous_trading_platform.contracts.governance.worker_results import (
     WorkerResultType,
 )
 
+# Under ./artifacts, which docker-compose.worker.yml mounts, so a payload written inside the
+# throw-away job container survives it.
+BENCH_RESIMS_DIR = Path("artifacts/worker/bench_resims")
+
+
+def default_bench_resims_path(run_id: str) -> Path:
+    return BENCH_RESIMS_DIR / f"{run_id}.json"
+
 
 def register(subparsers) -> None:
     parser = subparsers.add_parser(
@@ -134,7 +142,10 @@ def register(subparsers) -> None:
         "--out",
         type=Path,
         default=None,
-        help="Where to write the bench_resims payload JSON. Default: <run-id>.bench_resims.json",
+        help=(
+            "Where to write the bench_resims payload JSON. "
+            f"Default: {BENCH_RESIMS_DIR}/<run-id>.json (the mounted artifacts folder)."
+        ),
     )
     resim.set_defaults(func=handle_bench_resim)
 
@@ -277,7 +288,7 @@ def handle_bench_resim(args: argparse.Namespace) -> int:
     WorkerStateResetService.check_environment()
     as_of = args.as_of or datetime.now(UTC).date()
     run_id = args.run_id or f"bench_resims_{as_of.isoformat()}"
-    out_path = args.out or Path(f"{run_id}.bench_resims.json")
+    out_path = args.out or default_bench_resims_path(run_id)
     print_header(f"Bench re-sim {run_id} (as of {as_of})")
 
     try:

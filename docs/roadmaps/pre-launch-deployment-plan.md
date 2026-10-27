@@ -367,12 +367,39 @@ is a finding.
         fetches the inputs, pulls the datasets, re-simulates every strategy
         (`BenchResimulationService.resimulate_specs`, same sizing/seed as A's own review),
         writes the `bench_resims` payload and posts it (exit 0 accepted, 2 rejected)
-  - [ ] Seed `portfolio_memberships` on A (the active set + MACD on the bench); until then
-        the endpoint returns no strategies and the job exits with `nothing_to_do`
-  - [ ] Dry run on B: `atp worker bench-resim --no-publish`, compare against A's own
-        bench review numbers for the same window
-  - [ ] Weekly timer on B (`ratp-worker-bench-resim.timer`, Sat after the nightly pull)
+  - [x] Seed `portfolio_memberships` on A (done 2026-10-27 through `ActivePortfolioService`:
+        `mean_reversion_v1` + `momentum_v1` ACTIVE, `macd_crossover_v1` BENCH by operator,
+        `bench_management_enabled=true`; trading untouched while `portfolio_mode_enabled=false`).
+        Owed: an `atp portfolio membership list|refresh|set` CLI so this is repeatable
+  - [x] Dry run on B 2026-10-27: `worker bench-resim --as-of 2026-10-26 --no-publish` → 19 s,
+        3/3 strategies, git SHAs match A. Window 07-29..10-26 but A only holds 5-min bars
+        since mid-October, so the numbers are thin until ~mid-January (momentum_v1: 249
+        trades, turnover 10×/day, score 2.38; the other two ≈ 0.8–0.9 on 15–18 trades).
+        Findings: `daily_returns` empty for every outcome and no SPY market returns → the
+        review's correlation lens has nothing until fixed (see 3.3a findings below)
+  - [x] Weekly timer on B (`ratp-worker-bench-resim.timer`, Sat 06:00 ET, after Friday's pull;
+        `sudo infra/ops/install_worker_timers.sh` to install). Payload default path moved under
+        the mounted `artifacts/worker/bench_resims/` (the first dry run wrote into the job
+        container's /tmp and was lost with it)
   - [ ] Flip `worker_results_enabled`, then `portfolio_review_mode=advisory`, then `auto`
+  - **3.3(a) findings (2026-10-27, from the first dry run on B)**
+    - [ ] **Finding 14: live raw-bars versions are one session each.** Every EOD publish cuts
+          a `raw_bars_<date>T133000Z_*` version whose coverage is that single day (25 versions on
+          A, one per session). `resolve_bench_window` takes "the latest validated raw_bars"
+          as the re-sim dataset, so the 63-day window re-simulated 2026-10-26 only: one day
+          of bars, one daily close, hence empty `daily_returns` and no SPY market returns
+          (`bench_review.no_market_returns`). Box A's own bench review (`bench_hooks`) has the
+          same gap; in backtests it was hidden because the replay used its cumulative dataset.
+          Fix on A: a rolling multi-session raw-bars version written at EOD after
+          `resolve_raw_bars_dataset` (union of the last `bench_resim_window_days` sessions'
+          per-day versions, coverage start..end spanning them, validated and published like
+          the daily ones), and `resolve_bench_window` prefers the latest rolling version. B
+          pulls it like any other version, so the worker job needs no change. Until this is
+          in, weekly re-sims are plumbing tests only; do not install the timer on B or flip
+          `worker_results_enabled`
+    - [ ] After Finding 14: re-run the dry run, confirm `daily_returns` has one entry per
+          session and `market_returns` is populated, then install the timer
+          (`sudo infra/ops/install_worker_timers.sh` on B)
 - [ ] (b) Monthly research / strategy generation → bench
 - [ ] (c) Allocation/governance parameter changes, last (riskiest)
 
