@@ -205,10 +205,126 @@ only ran ~09:30–11:00 ET each day, so those days do not count. Causes and fixe
   `dataset_versions` row; returns/regime versions live in `feature_dataset_versions`, so B
   logged `no_registry_row` for each. Manifests now also carry `feature_dataset_version`
   and the pull registers it.
-- Still to do from the soak: container logs print only event names (the formatter drops
-  `extra` fields; they are in Loki), and Box A's root volume (79% of 29 GB) needs the
-  planned grow to 50 GB. **The soak clock restarts at the first full session after these
-  fixes are deployed.**
+- Box A's root volume was grown 29 → 50 GB online the same night (growpart + resize2fs).
+  All four fixes merged (PRs #150, #151) and deployed to A and B 2026-10-15 ~04:10 UTC.
+  **The soak clock restarts with the Thu 2026-10-15 session.**
+- Why there were **0 signals, 0 order intents, 0 fills** in the three days (A's DB, checked
+  2026-10-15): `portfolio_memberships` is empty, so the cycle runs the legacy single-strategy
+  path and picks one approved row by name (`macd_crossover_v1`, a moving-average crossover
+  with default parameters = 31-bar warm-up). With ~8 stored bars per symbol per day it never
+  warmed up before 11:00 ET. Not a strategy or governance fault. The nightly rebalance is a
+  no-op and auto-promotion logs `missing governance evidence` because the three approved
+  rows came from the dev dump without a research run behind them, and the nine candidates
+  have no bench evidence yet (that is 3.3(a)'s job).
+
+**1.6 Next session checklist (after the first clean day)**
+
+*Verify Thu 2026-10-15 was a clean soak day (Box A):*
+- [ ] Scheduler log: ticks at HH:M5:10 all session; no `ingestion_deadline_missed`, no
+      `Too many missing bars`, few or no `ingest_bars.late_bars`
+      (`docker compose logs scheduler --since 24h | grep -c trading_cycle_degraded` → 0)
+- [ ] Stored bars for the day ≈ 1,700 (22 symbols × 78), not ~170: count rows in
+      `data/bars/raw/dataset_version=raw_bars_<date>T133000Z_*/`
+- [ ] `audit_logs`: `BAR_LATE` near 0, `BAR_MISSING` small, no `RUN_FAILED`
+- [ ] `strategy_runtime_states.last_evaluated_bar_timestamp` = the last tick before close
+- [ ] `signals` has rows from ~12:05 ET on (31-bar warm-up met); `order_intents` / `fills`
+      non-empty if the crossover fired
+- [ ] EOD chain finished; S3 `datasets/published/<date>.json` lists the day's versions
+- [ ] Box B's 20:30 ET pull (`journalctl -u ratp-worker-pull.service`) registered the
+      returns/regime versions with no `no_registry_row` warnings
+- [ ] Grafana Trading Ops / Infra: memory flat on t4g.medium, no heartbeat gaps
+
+*Log formatter (small, do before anything else):*
+- [ ] `observability/logging.py`: append the record's `extra` fields to the console line
+      as `key=value` (JSON for dicts/lists), so `docker compose logs` shows strategy id,
+      warm-up bars, signal/order counts, late/missing symbols without opening Loki
+- [ ] Test: a log call with `extra={...}` renders the fields; a call without renders as today
+- [ ] Deploy and confirm one scheduler tick's lines on Box A read end to end
+
+*Seed an initial active set (exercise the portfolio path during the soak):*
+- [ ] Decide the members: proposal = the three paper-approved rows (`momentum_v1`,
+      `mean_reversion_v1`, `macd_crossover_v1`) as ACTIVE, equal budgets, no on-deck yet
+- [ ] Confirm `operator_settings.portfolio_mode_enabled` is on; keep
+      `portfolio_review_mode=off` and `worker_results_enabled=false` until 3.3(a)
+- [ ] Insert the `portfolio_memberships` rows + `portfolio_membership_transitions` audit
+      (via the governance CLI/API if one exists, else a reviewed SQL script committed to
+      `scripts/`); record who/why in the transition reason
+- [ ] Next session's log shows one `trading_cycle.active_strategy_resolved` per member and
+      `portfolio_signal_aggregator.summary` with three inputs; sleeve ledgers populate
+- [ ] Nightly rebalance stops logging `STRATEGY_ALLOCATION_REBALANCE_NOOP` once quality
+      scores exist (weekly interval guard still applies)
+- [ ] Note in this doc which path the soak days before the seed exercised (single-strategy)
+
+*Then start 3.3(a)* (see the Phase 3 checklist below for the sub-steps).
+
+**1.7 Findings 7–8 and the go-live-on-paper decision (Thu 2026-10-15 → Sat 2026-10-18)**
+
+Thu 2026-10-15 was the first day the order path ran: after the Alpaca data-host fix (PR #152)
+10 BUY signals became 10 `order_intents` with `ORDER_GENERATED` audit rows, but 0 orders reached
+Alpaca and 0 fills landed. Two causes:
+
+- **Finding 7: shadow mode was on.** `SHADOW_MODE_ENABLED` is unset in A's `.env` and defaults to
+  `true`, so the submission job stops after the risk check and never calls the broker. This is the
+  intended pre-paper gate, but nothing in this plan or `.env.example` said to turn it off.
+  `.env.example` now documents it (PR #153). **Decision (Sat 2026-10-18): trade paper for real from
+  Mon 2026-10-20.** Operator step on Box A (check the prompt reads `ip-172-31-42-34`), before 09:30 ET:
+  - [ ] add `SHADOW_MODE_ENABLED=false` to `~/Autonomous-Trading-Platform/.env`
+  - [ ] `docker compose up -d scheduler` (recreates the container so it picks up the new env;
+        the EC2 instance is not touched)
+  - [ ] confirm: `docker compose exec scheduler env | grep SHADOW_MODE` prints `false`
+- **Finding 8: a throttle rejection killed the whole tick.** `MAX_ORDERS_PER_BAR=2` on A; the
+  third BUY intent in the 15:00 ET bar raised `OrdersPerBarLimitExceededError`, which the
+  submission job re-raised, so the tick ended `cycle_failed` and the two allowed intents never
+  went out either. Fixed in PR #153 (merged + deployed to A Sat 2026-10-18): a throttled intent is
+  now audited `ORDER_REJECTED_BY_THROTTLE`, its tracked order goes REJECTED, and the tick carries on.
+- **Limits kept as they are on A** (decided 2026-10-18): 2 orders/bar, 20/hour, $100k gross
+  exposure, $25k per symbol, $100k daily notional. Intents size at ~$25k each, so the gross cap
+  binds after about four open positions; revisit once a week of fills exists.
+
+*Monday 2026-10-20 checklist (first real orders):*
+- [ ] First BUY signal → `order_intents` row → order visible in the Alpaca paper account →
+      `fills` row → position/cash ledgers move (this path has never run live)
+- [ ] `ORDER_REJECTED_BY_THROTTLE` audit rows are expected when >2 BUYs share a bar; no
+      `cycle_failed` ticks from it
+- [ ] EOD broker reconciliation agrees with Alpaca's positions
+- [ ] Fri 2026-10-16's session was never reviewed (shadow mode still on, so no orders expected);
+      the soak clock starts with the first full session that produces fills
+
+**1.7 Calendar of first-time triggers (verify each the morning after)**
+
+Box A has run cleanly since Thu 2026-10-22 (kill switch released; soak clock counts from
+there, target ten clean sessions = Wed 2026-11-04). From here on the risk moves from "does a
+tick work" to "does each scheduled thing fire the first time its date comes round". Every
+end-of-day step is recorded in `runtime_job_run_steps` (`completed` / `skipped` / `failed`,
+with `error_message`), so each line below is one query the next morning:
+
+```
+docker compose exec -T postgres psql -U ratp -d ratp -Atc "select step_name, status, started_at, duration_ms, error_message from runtime_job_run_steps where started_at > now() - interval '1 day' order by started_at"
+```
+
+Calendar pre-checked 2026-10-26 with `RealMarketCalendar` (exchange_calendars XNYS, zoneinfo
+America/New_York): 10/30 is the month's last session, 10/31 closed, 11/2 is the week's first
+session after the clock change, 11/26 closed, 11/27 and 12/24 close at 13:00 ET and report
+`is_early_close`, 12/31 is December's last session. The clock docstring still says early closes
+are not handled; `RealMarketCalendar.market_close` does take them from the exchange calendar.
+
+| When | Trigger | Rule in code | First time on A | Verify |
+|---|---|---|---|---|
+| every Monday | `weekly_portfolio_review` | `is_first_trading_day_of_week` | 10/20 | [x] fired 10/26, `completed` in 11 ms (no-op while `portfolio_review_mode=off`); 10/22–23 `skipped` as expected |
+| Fri 10/30 close | `monthly_universe_rotation` | `is_last_trading_day_of_month`, churn guard on, reason `scheduler_monthly` | never run on A (active universe is still the dev dump `proposed_2024-12-02`, 22 names) | [ ] step `completed`; a new `universe_rotation_records` row with `churn_pct` ≤ the guard; `universe_versions` has a new `active` row effective Mon 11/2; the EOD chain did not fail on it |
+| Sun 11/1 | daylight saving ends | all times via `America/New_York` zoneinfo | first clock change during the soak | [ ] Mon 11/2 ticks land at boundary + 10 s from 09:30 ET; EOD chain starts after 16:00 ET, not 15:00 or 17:00 |
+| Mon 11/2 | weekly review on the first session after a rotation | | | [ ] `completed`; review sees the new universe, no error |
+| Thu 11/26 | Thanksgiving, closed | `is_trading_day` false | first holiday | [ ] runner logs "next market open" and runs no ticks, no EOD chain, no `runtime_job_runs` row for 11/26; B's nightly pull finds nothing new and exits clean |
+| Fri 11/27 | early close 13:00 ET | `market_close` from the exchange calendar, `is_early_close` | first half-day | [ ] last tick ≤ 12:55 ET, EOD chain starts ~13:15 ET, `final_ingestion` has the half-day's bars only, no ticks between 13:00 and 16:00 |
+| Thu 12/24 | early close 13:00 ET | same | second half-day | [ ] same as 11/27 |
+| Thu 12/31 close | `monthly_universe_rotation` | | second rotation | [ ] same as 10/30; compare churn with the first |
+| weekly, after 3.3(a) deploy | B's `ratp-worker-bench-resim.timer` → `POST /worker/results` | timer (Sat, after the nightly pull) | not built | [ ] A lists the run `accepted` (`GET /worker/results`); Monday's review `worker_run_id` points at it |
+| nightly | backup → S3, B's dataset pull 20:30 ET | host timers | 10/12 | [x] running since 10/12 (`journalctl -u ratp-worker-pull.service`) |
+| Sun 03:00 ET | retention on A | host timer | 10/18 | [x] running |
+
+Anything that fires `failed` here resets the soak clock only if it needed a code fix; a
+`skipped` on the wrong day or a step that never appears means the cadence rule is wrong and
+is a finding.
 
 ### Phase 2: worker bootstrap (can overlap with A's soak)
 
