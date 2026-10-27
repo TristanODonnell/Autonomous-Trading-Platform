@@ -290,6 +290,42 @@ Alpaca and 0 fills landed. Two causes:
 - [ ] Fri 2026-10-16's session was never reviewed (shadow mode still on, so no orders expected);
       the soak clock starts with the first full session that produces fills
 
+**1.7 Calendar of first-time triggers (verify each the morning after)**
+
+Box A has run cleanly since Thu 2026-10-22 (kill switch released; soak clock counts from
+there, target ten clean sessions = Wed 2026-11-04). From here on the risk moves from "does a
+tick work" to "does each scheduled thing fire the first time its date comes round". Every
+end-of-day step is recorded in `runtime_job_run_steps` (`completed` / `skipped` / `failed`,
+with `error_message`), so each line below is one query the next morning:
+
+```
+docker compose exec -T postgres psql -U ratp -d ratp -Atc "select step_name, status, started_at, duration_ms, error_message from runtime_job_run_steps where started_at > now() - interval '1 day' order by started_at"
+```
+
+Calendar pre-checked 2026-10-26 with `RealMarketCalendar` (exchange_calendars XNYS, zoneinfo
+America/New_York): 10/30 is the month's last session, 10/31 closed, 11/2 is the week's first
+session after the clock change, 11/26 closed, 11/27 and 12/24 close at 13:00 ET and report
+`is_early_close`, 12/31 is December's last session. The clock docstring still says early closes
+are not handled; `RealMarketCalendar.market_close` does take them from the exchange calendar.
+
+| When | Trigger | Rule in code | First time on A | Verify |
+|---|---|---|---|---|
+| every Monday | `weekly_portfolio_review` | `is_first_trading_day_of_week` | 10/20 | [x] fired 10/26, `completed` in 11 ms (no-op while `portfolio_review_mode=off`); 10/22–23 `skipped` as expected |
+| Fri 10/30 close | `monthly_universe_rotation` | `is_last_trading_day_of_month`, churn guard on, reason `scheduler_monthly` | never run on A (active universe is still the dev dump `proposed_2024-12-02`, 22 names) | [ ] step `completed`; a new `universe_rotation_records` row with `churn_pct` ≤ the guard; `universe_versions` has a new `active` row effective Mon 11/2; the EOD chain did not fail on it |
+| Sun 11/1 | daylight saving ends | all times via `America/New_York` zoneinfo | first clock change during the soak | [ ] Mon 11/2 ticks land at boundary + 10 s from 09:30 ET; EOD chain starts after 16:00 ET, not 15:00 or 17:00 |
+| Mon 11/2 | weekly review on the first session after a rotation | | | [ ] `completed`; review sees the new universe, no error |
+| Thu 11/26 | Thanksgiving, closed | `is_trading_day` false | first holiday | [ ] runner logs "next market open" and runs no ticks, no EOD chain, no `runtime_job_runs` row for 11/26; B's nightly pull finds nothing new and exits clean |
+| Fri 11/27 | early close 13:00 ET | `market_close` from the exchange calendar, `is_early_close` | first half-day | [ ] last tick ≤ 12:55 ET, EOD chain starts ~13:15 ET, `final_ingestion` has the half-day's bars only, no ticks between 13:00 and 16:00 |
+| Thu 12/24 | early close 13:00 ET | same | second half-day | [ ] same as 11/27 |
+| Thu 12/31 close | `monthly_universe_rotation` | | second rotation | [ ] same as 10/30; compare churn with the first |
+| weekly, after 3.3(a) deploy | B's `ratp-worker-bench-resim.timer` → `POST /worker/results` | timer (Sat, after the nightly pull) | not built | [ ] A lists the run `accepted` (`GET /worker/results`); Monday's review `worker_run_id` points at it |
+| nightly | backup → S3, B's dataset pull 20:30 ET | host timers | 10/12 | [x] running since 10/12 (`journalctl -u ratp-worker-pull.service`) |
+| Sun 03:00 ET | retention on A | host timer | 10/18 | [x] running |
+
+Anything that fires `failed` here resets the soak clock only if it needed a code fix; a
+`skipped` on the wrong day or a step that never appears means the cadence rule is wrong and
+is a finding.
+
 ### Phase 2: worker bootstrap (can overlap with A's soak)
 
 **2.1 Box** (code done 2026-10-11 on `worker-bootstrap`; runbook `docs/operations/runbooks/worker-box.md`; box not provisioned yet)
