@@ -209,6 +209,14 @@ def _run_portfolio_review(
     }
 
 
+def _latest_rolling_raw_bars(session: Session) -> DatasetVersions | None:
+    from autonomous_trading_platform.application.services.rolling_raw_bars_service import (
+        RollingRawBarsService,
+    )
+
+    return RollingRawBarsService(session).latest_rolling()
+
+
 def market_daily_returns(
     *, session: Session, window: BenchWindow, simulation_runner: Any
 ) -> pd.Series | None:
@@ -283,8 +291,9 @@ def resolve_bench_window(
     """The shared re-sim window: trailing `trading_days` ending at as_of.
 
     Mirrors the research tick: the replay's cumulative dataset in backtests (clamped
-    to its coverage start), else the latest validated adjusted/raw dataset; symbols
-    from the survivorship-safe universe active at the window start.
+    to its coverage start), else the newest rolling multi-session raw-bars version
+    (Finding 14; clamped to its coverage start), else the latest validated raw
+    dataset; symbols from the survivorship-safe universe active at the window start.
     """
     from autonomous_trading_platform.application.services.platform_replay.research_hooks import (
         _resolve_research_universe_scope,
@@ -300,13 +309,17 @@ def resolve_bench_window(
         if row is not None and row.date_coverage_start is not None:
             start = max(start, row.date_coverage_start)
     else:
-        row = (
-            session.query(DatasetVersions)
-            .filter(DatasetVersions.dataset_name == "raw_bars")
-            .filter(DatasetVersions.validation_status == "validated")
-            .order_by(DatasetVersions.created_at.desc())
-            .first()
-        )
+        row = _latest_rolling_raw_bars(session)
+        if row is not None and row.date_coverage_start is not None:
+            start = max(start, row.date_coverage_start)
+        if row is None:
+            row = (
+                session.query(DatasetVersions)
+                .filter(DatasetVersions.dataset_name == "raw_bars")
+                .filter(DatasetVersions.validation_status == "validated")
+                .order_by(DatasetVersions.created_at.desc())
+                .first()
+            )
         if row is None:
             return None
         dataset_version = row.dataset_version_id

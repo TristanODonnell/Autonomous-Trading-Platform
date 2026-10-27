@@ -31,6 +31,9 @@ from autonomous_trading_platform.application.services.portfolio_review_service i
 from autonomous_trading_platform.application.services.portfolio_scorecard_service import (
     PortfolioScorecardService,
 )
+from autonomous_trading_platform.application.services.rolling_raw_bars_service import (
+    RollingRawBarsService,
+)
 from autonomous_trading_platform.application.services.worker_result_apply_service import (
     WorkerResultApplyService,
 )
@@ -323,6 +326,7 @@ class PaperTradingGoldenPathOrchestrator:
                 self._step_monthly_universe_rotation,
                 applies=lambda ctx: self._calendar.is_last_trading_day_of_month(ctx.trading_date),
             ),
+            ChainStep("rolling_raw_bars", self._step_rolling_raw_bars),
             ChainStep("operations_health", self._step_operations_health),
             ChainStep(
                 "publish_datasets",
@@ -480,6 +484,21 @@ class PaperTradingGoldenPathOrchestrator:
             now_utc=ctx.now_utc, trigger_source="scheduler", session=self.session
         )
         return dict(result) if isinstance(result, dict) else {"status": str(result)}
+
+    def _step_rolling_raw_bars(self, ctx: ChainContext) -> dict[str, Any]:
+        """One raw-bars version spanning the bench window (Finding 14), rebuilt from the
+        per-session versions whenever a new session has landed; published with the rest."""
+        from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
+            OperatorSettingsRepository,
+        )
+
+        settings = OperatorSettingsRepository(self.session).get_or_create_default()
+        sessions = int(getattr(settings, "bench_resim_window_days", 63) or 63)
+        result = RollingRawBarsService(self.session).build(
+            as_of=ctx.trading_date, sessions=sessions, now_utc=ctx.now_utc
+        )
+        self.session.flush()
+        return result.summary()
 
     def _step_operations_health(self, ctx: ChainContext) -> dict[str, Any]:
         result = snapshot_operations_at_timestamp(
