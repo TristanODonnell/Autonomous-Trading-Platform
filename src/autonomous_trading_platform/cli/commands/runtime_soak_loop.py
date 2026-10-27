@@ -115,6 +115,7 @@ class _PaperTradingSoakRunner:
         self._calendar = RealMarketCalendar()
         self._sleeper = InterruptibleSleeper()
         self._intraday_cycles = 0
+        self._intraday_attempts = 0
         self._eod_cycles = 0
         self._locks_acquired = 0
         self._locks_skipped = 0
@@ -124,7 +125,9 @@ class _PaperTradingSoakRunner:
         self._eod_completed_at: float | None = None
 
     def _run_intraday_tick(self) -> None:
-        tick_num = self._intraday_cycles + 1
+        # Numbered by attempt, not by success: a failed tick used to repeat its number.
+        self._intraday_attempts += 1
+        tick_num = self._intraday_attempts
         print(f"[{_ts()}] Running intraday tick #{tick_num}")
         acquired = self._lock.acquire(_INTRADAY_LOCK_KEY)
         if not acquired:

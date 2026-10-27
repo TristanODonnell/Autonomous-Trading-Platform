@@ -444,3 +444,44 @@ class TestPolicyPreview:
         assert payload["offline"] is True
         assert payload["policy_mode"] == "twap"
         assert payload["transformed_intent"]["symbol"] == "AAPL"
+
+
+def test_to_sor_fill_maps_the_fill_contract_like_the_reconciliation_job() -> None:
+    # Soak day 2: `reconcile-order` crashed with "'Fill' object has no attribute
+    # 'order_id'" on the first order that had filled, so the one fill the last tick of
+    # the day left unbooked could not be booked by hand.
+    from autonomous_trading_platform.contracts.common.enums import LiquiditySide, Side
+    from autonomous_trading_platform.contracts.trading.fill import Fill
+
+    fill = Fill(
+        fill_id="fill-1",
+        broker_order_id="935610d1",
+        intent_id=uuid4(),
+        run_id=uuid4(),
+        timestamp=datetime(2026, 10, 22, 19, 55, 24, tzinfo=UTC),
+        symbol="TSLA",
+        side=Side.BUY,
+        quantity=Decimal("36"),
+        price=Decimal("373.35"),
+        fees=Decimal("0"),
+        liquidity=LiquiditySide.TAKER,
+        venue="alpaca",
+        metadata={"source": "test"},
+    )
+
+    row = execution.to_sor_fill(fill)
+
+    assert row.fill_id == "fill-1"
+    assert row.broker_order_id == "935610d1"
+    assert row.intent_id == fill.intent_id
+    assert row.run_id == fill.run_id
+    assert row.timestamp == fill.timestamp
+    assert (row.symbol, row.side, row.quantity, row.price) == (
+        "TSLA",
+        Side.BUY,
+        Decimal("36"),
+        Decimal("373.35"),
+    )
+    assert row.liquidity is LiquiditySide.TAKER
+    assert row.venue == "alpaca"
+    assert row.meta == {"source": "test"}

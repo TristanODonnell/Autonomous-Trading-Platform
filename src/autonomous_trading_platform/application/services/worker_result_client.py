@@ -4,21 +4,27 @@
 role. Box A always answers a decision (accepted / rejected / duplicate) with HTTP 200;
 anything else (401/403, 422 validation, 5xx, network) raises ``WorkerResultPublishError``
 so a job's summary records the failure instead of silently moving on.
+
+``GET {base_url}/api/v1/worker/bench-inputs`` (plan 3.3a) fetches what A wants
+re-simulated this week; the same error rule applies.
 """
 
 from __future__ import annotations
 
 import os
+from datetime import date
 from typing import Any
 
 import requests
 
 from autonomous_trading_platform.contracts.governance.worker_results import (
+    BenchResimInputs,
     WorkerResultDecision,
     WorkerResultSubmission,
 )
 
 RESULTS_PATH = "/api/v1/worker/results"
+BENCH_INPUTS_PATH = "/api/v1/worker/bench-inputs"
 
 
 class WorkerResultPublishError(RuntimeError):
@@ -55,11 +61,41 @@ class WorkerResultClient:
             response = self._http.post(
                 f"{self._base_url}{RESULTS_PATH}",
                 json=submission.model_dump(mode="json"),
-                headers={"Authorization": f"Bearer {self._token}"},
+                headers=self._headers(),
                 timeout=self._timeout,
             )
         except requests.RequestException as exc:
             raise WorkerResultPublishError(f"Box A unreachable: {exc}") from exc
+        data = self._data(response, what=submission.run_id)
+        decision: WorkerResultDecision = WorkerResultDecision.model_validate(data)
+        return decision
+
+    def fetch_bench_inputs(
+        self, *, as_of: date | None = None, trading_days: int | None = None
+    ) -> BenchResimInputs:
+        params: dict[str, Any] = {}
+        if as_of is not None:
+            params["as_of"] = as_of.isoformat()
+        if trading_days is not None:
+            params["trading_days"] = trading_days
+        try:
+            response = self._http.get(
+                f"{self._base_url}{BENCH_INPUTS_PATH}",
+                params=params,
+                headers=self._headers(),
+                timeout=self._timeout,
+            )
+        except requests.RequestException as exc:
+            raise WorkerResultPublishError(f"Box A unreachable: {exc}") from exc
+        data = self._data(response, what="bench-inputs")
+        inputs: BenchResimInputs = BenchResimInputs.model_validate(data)
+        return inputs
+
+    def _headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._token}"}
+
+    @staticmethod
+    def _data(response: Any, *, what: str) -> Any:
         body: Any
         try:
             body = response.json()
@@ -67,10 +103,8 @@ class WorkerResultClient:
             body = response.text
         if response.status_code != 200:
             raise WorkerResultPublishError(
-                f"Box A answered {response.status_code} for {submission.run_id}",
+                f"Box A answered {response.status_code} for {what}",
                 status_code=response.status_code,
                 body=body,
             )
-        data = body.get("data", body) if isinstance(body, dict) else body
-        decision: WorkerResultDecision = WorkerResultDecision.model_validate(data)
-        return decision
+        return body.get("data", body) if isinstance(body, dict) else body

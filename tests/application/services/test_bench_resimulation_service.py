@@ -244,3 +244,54 @@ def test_run_id_type_is_preserved(db_session: Session) -> None:
     )["s1"]
 
     assert isinstance(outcome.run_id, UUID)
+
+
+# ---------------------------------------------------------------- specs (3.3a)
+
+
+def test_resimulate_specs_runs_supplied_configs_without_strategy_configs_rows(
+    db_session: Session,
+) -> None:
+    from autonomous_trading_platform.application.services.bench_resimulation_service import (
+        BenchResimSpec,
+    )
+
+    runner = _FakeRunner(
+        results={
+            "macd_crossover_v1": _result([100.0, 101.0, 103.0]),
+            "momentum_v1": RuntimeError("boom"),
+        },
+        requests=[],
+    )
+    service = BenchResimulationService(db_session, runner, initial_cash=50_000.0, random_seed=7)
+
+    outcomes = service.resimulate_specs(
+        [
+            BenchResimSpec("macd_crossover_v1", "moving_average_crossover", {"long_window": 30}),
+            BenchResimSpec("momentum_v1", "momentum", {"lookback": 5}),
+        ],
+        window=_WINDOW,
+        review_id="bench_resims_2026-10-23",
+    )
+
+    assert db_session.get(StrategyConfigs, "macd_crossover_v1") is None
+    ok = outcomes["macd_crossover_v1"]
+    assert ok.ok and ok.strategy_type == "moving_average_crossover"
+    assert ok.trade_count == 12 and ok.score is not None
+    failed = outcomes["momentum_v1"]
+    assert not failed.ok and failed.error == "boom"
+
+    by_id = {r.strategy_id: r for r in runner.requests}
+    request = by_id["macd_crossover_v1"]
+    assert request.strategy_config == {
+        "type": "moving_average_crossover",
+        "strategy_id": "macd_crossover_v1",
+        "parameters": {"long_window": 30},
+    }
+    assert request.initial_cash == 50_000.0 and request.random_seed == 7
+    assert request.dataset_version == "raw_bars_test"
+    assert request.start_date == _WINDOW.start_date and request.end_date == _WINDOW.end_date
+    assert request.experiment_id == BenchResimulationService.experiment_id(
+        "bench_resims_2026-10-23"
+    )
+    assert request.window_role == "bench" and request.stage_name == "bench_resim"

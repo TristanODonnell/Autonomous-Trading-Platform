@@ -274,6 +274,11 @@ def run_portfolio_evaluation(
                 now=now_utc,
                 recent_closes=recent_closes,
                 skip_order_limit_breaches=True,
+                on_order_rejected=order_limit_rejection_auditor(
+                    audit_logger=deps.audit_logger,
+                    run_id=str(manifest.run_id),
+                    component="scheduler.jobs.portfolio_evaluation",
+                ),
                 # Equal split of the sleeve across the traded universe, the rule research
                 # re-sims use (execution/services/sleeve_sizing.py).
                 symbol_count=manifest.universe_member_count,
@@ -416,6 +421,53 @@ def run_portfolio_evaluation(
         ),
         intents,
     )
+
+
+def order_limit_rejection_auditor(*, audit_logger, run_id: str, component: str):
+    """Callback for generate_order_intents(on_order_rejected=...): an intent dropped at
+    evaluation for breaching a dollar limit leaves an ORDER_REJECTED_BY_RISK_LIMIT audit
+    row (the same event the submission job writes), so the console and the audit trail
+    show why a signal produced no order."""
+
+    def _audit(intent: OrderIntent, exc: Exception) -> None:
+        logger.warning(
+            "evaluation.intent_rejected_by_risk_limit",
+            extra={
+                "run_id": run_id,
+                "strategy_id": intent.strategy_id,
+                "symbol": intent.symbol,
+                "side": intent.side.value,
+                "qty": str(intent.qty),
+                "error": str(exc),
+            },
+        )
+        if not hasattr(audit_logger, "record_event"):
+            return
+        try:
+            audit_logger.record_event(
+                run_id=run_id,
+                event_type="ORDER_REJECTED_BY_RISK_LIMIT",
+                component=component,
+                message=f"Order intent for {intent.symbol} rejected by risk limit",
+                metadata={
+                    "intent_id": str(intent.intent_id),
+                    "symbol": intent.symbol,
+                    "strategy_id": intent.strategy_id,
+                    "side": intent.side.value,
+                    "qty": str(intent.qty),
+                    "bar_timestamp": intent.bar_timestamp.isoformat(),
+                    "stage": "evaluation",
+                    "error": str(exc),
+                    "severity": "warning",
+                },
+            )
+        except Exception:
+            logger.exception(
+                "evaluation.risk_limit_rejection_not_audited",
+                extra={"run_id": run_id, "symbol": intent.symbol},
+            )
+
+    return _audit
 
 
 def _cap_buys_to_budget(

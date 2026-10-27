@@ -309,7 +309,8 @@ def _shadow_trade(
     )
     outcome.intent_count = len(generated)
 
-    # Throttle, per strategy; like real submission, a rejection stops the rest.
+    # Throttle, per strategy. Real submission skips a rejected intent and goes on; the
+    # shadow stops at the first rejection, which for the per-bar limit comes to the same.
     throttle = OrderThrottleService(deps.settings, StubOrderActivityReader())
     allowed: list[OrderIntent] = []
     for index, intent in enumerate(generated):

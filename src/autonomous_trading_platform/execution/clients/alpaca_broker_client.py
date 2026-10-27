@@ -8,11 +8,14 @@ import httpx
 from opentelemetry.trace import StatusCode
 
 from autonomous_trading_platform.config.broker_config_validator import (
+    ALPACA_DATA_BASE_URL,
     ALPACA_LIVE_BASE_URL,
     ALPACA_PAPER_BASE_URL,
 )
 from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.execution.errors import BrokerOrderRejectedError
 from autonomous_trading_platform.observability.enums import SpanTimespan
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metric_labels import broker_labels
 from autonomous_trading_platform.observability.metrics import (
     ratp_broker_api_failures_total,
@@ -23,12 +26,24 @@ from autonomous_trading_platform.observability.tracing import start_span
 
 COMPONENT = "execution.broker_client"
 
+logger = get_logger(__name__)
+
+# 4xx statuses that mean "try again later", not "this order is refused".
+_RETRYABLE_CLIENT_STATUSES = frozenset({408, 429})
+_REJECTION_BODY_LIMIT = 500
+
 
 class AlpacaBrokerClient:
     def __init__(self, settings: Settings) -> None:
         self.api_key = settings.broker_api_key
         self.secret_key = settings.broker_api_secret
         self.base_url = settings.alpaca_base_url
+        # Market data is served from a different host than trading. Test doubles often pass a
+        # bare namespace as settings, hence the defaults.
+        self.data_base_url = str(
+            getattr(settings, "alpaca_data_base_url", ALPACA_DATA_BASE_URL)
+        ).rstrip("/")
+        self.data_feed = str(getattr(settings, "alpaca_data_feed", "iex"))
 
         if not self.api_key or not self.secret_key:
             raise ValueError("Missing Alpaca credentials for the configured trading environment.")
@@ -50,10 +65,34 @@ class AlpacaBrokerClient:
     # ------------------------------------------------------------------
 
     def submit_order(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return cast(
-            dict[str, Any],
-            self._request("POST", "/v2/orders", endpoint_tag="orders.submit", json=payload),
+        response = self._raw_request(
+            "POST", "/v2/orders", endpoint_tag="orders.submit", json=payload
         )
+        status = response.status_code
+        if 400 <= status < 500 and status not in _RETRYABLE_CLIENT_STATUSES:
+            # The broker understood the order and refused it (insufficient buying power,
+            # nothing to sell, bad parameters). Surface the body: it is the only place
+            # the reason is stated, and raise_for_status() would drop it.
+            body = response.text[:_REJECTION_BODY_LIMIT]
+            symbol = payload.get("symbol")
+            logger.warning(
+                "alpaca_broker_client.order_rejected",
+                extra={
+                    "symbol": symbol,
+                    "side": payload.get("side"),
+                    "qty": payload.get("qty"),
+                    "status_code": status,
+                    "body": body,
+                },
+            )
+            raise BrokerOrderRejectedError(
+                f"Broker rejected order for {symbol}: HTTP {status} {body}",
+                status_code=status,
+                body=body,
+                symbol=str(symbol) if symbol is not None else None,
+            )
+        response.raise_for_status()
+        return cast(dict[str, Any], response.json())
 
     def get_order_by_id(self, order_id: str) -> dict[str, Any]:
         return cast(
@@ -158,17 +197,16 @@ class AlpacaBrokerClient:
         Uses the mid-price (ask + bid / 2) for sizing — callers should
         extract via get_mid_prices() helper below.
 
-        Note: uses the /v2/stocks/quotes/latest endpoint which requires
-        the data base_url (data.alpaca.markets), not the trading base_url.
-        Callers must ensure settings.alpaca_data_base_url is configured.
+        Served by the market-data host (``data_base_url``), not the trading host.
         """
-        params = {"symbols": ",".join(symbols), "feed": "iex"}
+        params = {"symbols": ",".join(symbols), "feed": self.data_feed}
         data = cast(
             dict[str, Any],
             self._request(
                 "GET",
                 "/v2/stocks/quotes/latest",
                 endpoint_tag="market_data.latest_quotes",
+                data_api=True,
                 params=params,
             ),
         )
@@ -182,14 +220,17 @@ class AlpacaBrokerClient:
             p   — trade price (float)
             s   — trade size
             t   — timestamp
+
+        Served by the market-data host (``data_base_url``), not the trading host.
         """
-        params = {"symbols": ",".join(symbols), "feed": "iex"}
+        params = {"symbols": ",".join(symbols), "feed": self.data_feed}
         data = cast(
             dict[str, Any],
             self._request(
                 "GET",
                 "/v2/stocks/trades/latest",
                 endpoint_tag="market_data.latest_trades",
+                data_api=True,
                 params=params,
             ),
         )
@@ -201,9 +242,12 @@ class AlpacaBrokerClient:
         path: str,
         *,
         endpoint_tag: str,
+        data_api: bool = False,
         **kwargs: Any,
     ) -> Any:
-        response = self._raw_request(method, path, endpoint_tag=endpoint_tag, **kwargs)
+        response = self._raw_request(
+            method, path, endpoint_tag=endpoint_tag, data_api=data_api, **kwargs
+        )
         response.raise_for_status()
         if response.status_code == 204:
             return None
@@ -215,8 +259,14 @@ class AlpacaBrokerClient:
         path: str,
         *,
         endpoint_tag: str,
+        data_api: bool = False,
         **kwargs: Any,
     ) -> httpx.Response:
+        """Send one request; ``data_api=True`` routes it to the market-data host.
+
+        An absolute URL makes httpx ignore the client's trading ``base_url``.
+        """
+        url = f"{self.data_base_url}{path}" if data_api else path
         request_id = f"ratp-{uuid4()}"
         headers = dict(kwargs.pop("headers", {}) or {})
         headers["X-RATP-Request-ID"] = request_id
@@ -238,7 +288,7 @@ class AlpacaBrokerClient:
             start = perf_counter()
             ratp_broker_api_requests_total.add(1, {**base_labels, "status": "started"})
             try:
-                response = self.client.request(method, path, headers=headers, **kwargs)
+                response = self.client.request(method, url, headers=headers, **kwargs)
                 latency = perf_counter() - start
                 status = str(response.status_code)
                 response_labels = {**base_labels, "status": status}

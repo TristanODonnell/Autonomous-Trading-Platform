@@ -4,6 +4,7 @@ from decimal import Decimal
 from dotenv import load_dotenv
 
 from autonomous_trading_platform.config.broker_config_validator import (
+    ALPACA_DATA_BASE_URL,
     expected_alpaca_base_url,
     validate_alpaca_base_url,
     validate_broker_environment,
@@ -42,6 +43,11 @@ class Settings:
         # plan cannot query for the last 15 minutes ("subscription does not permit querying
         # recent SIP data"), so every intraday and end-of-day ingestion fails. "iex" is free.
         self.alpaca_data_feed = (os.getenv("ALPACA_DATA_FEED") or "iex").strip().lower()
+        # Alpaca market-data host. Latest trades/quotes live here, not on the trading host;
+        # overridable only for tests/mocks.
+        self.alpaca_data_base_url = (
+            os.getenv("ALPACA_DATA_BASE_URL") or ALPACA_DATA_BASE_URL
+        ).rstrip("/")
 
         self.universe_rebalance_cadence = os.getenv(
             "UNIVERSE_REBALANCE_CADENCE",

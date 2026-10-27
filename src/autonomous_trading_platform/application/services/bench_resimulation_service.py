@@ -49,6 +49,15 @@ class BenchWindow:
     end_date: date
 
 
+@dataclass(frozen=True)
+class BenchResimSpec:
+    """A strategy to re-simulate, config in hand (the worker gets these from Box A)."""
+
+    strategy_id: str
+    strategy_type: str
+    parameters: dict[str, Any] = field(default_factory=dict)
+
+
 @dataclass
 class ResimOutcome:
     strategy_id: str
@@ -98,21 +107,42 @@ class BenchResimulationService:
             for sid in strategy_ids
         }
 
+    def resimulate_specs(
+        self, specs: list[BenchResimSpec], *, window: BenchWindow, review_id: str
+    ) -> dict[str, ResimOutcome]:
+        """Same as ``resimulate`` for configs supplied by the caller (plan 3.3a: the worker
+        re-simulates Box A's bench without holding A's strategy_configs rows)."""
+        return {
+            spec.strategy_id: self._run_spec(spec, window=window, review_id=review_id)
+            for spec in specs
+        }
+
     def _resimulate_one(
         self, strategy_id: str, *, window: BenchWindow, review_id: str
     ) -> ResimOutcome:
         config = self._session.get(StrategyConfigs, strategy_id)
         if config is None or not config.strategy_type:
             return ResimOutcome(strategy_id, None, error="missing_strategy_config")
-        outcome = ResimOutcome(strategy_id, config.strategy_type)
+        spec = BenchResimSpec(
+            strategy_id=strategy_id,
+            strategy_type=config.strategy_type,
+            parameters=stored_config_parameters(config.config_json),
+        )
+        return self._run_spec(spec, window=window, review_id=review_id)
+
+    def _run_spec(
+        self, spec: BenchResimSpec, *, window: BenchWindow, review_id: str
+    ) -> ResimOutcome:
+        strategy_id = spec.strategy_id
+        outcome = ResimOutcome(strategy_id, spec.strategy_type)
         try:
             result = self._runner.run(
                 SimulationRunRequest(
                     strategy_id=strategy_id,
                     strategy_config={
-                        "type": config.strategy_type,
+                        "type": spec.strategy_type,
                         "strategy_id": strategy_id,
-                        "parameters": stored_config_parameters(config.config_json),
+                        "parameters": dict(spec.parameters),
                     },
                     dataset_version=window.dataset_version,
                     random_seed=self._seed,

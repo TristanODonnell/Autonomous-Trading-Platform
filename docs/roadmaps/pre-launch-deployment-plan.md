@@ -359,16 +359,20 @@ is a finding.
 
 **3.3 Switch automation on in order of risk, one at a time with a few cycles between**
 - [ ] (a) Weekly bench re-sims + scorecards from B, plus the weekly review DAG on A
-  - [ ] Read endpoint on A: bench membership + each strategy's config (and the active set),
-        `worker`-role readable, so B knows what to re-simulate
-  - [ ] Worker job on B: pull that list, re-sim each over a recent window on the pulled
-        datasets (`--as-of` pinned), build a typed `BenchResimsPayload`, post it with
-        `atp worker publish-result`; summary + artifact to S3 under `artifacts/worker/`
-  - [ ] Weekly timer on B (after the nightly pull, before A's weekly review)
-  - [ ] On A: flip `worker_results_enabled=true`; confirm `worker_result_submissions`
-        accepts (not `stale_dataset` / `git_sha_mismatch`)
-  - [ ] `portfolio_review_mode=advisory`; read two or three weekly reviews
-  - [ ] `portfolio_review_mode=auto`; watch the first automatic swap end to end
+  - [x] Read endpoint on A: `GET /api/v1/worker/bench-inputs` (`worker` role) returns the
+        ACTIVE / ON_DECK / BENCH strategies with their stored parameters, the shared window
+        (`resolve_bench_window`, `bench_resim_window_days`), dataset version, symbols and A's
+        git SHA (`BenchResimInputsService`, `BenchResimInputs` contract)
+  - [x] Worker job: `atp worker bench-resim [--as-of] [--run-id] [--no-pull] [--no-publish]`
+        fetches the inputs, pulls the datasets, re-simulates every strategy
+        (`BenchResimulationService.resimulate_specs`, same sizing/seed as A's own review),
+        writes the `bench_resims` payload and posts it (exit 0 accepted, 2 rejected)
+  - [ ] Seed `portfolio_memberships` on A (the active set + MACD on the bench); until then
+        the endpoint returns no strategies and the job exits with `nothing_to_do`
+  - [ ] Dry run on B: `atp worker bench-resim --no-publish`, compare against A's own
+        bench review numbers for the same window
+  - [ ] Weekly timer on B (`ratp-worker-bench-resim.timer`, Sat after the nightly pull)
+  - [ ] Flip `worker_results_enabled`, then `portfolio_review_mode=advisory`, then `auto`
 - [ ] (b) Monthly research / strategy generation → bench
 - [ ] (c) Allocation/governance parameter changes, last (riskiest)
 

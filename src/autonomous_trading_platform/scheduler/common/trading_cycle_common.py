@@ -525,6 +525,11 @@ def build_trading_cycle_dependencies(
         broker_client=broker_client,
     )
 
+    # The ledger snapshot is one tick behind the broker (last tick's fill is booked
+    # by this tick's reconciliation, after the risk check), so check the caps
+    # against the broker's live positions, as the strategy evaluation already does.
+    risk_state_reader.refresh_from_broker(execution_context.broker_client)
+
     return TradingCycleDependencies(
         session=session,
         settings=settings,
