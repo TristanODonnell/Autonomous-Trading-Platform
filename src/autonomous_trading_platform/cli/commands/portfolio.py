@@ -23,8 +23,12 @@ from autonomous_trading_platform.application.services.portfolio_summary_service 
 from autonomous_trading_platform.application.services.strategy_allocation_service import (
     StrategyAllocationService,
 )
-from autonomous_trading_platform.cli.formatters import print_error, print_json
+from autonomous_trading_platform.cli.formatters import print_error, print_header, print_json
+from autonomous_trading_platform.config.enums import TradingEnvironment
 from autonomous_trading_platform.config.settings import Settings
+from autonomous_trading_platform.contracts.governance.portfolio_membership import (
+    MembershipStatus,
+)
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
 from autonomous_trading_platform.portfolio.simulation_allocation_provider import (
@@ -179,6 +183,49 @@ def register(subparsers) -> None:
     risk = portfolio_subparsers.add_parser("risk", help="Show dashboard portfolio risk.")
     risk.add_argument("--json", action="store_true")
     risk.set_defaults(func=handle_risk)
+
+    membership = portfolio_subparsers.add_parser(
+        "membership",
+        help="Portfolio memberships (active set, on-deck, bench): list, refresh, set.",
+    )
+    membership_subparsers = membership.add_subparsers(dest="membership_command", required=True)
+    membership_list = membership_subparsers.add_parser(
+        "list", help="Show every strategy's membership status."
+    )
+    membership_list.add_argument("--json", action="store_true")
+    membership_list.set_defaults(func=handle_membership_list)
+
+    membership_refresh = membership_subparsers.add_parser(
+        "refresh",
+        help=(
+            "Recompute the active set and on-deck tier from governance "
+            "(ActivePortfolioService.refresh); records every change."
+        ),
+    )
+    membership_refresh.add_argument("--updated-by", required=True, help="Actor identifier.")
+    membership_refresh.add_argument(
+        "--environment",
+        choices=["paper", "live"],
+        default="paper",
+        help="Which approvals count as eligible (default: paper).",
+    )
+    _add_membership_dry_run_enforce(membership_refresh)
+    membership_refresh.add_argument("--json", action="store_true")
+    membership_refresh.set_defaults(func=handle_membership_refresh)
+
+    membership_set = membership_subparsers.add_parser(
+        "set",
+        help="Set one strategy's membership status by hand (e.g. put a candidate on the bench).",
+    )
+    membership_set.add_argument("--strategy-id", required=True)
+    membership_set.add_argument(
+        "--status", required=True, choices=[status.value for status in MembershipStatus]
+    )
+    membership_set.add_argument("--reason", required=True)
+    membership_set.add_argument("--updated-by", required=True, help="Actor identifier.")
+    _add_membership_dry_run_enforce(membership_set)
+    membership_set.add_argument("--json", action="store_true")
+    membership_set.set_defaults(func=handle_membership_set)
 
     cash = portfolio_subparsers.add_parser("cash", help="Inspect cash snapshots.")
     cash_subparsers = cash.add_subparsers(dest="cash_command", required=True)
@@ -502,6 +549,156 @@ def handle_risk(args: argparse.Namespace) -> int:
         return 0
     finally:
         session.close()
+
+
+def _add_membership_dry_run_enforce(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--dry-run", action="store_true", help="Preview; write nothing.")
+    group.add_argument("--enforce", action="store_true", help="Apply the change.")
+
+
+def _membership_payload(row: Any) -> dict[str, Any]:
+    return {
+        "strategy_id": row.strategy_id,
+        "status": row.status,
+        "since": row.since.isoformat() if row.since else None,
+        "reason": row.reason,
+        "quality_score": row.quality_score,
+        "updated_by": row.updated_by,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def _print_membership_rows(rows: list[dict[str, Any]]) -> None:
+    print_header("Portfolio memberships")
+    if not rows:
+        print("  (none)")
+        return
+    width = max(len(r["strategy_id"]) for r in rows)
+    for r in rows:
+        score = "" if r["quality_score"] is None else f"  score={r['quality_score']:.3f}"
+        print(
+            f"  {r['strategy_id']:<{width}}  {r['status']:<13}  since {r['since'] or '-'}"
+            f"{score}  by {r['updated_by']}  {r['reason'] or ''}"
+        )
+
+
+def handle_membership_list(args: argparse.Namespace) -> int:
+    from autonomous_trading_platform.storage.sor.repositories.core.portfolio_membership_repository import (
+        PortfolioMembershipRepository,
+    )
+
+    session = get_session()
+    try:
+        rows = [_membership_payload(r) for r in PortfolioMembershipRepository(session).get_all()]
+    finally:
+        session.close()
+    if getattr(args, "json", False):
+        print_json({"count": len(rows), "memberships": rows})
+    else:
+        _print_membership_rows(rows)
+    return 0
+
+
+def handle_membership_refresh(args: argparse.Namespace) -> int:
+    from autonomous_trading_platform.application.services.active_portfolio_service import (
+        ActivePortfolioService,
+    )
+    from autonomous_trading_platform.storage.sor.repositories.core.portfolio_membership_repository import (
+        PortfolioMembershipRepository,
+    )
+
+    if not args.dry_run and not args.enforce:
+        print_error("Specify --dry-run to preview or --enforce to apply the refresh.")
+        return 1
+    environment = TradingEnvironment(args.environment)
+    session = get_session()
+    try:
+        service = ActivePortfolioService(session, trading_environment=environment)
+        if args.dry_run:
+            payload: dict[str, Any] = {
+                "dry_run": True,
+                "environment": environment.value,
+                "eligible": service.eligible_strategy_ids(),
+                "on_deck_eligible": service.on_deck_eligible_strategy_ids(),
+                "current": [
+                    _membership_payload(r) for r in PortfolioMembershipRepository(session).get_all()
+                ],
+                "status": "preview_only",
+            }
+        else:
+            result = service.refresh(now=datetime.now(UTC), actor=args.updated_by)
+            session.commit()
+            payload = {**result.model_dump(mode="json"), "status": "refreshed"}
+    except Exception as exc:
+        session.rollback()
+        print_error(f"Membership refresh failed: {exc}")
+        return 1
+    finally:
+        session.close()
+    if getattr(args, "json", False):
+        print_json(payload)
+    else:
+        print_header(
+            "Membership refresh (dry-run)" if args.dry_run else "Membership refresh applied"
+        )
+        for key in ("active", "added", "removed", "winding_down", "on_deck", "bench", "eligible"):
+            if key in payload:
+                print(f"  {key:<14} {payload[key]}")
+        if args.dry_run:
+            _print_membership_rows(payload["current"])
+    return 0
+
+
+def handle_membership_set(args: argparse.Namespace) -> int:
+    from autonomous_trading_platform.application.services.active_portfolio_service import (
+        ActivePortfolioService,
+    )
+    from autonomous_trading_platform.storage.sor.repositories.core.portfolio_membership_repository import (
+        PortfolioMembershipRepository,
+    )
+
+    if not args.dry_run and not args.enforce:
+        print_error("Specify --dry-run to preview or --enforce to apply the change.")
+        return 1
+    status = MembershipStatus(args.status)
+    session = get_session()
+    try:
+        existing = PortfolioMembershipRepository(session).get(args.strategy_id)
+        from_status = existing.status if existing is not None else None
+        if args.dry_run:
+            payload: dict[str, Any] = {
+                "dry_run": True,
+                "strategy_id": args.strategy_id,
+                "from_status": from_status,
+                "to_status": status.value,
+                "reason": args.reason,
+                "updated_by": args.updated_by,
+                "status": "preview_only",
+            }
+        else:
+            transition = ActivePortfolioService(session).set_status(
+                args.strategy_id,
+                status,
+                args.reason,
+                actor=args.updated_by,
+                now=datetime.now(UTC),
+            )
+            session.commit()
+            payload = {**transition.model_dump(mode="json"), "status": "transitioned"}
+    except Exception as exc:
+        session.rollback()
+        print_error(f"Membership change failed: {exc}")
+        return 1
+    finally:
+        session.close()
+    if getattr(args, "json", False):
+        print_json(payload)
+    else:
+        print_header("Membership change (dry-run)" if args.dry_run else "Membership change applied")
+        for key, value in payload.items():
+            print(f"  {key:<16} {value}")
+    return 0
 
 
 def handle_cash_latest(args: argparse.Namespace) -> int:

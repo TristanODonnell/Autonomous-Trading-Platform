@@ -370,7 +370,8 @@ is a finding.
   - [x] Seed `portfolio_memberships` on A (done 2026-10-27 through `ActivePortfolioService`:
         `mean_reversion_v1` + `momentum_v1` ACTIVE, `macd_crossover_v1` BENCH by operator,
         `bench_management_enabled=true`; trading untouched while `portfolio_mode_enabled=false`).
-        Owed: an `atp portfolio membership list|refresh|set` CLI so this is repeatable
+        Repeatable since `atp portfolio membership list | refresh --updated-by X --enforce |
+        set --strategy-id S --status bench --reason R --updated-by X --enforce` (dry-run previews)
   - [x] Dry run on B 2026-10-27: `worker bench-resim --as-of 2026-10-26 --no-publish` → 19 s,
         3/3 strategies, git SHAs match A. Window 07-29..10-26 but A only holds 5-min bars
         since mid-October, so the numbers are thin until ~mid-January (momentum_v1: 249
