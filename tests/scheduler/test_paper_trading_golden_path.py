@@ -710,6 +710,7 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
         "allocation_rebalance",
         "weekly_portfolio_review",
         "monthly_universe_rotation",
+        "rolling_raw_bars",
         "operations_health",
         "publish_datasets",
     ]

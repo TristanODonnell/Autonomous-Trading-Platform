@@ -396,7 +396,20 @@ is a finding.
           the daily ones), and `resolve_bench_window` prefers the latest rolling version. B
           pulls it like any other version, so the worker job needs no change. Until this is
           in, weekly re-sims are plumbing tests only; do not install the timer on B or flip
-          `worker_results_enabled`
+          `worker_results_enabled`.
+          **Fix (branch `fix/rolling-raw-bars`):** `RollingRawBarsService` reads the newest
+          `bench_resim_window_days` per-session versions back through the bounded reader,
+          merges them (last `bar_id` wins, as the daily chunk writer does), writes one new
+          immutable version with per-file checksum rows, and registers it `validated` with
+          `metadata_json.dataset_lifecycle = "rolling_bench_window"` and
+          `source_versions`. New EOD step `rolling_raw_bars` (after the monthly rotation,
+          before `operations_health`; no-op when the newest rolling version already has the
+          same sources). `resolve_bench_window` prefers the newest rolling version and
+          clamps the window start to its coverage, so until A holds ~15 calendar days of
+          sessions the window is reported as `insufficient_data_for_window` rather than
+          re-simulated on one day. Follow-up: a rolling version is written every session
+          (~63 sessions of 5-minute bars each); `retention.sh` leaves Parquet alone, so
+          add pruning of rolling versions older than ~14 days before disk becomes a topic
     - [ ] After Finding 14: re-run the dry run, confirm `daily_returns` has one entry per
           session and `market_returns` is populated, then install the timer
           (`sudo infra/ops/install_worker_timers.sh` on B)
