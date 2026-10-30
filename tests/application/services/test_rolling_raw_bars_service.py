@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
 import pyarrow as pa
 import pytest
+from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
+import autonomous_trading_platform.application.services.rolling_raw_bars_service as rolling_module
 from autonomous_trading_platform.application.services.platform_replay import (
     bench_hooks,
     research_hooks,
@@ -253,3 +256,86 @@ def test_bench_window_prefers_the_rolling_version(
     assert window.start_date == days[0]
     assert window.end_date == as_of
     assert window.symbols == ["AAPL", "MSFT"]
+
+
+# ---------------------------------------------------------------------------------------
+# Finding 15: on Postgres ``checksums.dataset_version`` is a foreign key to
+# ``dataset_versions`` (migration 77afde93f3e2). SQLite does not enforce it, so the
+# constraint is emulated here at flush time.
+
+
+class _ForeignKeyViolation(Exception):
+    pass
+
+
+@pytest.fixture
+def enforce_checksum_foreign_key(db_session: Session) -> Generator[None, None, None]:
+    def _check(session: Session, flush_context: object, instances: object) -> None:
+        pending = [obj for obj in session.new if isinstance(obj, Checksums)]
+        if not pending:
+            return
+        with session.no_autoflush:
+            registered = {
+                row[0] for row in session.execute(select(DatasetVersions.dataset_version_id)).all()
+            }
+        missing = sorted({c.dataset_version for c in pending} - registered)
+        if missing:
+            raise _ForeignKeyViolation(
+                f"checksums reference unregistered dataset_versions: {missing}"
+            )
+
+    event.listen(db_session, "before_flush", _check)
+    try:
+        yield
+    finally:
+        event.remove(db_session, "before_flush", _check)
+
+
+def test_version_row_is_committed_before_its_checksum_rows(
+    db_session: Session, base_path: Path, enforce_checksum_foreign_key: None
+) -> None:
+    d1, d2 = date(2026, 10, 22), date(2026, 10, 23)
+    seed_daily_version(db_session, base_path, day=d1, tables=[_bars("AAPL", d1, [1.0, 2.0])])
+    seed_daily_version(db_session, base_path, day=d2, tables=[_bars("AAPL", d2, [3.0])])
+
+    result = RollingRawBarsService(db_session, base_path=base_path).build(
+        as_of=d2, sessions=2, now_utc=_NOW
+    )
+
+    assert result.status == "created"
+    row = db_session.get(DatasetVersions, result.dataset_version_id)
+    assert row is not None and row.checksum
+    checksum_rows = (
+        db_session.query(Checksums)
+        .filter(Checksums.dataset_version == result.dataset_version_id)
+        .all()
+    )
+    assert checksum_rows and all(r.checksum_value for r in checksum_rows)
+
+
+def test_registration_failure_removes_the_written_version(
+    db_session: Session, base_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    d1 = date(2026, 10, 22)
+    seed_daily_version(db_session, base_path, day=d1, tables=[_bars("AAPL", d1, [1.0, 2.0])])
+    before = {p.name for p in (base_path / "bars" / "raw").iterdir()}
+
+    def _boom(self: object, dataset_version: object) -> None:
+        raise RuntimeError("registration failed")
+
+    monkeypatch.setattr(rolling_module.DatasetRegistrationService, "save", _boom)
+
+    with pytest.raises(RuntimeError, match="registration failed"):
+        RollingRawBarsService(db_session, base_path=base_path).build(
+            as_of=d1, sessions=1, now_utc=_NOW
+        )
+
+    # No orphan directory for the publish step to ship, and nothing registered.
+    assert {p.name for p in (base_path / "bars" / "raw").iterdir()} == before
+    assert db_session.query(Checksums).count() == 0
+    assert (
+        db_session.query(DatasetVersions)
+        .filter(DatasetVersions.metadata_json["dataset_lifecycle"].as_string() == ROLLING_LIFECYCLE)
+        .count()
+        == 0
+    )

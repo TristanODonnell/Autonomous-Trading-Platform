@@ -16,6 +16,8 @@ daily versions, nothing is written.
 
 from __future__ import annotations
 
+import hashlib
+import shutil
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -122,42 +124,55 @@ class RollingRawBarsService:
                 reason="no_bars_in_sources",
             )
 
-        version_id = generate_dataset_version("raw_bars")
-        write_table(table, RAW_BARS_DATASET, self._base_path, version_id)
-        checksum = self._register_checksums(version_id)
-
         coverage_start = min(row.date_coverage_start for row in sources if row.date_coverage_start)
         coverage_end = max(row.date_coverage_end for row in sources if row.date_coverage_end)
-        DatasetRegistrationService(session=self._session).save(
-            DatasetVersion(
-                dataset_version_id=version_id,
-                dataset_name=RAW_BARS_DATASET.dataset_key,
-                created_at=now_utc,
-                source=ROLLING_SOURCE,
-                price_basis=PriceBasis.RAW,
-                interval=BarInterval.FIVE_MIN,
-                schema_version=RAW_BARS_DATASET.schema_version,
-                symbol_coverage=len(symbols),
-                date_coverage_start=coverage_start,
-                date_coverage_end=coverage_end,
-                validation_status="validated",
-                checksum=checksum,
-                source_manifest={
-                    "pipeline": ROLLING_SOURCE,
-                    "symbols": symbols,
-                    "source_versions": source_ids,
-                    "sessions": len(source_ids),
-                    "as_of": as_of.isoformat(),
-                },
-                metadata_json={
-                    "dataset_lifecycle": ROLLING_LIFECYCLE,
-                    "source_versions": source_ids,
-                    "sessions": len(source_ids),
-                    "as_of": as_of.isoformat(),
-                },
+        version_id = generate_dataset_version("raw_bars")
+        write_table(table, RAW_BARS_DATASET, self._base_path, version_id)
+        try:
+            # Finding 15: ``checksums.dataset_version`` references ``dataset_versions``, so the
+            # version row must be committed before any checksum row (SQLite tests do not
+            # enforce the constraint; Postgres does).
+            files = self._file_checksums(version_id)
+            DatasetRegistrationService(session=self._session).save(
+                DatasetVersion(
+                    dataset_version_id=version_id,
+                    dataset_name=RAW_BARS_DATASET.dataset_key,
+                    created_at=now_utc,
+                    source=ROLLING_SOURCE,
+                    price_basis=PriceBasis.RAW,
+                    interval=BarInterval.FIVE_MIN,
+                    schema_version=RAW_BARS_DATASET.schema_version,
+                    symbol_coverage=len(symbols),
+                    date_coverage_start=coverage_start,
+                    date_coverage_end=coverage_end,
+                    validation_status="validated",
+                    checksum=_aggregate_checksum(files),
+                    source_manifest={
+                        "pipeline": ROLLING_SOURCE,
+                        "symbols": symbols,
+                        "source_versions": source_ids,
+                        "sessions": len(source_ids),
+                        "as_of": as_of.isoformat(),
+                    },
+                    metadata_json={
+                        "dataset_lifecycle": ROLLING_LIFECYCLE,
+                        "source_versions": source_ids,
+                        "sessions": len(source_ids),
+                        "as_of": as_of.isoformat(),
+                    },
+                )
             )
-        )
-        self._session.flush()
+            self._register_checksums(version_id, files)
+            self._session.flush()
+        except Exception:
+            # Never leave an unregistered version on disk: the publish step ships every
+            # local version directory, registered or not, and a retried step would stack
+            # one orphan per attempt.
+            shutil.rmtree(
+                dataset_version_root(self._base_path, RAW_BARS_DATASET, version_id),
+                ignore_errors=True,
+            )
+            raise
         result = RollingRawBarsResult(
             status="created",
             dataset_version_id=version_id,
@@ -231,15 +246,17 @@ class RollingRawBarsService:
         combined = _dedupe_by_bar_id(combined)
         return combined.sort_by([("symbol", "ascending"), ("timestamp", "ascending")])
 
-    def _register_checksums(self, version_id: str) -> str:
+    def _file_checksums(self, version_id: str) -> list[tuple[Path, str]]:
+        """sha256 of every Parquet file in the written version, in path order (no I/O to
+        the database)."""
         root = dataset_version_root(self._base_path, RAW_BARS_DATASET, version_id)
         files = sorted(p for p in root.rglob("*.parquet") if p.is_file())
-        import hashlib
+        return [(path, compute_file_checksum(path)) for path in files]
 
-        aggregate = hashlib.sha256()
+    def _register_checksums(self, version_id: str, files: list[tuple[Path, str]]) -> None:
+        """One ``checksums`` row per file; the ``dataset_versions`` row must already exist."""
         with SorUnitOfWork(self._session) as uow:
-            for path in files:
-                value = compute_file_checksum(path)
+            for path, value in files:
                 uow.checksums.upsert(
                     uow.checksums.build_row(
                         dataset_version=version_id,
@@ -249,8 +266,13 @@ class RollingRawBarsService:
                         checksum_value=value,
                     )
                 )
-                aggregate.update(f"{path}|{value}\n".encode())
-        return aggregate.hexdigest()
+
+
+def _aggregate_checksum(files: list[tuple[Path, str]]) -> str:
+    aggregate = hashlib.sha256()
+    for path, value in files:
+        aggregate.update(f"{path}|{value}\n".encode())
+    return aggregate.hexdigest()
 
 
 def _declared_symbols(row: DatasetVersions) -> list[str]:
