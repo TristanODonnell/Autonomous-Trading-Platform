@@ -10,6 +10,13 @@ from typing import Any, cast
 
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.platform_replay.universe_hooks import (
+    CANDIDATE_MARKET_DATA_ALPACA_DAILY,
+    CANDIDATE_MARKET_DATA_DATASET,
+    CANDIDATE_MARKET_DATA_SOURCES,
+    build_candidate_bar_source,
+    run_universe_at_timestamp,
+)
 from autonomous_trading_platform.cli.formatters import print_error, print_header, print_json
 from autonomous_trading_platform.cli.helpers import parse_datetime
 from autonomous_trading_platform.contracts.common.enums import UniverseSource
@@ -269,8 +276,56 @@ def register(subparsers) -> None:
         action="store_true",
         help="Score and summarize the candidate without persisting it",
     )
+    candidate_generate_parser.add_argument(
+        "--market-data",
+        choices=sorted(CANDIDATE_MARKET_DATA_SOURCES),
+        default=CANDIDATE_MARKET_DATA_DATASET,
+        help=(
+            "Where the scorer reads bars: dataset (local storage; replays) or "
+            "alpaca_daily (fetch daily bars for the whole pool; live rotation)"
+        ),
+    )
     candidate_generate_parser.add_argument("--approved-by", default=None)
     candidate_generate_parser.set_defaults(func=handle_candidate_generate)
+
+    monthly_rotation_parser = universe_subparsers.add_parser(
+        "monthly-rotation",
+        help=(
+            "Run the scheduler's month-end rotation (pool refresh -> candidates -> "
+            "rotate) now; --dry-run proposes without activating"
+        ),
+    )
+    monthly_rotation_parser.add_argument("--timestamp")
+    monthly_rotation_parser.add_argument(
+        "--market-data",
+        choices=sorted(CANDIDATE_MARKET_DATA_SOURCES),
+        default=CANDIDATE_MARKET_DATA_ALPACA_DAILY,
+        help="Where the scorer reads bars (default: alpaca_daily, as the scheduler does)",
+    )
+    monthly_rotation_parser.add_argument(
+        "--dataset-version-id",
+        default=None,
+        help="raw_bars version for --market-data dataset",
+    )
+    monthly_rotation_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Bypass the churn guard (the scheduler never does)",
+    )
+    monthly_rotation_parser.add_argument("--approved-by", default=None)
+    mode = monthly_rotation_parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Refresh the pool and score candidates for real, propose the rotation, "
+        "then roll it back: the active universe is untouched",
+    )
+    mode.add_argument(
+        "--enforce",
+        action="store_true",
+        help="Activate the proposed universe (what the month-end step does)",
+    )
+    monthly_rotation_parser.set_defaults(func=handle_monthly_rotation)
 
     candidate_inspect_parser = universe_subparsers.add_parser(
         "candidate-inspect",
@@ -1005,6 +1060,9 @@ def handle_candidate_generate(args: argparse.Namespace) -> int:
         config=config,
         name=args.name,
         dry_run=getattr(args, "dry_run", False),
+        bar_source=build_candidate_bar_source(
+            getattr(args, "market_data", CANDIDATE_MARKET_DATA_DATASET)
+        ),
     )
 
     print_header("Candidate Generate")
@@ -1015,6 +1073,7 @@ def handle_candidate_generate(args: argparse.Namespace) -> int:
             "universe_version_id": result.version.universe_version_id,
             "name": result.version.name,
             "config_hash": result.version.config_hash,
+            "market_data_source": result.generation_metadata.get("market_data_source"),
             "included_count": len(result.included_members),
             "excluded_count": len(result.excluded_members),
             "diagnostics": result.diagnostics,
@@ -1545,6 +1604,55 @@ def handle_rotate(args: argparse.Namespace) -> int:
         }
     )
     return 0
+
+
+def handle_monthly_rotation(args: argparse.Namespace) -> int:
+    """The exact code path of the scheduler's ``monthly_universe_rotation`` EOD step,
+    run on demand. Pool refresh and candidate scoring persist their records either way
+    (they are audit rows, not the active universe); the rotation itself is kept only
+    with ``--enforce``."""
+    from autonomous_trading_platform.contracts.runtime.platform_replay import (
+        PlatformReplayContext,
+    )
+
+    timestamp = _resolve_timestamp(args.timestamp)
+    dry_run = bool(getattr(args, "dry_run", False))
+    context = PlatformReplayContext.create(
+        symbols=[], timestamp=timestamp, actor=getattr(args, "approved_by", None) or "operator"
+    )
+    context.dataset_version_id = getattr(args, "dataset_version_id", None)
+
+    session = get_session()
+    try:
+        result = run_universe_at_timestamp(
+            session=session,
+            timestamp=timestamp,
+            replay_context=context,
+            force_rotation=bool(getattr(args, "force", False)),
+            rotation_reason="operator_monthly",
+            candidate_market_data=getattr(args, "market_data", CANDIDATE_MARKET_DATA_ALPACA_DAILY),
+        )
+        kept = result.status == "ok" and not dry_run
+        if kept:
+            session.commit()
+        else:
+            session.rollback()
+    finally:
+        session.close()
+
+    print_header("Universe Monthly Rotation")
+    print_json(
+        {
+            "dry_run": dry_run,
+            "status": result.status,
+            "rotation_kept": kept,
+            "timestamp": timestamp.isoformat(),
+            "errors": list(result.errors),
+            "warnings": list(result.warnings),
+            **dict(result.summary),
+        }
+    )
+    return 0 if result.status != "failed" else 1
 
 
 def handle_rollback(args: argparse.Namespace) -> int:

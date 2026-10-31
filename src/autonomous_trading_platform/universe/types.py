@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class UniverseResolutionMode(StrEnum):
@@ -86,6 +86,26 @@ class RawSymbolRecord:
     easy_to_borrow: bool | None = None
     provider_symbol: str | None = None
     provider_asset_id: str | None = None
+
+
+class CandidateBarSource(Protocol):
+    """Bars for candidate scoring fetched per run instead of read from local storage.
+
+    ``fetch_bars`` returns, per symbol, rows of ``(timestamp, close, volume, trade_count)``
+    ordered by timestamp. ``expected_bars_per_day`` tells the scorer how many bars a
+    complete session holds for this source (1 for daily bars, 78 for five-minute bars)
+    so bar completeness is judged against the right denominator.
+    """
+
+    @property
+    def source_name(self) -> str: ...
+
+    @property
+    def expected_bars_per_day(self) -> int: ...
+
+    def fetch_bars(
+        self, symbols: list[str], *, start: datetime, end: datetime
+    ) -> dict[str, list[tuple[datetime, Any, Any, Any]]]: ...
 
 
 class RawSymbolProvider(Protocol):

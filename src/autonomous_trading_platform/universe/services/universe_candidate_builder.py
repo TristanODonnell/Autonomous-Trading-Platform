@@ -31,7 +31,7 @@ from autonomous_trading_platform.storage.sor.models.universe_versions import (
     UniverseMember,
     UniverseVersion,
 )
-from autonomous_trading_platform.universe.types import CandidateGenerationConfig
+from autonomous_trading_platform.universe.types import CandidateBarSource, CandidateGenerationConfig
 
 logger = get_logger(__name__)
 
@@ -98,10 +98,30 @@ class UniverseCandidateBuilder:
         raw_pool_query_service: RawMarketPoolQuery,
         *,
         dataset_version_id: str | None = None,
+        bar_source: CandidateBarSource | None = None,
     ) -> None:
+        """Market data comes from, in order of precedence: ``bar_source`` (fetched per run,
+        e.g. Alpaca daily bars for the live monthly rotation), the Parquet
+        ``dataset_version_id`` (replays), else the ``market_bars`` table."""
         self.session = session
         self.raw_pool_query_service = raw_pool_query_service
         self.dataset_version_id = dataset_version_id
+        self.bar_source = bar_source
+        self._prefetched: dict[str, list[tuple[datetime, Any, Any, Any]]] | None = None
+
+    @property
+    def market_data_source(self) -> str:
+        if self.bar_source is not None:
+            return f"bar_source:{self.bar_source.source_name}"
+        if self.dataset_version_id is not None:
+            return f"dataset_version:{self.dataset_version_id}"
+        return "market_bars_table"
+
+    @property
+    def _expected_bars_per_day(self) -> int:
+        if self.bar_source is not None:
+            return max(int(self.bar_source.expected_bars_per_day), 1)
+        return _EXPECTED_BARS_PER_US_EQUITY_DAY
 
     def build_candidate(
         self,
@@ -132,6 +152,24 @@ class UniverseCandidateBuilder:
         candidate_symbols = self.raw_pool_query_service.get_active_tradable_symbols(
             config.as_of, asset_type=config.asset_type
         )
+
+        self._prefetched = None
+        if self.bar_source is not None:
+            # One fetch for the whole pool; per-symbol lookups below read from it.
+            window_start = config.as_of - timedelta(days=config.lookback_days * 3)
+            self._prefetched = self.bar_source.fetch_bars(
+                list(candidate_symbols), start=window_start, end=config.as_of
+            )
+            logger.info(
+                "candidate market data fetched",
+                extra={
+                    **base_log,
+                    "step": "market_data_fetched",
+                    "market_data_source": self.market_data_source,
+                    "symbols_requested": len(candidate_symbols),
+                    "symbols_with_bars": len(self._prefetched),
+                },
+            )
 
         metrics_by_symbol: dict[str, _SymbolMetrics] = {}
         rejected: list[
@@ -192,6 +230,7 @@ class UniverseCandidateBuilder:
             included_count=len(included),
             excluded_count=len(rejected) + len(beyond_max),
             generation_timestamp=now_utc,
+            market_data_source=self.market_data_source,
         )
 
         version = UniverseVersion(
@@ -307,7 +346,10 @@ class UniverseCandidateBuilder:
     ) -> tuple[_SymbolMetrics, str | None] | None:
         window_start = config.as_of - timedelta(days=config.lookback_days * 3)
 
-        if self.dataset_version_id is not None:
+        rows: list[tuple]
+        if self._prefetched is not None:
+            rows = list(self._prefetched.get(symbol, []))
+        elif self.dataset_version_id is not None:
             rows = self._fetch_parquet_rows(symbol, window_start, config.as_of)
         else:
             stmt = (
@@ -368,6 +410,7 @@ class UniverseCandidateBuilder:
             daily_trade_count_bars=daily_trade_count_bars,
             history_days=history_days,
             lookback_days=config.lookback_days,
+            expected_bars_per_day=self._expected_bars_per_day,
         )
 
         if history_days < config.min_history_days:
@@ -531,6 +574,7 @@ def _compute_liq_qual(
     daily_trade_count_bars: dict[date, int],
     history_days: int,
     lookback_days: int,
+    expected_bars_per_day: int = _EXPECTED_BARS_PER_US_EQUITY_DAY,
 ) -> tuple[CandidateLiquidityMetrics, CandidateQualityMetrics]:
     last_date = selected_dates[-1]
     last_price = daily_last_close[last_date]
@@ -543,7 +587,7 @@ def _compute_liq_qual(
     adv = _mean_decimal(vol_values)
     med_ddv = _median_decimal(ddv_values)
     avg_bars = sum(bar_counts) / max(len(bar_counts), 1)
-    completeness = min(1.0, avg_bars / _EXPECTED_BARS_PER_US_EQUITY_DAY)
+    completeness = min(1.0, avg_bars / max(expected_bars_per_day, 1))
     consistency = history_days / max(lookback_days, 1)
 
     closes = [daily_last_close[d] for d in selected_dates]
@@ -606,9 +650,11 @@ def _build_generation_metadata(
     included_count: int,
     excluded_count: int,
     generation_timestamp: datetime,
+    market_data_source: str = "market_bars_table",
 ) -> dict[str, Any]:
     return {
         "schema_version": 1,
+        "market_data_source": market_data_source,
         "as_of": config.as_of.isoformat(),
         "lookback_days": config.lookback_days,
         "min_history_days": config.min_history_days,

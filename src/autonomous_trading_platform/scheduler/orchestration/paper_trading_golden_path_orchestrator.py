@@ -559,6 +559,9 @@ class PaperTradingGoldenPathOrchestrator:
             replay_context=self._live_context(ctx),
             force_rotation=False,
             rotation_reason="scheduler_monthly",
+            # Finding 16: the pool is ~500 names but this box only ingests bars for the
+            # ones it trades, so the scorer fetches Alpaca daily bars for the pool.
+            candidate_market_data="alpaca_daily",
         )
         self.session.flush()
         if result.status == "failed":

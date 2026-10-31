@@ -311,7 +311,7 @@ are not handled; `RealMarketCalendar.market_close` does take them from the excha
 | When | Trigger | Rule in code | First time on A | Verify |
 |---|---|---|---|---|
 | every Monday | `weekly_portfolio_review` | `is_first_trading_day_of_week` | 10/20 | [x] fired 10/26, `completed` in 11 ms (no-op while `portfolio_review_mode=off`); 10/22–23 `skipped` as expected |
-| Fri 10/30 close | `monthly_universe_rotation` | `is_last_trading_day_of_month`, churn guard on, reason `scheduler_monthly` | never run on A (active universe is still the dev dump `proposed_2024-12-02`, 22 names) | [ ] step `completed`; a new `universe_rotation_records` row with `churn_pct` ≤ the guard; `universe_versions` has a new `active` row effective Mon 11/2; the EOD chain did not fail on it |
+| Fri 10/30 close | `monthly_universe_rotation` | `is_last_trading_day_of_month`, churn guard on, reason `scheduler_monthly` | never run on A (active universe is still the dev dump `proposed_2024-12-02`, 22 names) | [x] ran, step `failed`: empty proposal (Finding 16, 3.3a); chain continued, universe unchanged. Re-verify with `atp universe monthly-rotation --dry-run` after the fix deploys, then Mon 11/30 close for real |
 | Sun 11/1 | daylight saving ends | all times via `America/New_York` zoneinfo | first clock change during the soak | [ ] Mon 11/2 ticks land at boundary + 10 s from 09:30 ET; EOD chain starts after 16:00 ET, not 15:00 or 17:00 |
 | Mon 11/2 | weekly review on the first session after a rotation | | | [ ] `completed`; review sees the new universe, no error |
 | Thu 11/26 | Thanksgiving, closed | `is_trading_day` false | first holiday | [ ] runner logs "next market open" and runs no ticks, no EOD chain, no `runtime_job_runs` row for 11/26; B's nightly pull finds nothing new and exits clean |
@@ -414,6 +414,41 @@ is a finding.
     - [ ] After Finding 14: re-run the dry run, confirm `daily_returns` has one entry per
           session and `market_returns` is populated, then install the timer
           (`sudo infra/ops/install_worker_timers.sh` on B)
+    - [x] **Finding 15: the `rolling_raw_bars` step failed every EOD after deploy (10/27-10/30).**
+          `checksums.dataset_version` is a foreign key to `dataset_versions` on Postgres;
+          the service committed the checksum rows before it saved the version row. The
+          SQLite test suite does not enforce the constraint, so four tests passed. Three
+          retries a night left 12 unregistered version directories on A, which
+          `publish_datasets` shipped to S3 (it uploads every local version directory) and B
+          pulled, unregistered. Fixed in PR #161 (2026-10-30, deployed to A and B): version
+          row first, then checksum rows; any failure after the Parquet write removes the
+          directory; the foreign key is emulated in the tests. Orphans deleted from A, S3
+          and B the same night. First real run: Mon 2026-11-02 EOD.
+    - [ ] **Finding 16: the first month-end universe rotation on A (Fri 10/30) proposed an
+          empty universe.** The candidate scorer reads bars from the box's own store, and A
+          only ingests five-minute bars for the names it trades: 478 of the ~500 pool names
+          were rejected `no_market_data`, and the 22 traded names `insufficient_history`
+          because the live hook hands the scorer that session's one-day dataset version
+          (Finding 14's shape again). The pre-activation checks refused the empty proposal,
+          so the dev-dump universe stayed active; the chain was not blocked. Backtests never
+          hit this because the replay dataset holds bars for every pool name.
+          **Fix (branch `fix/universe-rotation-market-data`):** the scorer takes a
+          `CandidateBarSource`; `AlpacaDailyBarSource` fetches daily bars for the whole pool
+          per run (the same data the pool-refresh screener already ranks on; three batched
+          requests; a failed batch is retried once, then the step fails rather than scoring
+          partial data). The scheduler's step passes `candidate_market_data="alpaca_daily"`;
+          replays keep their pinned Parquet version. With daily bars, one bar is a complete
+          session, so bar completeness is 1.0 rather than a 78-bar penalty. The candidate
+          version's `generation_metadata.market_data_source` records which path scored it,
+          and the step's summary now lists `added` / `removed` and rejections by reason.
+          **Verify before Mon 11/30 (the month's last session; 11/28 is a Saturday):** `atp universe monthly-rotation --dry-run` on A runs the
+          exact scheduler path (pool refresh and candidate scoring persist their audit rows;
+          the rotation itself is rolled back), and prints the proposed adds/drops; expect
+          ~500 pool names, `rejections_by_reason` without `no_market_data` in bulk, and
+          churn at or under the 30% guard. `--enforce` activates it like the month-end step.
+          Not reproducible from disk (neither is the pool refresh); if that matters later,
+          have the refresh store the daily bars it already downloads and point the scorer at
+          them.
 - [ ] (b) Monthly research / strategy generation → bench
 - [ ] (c) Allocation/governance parameter changes, last (riskiest)
 
