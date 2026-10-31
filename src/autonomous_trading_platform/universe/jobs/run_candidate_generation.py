@@ -19,7 +19,7 @@ from autonomous_trading_platform.universe.services.universe_candidate_builder im
     CandidateBuildResult,
     UniverseCandidateBuilder,
 )
-from autonomous_trading_platform.universe.types import CandidateGenerationConfig
+from autonomous_trading_platform.universe.types import CandidateBarSource, CandidateGenerationConfig
 
 
 def run_candidate_generation(
@@ -31,6 +31,7 @@ def run_candidate_generation(
     rebalance_reason: str | None = None,
     dry_run: bool = False,
     dataset_version_id: str | None = None,
+    bar_source: CandidateBarSource | None = None,
 ) -> CandidateBuildResult:
     """
     Generate and persist a candidate universe version.
@@ -56,7 +57,10 @@ def run_candidate_generation(
         raw_pool_repo = RawMarketPoolRepository(session)
         raw_pool_query_service = RawMarketPoolQueryService(raw_pool_repo)
         builder = UniverseCandidateBuilder(
-            session, raw_pool_query_service, dataset_version_id=dataset_version_id
+            session,
+            raw_pool_query_service,
+            dataset_version_id=dataset_version_id,
+            bar_source=bar_source,
         )
         version_repository = UniverseVersionRepository(session)
 

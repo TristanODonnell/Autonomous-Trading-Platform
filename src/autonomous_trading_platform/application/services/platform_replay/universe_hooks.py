@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import traceback
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -26,6 +27,12 @@ from autonomous_trading_platform.universe.types import UniverseRebalanceConfig
 
 _logger = get_logger(__name__)
 
+CANDIDATE_MARKET_DATA_DATASET = "dataset"
+CANDIDATE_MARKET_DATA_ALPACA_DAILY = "alpaca_daily"
+CANDIDATE_MARKET_DATA_SOURCES = frozenset(
+    {CANDIDATE_MARKET_DATA_DATASET, CANDIDATE_MARKET_DATA_ALPACA_DAILY}
+)
+
 
 def run_universe_at_timestamp(
     *,
@@ -37,6 +44,7 @@ def run_universe_at_timestamp(
     dry_run: bool = False,
     screener_source: str = "alpaca_active",
     rotation_reason: str = "platform_replay",
+    candidate_market_data: str = CANDIDATE_MARKET_DATA_DATASET,
 ) -> UniverseReplayResult:
     """Run universe selection/rotation at timestamp T.
 
@@ -47,6 +55,14 @@ def run_universe_at_timestamp(
     screener_source picks the candidate pool: "alpaca_active" ranks today's
     active assets (misses since-delisted names); "sp500_point_in_time" ranks
     index members as of T (survivorship-safe).
+
+    candidate_market_data picks where the candidate scorer reads bars: "dataset"
+    reads ``replay_context.dataset_version_id`` (replays, reproducible);
+    "alpaca_daily" fetches daily bars from Alpaca for the whole pool (the live
+    monthly rotation on a box that only ingests bars for the names it trades).
+
+    Nothing here commits the caller's ``session`` for step 3: the scheduler's chain
+    and the operator CLI decide whether the rotation is kept or rolled back.
     """
     base = dict(
         domain="universe",
@@ -67,6 +83,7 @@ def run_universe_at_timestamp(
         )
 
     warnings: list[str] = []
+    candidate_summary: dict[str, Any] = {}
 
     # ── Step 1: refresh raw market pool via screener ─────────────────────────
     # Ranking is by dollar volume as of this rotation date; membership is
@@ -97,12 +114,21 @@ def run_universe_at_timestamp(
         )
         from autonomous_trading_platform.universe.types import CandidateGenerationConfig
 
-        run_candidate_generation(
+        candidate = run_candidate_generation(
             as_of=timestamp,
             config=CandidateGenerationConfig(as_of=timestamp, lookback_days=20, max_symbols=500),
             rebalance_reason=f"{rotation_reason}_monthly",
             dataset_version_id=replay_context.dataset_version_id,
+            bar_source=build_candidate_bar_source(candidate_market_data),
         )
+        candidate_summary = {
+            "candidate_version_id": candidate.version.universe_version_id,
+            "candidate_pool_size": candidate.generation_metadata.get("candidate_pool_size"),
+            "candidate_included": len(candidate.included_members),
+            "candidate_excluded": len(candidate.excluded_members),
+            "market_data_source": candidate.generation_metadata.get("market_data_source"),
+            "rejections_by_reason": _rejections_by_reason(candidate),
+        }
     except Exception as exc:
         warnings.append(f"candidate_generation_failed: {exc}")
 
@@ -158,6 +184,7 @@ def run_universe_at_timestamp(
     version_repo2 = UniverseVersionRepository(session)
     members2 = version_repo2.get_included_members(new_version.universe_version_id)
     churn = float(rec.churn_pct) if rec.churn_pct is not None else None
+    rebalance = result.rebalance_result
 
     return UniverseReplayResult(
         **base,
@@ -171,11 +198,42 @@ def run_universe_at_timestamp(
             "universe_version_id": new_version.universe_version_id,
             "symbol_count": len(members2),
             "rotation_applied": not result.skipped,
+            "skip_reason": result.skip_reason,
             "churn_pct": churn,
             "rotation_id": rec.rotation_id,
+            "previous_universe_version_id": rec.previous_universe_version_id,
+            "added": sorted(rebalance.added) if rebalance else [],
+            "removed": sorted(rebalance.removed) if rebalance else [],
+            "retained_count": len(rebalance.retained) if rebalance else None,
             "timestamp": timestamp.isoformat(),
+            **candidate_summary,
         },
     )
+
+
+def build_candidate_bar_source(candidate_market_data: str) -> Any:
+    """The ``CandidateBarSource`` for a ``candidate_market_data`` choice, or None for
+    the stored-dataset path."""
+    if candidate_market_data == CANDIDATE_MARKET_DATA_DATASET:
+        return None
+    if candidate_market_data == CANDIDATE_MARKET_DATA_ALPACA_DAILY:
+        from autonomous_trading_platform.universe.providers.alpaca_daily_bar_source import (
+            AlpacaDailyBarSource,
+        )
+
+        return AlpacaDailyBarSource()
+    raise ValueError(
+        f"Unknown candidate_market_data {candidate_market_data!r}; "
+        f"valid: {sorted(CANDIDATE_MARKET_DATA_SOURCES)}"
+    )
+
+
+def _rejections_by_reason(candidate: Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for member in candidate.excluded_members:
+        reason = str(member.excluded_reason or "unknown")
+        counts[reason] = counts.get(reason, 0) + 1
+    return dict(sorted(counts.items()))
 
 
 def snapshot_universe_at_timestamp(

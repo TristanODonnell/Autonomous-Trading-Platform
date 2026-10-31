@@ -664,3 +664,111 @@ def test_mixed_rejection_reasons_all_captured() -> None:
     assert excluded["LOW_ADDV"] == "insufficient_liquidity"
     assert excluded["NEW_IPO"] == "insufficient_history"
     assert excluded["NO_DATA"] == "no_market_data"
+
+
+# ---------------------------------------------------------------------------
+# Finding 16: bars fetched per run through a CandidateBarSource (live rotation)
+# ---------------------------------------------------------------------------
+
+
+class _StubBarSource:
+    """Daily bars served from memory; records what was requested."""
+
+    source_name = "stub_daily"
+    expected_bars_per_day = 1
+
+    def __init__(self, rows_by_symbol: dict[str, list[tuple[Any, Any, Any, Any]]]) -> None:
+        self._rows = rows_by_symbol
+        self.calls: list[tuple[list[str], datetime, datetime]] = []
+
+    def fetch_bars(
+        self, symbols: list[str], *, start: datetime, end: datetime
+    ) -> dict[str, list[tuple[Any, Any, Any, Any]]]:
+        self.calls.append((list(symbols), start, end))
+        return {s: list(rows) for s, rows in self._rows.items() if s in symbols}
+
+
+def _daily_rows(
+    n_days: int, close: str = "50.00", volume: int = 2_000_000
+) -> list[tuple[Any, Any, Any, Any]]:
+    rows = []
+    for offset in range(n_days):
+        ts = datetime(2025, 1, 1, 5, 0, tzinfo=UTC) + timedelta(days=offset)
+        if ts > _AS_OF:
+            break
+        rows.append((ts, Decimal(close), volume, 1500))
+    return rows
+
+
+def _make_bar_source_builder(
+    symbols: list[str], rows_by_symbol: dict[str, list[tuple[Any, Any, Any, Any]]]
+) -> tuple[UniverseCandidateBuilder, _StubBarSource, Any]:
+    # No bars anywhere in storage: the session would reject everything on its own.
+    session = _make_session_with_bars({})
+    source = _StubBarSource(rows_by_symbol)
+    builder = UniverseCandidateBuilder(
+        session,
+        _StubRawPoolQueryService(symbols=symbols),
+        dataset_version_id="raw_bars_one_session",
+        bar_source=source,
+    )
+    return builder, source, session
+
+
+def test_bar_source_takes_precedence_over_stored_data_and_scores_daily_bars() -> None:
+    builder, source, session = _make_bar_source_builder(
+        ["AAPL", "MSFT", "NVDA"],
+        {"AAPL": _daily_rows(20), "MSFT": _daily_rows(20, close="300.00"), "NVDA": _daily_rows(2)},
+    )
+    config = _default_config(min_history_days=10)
+
+    result = builder.build_candidate(config=config, name="live")
+
+    # One fetch for the whole pool over the 3x lookback window.
+    assert len(source.calls) == 1
+    symbols, start, end = source.calls[0]
+    assert symbols == ["AAPL", "MSFT", "NVDA"]
+    assert end == _AS_OF and start == _AS_OF - timedelta(days=60)
+    # Neither the market_bars table nor Parquet was consulted.
+    session.execute.assert_not_called()
+
+    included = {m.symbol: m for m in result.included_members}
+    assert sorted(included) == ["AAPL", "MSFT"]
+    rejected = {m.symbol: m.excluded_reason for m in result.excluded_members}
+    assert rejected == {"NVDA": "insufficient_history"}
+    # Daily bars: one bar is a complete session, so completeness is not penalised.
+    assert included["AAPL"].quality_metrics_json["bar_completeness_pct"] == 1.0
+    assert included["AAPL"].quality_metrics_json["history_days"] == 20
+    assert Decimal(str(included["AAPL"].liquidity_metrics_json["average_daily_dollar_volume"])) == (
+        Decimal("50.00") * 2_000_000
+    )
+    assert result.generation_metadata["market_data_source"] == "bar_source:stub_daily"
+    assert result.version.generation_metadata_json["market_data_source"] == "bar_source:stub_daily"
+
+
+def test_pool_names_the_bar_source_has_no_bars_for_are_rejected_as_no_market_data() -> None:
+    builder, _source, _session = _make_bar_source_builder(
+        ["AAPL", "ZZZZ"], {"AAPL": _daily_rows(20)}
+    )
+    result = builder.build_candidate(config=_default_config(min_history_days=10), name="live")
+    assert [m.symbol for m in result.included_members] == ["AAPL"]
+    assert {m.symbol: m.excluded_reason for m in result.excluded_members} == {
+        "ZZZZ": "no_market_data"
+    }
+
+
+def test_market_data_source_is_recorded_for_the_stored_paths_too() -> None:
+    table = _make_builder(symbols=[], bars_by_symbol={})
+    assert table.market_data_source == "market_bars_table"
+    parquet = UniverseCandidateBuilder(
+        _make_session_with_bars({}),
+        _StubRawPoolQueryService(symbols=[]),
+        dataset_version_id="raw_bars_x",
+    )
+    assert parquet.market_data_source == "dataset_version:raw_bars_x"
+    assert (
+        table.build_candidate(config=_default_config(), name="t").generation_metadata[
+            "market_data_source"
+        ]
+        == "market_bars_table"
+    )
