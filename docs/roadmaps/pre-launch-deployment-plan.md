@@ -449,6 +449,30 @@ is a finding.
           Not reproducible from disk (neither is the pool refresh); if that matters later,
           have the refresh store the daily bars it already downloads and point the scorer at
           them.
+          **First dry run on A (2026-10-31 00:52 UTC, after PR #162 deployed):** the scorer
+          worked (pool 500, 493 scored, 6 `insufficient_liquidity`, 1 `no_market_data`) and
+          exposed two more things, fixed on the same branch for the follow-up PR:
+          - *The pool refresh had failed, so it scored the backtest's 2024-12-02 pool.*
+            Alpaca now lists assets on TXSE, which the installed SDK's exchange enum does
+            not know (nor does 0.44.0), and one unknown code fails validation of the whole
+            asset list. The screener now asks the trading client for raw dicts
+            (`raw_data=True`) and filters on exchange itself, so unknown exchanges are
+            skipped rather than fatal. The 10/30 scheduled run hit the same error (it is
+            only a warning in the step summary).
+          - *The churn rule shrank the universe.* 18 active names, budget int(0.3 x 18) =
+            5; five actives ranked 38-116 (past the retain-until-30 threshold) were
+            removed worst-first and used the whole budget, so no name was added: 18 -> 13.
+            Decision (user, 2026-10-31): optional removes are taken only as swaps with the
+            best eligible add (2 budget units), mandatory removes (gone from the pool or
+            excluded) are paid first, and any budget left fills toward the 20-name target.
+            The universe never shrinks on rank alone. On the same data: 2 swaps + 1 fill,
+            18 -> 19, churn 5/18. Also decided: ETFs stay eligible for now (11 of the top
+            20 candidates are ETFs because the volatility penalty favours bond and sector
+            funds; the strategies already trade SPY/QQQ/TLT); revisit the scoring weights
+            or an equity-only pool with backtest evidence, not mid-soak.
+          Re-run `atp universe monthly-rotation --dry-run` after the follow-up deploys:
+          expect no `screener_refresh_failed` warning, a pool snapshot captured today,
+          `added` non-empty and `symbol_count` 19 or 20.
 - [ ] (b) Monthly research / strategy generation → bench
 - [ ] (c) Allocation/governance parameter changes, last (riskiest)
 

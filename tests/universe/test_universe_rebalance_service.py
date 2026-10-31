@@ -333,13 +333,16 @@ class TestHysteresisRetention:
         """Rank 700 with retain_until=650 → should be in optional_removes."""
         result = _run(
             active_members=_active_members("AAPL", "DEGRADED"),
-            candidate_members=_candidate_members(("AAPL", 50, None), ("DEGRADED", 700, None)),
+            candidate_members=_candidate_members(
+                ("AAPL", 50, None), ("DEGRADED", 700, None), ("FRESH", 60, None)
+            ),
             config=_default_config(
                 retain_until_rank_greater_than=650,
                 max_churn_pct=1.0,  # high churn to ensure removal
             ),
         )
-        assert "DEGRADED" in result.removed
+        # Optional removes are swaps: DEGRADED leaves because FRESH can replace it.
+        assert "DEGRADED" in result.removed and "FRESH" in result.added
 
     def test_retain_threshold_boundary_kept(self):
         """Symbol at exactly retain_until_rank_greater_than is retained."""
@@ -354,10 +357,12 @@ class TestHysteresisRetention:
         """Symbol at retain_until + 1 goes to optional removes."""
         result = _run(
             active_members=_active_members("AAPL", "EDGE"),
-            candidate_members=_candidate_members(("AAPL", 50, None), ("EDGE", 651, None)),
+            candidate_members=_candidate_members(
+                ("AAPL", 50, None), ("EDGE", 651, None), ("FRESH", 60, None)
+            ),
             config=_default_config(retain_until_rank_greater_than=650, max_churn_pct=1.0),
         )
-        assert "EDGE" in result.removed
+        assert "EDGE" in result.removed and "FRESH" in result.added
 
     def test_retained_within_threshold_reason(self):
         result = _run(
@@ -430,17 +435,18 @@ class TestChurnEnforcement:
             ("C", 750, None),  # optional remove
             ("D", 800, None),  # optional remove
         )
-        # max_churn=0.25 → max 1 change total, 0 mandatory → 1 for optional
+        # max_churn=0.25 → max 1 change total, 0 mandatory. An optional remove is only
+        # taken as a swap with an add, and there is no eligible add here, so all three
+        # are skipped and the universe keeps its size.
         config = _default_config(
             retain_until_rank_greater_than=650,
             max_churn_pct=0.25,
             add_only_if_rank_less_than_or_equal=400,
         )
         result = _run(active_members=active, candidate_members=candidate, config=config)
-        # 1 optional remove happens (worst rank first = D rank 800), 2 skipped
-        assert len(result.skipped_removes) == 2
-        # D (worst rank) should be removed, B and C skipped
-        assert "D" in result.removed
+        assert result.skipped_removes == ["D", "C", "B"]  # worst rank first
+        assert result.removed == [] and result.added == []
+        assert sorted(result.retained) == ["A", "B", "C", "D"]
 
     def test_churn_pct_reported_correctly(self):
         result = _run(
@@ -834,3 +840,92 @@ class TestRetainedByChurnLimit:
         b_member = next((m for m in result.proposed_members if m.symbol == "B"), None)
         assert b_member is not None
         assert b_member.included_reason == "retained_by_churn_limit"
+
+
+# ---------------------------------------------------------------------------
+# Paired churn rule (Finding 16 follow-up): optional removes are swaps, spare
+# budget fills toward the target, the universe never shrinks on rank alone.
+# ---------------------------------------------------------------------------
+
+
+class TestPairedChurnBudget:
+    def _live_config(self, **overrides):
+        base = dict(
+            target_universe_size=20,
+            max_churn_pct=0.30,
+            retain_until_rank_greater_than=30,
+            add_only_if_rank_less_than_or_equal=20,
+        )
+        base.update(overrides)
+        return _default_config(**base)
+
+    def test_first_live_rotation_shape_swaps_and_fills_instead_of_shrinking(self):
+        """18 active, budget int(0.3*18)=5, five actives ranked past 30, plenty of
+        top-20 adds: 2 swaps (4) + 1 fill (1) -> 19 names, churn 5/18."""
+        active = _active_members(
+            *[f"A{i}" for i in range(13)], "GOOGL", "AVGO", "AMD", "CRM", "DIA"
+        )
+        entries = [(f"A{i}", i + 1, None) for i in range(13)]  # ranks 1..13, retained
+        entries += [("NEW1", 14, None), ("NEW2", 15, None), ("NEW3", 16, None), ("NEW4", 17, None)]
+        entries += [
+            ("GOOGL", 38, None),
+            ("AVGO", 41, None),
+            ("AMD", 50, None),
+            ("CRM", 83, None),
+            ("DIA", 116, None),
+        ]
+        result = _run(
+            active_members=active,
+            candidate_members=_candidate_members(*entries),
+            config=self._live_config(),
+        )
+        assert result.removed == ["CRM", "DIA"]  # worst ranks first
+        assert result.added == ["NEW1", "NEW2", "NEW3"]  # 2 swap partners + 1 fill
+        assert result.skipped_removes == ["AMD", "AVGO", "GOOGL"]
+        assert result.skipped_adds == ["NEW4"]
+        assert len(result.retained) + len(result.added) == 19
+        assert result.churn_pct == pytest.approx(5 / 18, abs=1e-6)
+        assert result.audit_summary["churn_limited"] is True
+
+    def test_optional_remove_needs_a_replacement(self):
+        """Budget for one change only: a swap costs two, so the weak name stays and the
+        single unit fills toward target instead."""
+        result = _run(
+            active_members=_active_members("A", "B", "C", "D"),
+            candidate_members=_candidate_members(
+                ("A", 1, None), ("B", 2, None), ("C", 3, None), ("D", 700, None), ("NEW", 4, None)
+            ),
+            config=self._live_config(max_churn_pct=0.25),  # int(0.25*4) = 1
+        )
+        assert result.removed == [] and result.skipped_removes == ["D"]
+        assert result.added == ["NEW"]
+        assert len(result.retained) + len(result.added) == 5
+
+    def test_fill_stops_at_target_size(self):
+        result = _run(
+            active_members=_active_members("A", "B"),
+            candidate_members=_candidate_members(
+                ("A", 1, None), ("B", 2, None), ("N1", 3, None), ("N2", 4, None), ("N3", 5, None)
+            ),
+            config=self._live_config(target_universe_size=3, max_churn_pct=1.0),
+        )
+        assert result.added == ["N1"]
+        assert result.skipped_adds == ["N2", "N3"]
+
+    def test_mandatory_removes_are_paid_first_then_swaps(self):
+        """Budget 3 (10 actives * 0.3): one mandatory remove leaves 2 = exactly one swap."""
+        active = _active_members(*[f"A{i}" for i in range(8)], "GONE", "WEAK")
+        entries = [(f"A{i}", i + 1, None) for i in range(8)] + [
+            ("WEAK", 99, None),
+            ("N1", 9, None),
+            ("N2", 10, None),
+        ]
+        result = _run(
+            active_members=active,
+            candidate_members=_candidate_members(*entries),
+            config=self._live_config(target_universe_size=10),
+        )
+        assert result.removed == ["GONE", "WEAK"]
+        assert result.added == ["N1"]
+        assert result.skipped_adds == ["N2"]
+        assert result.churn_pct == pytest.approx(0.3, abs=1e-6)
