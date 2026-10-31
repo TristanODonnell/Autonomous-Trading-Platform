@@ -58,6 +58,8 @@ class AlpacaScreenerProvider:
         min_price: float = 5.0,
         min_dollar_volume: float = 5_000_000.0,
         batch_size: int = 200,
+        trading_client: Any | None = None,
+        data_client: Any | None = None,
     ) -> None:
         self.as_of = as_of
         self.top_n = top_n
@@ -65,40 +67,34 @@ class AlpacaScreenerProvider:
         self.min_price = min_price
         self.min_dollar_volume = min_dollar_volume
         self.batch_size = batch_size
+        self._trading_client = trading_client
+        self._data_client = data_client
 
     def fetch_symbols(self) -> list[RawSymbolRecord]:
-        from alpaca.trading.client import TradingClient
         from alpaca.trading.enums import AssetClass, AssetStatus
         from alpaca.trading.requests import GetAssetsRequest
 
-        from autonomous_trading_platform.config.settings import Settings
-        from autonomous_trading_platform.ingestion.market_data.clients.alpaca_market_data_client import (
-            get_stock_historical_client,
-        )
-
-        settings = Settings()
-        trading_client = TradingClient(
-            settings.broker_api_key,
-            settings.broker_api_secret,
-            paper=True,
-        )
-        data_client = get_stock_historical_client()
+        trading_client = self._trading_client or _build_trading_client()
+        data_client = self._data_client or _build_data_client()
 
         # ── Step 1: get all active US equity assets ──────────────────────────
         request = GetAssetsRequest(
             asset_class=AssetClass.US_EQUITY,
             status=AssetStatus.ACTIVE,
         )
+        # Raw dicts, not the SDK's Asset model: Alpaca lists assets on exchanges the
+        # installed SDK's enum does not know (TXSE since 2026), and one unknown code
+        # failed validation of the whole list, so the monthly pool refresh never ran.
         all_assets = trading_client.get_all_assets(filter=request)
 
-        asset_map: dict[str, object] = {}
+        asset_map: dict[str, Any] = {}
         for asset in all_assets:
-            symbol = str(getattr(asset, "symbol", "") or "")
+            symbol = str(_field(asset, "symbol") or "")
             if not symbol or not _SYMBOL_RE.match(symbol):
                 continue
-            if not getattr(asset, "tradable", False):
+            if not _field(asset, "tradable"):
                 continue
-            exchange = str(getattr(asset, "exchange", "") or "")
+            exchange = str(_field(asset, "exchange") or "")
             if exchange not in _TARGET_EXCHANGES:
                 continue
             asset_map[symbol] = asset
@@ -129,17 +125,46 @@ class AlpacaScreenerProvider:
                     asset_type="us_equity",
                     status="active",
                     is_tradable=True,
-                    exchange=str(getattr(asset, "exchange", None) or "") or None,
-                    name=str(getattr(asset, "name", None) or "") or None,
-                    marginable=getattr(asset, "marginable", None),
-                    shortable=getattr(asset, "shortable", None),
-                    fractionable=getattr(asset, "fractionable", None),
-                    easy_to_borrow=getattr(asset, "easy_to_borrow", None),
+                    exchange=str(_field(asset, "exchange") or "") or None,
+                    name=str(_field(asset, "name") or "") or None,
+                    marginable=_field(asset, "marginable"),
+                    shortable=_field(asset, "shortable"),
+                    fractionable=_field(asset, "fractionable"),
+                    easy_to_borrow=_field(asset, "easy_to_borrow"),
                     provider_symbol=symbol,
-                    provider_asset_id=str(getattr(asset, "id", "") or "") or None,
+                    provider_asset_id=str(_field(asset, "id") or "") or None,
                 )
             )
         return records
+
+
+def _field(asset: Any, name: str) -> Any:
+    """Read a field from a raw asset dict or an SDK Asset model."""
+    if isinstance(asset, dict):
+        return asset.get(name)
+    return getattr(asset, name, None)
+
+
+def _build_trading_client() -> Any:
+    from alpaca.trading.client import TradingClient
+
+    from autonomous_trading_platform.config.settings import Settings
+
+    settings = Settings()
+    return TradingClient(
+        settings.broker_api_key,
+        settings.broker_api_secret,
+        paper=True,
+        raw_data=True,
+    )
+
+
+def _build_data_client() -> Any:
+    from autonomous_trading_platform.ingestion.market_data.clients.alpaca_market_data_client import (
+        get_stock_historical_client,
+    )
+
+    return get_stock_historical_client()
 
 
 def rank_symbols_by_dollar_volume(

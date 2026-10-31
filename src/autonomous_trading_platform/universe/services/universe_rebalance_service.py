@@ -331,28 +331,38 @@ def _hysteresis_rebalance(
         skipped_remove_churn: list[str] = []
         skipped_add_churn: list[str] = []
     else:
+        # Budget = changes allowed this rotation (adds and removes each count one).
+        # Mandatory removes (gone from the pool / excluded) always happen and are paid
+        # first. An optional remove (rank fell past the retain threshold) is only taken
+        # as a swap with the best eligible add, so the universe never shrinks on rank
+        # alone. Whatever budget is left fills toward the target size. (The first live
+        # rotation spent its whole budget on five removes and no adds, 18 -> 13.)
         max_changes = int(config.max_churn_pct * active_size)
-        remaining = max_changes - len(mandatory_removes)
-        budget = max(0, remaining)
+        budget = max(0, max_changes - len(mandatory_removes))
+        size = active_size - len(mandatory_removes)
 
         actual_optional_removes = set[str]()
         actual_adds = set[str]()
         skipped_remove_churn = []
         skipped_add_churn = []
+        pending_adds = list(eligible_adds_sorted)
 
         for s in optional_removes_sorted:
-            if budget > 0:
+            if budget >= 2 and pending_adds:
                 actual_optional_removes.add(s)
-                budget -= 1
+                actual_adds.add(pending_adds.pop(0))
+                budget -= 2
             else:
                 skipped_remove_churn.append(s)
 
-        for s in eligible_adds_sorted:
-            if budget > 0:
-                actual_adds.add(s)
-                budget -= 1
-            else:
-                skipped_add_churn.append(s)
+        while (
+            budget > 0
+            and pending_adds
+            and size + len(actual_adds) - len(actual_optional_removes) < config.target_universe_size
+        ):
+            actual_adds.add(pending_adds.pop(0))
+            budget -= 1
+        skipped_add_churn = pending_adds
 
     actual_removes = set(mandatory_removes.keys()) | actual_optional_removes
     retained_by_churn_limit = set(optional_removes.keys()) - actual_optional_removes
