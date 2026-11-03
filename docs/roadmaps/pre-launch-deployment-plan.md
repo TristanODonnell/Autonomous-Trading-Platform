@@ -241,19 +241,16 @@ only ran ~09:30–11:00 ET each day, so those days do not count. Causes and fixe
 - [ ] Test: a log call with `extra={...}` renders the fields; a call without renders as today
 - [ ] Deploy and confirm one scheduler tick's lines on Box A read end to end
 
-*Seed an initial active set (exercise the portfolio path during the soak):*
-- [ ] Decide the members: proposal = the three paper-approved rows (`momentum_v1`,
-      `mean_reversion_v1`, `macd_crossover_v1`) as ACTIVE, equal budgets, no on-deck yet
-- [ ] Confirm `operator_settings.portfolio_mode_enabled` is on; keep
-      `portfolio_review_mode=off` and `worker_results_enabled=false` until 3.3(a)
-- [ ] Insert the `portfolio_memberships` rows + `portfolio_membership_transitions` audit
-      (via the governance CLI/API if one exists, else a reviewed SQL script committed to
-      `scripts/`); record who/why in the transition reason
-- [ ] Next session's log shows one `trading_cycle.active_strategy_resolved` per member and
-      `portfolio_signal_aggregator.summary` with three inputs; sleeve ledgers populate
-- [ ] Nightly rebalance stops logging `STRATEGY_ALLOCATION_REBALANCE_NOOP` once quality
-      scores exist (weekly interval guard still applies)
-- [ ] Note in this doc which path the soak days before the seed exercised (single-strategy)
+*Seed an initial active set (resolved 2026-11-02):*
+- [x] Members decided and seeded 2026-10-27 through `ActivePortfolioService`: `mean_reversion_v1`
+      and `momentum_v1` ACTIVE, `macd_crossover_v1` BENCH (see 3.3(a))
+- [x] `portfolio_mode_enabled` was **not** switched on: the memberships are inert and the
+      whole soak has run the legacy single-strategy path (`macd_crossover_v1` until 10/22,
+      `mean_reversion_v1` from 10/23, picked by `_resolve_active_strategy`'s ordering).
+      Switching it on is now its own step, **3.3(0)**, after the soak completes
+- [x] `portfolio_review_mode=off` and `worker_results_enabled=false` until 3.3(a)
+- The verify list (one runtime per member, aggregator inputs, sleeve ledgers, rebalance no
+  longer a no-op) moved to 3.3(0)
 
 *Then start 3.3(a)* (see the Phase 3 checklist below for the sub-steps).
 
@@ -311,9 +308,9 @@ are not handled; `RealMarketCalendar.market_close` does take them from the excha
 | When | Trigger | Rule in code | First time on A | Verify |
 |---|---|---|---|---|
 | every Monday | `weekly_portfolio_review` | `is_first_trading_day_of_week` | 10/20 | [x] fired 10/26, `completed` in 11 ms (no-op while `portfolio_review_mode=off`); 10/22–23 `skipped` as expected |
-| Fri 10/30 close | `monthly_universe_rotation` | `is_last_trading_day_of_month`, churn guard on, reason `scheduler_monthly` | never run on A (active universe is still the dev dump `proposed_2024-12-02`, 22 names) | [x] ran, step `failed`: empty proposal (Finding 16, 3.3a); chain continued, universe unchanged. Re-verify with `atp universe monthly-rotation --dry-run` after the fix deploys, then Mon 11/30 close for real |
-| Sun 11/1 | daylight saving ends | all times via `America/New_York` zoneinfo | first clock change during the soak | [ ] Mon 11/2 ticks land at boundary + 10 s from 09:30 ET; EOD chain starts after 16:00 ET, not 15:00 or 17:00 |
-| Mon 11/2 | weekly review on the first session after a rotation | | | [ ] `completed`; review sees the new universe, no error |
+| Fri 10/30 close | `monthly_universe_rotation` | `is_last_trading_day_of_month`, churn guard on, reason `scheduler_monthly` | never run on A (active universe is still the dev dump `proposed_2024-12-02`, 22 names) | [x] ran, step `failed`: empty proposal (Finding 16, 3.3a); chain continued, universe unchanged. Re-verified 2026-11-03 01:50 UTC with `atp universe monthly-rotation --dry-run` after PR #163: pool 500 captured, 18 → 19 (+HYG, LQD, XLF; −CRM, DIA), churn 27.8%, no warnings, no rejections. Next real run Mon 11/30 close |
+| Sun 11/1 | daylight saving ends | all times via `America/New_York` zoneinfo | first clock change during the soak | [x] 11/2: tick #1 at 09:30:00 ET, then every boundary + 10 s through 15:55:10 (79 ticks, same as every prior session; the 79th at 15:59:59 is degraded `ingestion_deadline_missed` every day, not new); EOD chain 18:00–18:02 ET = 23:00 UTC, one UTC hour later than Friday as expected |
+| Mon 11/2 | weekly review on the first session after a rotation | | | [x] `completed` in 12 ms on 11/2 (no-op, `portfolio_review_mode=off`); universe unchanged because the 10/30 rotation never activated |
 | Thu 11/26 | Thanksgiving, closed | `is_trading_day` false | first holiday | [ ] runner logs "next market open" and runs no ticks, no EOD chain, no `runtime_job_runs` row for 11/26; B's nightly pull finds nothing new and exits clean |
 | Fri 11/27 | early close 13:00 ET | `market_close` from the exchange calendar, `is_early_close` | first half-day | [ ] last tick ≤ 12:55 ET, EOD chain starts ~13:15 ET, `final_ingestion` has the half-day's bars only, no ticks between 13:00 and 16:00 |
 | Thu 12/24 | early close 13:00 ET | same | second half-day | [ ] same as 11/27 |
@@ -358,6 +355,57 @@ is a finding.
 - [x] **API hand-off contract**: results carry `dataset_version`, code version (git SHA), run ID and fixture; A rejects stale or mismatched results; calls are idempotent by run ID (`POST /api/v1/worker/results` + `GET` list/one, `worker` JWT role, `WorkerResultSubmission`/`WorkerResultDecision` contracts, typed `BenchResimsPayload`; worker side `WorkerResultClient` + `atp worker publish-result`; A's weekly review consumes the latest accepted still-fresh `bench_resims` and marks it `applied` with the review id). **Open for 3.3(a):** the worker job that produces bench re-sims needs A's bench membership + strategy configs as input
 
 **3.3 Switch automation on in order of risk, one at a time with a few cycles between**
+- [x] **(0) Turn on portfolio mode: trade the seeded active set (first, after the soak)** —
+  switched on Mon 2026-11-02 at 05:45 UTC (00:45 ET Tue); first portfolio-path session is Tue 11/3
+  - *Why first:* the review in (a) decides swaps for an active set that is not trading, and
+    the bench, sleeves and allocation only become visible once the portfolio path runs. The
+    user wants this live early as the realistic read on whether the system is moving in the
+    right direction, with the bench and rotation layered on as they come up.
+  - *Risk:* lowest in Phase 3. One operator setting, no deploy, reversible the same way; the
+    kill switch still overrides everything. The code path is Step 1 of the rotation plan
+    (done 2026-09-28) and ran in every rotation backtest, but has never traded on A.
+  - *When:* decided Mon 11/2 night to flip immediately rather than wait for Thu 11/5: the
+    last two soak sessions only re-test plumbing that has run clean for eight, the portfolio
+    path does not touch ingestion or the EOD chain, and the flag is reversible on the next
+    tick. Do not start any (a) switch the same week.
+  - *Operator step on A* (prompt reads `ip-172-31-42-34`). **Finding 17:** `atp settings set`
+    refuses `portfolio_mode_enabled` (and `bench_management_enabled`): the CLI only accepts
+    the fields of `OperatorSettingsUpdateRequest`, neither flag is in it, and the box has no
+    `OPERATOR_SETTINGS_UPDATED` audit rows at all, so the 10/27 bench flag was also set
+    outside the CLI. Done with SQL from the laptop (a file piped over ssh, because long
+    quoted one-liners get a newline inserted when pasted into PowerShell):
+    ```
+    type ~lip.sql | ssh -i ~/.ssh/trading-platform-laptop ubuntu@3.133.10.131 'cd ~/Autonomous-Trading-Platform && docker compose exec -T postgres psql -U ratp -d ratp'
+    -- flip.sql:
+    update operator_settings set portfolio_mode_enabled = true, updated_by = 'tristan', updated_at = now();
+    select portfolio_mode_enabled, bench_management_enabled, updated_at from operator_settings;
+    ```
+    No restart needed: `resolve_strategy_runtimes` reads the row every tick. Roll back with
+    the same statement and `false`; positions already opened stay owned by their sleeve and
+    the legacy path winds them down. Follow-up PR: add both flags to
+    `OperatorSettingsUpdateRequest` so the CLI can flip them with an audit row.
+  - *What changes:* `momentum_v1` joins `mean_reversion_v1` (re-sim 2026-10-27: ~10 turns a
+    day, 249 trades over the window), so expect many more intents and more
+    `ORDER_REJECTED_BY_THROTTLE` / gross-cap rejections against the current limits (2 per
+    bar, 20 per hour, $100k gross, $25k per symbol). Intents are sized from membership
+    budgets (`budget_pct`), not one strategy's full capital. Revisit the limits after two
+    sessions with fills, not before.
+  - *Verify the first session (Tue 11/3):*
+    - [ ] Scheduler log: `trading_cycle.portfolio_runtimes_resolved` once per tick and two
+          `evaluate_strategy_job | job_started` per tick (today: zero and one)
+    - [ ] `portfolio_signal_aggregator.summary` with two inputs (needs the 1.6 log-formatter
+          item or Loki: `{service_name="ratp-scheduler"} |= "aggregator.summary"`)
+    - [ ] `signals` has rows for both strategies; `strategy_runtime_states` gains a
+          `momentum_v1` row
+    - [ ] `strategy_sleeve_ledger` / `strategy_sleeve_positions` populate (both empty today)
+          and the EOD `broker_reconciliation` still agrees with Alpaca
+    - [ ] No `cycle_failed` ticks; throttle rejections audited, not fatal (Finding 8 shape)
+    - [ ] Next nightly `allocation_rebalance` stops logging
+          `STRATEGY_ALLOCATION_REBALANCE_NOOP` once quality scores exist (weekly interval
+          guard still applies); `strategy_quality_score_history` gains rows
+    - [ ] Grafana Trading Ops: per-strategy panels show two sleeves
+  - [ ] After two clean sessions with both strategies filling, note here whether the order
+        limits were changed, then start (a)
 - [ ] (a) Weekly bench re-sims + scorecards from B, plus the weekly review DAG on A
   - [x] Read endpoint on A: `GET /api/v1/worker/bench-inputs` (`worker` role) returns the
         ACTIVE / ON_DECK / BENCH strategies with their stored parameters, the shared window
@@ -423,8 +471,8 @@ is a finding.
           pulled, unregistered. Fixed in PR #161 (2026-10-30, deployed to A and B): version
           row first, then checksum rows; any failure after the Parquet write removes the
           directory; the foreign key is emulated in the tests. Orphans deleted from A, S3
-          and B the same night. First real run: Mon 2026-11-02 EOD.
-    - [ ] **Finding 16: the first month-end universe rotation on A (Fri 10/30) proposed an
+          and B the same night. First real run Mon 2026-11-02 EOD was clean: `rolling_raw_bars` `completed` in 19.7 s, version row plus 44 checksum rows, published to S3 and registered by B's 20:30 ET pull.
+    - [x] **Finding 16: the first month-end universe rotation on A (Fri 10/30) proposed an
           empty universe.** The candidate scorer reads bars from the box's own store, and A
           only ingests five-minute bars for the names it trades: 478 of the ~500 pool names
           were rejected `no_market_data`, and the 22 traded names `insufficient_history`
@@ -473,6 +521,11 @@ is a finding.
           Re-run `atp universe monthly-rotation --dry-run` after the follow-up deploys:
           expect no `screener_refresh_failed` warning, a pool snapshot captured today,
           `added` non-empty and `symbol_count` 19 or 20.
+          **Done 2026-11-03 01:50 UTC (PR #163 on A since 10/31 01:12 UTC):** `status: ok`, no
+          warnings, pool snapshot captured at 01:49:54 UTC (500 names, all 500 scored, no
+          rejections), 18 → 19: added HYG, LQD, XLF; removed CRM, DIA; churn 27.8% (under the
+          30% guard); `market_data_source: bar_source:alpaca_daily`; rotation rolled back.
+          Nothing left to verify before the Mon 11/30 close.
 - [ ] (b) Monthly research / strategy generation → bench
 - [ ] (c) Allocation/governance parameter changes, last (riskiest)
 
