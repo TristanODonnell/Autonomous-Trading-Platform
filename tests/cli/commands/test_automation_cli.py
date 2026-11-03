@@ -23,6 +23,10 @@ def test_automation_switches_are_settable_without_a_deploy() -> None:
         ("worker_result_max_age_days", "5"),
         ("worker_result_require_matching_git_sha", "false"),
         ("min_rebalance_interval_hours", "168"),
+        # Finding 17: the rotation tier switches were missing from the request, so the
+        # first flip on Box A had to be a SQL update with no audit row.
+        ("portfolio_mode_enabled", "true"),
+        ("bench_management_enabled", "true"),
     ):
         args = parser.parse_args(
             [
@@ -44,3 +48,5 @@ def test_automation_switches_are_settable_without_a_deploy() -> None:
     assert settings_cmd._coerce_value("worker_results_enabled", "true") is True
     assert settings_cmd._coerce_value("worker_result_max_age_days", "5") == 5
     assert settings_cmd._coerce_value("portfolio_review_mode", "auto") == "auto"
+    assert settings_cmd._coerce_value("portfolio_mode_enabled", "true") is True
+    assert settings_cmd._coerce_value("bench_management_enabled", "false") is False

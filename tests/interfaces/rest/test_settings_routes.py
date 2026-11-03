@@ -42,6 +42,8 @@ def test_get_settings_returns_default_operator_settings(client: TestClient) -> N
         "worker_results_enabled": False,
         "worker_result_max_age_days": 3,
         "worker_result_require_matching_git_sha": True,
+        "portfolio_mode_enabled": False,
+        "bench_management_enabled": False,
         "metadata": {
             "source_of_truth": {
                 "automation_controls_source": "settings",
@@ -336,3 +338,40 @@ def test_advanced_settings_returns_overrides_and_read_only_state(
 
     assert admin_response.status_code == 200
     assert admin_response.json()["data"]["read_only"] is False
+
+
+def test_put_settings_flips_portfolio_mode_with_an_audit_row(
+    client: TestClient, db_session: Session
+) -> None:
+    """Finding 17: the rotation tier switches are settable through the request and audited."""
+    response = client.put(
+        "/api/v1/settings",
+        json={
+            "portfolio_mode_enabled": True,
+            "bench_management_enabled": True,
+            "reason": "3.3(0): trade the seeded active set",
+        },
+        headers=auth_headers(role="admin"),
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["portfolio_mode_enabled"] is True
+    assert data["bench_management_enabled"] is True
+
+    row = db_session.get(OperatorSettingsRow, "default")
+    assert row is not None
+    assert row.portfolio_mode_enabled is True
+    assert row.bench_management_enabled is True
+
+    audit_log = db_session.query(AuditLogRow).one()
+    assert audit_log.event_type == "OPERATOR_SETTINGS_UPDATED"
+    assert audit_log.event_metadata is not None
+    assert audit_log.event_metadata["changes"]["portfolio_mode_enabled"] == {
+        "previous": False,
+        "new": True,
+    }
+    assert audit_log.event_metadata["changes"]["bench_management_enabled"] == {
+        "previous": False,
+        "new": True,
+    }

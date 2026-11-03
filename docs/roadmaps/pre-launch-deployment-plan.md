@@ -382,8 +382,32 @@ is a finding.
     ```
     No restart needed: `resolve_strategy_runtimes` reads the row every tick. Roll back with
     the same statement and `false`; positions already opened stay owned by their sleeve and
-    the legacy path winds them down. Follow-up PR: add both flags to
-    `OperatorSettingsUpdateRequest` so the CLI can flip them with an audit row.
+    the legacy path winds them down. Fixed the same night: both flags are now in
+    `OperatorSettingsUpdateRequest`, the settings DTO and the REST response, so
+    `atp settings set --key portfolio_mode_enabled --value true` and `PUT /api/v1/settings`
+    flip them with an `OPERATOR_SETTINGS_UPDATED` row (tests on the CLI parser and the route).
+  - **Finding 18 (found 2026-11-02 while reviewing allocation): the portfolio drawdown
+    ladder's peak is dev-dump data.** `portfolio_drawdown_governance_state.peak_equity_usd`
+    was $117,955 with a breach recorded 2026-07-19, both from the July dump, not this
+    account (reset to $100k on 10/09; real high since then $100,531). Against the stale
+    peak the account read 18% down, past the 15% threshold; the action is `warn_only` with
+    `auto_resume`, so nothing fired, but every nightly `DRAWDOWN_GOVERNANCE_LADDER_RUN`
+    was measuring the wrong thing. Reset by SQL (`~/ladder_reset.sql` on the laptop, same
+    pipe-over-ssh as the flip): peak = 100531.26, breach fields cleared; the ladder raises
+    the peak itself from the nightly equity. Open question for later: whether the ladder
+    should seed its peak from the first broker sync after an account reset rather than
+    carrying whatever the dump held.
+  - **Dump-era rows (scoped 2026-11-02, not done):** A's SoR still carries the dev dump's
+    2023-2024 backtest and the July 2026 fixture: 29.7k `fills`, 35.9k `signals`, 29.7k
+    `order_intents`, 84.8k `run_manifests`, 29.7k `cash_snapshots`, 15.7k
+    `position_snapshots`, 3.96M `audit_logs`, all dated before 2026-10-01. The live
+    performance metrics read a trailing window (at least 90 days times a lookback
+    multiplier), which keeps the 2023-2024 rows out but can still pick up the July 2026
+    fixture (equity in the millions on 07/15-07/19); treat any live-metric or "all time"
+    dashboard number as suspect until the purge is done.
+    Purge is a scripted, FK-ordered delete by `run_id` with the nightly backup verified
+    first and a restore test after; do it on a weekend, not mid-soak, and not the night
+    before the first multi-strategy session.
   - *What changes:* `momentum_v1` joins `mean_reversion_v1` (re-sim 2026-10-27: ~10 turns a
     day, 249 trades over the window), so expect many more intents and more
     `ORDER_REJECTED_BY_THROTTLE` / gross-cap rejections against the current limits (2 per

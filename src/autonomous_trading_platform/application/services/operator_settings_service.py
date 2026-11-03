@@ -37,6 +37,9 @@ class OperatorSettingsDTO:
     worker_results_enabled: bool = False
     worker_result_max_age_days: int = 3
     worker_result_require_matching_git_sha: bool = True
+    # Portfolio-rotation tier switches (plan 3.3(0), Finding 17)
+    portfolio_mode_enabled: bool = False
+    bench_management_enabled: bool = False
 
 
 class OperatorSettingsService:
@@ -155,4 +158,6 @@ class OperatorSettingsService:
             worker_result_require_matching_git_sha=bool(
                 getattr(row, "worker_result_require_matching_git_sha", True)
             ),
+            portfolio_mode_enabled=bool(getattr(row, "portfolio_mode_enabled", False)),
+            bench_management_enabled=bool(getattr(row, "bench_management_enabled", False)),
         )
