@@ -241,19 +241,16 @@ only ran ~09:30–11:00 ET each day, so those days do not count. Causes and fixe
 - [ ] Test: a log call with `extra={...}` renders the fields; a call without renders as today
 - [ ] Deploy and confirm one scheduler tick's lines on Box A read end to end
 
-*Seed an initial active set (exercise the portfolio path during the soak):*
-- [ ] Decide the members: proposal = the three paper-approved rows (`momentum_v1`,
-      `mean_reversion_v1`, `macd_crossover_v1`) as ACTIVE, equal budgets, no on-deck yet
-- [ ] Confirm `operator_settings.portfolio_mode_enabled` is on; keep
-      `portfolio_review_mode=off` and `worker_results_enabled=false` until 3.3(a)
-- [ ] Insert the `portfolio_memberships` rows + `portfolio_membership_transitions` audit
-      (via the governance CLI/API if one exists, else a reviewed SQL script committed to
-      `scripts/`); record who/why in the transition reason
-- [ ] Next session's log shows one `trading_cycle.active_strategy_resolved` per member and
-      `portfolio_signal_aggregator.summary` with three inputs; sleeve ledgers populate
-- [ ] Nightly rebalance stops logging `STRATEGY_ALLOCATION_REBALANCE_NOOP` once quality
-      scores exist (weekly interval guard still applies)
-- [ ] Note in this doc which path the soak days before the seed exercised (single-strategy)
+*Seed an initial active set (resolved 2026-11-02):*
+- [x] Members decided and seeded 2026-10-27 through `ActivePortfolioService`: `mean_reversion_v1`
+      and `momentum_v1` ACTIVE, `macd_crossover_v1` BENCH (see 3.3(a))
+- [x] `portfolio_mode_enabled` was **not** switched on: the memberships are inert and the
+      whole soak has run the legacy single-strategy path (`macd_crossover_v1` until 10/22,
+      `mean_reversion_v1` from 10/23, picked by `_resolve_active_strategy`'s ordering).
+      Switching it on is now its own step, **3.3(0)**, after the soak completes
+- [x] `portfolio_review_mode=off` and `worker_results_enabled=false` until 3.3(a)
+- The verify list (one runtime per member, aggregator inputs, sleeve ledgers, rebalance no
+  longer a no-op) moved to 3.3(0)
 
 *Then start 3.3(a)* (see the Phase 3 checklist below for the sub-steps).
 
@@ -358,6 +355,48 @@ is a finding.
 - [x] **API hand-off contract**: results carry `dataset_version`, code version (git SHA), run ID and fixture; A rejects stale or mismatched results; calls are idempotent by run ID (`POST /api/v1/worker/results` + `GET` list/one, `worker` JWT role, `WorkerResultSubmission`/`WorkerResultDecision` contracts, typed `BenchResimsPayload`; worker side `WorkerResultClient` + `atp worker publish-result`; A's weekly review consumes the latest accepted still-fresh `bench_resims` and marks it `applied` with the review id). **Open for 3.3(a):** the worker job that produces bench re-sims needs A's bench membership + strategy configs as input
 
 **3.3 Switch automation on in order of risk, one at a time with a few cycles between**
+- [ ] **(0) Turn on portfolio mode: trade the seeded active set (first, after the soak)**
+  - *Why first:* the review in (a) decides swaps for an active set that is not trading, and
+    the bench, sleeves and allocation only become visible once the portfolio path runs. The
+    user wants this live early as the realistic read on whether the system is moving in the
+    right direction, with the bench and rotation layered on as they come up.
+  - *Risk:* lowest in Phase 3. One operator setting, no deploy, reversible the same way; the
+    kill switch still overrides everything. The code path is Step 1 of the rotation plan
+    (done 2026-09-28) and ran in every rotation backtest, but has never traded on A.
+  - *When:* Thu 2026-11-05 before 09:30 ET, i.e. after Wednesday's close completes the ten
+    clean sessions. Do not start any (a) switch the same week.
+  - *Operator steps on A* (prompt reads `ip-172-31-42-34`, from `~/Autonomous-Trading-Platform`):
+    ```
+    docker compose exec app atp controls automation
+    docker compose exec app atp settings set --key portfolio_mode_enabled --value true --updated-by tristan --reason "3.3(0): trade the seeded active set"
+    docker compose exec app atp settings verify-persisted --expect portfolio_mode_enabled=true
+    docker compose exec app atp portfolio membership list
+    ```
+    No restart needed: `resolve_strategy_runtimes` reads the setting every tick. Roll back
+    with the same `set` command and `--value false`; positions already opened stay owned by
+    their sleeve and the legacy path winds them down.
+  - *What changes:* `momentum_v1` joins `mean_reversion_v1` (re-sim 2026-10-27: ~10 turns a
+    day, 249 trades over the window), so expect many more intents and more
+    `ORDER_REJECTED_BY_THROTTLE` / gross-cap rejections against the current limits (2 per
+    bar, 20 per hour, $100k gross, $25k per symbol). Intents are sized from membership
+    budgets (`budget_pct`), not one strategy's full capital. Revisit the limits after two
+    sessions with fills, not before.
+  - *Verify the first session (Thu 11/5):*
+    - [ ] Scheduler log: `trading_cycle.portfolio_runtimes_resolved` once per tick and two
+          `evaluate_strategy_job | job_started` per tick (today: zero and one)
+    - [ ] `portfolio_signal_aggregator.summary` with two inputs (needs the 1.6 log-formatter
+          item or Loki: `{service_name="ratp-scheduler"} |= "aggregator.summary"`)
+    - [ ] `signals` has rows for both strategies; `strategy_runtime_states` gains a
+          `momentum_v1` row
+    - [ ] `strategy_sleeve_ledger` / `strategy_sleeve_positions` populate (both empty today)
+          and the EOD `broker_reconciliation` still agrees with Alpaca
+    - [ ] No `cycle_failed` ticks; throttle rejections audited, not fatal (Finding 8 shape)
+    - [ ] Next nightly `allocation_rebalance` stops logging
+          `STRATEGY_ALLOCATION_REBALANCE_NOOP` once quality scores exist (weekly interval
+          guard still applies); `strategy_quality_score_history` gains rows
+    - [ ] Grafana Trading Ops: per-strategy panels show two sleeves
+  - [ ] After two clean sessions with both strategies filling, note here whether the order
+        limits were changed, then start (a)
 - [ ] (a) Weekly bench re-sims + scorecards from B, plus the weekly review DAG on A
   - [x] Read endpoint on A: `GET /api/v1/worker/bench-inputs` (`worker` role) returns the
         ACTIVE / ON_DECK / BENCH strategies with their stored parameters, the shared window
