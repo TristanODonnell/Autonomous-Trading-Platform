@@ -311,9 +311,9 @@ are not handled; `RealMarketCalendar.market_close` does take them from the excha
 | When | Trigger | Rule in code | First time on A | Verify |
 |---|---|---|---|---|
 | every Monday | `weekly_portfolio_review` | `is_first_trading_day_of_week` | 10/20 | [x] fired 10/26, `completed` in 11 ms (no-op while `portfolio_review_mode=off`); 10/22–23 `skipped` as expected |
-| Fri 10/30 close | `monthly_universe_rotation` | `is_last_trading_day_of_month`, churn guard on, reason `scheduler_monthly` | never run on A (active universe is still the dev dump `proposed_2024-12-02`, 22 names) | [x] ran, step `failed`: empty proposal (Finding 16, 3.3a); chain continued, universe unchanged. Re-verify with `atp universe monthly-rotation --dry-run` after the fix deploys, then Mon 11/30 close for real |
-| Sun 11/1 | daylight saving ends | all times via `America/New_York` zoneinfo | first clock change during the soak | [ ] Mon 11/2 ticks land at boundary + 10 s from 09:30 ET; EOD chain starts after 16:00 ET, not 15:00 or 17:00 |
-| Mon 11/2 | weekly review on the first session after a rotation | | | [ ] `completed`; review sees the new universe, no error |
+| Fri 10/30 close | `monthly_universe_rotation` | `is_last_trading_day_of_month`, churn guard on, reason `scheduler_monthly` | never run on A (active universe is still the dev dump `proposed_2024-12-02`, 22 names) | [x] ran, step `failed`: empty proposal (Finding 16, 3.3a); chain continued, universe unchanged. Re-verified 2026-11-03 01:50 UTC with `atp universe monthly-rotation --dry-run` after PR #163: pool 500 captured, 18 → 19 (+HYG, LQD, XLF; −CRM, DIA), churn 27.8%, no warnings, no rejections. Next real run Mon 11/30 close |
+| Sun 11/1 | daylight saving ends | all times via `America/New_York` zoneinfo | first clock change during the soak | [x] 11/2: tick #1 at 09:30:00 ET, then every boundary + 10 s through 15:55:10 (79 ticks, same as every prior session; the 79th at 15:59:59 is degraded `ingestion_deadline_missed` every day, not new); EOD chain 18:00–18:02 ET = 23:00 UTC, one UTC hour later than Friday as expected |
+| Mon 11/2 | weekly review on the first session after a rotation | | | [x] `completed` in 12 ms on 11/2 (no-op, `portfolio_review_mode=off`); universe unchanged because the 10/30 rotation never activated |
 | Thu 11/26 | Thanksgiving, closed | `is_trading_day` false | first holiday | [ ] runner logs "next market open" and runs no ticks, no EOD chain, no `runtime_job_runs` row for 11/26; B's nightly pull finds nothing new and exits clean |
 | Fri 11/27 | early close 13:00 ET | `market_close` from the exchange calendar, `is_early_close` | first half-day | [ ] last tick ≤ 12:55 ET, EOD chain starts ~13:15 ET, `final_ingestion` has the half-day's bars only, no ticks between 13:00 and 16:00 |
 | Thu 12/24 | early close 13:00 ET | same | second half-day | [ ] same as 11/27 |
@@ -423,8 +423,8 @@ is a finding.
           pulled, unregistered. Fixed in PR #161 (2026-10-30, deployed to A and B): version
           row first, then checksum rows; any failure after the Parquet write removes the
           directory; the foreign key is emulated in the tests. Orphans deleted from A, S3
-          and B the same night. First real run: Mon 2026-11-02 EOD.
-    - [ ] **Finding 16: the first month-end universe rotation on A (Fri 10/30) proposed an
+          and B the same night. First real run Mon 2026-11-02 EOD was clean: `rolling_raw_bars` `completed` in 19.7 s, version row plus 44 checksum rows, published to S3 and registered by B's 20:30 ET pull.
+    - [x] **Finding 16: the first month-end universe rotation on A (Fri 10/30) proposed an
           empty universe.** The candidate scorer reads bars from the box's own store, and A
           only ingests five-minute bars for the names it trades: 478 of the ~500 pool names
           were rejected `no_market_data`, and the 22 traded names `insufficient_history`
@@ -473,6 +473,11 @@ is a finding.
           Re-run `atp universe monthly-rotation --dry-run` after the follow-up deploys:
           expect no `screener_refresh_failed` warning, a pool snapshot captured today,
           `added` non-empty and `symbol_count` 19 or 20.
+          **Done 2026-11-03 01:50 UTC (PR #163 on A since 10/31 01:12 UTC):** `status: ok`, no
+          warnings, pool snapshot captured at 01:49:54 UTC (500 names, all 500 scored, no
+          rejections), 18 → 19: added HYG, LQD, XLF; removed CRM, DIA; churn 27.8% (under the
+          30% guard); `market_data_source: bar_source:alpaca_daily`; rotation rolled back.
+          Nothing left to verify before the Mon 11/30 close.
 - [ ] (b) Monthly research / strategy generation → bench
 - [ ] (c) Allocation/governance parameter changes, last (riskiest)
 
