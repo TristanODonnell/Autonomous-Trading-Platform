@@ -49,6 +49,10 @@ class OperatorSettingsResponse(BaseModel):
     worker_results_enabled: bool = False
     worker_result_max_age_days: int = 3
     worker_result_require_matching_git_sha: bool = True
+    # Portfolio-rotation tier switches (plan 3.3(0), Finding 17): off = legacy
+    # single-strategy cycle / no bench tier.
+    portfolio_mode_enabled: bool = False
+    bench_management_enabled: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -103,6 +107,10 @@ class OperatorSettingsUpdateRequest(BaseModel):
     worker_results_enabled: bool | None = None
     worker_result_max_age_days: int | None = Field(default=None, ge=0, le=60)
     worker_result_require_matching_git_sha: bool | None = None
+    # Portfolio-rotation tier switches (plan 3.3(0), Finding 17). Flippable here and by
+    # `atp settings set` so the change lands with an OPERATOR_SETTINGS_UPDATED audit row.
+    portfolio_mode_enabled: bool | None = None
+    bench_management_enabled: bool | None = None
     reason: str | None = Field(default=None, max_length=500)
 
 
