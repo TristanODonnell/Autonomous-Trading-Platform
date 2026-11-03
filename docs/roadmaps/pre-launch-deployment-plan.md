@@ -355,7 +355,8 @@ is a finding.
 - [x] **API hand-off contract**: results carry `dataset_version`, code version (git SHA), run ID and fixture; A rejects stale or mismatched results; calls are idempotent by run ID (`POST /api/v1/worker/results` + `GET` list/one, `worker` JWT role, `WorkerResultSubmission`/`WorkerResultDecision` contracts, typed `BenchResimsPayload`; worker side `WorkerResultClient` + `atp worker publish-result`; A's weekly review consumes the latest accepted still-fresh `bench_resims` and marks it `applied` with the review id). **Open for 3.3(a):** the worker job that produces bench re-sims needs A's bench membership + strategy configs as input
 
 **3.3 Switch automation on in order of risk, one at a time with a few cycles between**
-- [ ] **(0) Turn on portfolio mode: trade the seeded active set (first, after the soak)**
+- [x] **(0) Turn on portfolio mode: trade the seeded active set (first, after the soak)** —
+  switched on Mon 2026-11-02 at 05:45 UTC (00:45 ET Tue); first portfolio-path session is Tue 11/3
   - *Why first:* the review in (a) decides swaps for an active set that is not trading, and
     the bench, sleeves and allocation only become visible once the portfolio path runs. The
     user wants this live early as the realistic read on whether the system is moving in the
@@ -363,25 +364,33 @@ is a finding.
   - *Risk:* lowest in Phase 3. One operator setting, no deploy, reversible the same way; the
     kill switch still overrides everything. The code path is Step 1 of the rotation plan
     (done 2026-09-28) and ran in every rotation backtest, but has never traded on A.
-  - *When:* Thu 2026-11-05 before 09:30 ET, i.e. after Wednesday's close completes the ten
-    clean sessions. Do not start any (a) switch the same week.
-  - *Operator steps on A* (prompt reads `ip-172-31-42-34`, from `~/Autonomous-Trading-Platform`):
+  - *When:* decided Mon 11/2 night to flip immediately rather than wait for Thu 11/5: the
+    last two soak sessions only re-test plumbing that has run clean for eight, the portfolio
+    path does not touch ingestion or the EOD chain, and the flag is reversible on the next
+    tick. Do not start any (a) switch the same week.
+  - *Operator step on A* (prompt reads `ip-172-31-42-34`). **Finding 17:** `atp settings set`
+    refuses `portfolio_mode_enabled` (and `bench_management_enabled`): the CLI only accepts
+    the fields of `OperatorSettingsUpdateRequest`, neither flag is in it, and the box has no
+    `OPERATOR_SETTINGS_UPDATED` audit rows at all, so the 10/27 bench flag was also set
+    outside the CLI. Done with SQL from the laptop (a file piped over ssh, because long
+    quoted one-liners get a newline inserted when pasted into PowerShell):
     ```
-    docker compose exec app atp controls automation
-    docker compose exec app atp settings set --key portfolio_mode_enabled --value true --updated-by tristan --reason "3.3(0): trade the seeded active set"
-    docker compose exec app atp settings verify-persisted --expect portfolio_mode_enabled=true
-    docker compose exec app atp portfolio membership list
+    type ~lip.sql | ssh -i ~/.ssh/trading-platform-laptop ubuntu@3.133.10.131 'cd ~/Autonomous-Trading-Platform && docker compose exec -T postgres psql -U ratp -d ratp'
+    -- flip.sql:
+    update operator_settings set portfolio_mode_enabled = true, updated_by = 'tristan', updated_at = now();
+    select portfolio_mode_enabled, bench_management_enabled, updated_at from operator_settings;
     ```
-    No restart needed: `resolve_strategy_runtimes` reads the setting every tick. Roll back
-    with the same `set` command and `--value false`; positions already opened stay owned by
-    their sleeve and the legacy path winds them down.
+    No restart needed: `resolve_strategy_runtimes` reads the row every tick. Roll back with
+    the same statement and `false`; positions already opened stay owned by their sleeve and
+    the legacy path winds them down. Follow-up PR: add both flags to
+    `OperatorSettingsUpdateRequest` so the CLI can flip them with an audit row.
   - *What changes:* `momentum_v1` joins `mean_reversion_v1` (re-sim 2026-10-27: ~10 turns a
     day, 249 trades over the window), so expect many more intents and more
     `ORDER_REJECTED_BY_THROTTLE` / gross-cap rejections against the current limits (2 per
     bar, 20 per hour, $100k gross, $25k per symbol). Intents are sized from membership
     budgets (`budget_pct`), not one strategy's full capital. Revisit the limits after two
     sessions with fills, not before.
-  - *Verify the first session (Thu 11/5):*
+  - *Verify the first session (Tue 11/3):*
     - [ ] Scheduler log: `trading_cycle.portfolio_runtimes_resolved` once per tick and two
           `evaluate_strategy_job | job_started` per tick (today: zero and one)
     - [ ] `portfolio_signal_aggregator.summary` with two inputs (needs the 1.6 log-formatter
