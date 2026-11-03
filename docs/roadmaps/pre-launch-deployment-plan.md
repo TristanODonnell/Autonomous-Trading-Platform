@@ -430,6 +430,56 @@ is a finding.
     - [ ] Grafana Trading Ops: per-strategy panels show two sleeves
   - [ ] After two clean sessions with both strategies filling, note here whether the order
         limits were changed, then start (a)
+  - **First session, Tue 2026-11-03 (reviewed after the close).** Mechanics: the portfolio
+    path ran all 79 ticks (`portfolio_runtimes_resolved` 79, three `evaluate_strategy_job`
+    starts per tick, aggregator summary 78, no `cycle_failed`), `momentum_v1` traded for the
+    first time (128 fills, $74k notional; `mean_reversion_v1` 37 fills, $28k), sleeve tables
+    populated, EOD chain clean, Box B pull clean. Broker equity $97,238 at the close
+    (+$843 on the day). Four findings, in order of what they cost:
+    - [ ] **Finding 19: the throttle starves exits.** 985 intents, 829 rejected by the
+          2-per-bar cap. The orphan `__unattributed__` sleeve (the inherited DIA / QQQ / TLT
+          book, ~$75k) generated 78 sell intents per name and filled none: the submission
+          job takes intents in evaluation order (active members first, orphan sleeves
+          appended last) and the two slots go to the first two every bar; only AMD and AVGO
+          got out, on the one bar with a free slot (09:41 ET). Momentum alone was throttled
+          575 times. So the book is still 75% the old single-strategy positions and both
+          sleeves are squeezed into ~$25k of gross-cap room. Fix: order exits before entries
+          at submission (sells first, orphan / winding-down sleeves first among them), and
+          decide a multi-strategy `MAX_ORDERS_PER_BAR` (2 was set for one strategy; with
+          three books and a 5-bar momentum rule it blocks 84% of orders).
+    - [ ] **Finding 20: sleeve books drift from the broker within one session.** Tonight's
+          reconciliation: AMZN sleeves 8 / broker 0, AAPL 4 / 3, TSLA 4 / 4, META 4 / 4;
+          67 `sleeve_reconciliation.mismatch` warnings, 5 `sleeve_ledger.fill_not_applied`
+          errors ("sleeve 'momentum_v1' holds 0 AAPL; cannot sell 1"), 28 ticks with sells
+          clamped to account holdings. Mechanism: a bar's fills are only applied to the
+          sleeves by the reconciliation step of the *next* tick, which runs after that
+          tick's evaluation; evaluation books internal crosses immediately. So a momentum
+          sell that filled at the broker late in bar T is still in the sleeve at T+1, the
+          same shares get crossed to mean reversion, and when the broker fill is finally
+          applied the sleeve is already empty and the fill is dropped. The broker ends up
+          holding less than the sleeves say, forever. Fix: apply pending fills before
+          evaluation (reconcile first in the tick), or make the crossing service net
+          against open orders; and a nightly sleeve-vs-broker resync so drift cannot
+          compound.
+    - [ ] **Finding 21: the position / cash ledger is $24k off the broker, and the drawdown
+          ladder reads it.** Ledger equity $121,007 vs broker $97,215 (cash $29,786 vs
+          $5,853); positions AMZN 7 / 0, TSLA 1 / 4, AAPL 2 / 3, META 3 / 4. This predates
+          today (ledger $116k at Monday's close) and is the drift the ledger-resync runbook
+          exists for. The ladder evaluates `CashSnapshotRepository.get_latest()` (ledger),
+          so its peak rose to $121,022 today instead of being reset (Finding 18's reset was
+          not run; it would have been overwritten anyway). The `atp execution
+          validate-broker-consistency` check reports `drifted`. Fix: resync per the runbook
+          after the close, then point the ladder at broker equity.
+    - [ ] **Finding 22 (cadence, no fix needed yet):** `macd_crossover_v1` moved BENCH →
+          ON_DECK at the first tick (`selected_on_deck`): the active-set refresh fills
+          on-deck seats from eligible candidates, so the "bench until re-sim evidence" seed
+          lasted one tick. It is shadow-only (shadow sleeve: AMZN 4, CRM 1, META 1, MSFT 1,
+          QQQ 2, TLT 23), so harmless. `active_portfolio.below_minimum` warns every tick
+          because `min_active_strategies` is 3 with two members; set it to 2 or accept.
+    - Also seen: DIA / TLT dividends pending on the inherited book withheld the orphan
+      adoption for the first ticks (`adoption_withheld` ×5, `corporate_action.skipped`), then
+      adopted; symbol cap ($25k) rejected momentum's DIA buys because the orphan sleeve
+      already holds $25k DIA.
 - [ ] (a) Weekly bench re-sims + scorecards from B, plus the weekly review DAG on A
   - [x] Read endpoint on A: `GET /api/v1/worker/bench-inputs` (`worker` role) returns the
         ACTIVE / ON_DECK / BENCH strategies with their stored parameters, the shared window
