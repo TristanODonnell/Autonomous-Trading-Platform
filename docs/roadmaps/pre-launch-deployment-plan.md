@@ -436,7 +436,7 @@ is a finding.
     first time (128 fills, $74k notional; `mean_reversion_v1` 37 fills, $28k), sleeve tables
     populated, EOD chain clean, Box B pull clean. Broker equity $97,238 at the close
     (+$843 on the day). Four findings, in order of what they cost:
-    - [ ] **Finding 19: the throttle starves exits.** 985 intents, 829 rejected by the
+    - [x] **Finding 19: the throttle starves exits.** 985 intents, 829 rejected by the
           2-per-bar cap. The orphan `__unattributed__` sleeve (the inherited DIA / QQQ / TLT
           book, ~$75k) generated 78 sell intents per name and filled none: the submission
           job takes intents in evaluation order (active members first, orphan sleeves
@@ -447,7 +447,12 @@ is a finding.
           at submission (sells first, orphan / winding-down sleeves first among them), and
           decide a multi-strategy `MAX_ORDERS_PER_BAR` (2 was set for one strategy; with
           three books and a 5-bar momentum rule it blocks 84% of orders).
-    - [ ] **Finding 20: sleeve books drift from the broker within one session.** Tonight's
+          **Code fixed 2026-11-03** (`_order_for_submission` in `portfolio_evaluation.py`):
+          the aggregator now hands the submission job sells first, and among sells those of
+          non-ACTIVE (orphan / winding-down) sleeves first, evaluation order otherwise, so
+          whatever the per-bar cap is, exits take the slots before entries. The cap itself
+          is an env change on A, see the post-deploy steps below.
+    - [x] **Finding 20: sleeve books drift from the broker within one session.** Tonight's
           reconciliation: AMZN sleeves 8 / broker 0, AAPL 4 / 3, TSLA 4 / 4, META 4 / 4;
           67 `sleeve_reconciliation.mismatch` warnings, 5 `sleeve_ledger.fill_not_applied`
           errors ("sleeve 'momentum_v1' holds 0 AAPL; cannot sell 1"), 28 ticks with sells
@@ -461,6 +466,15 @@ is a finding.
           evaluation (reconcile first in the tick), or make the crossing service net
           against open orders; and a nightly sleeve-vs-broker resync so drift cannot
           compound.
+          **Code fixed 2026-11-03**, both halves: (1) in portfolio mode the trading cycle
+          runs a `pre_evaluation_reconciliation` step (same job and failure handling as the
+          post-submission one) before `trading_evaluation`, so bar T's fills are in the
+          sleeves before bar T+1 is evaluated and crossed; (2) the crossing service is not
+          given intents for a symbol that still has an open broker order (logged as
+          `portfolio_evaluation.cross_skipped_open_orders`); they go to the broker
+          uncrossed. Still open: the nightly sleeve-vs-broker resync (drift that already
+          happened is cleared by the ledger resync below, which rebuilds the sleeves
+          from the broker book).
     - [ ] **Finding 21: the position / cash ledger is $24k off the broker, and the drawdown
           ladder reads it.** Ledger equity $121,007 vs broker $97,215 (cash $29,786 vs
           $5,853); positions AMZN 7 / 0, TSLA 1 / 4, AAPL 2 / 3, META 3 / 4. This predates
@@ -480,6 +494,23 @@ is a finding.
       adoption for the first ticks (`adoption_withheld` ×5, `corporate_action.skipped`), then
       adopted; symbol cap ($25k) rejected momentum's DIA buys because the orphan sleeve
       already holds $25k DIA.
+    - **After the fix deploys (manual, on A, after the close):**
+      1. [ ] Ledger resync per `docs/operations/runbooks/ledger-resync.md` (Finding 21):
+         kill switch on, `sync-broker-state` + `sync-position-snapshot` with one fresh
+         run id, `validate-broker-consistency --paper-only` must print `ok`, then the
+         runbook's step-4 peak reset (this replaces Finding 18's hand-written reset: the
+         resynced equity is the right peak), kill switch off with `--confirm-release`.
+      2. [ ] `MAX_ORDERS_PER_BAR=6`, `MAX_ORDERS_PER_HOUR=60` in A's `.env`, then
+         `docker compose up -d scheduler`. Three books (two members + the orphan sleeve
+         winding down) need more than two slots a bar; 6 lets the orphan exits and both
+         members trade in the same bar, and 60/hour still caps a runaway loop at ~1
+         order a minute. Revisit once the orphan book is flat.
+      3. [ ] Optional: `min_active_strategies` 3 -> 2 in `operator_settings` (Finding 22)
+         to stop the per-tick `below_minimum` warning.
+      4. [ ] Next session, check: `pre_evaluation_reconciliation` step rows in
+         `runtime_job_run_steps` for every tick; orphan DIA / QQQ / TLT sells filling in
+         the first bars; no `fill_not_applied` errors; the EOD sleeve reconciliation
+         mismatch count near zero.
 - [ ] (a) Weekly bench re-sims + scorecards from B, plus the weekly review DAG on A
   - [x] Read endpoint on A: `GET /api/v1/worker/bench-inputs` (`worker` role) returns the
         ACTIVE / ON_DECK / BENCH strategies with their stored parameters, the shared window
