@@ -44,6 +44,7 @@ from autonomous_trading_platform.execution.services.portfolio_signal_aggregator 
     PortfolioSignalAggregator,
 )
 from autonomous_trading_platform.execution.services.sleeve_crossing_service import (
+    CrossingPlan,
     PlannedCross,
     SleeveCrossingService,
 )
@@ -118,6 +119,11 @@ def run_portfolio_evaluation(
         open_orders = execution_context.order_runtime_state_service.list_reconciliation_inputs(
             uow=uow
         )
+        # Symbols with an order still open at the broker (Finding 20): their sleeves may
+        # change before this bar's intents are submitted, so they are not crossed.
+        open_symbols = {
+            str(row.symbol).upper() for row in uow.tracked_orders.list_reconcilable_orders()
+        }
         if not open_orders:
             adoption = ledger.reconcile(
                 uow,
@@ -333,8 +339,24 @@ def run_portfolio_evaluation(
             },
         )
 
-    # 4. Internal crossing between sleeves.
-    plan = SleeveCrossingService(construction).plan(intents, prices=prices, run_id=manifest.run_id)
+    # 4. Internal crossing between sleeves. A symbol with an open broker order is sent
+    # uncrossed: a fill from the previous bar that has not reached the sleeve yet would
+    # otherwise be exited twice, once at the broker and once by the cross (Finding 20).
+    crossable, held_back = _split_by_symbols(intents, open_symbols)
+    if held_back:
+        logger.info(
+            "portfolio_evaluation.cross_skipped_open_orders",
+            extra={
+                "symbols": sorted({i.symbol for i in held_back}),
+                "run_id": str(manifest.run_id),
+            },
+        )
+    plan = SleeveCrossingService(construction).plan(
+        crossable, prices=prices, run_id=manifest.run_id
+    )
+    plan = CrossingPlan(
+        residual_intents=list(plan.residual_intents) + held_back, crosses=plan.crosses
+    )
     crosses: list[PlannedCross] = []
     if plan.crosses:
         try:
@@ -399,6 +421,9 @@ def run_portfolio_evaluation(
                 extra={"run_id": str(manifest.run_id)},
             )
 
+    # 7. Submission order (Finding 19): the per-bar throttle takes intents in this order,
+    # so exits go before entries and orphan / winding-down sleeves' exits before all.
+    intents = _order_for_submission(intents, runtimes)
     job_span.set_attribute("ratp.portfolio.strategy_count", len(runtimes))
     job_span.set_attribute("ratp.portfolio.internal_crosses", len(crosses))
     job_span.set_attribute("ratp.portfolio.intent_count", len(intents))
@@ -421,6 +446,41 @@ def run_portfolio_evaluation(
         ),
         intents,
     )
+
+
+def _split_by_symbols(
+    intents: list[OrderIntent], symbols: Collection[str]
+) -> tuple[list[OrderIntent], list[OrderIntent]]:
+    """(intents whose symbol is not in ``symbols``, the rest), both in original order."""
+    excluded = {s.upper() for s in symbols}
+    kept = [i for i in intents if i.symbol.upper() not in excluded]
+    held = [i for i in intents if i.symbol.upper() in excluded]
+    return kept, held
+
+
+def _order_for_submission(
+    intents: list[OrderIntent], runtimes: Collection[StrategyRuntime]
+) -> list[OrderIntent]:
+    """Order intents for the per-bar throttle (Finding 19).
+
+    Sells first, so exits are never starved by entries; among sells, those of sleeves
+    that are not ACTIVE (orphan / winding-down books that may only exit) first; otherwise
+    the evaluation order is kept. The first live multi-strategy session generated 78 sell
+    intents per inherited symbol and filled none, because the two slots per bar went to
+    the active members' intents that came first in the list.
+    """
+    active = {r.strategy_id for r in runtimes if r.status == MembershipStatus.ACTIVE}
+
+    def key(item: tuple[int, OrderIntent]) -> tuple[int, int, int]:
+        index, intent = item
+        is_sell = intent.side == Side.SELL
+        return (
+            0 if is_sell else 1,
+            0 if is_sell and intent.strategy_id not in active else 1,
+            index,
+        )
+
+    return [intent for _, intent in sorted(enumerate(intents), key=key)]
 
 
 def order_limit_rejection_auditor(*, audit_logger, run_id: str, component: str):

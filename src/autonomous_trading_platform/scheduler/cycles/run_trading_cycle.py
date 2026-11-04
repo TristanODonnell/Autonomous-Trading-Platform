@@ -582,6 +582,65 @@ def run_trading_cycle(
                 )
                 raise
 
+            # STEP 1b (portfolio mode): apply fills from the previous bar before the sleeves
+            # are evaluated and crossed (Finding 20). Without this a sell that filled late
+            # in bar T was still in its sleeve at T+1, got crossed to another sleeve, and
+            # the broker fill was then dropped as "sleeve holds 0". Same failure handling
+            # as the post-submission reconciliation step.
+            if trading_cycle_dependencies.strategy_runtimes is not None:
+                step = "pre_evaluation_reconciliation"
+                manifest.current_step = step
+                manifest_service.save(manifest)
+                record_step_started(
+                    logger=logger,
+                    metrics=TRADING_STEP_METRICS,
+                    step=step,
+                    component=component,
+                    run_id=str(run_id),
+                )
+                step_start = perf_counter()
+                try:
+                    with start_span(
+                        "trading_cycle.pre_evaluation_reconciliation",
+                        timespan=SpanTimespan.STEP,
+                    ) as step_span:
+                        step_span.set_attribute("ratp.run_id", str(run_id))
+                        step_span.set_attribute("ratp.step", step)
+                        run_order_reconciliation_job(
+                            run_id=str(run_id),
+                            now_utc=now_utc,
+                            broker_client=broker_client,
+                        )
+                    record_step_completed(
+                        logger=logger,
+                        metrics=TRADING_STEP_METRICS,
+                        step=step,
+                        component=component,
+                        run_id=str(run_id),
+                        duration_seconds=perf_counter() - step_start,
+                    )
+                    manifest.last_successful_step = step
+                    manifest_service.save(manifest)
+                except Exception as exc:
+                    if settings.freeze_trading_on_reconciliation_failure:
+                        freeze_service.freeze_trading(
+                            reason=f"reconciliation_failure: {exc}",
+                            source=component,
+                        )
+                    record_step_failed(
+                        logger=logger,
+                        metrics=TRADING_STEP_METRICS,
+                        step=step,
+                        component=component,
+                        run_id=str(run_id),
+                        exc=exc,
+                        duration_seconds=perf_counter() - step_start,
+                    )
+                    manifest.status = "failed"
+                    manifest.error_message = str(exc)
+                    manifest_service.save(manifest)
+                    raise
+
             # STEP 2: TRADING EVALUATION
             step = "trading_evaluation"
             manifest.current_step = step
