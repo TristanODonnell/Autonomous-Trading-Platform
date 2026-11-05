@@ -20,6 +20,7 @@ from autonomous_trading_platform.contracts.common.enums import (
     Side,
     TimeInForce,
 )
+from autonomous_trading_platform.contracts.trading.fill import Fill
 from autonomous_trading_platform.storage.sor.models.fill_quality_metrics import (
     FillQualityMetrics,
 )
@@ -71,6 +72,7 @@ class TestParserRegistration:
                 ["validate-broker-consistency", "--tolerance", "0.05"],
                 execution.handle_validate_broker_consistency,
             ),
+            (["sync-sleeves", "--dry-run"], execution.handle_sync_sleeves),
             (
                 [
                     "sync-position-snapshot",
@@ -485,3 +487,83 @@ def test_to_sor_fill_maps_the_fill_contract_like_the_reconciliation_job() -> Non
     assert row.liquidity is LiquiditySide.TAKER
     assert row.venue == "alpaca"
     assert row.meta == {"source": "test"}
+
+
+class TestSyncSleeves:
+    """Finding 24: the ledger resync never touched the sleeve books; this command does."""
+
+    @staticmethod
+    def _seed(db_session: Session, monkeypatch, broker_positions: list[dict]) -> None:
+        from autonomous_trading_platform.execution.services.strategy_sleeve_ledger_service import (
+            StrategySleeveLedgerService,
+        )
+        from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
+
+        class FakeBrokerClient:
+            def get_positions(self) -> list[dict]:
+                return broker_positions
+
+        monkeypatch.setattr(execution, "get_session", lambda: db_session)
+        monkeypatch.setattr(
+            execution,
+            "Settings",
+            lambda: SimpleNamespace(trading_environment=TradingEnvironment.PAPER),
+        )
+        monkeypatch.setattr(execution, "_build_broker_client", lambda _settings: FakeBrokerClient())
+        StrategySleeveLedgerService().apply_fill(
+            SorUnitOfWork(db_session),
+            fill=Fill(
+                fill_id="seed-1",
+                broker_order_id="seed-order-1",
+                intent_id=UUID("00000000-0000-0000-0000-00000000bbbb"),
+                run_id=UUID("00000000-0000-0000-0000-00000000aaaa"),
+                timestamp=datetime(2026, 11, 4, 14, 30, tzinfo=UTC),
+                symbol="AMZN",
+                side=Side.BUY,
+                quantity=Decimal("8"),
+                price=Decimal("200"),
+            ),
+            strategy_id="momentum_v1",
+        )
+
+    def test_writes_sleeves_down_to_the_account(self, db_session: Session, monkeypatch, capsys):
+        self._seed(db_session, monkeypatch, [])
+
+        assert execution.handle_sync_sleeves(_args(dry_run=False)) == 0
+
+        payload = _json_from_output(capsys.readouterr().out)
+        assert payload["status"] == "ok"
+        assert payload["sleeves"]["written_down"] == [
+            {"strategy_id": "momentum_v1", "symbol": "AMZN", "quantity": "8"}
+        ]
+        from autonomous_trading_platform.execution.services.strategy_sleeve_ledger_service import (
+            StrategySleeveLedgerService,
+        )
+        from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
+
+        assert StrategySleeveLedgerService().aggregate_quantities(SorUnitOfWork(db_session)) == {}
+
+    def test_dry_run_reports_without_changing_sleeves(
+        self, db_session: Session, monkeypatch, capsys
+    ):
+        self._seed(db_session, monkeypatch, [])
+
+        assert execution.handle_sync_sleeves(_args(dry_run=True)) == 0
+
+        payload = _json_from_output(capsys.readouterr().out)
+        assert payload["status"] == "dry_run"
+        assert payload["mismatches"] == [
+            {
+                "symbol": "AMZN",
+                "account_quantity": "0",
+                "sleeve_quantity": "8",
+                "would_skip": False,
+            }
+        ]
+        from autonomous_trading_platform.execution.services.strategy_sleeve_ledger_service import (
+            StrategySleeveLedgerService,
+        )
+        from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
+
+        held = StrategySleeveLedgerService().aggregate_quantities(SorUnitOfWork(db_session))
+        assert held == {"AMZN": Decimal("8")}

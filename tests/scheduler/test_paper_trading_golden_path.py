@@ -702,6 +702,7 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
         "final_ingestion",
         "resolve_raw_bars_dataset",
         "broker_reconciliation",
+        "sleeve_resync",
         "corporate_actions",
         "features",
         "risk",
@@ -718,6 +719,7 @@ def test_eod_schedule_creates_adjusted_dataset_from_daily_raw_dataset(
     # 2025-02-14 is a Friday and not the month's last session, so neither periodic step
     # applies; publishing is off without DATASET_S3_BUCKET.
     assert result.chain.skipped_steps == (
+        "sleeve_resync",
         "weekly_portfolio_review",
         "monthly_universe_rotation",
         "publish_datasets",

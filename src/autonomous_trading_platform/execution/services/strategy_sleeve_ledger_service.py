@@ -21,6 +21,7 @@ from collections import defaultdict
 from collections.abc import Collection, Mapping
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from autonomous_trading_platform.accounting.corporate_actions import (
@@ -36,7 +37,9 @@ from autonomous_trading_platform.contracts.accounting.strategy_sleeve import (
     SleeveMismatch,
     SleevePosition,
     SleeveReconciliationReport,
+    SleeveResyncReport,
     SleeveSnapshot,
+    SleeveWriteDown,
 )
 from autonomous_trading_platform.contracts.common.enums import CorporateActionType, Side
 from autonomous_trading_platform.contracts.market.corporate_action import CorporateAction
@@ -58,6 +61,24 @@ from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUni
 ZERO = Decimal("0")
 # Placeholder identifiers for synthetic fills used only to drive the ledger math.
 _SYNTHETIC_UUID = UUID(int=0)
+
+
+def plain_quantity(value: Decimal | int | str) -> str:
+    """``8.000000000`` -> ``"8"``, ``2.50`` -> ``"2.5"``; for reports and CLI output."""
+    return format(Decimal(str(value)).normalize(), "f")
+
+
+def fetch_account_positions(broker_client: Any) -> dict[str, Position]:
+    """The broker's positions as the ledger compares them: quantity and average cost."""
+    positions: dict[str, Position] = {}
+    for raw in broker_client.get_positions():
+        symbol = str(raw["symbol"]).upper()
+        positions[symbol] = Position(
+            symbol=symbol,
+            quantity=Decimal(str(raw["qty"])),
+            avg_cost=Decimal(str(raw["avg_entry_price"])),
+        )
+    return positions
 
 
 class SleeveAccountingError(ValueError):
@@ -506,6 +527,135 @@ class StrategySleeveLedgerService:
         return SleeveReconciliationReport(
             timestamp=timestamp, mismatches=mismatches, adopted_symbols=adopted
         )
+
+    def resync(
+        self,
+        uow: SorUnitOfWork,
+        *,
+        account_positions: Mapping[str, Decimal | Position],
+        timestamp: datetime,
+        skip_symbols: Collection[str] = (),
+        run_id: UUID | None = None,
+    ) -> SleeveResyncReport:
+        """Make the sleeves sum to the broker account, symbol by symbol.
+
+        Shares the account holds that no sleeve owns are adopted into the unattributed
+        sleeve at the account's average cost (as ``reconcile`` does). Shares the sleeves
+        claim that the account does not hold are written down at the sleeve's own cost,
+        unattributed sleeve first, then the strategies in name order, so a stale orphan
+        book is cleared before a member's. A short at the broker writes the sleeves to
+        zero and is reported as unresolved: sleeves never go negative. Symbols in
+        ``skip_symbols`` (a broker order is still open on them, so their fills are not
+        all in the sleeve yet) are reported, not touched.
+        """
+        self._require_real("resync")
+        skip = {s.upper() for s in skip_symbols}
+        sleeves = self.all_positions(uow)
+        totals = self.aggregate_quantities(uow)
+        adopted: list[str] = []
+        written_down: list[SleeveWriteDown] = []
+        skipped: list[SleeveMismatch] = []
+        unresolved: list[SleeveMismatch] = []
+
+        for symbol in sorted(set(totals) | set(account_positions)):
+            raw = account_positions.get(symbol, ZERO)
+            account_qty = Decimal(raw.quantity) if isinstance(raw, Position) else Decimal(raw)
+            sleeve_qty = totals.get(symbol, ZERO)
+            if account_qty == sleeve_qty:
+                continue
+            mismatch = SleeveMismatch(
+                symbol=symbol, account_quantity=account_qty, sleeve_quantity=sleeve_qty
+            )
+            if symbol.upper() in skip:
+                skipped.append(mismatch)
+                continue
+
+            target = max(account_qty, ZERO)
+            if target > sleeve_qty:
+                avg_cost = raw.avg_cost if isinstance(raw, Position) else None
+                if avg_cost is None or Decimal(avg_cost) <= ZERO:
+                    unresolved.append(mismatch)
+                    continue
+                self.adopt(
+                    uow,
+                    strategy_id=UNATTRIBUTED_SLEEVE_ID,
+                    symbol=symbol,
+                    quantity=target - sleeve_qty,
+                    avg_cost=Decimal(avg_cost),
+                    timestamp=timestamp,
+                )
+                adopted.append(symbol)
+            elif target < sleeve_qty:
+                surplus = sleeve_qty - target
+                holders = sorted(
+                    (
+                        strategy_id
+                        for strategy_id, held in sleeves.items()
+                        if symbol in held and Decimal(held[symbol].quantity) > ZERO
+                    ),
+                    key=lambda strategy_id: (strategy_id != UNATTRIBUTED_SLEEVE_ID, strategy_id),
+                )
+                for strategy_id in holders:
+                    if surplus <= ZERO:
+                        break
+                    held = sleeves[strategy_id][symbol]
+                    quantity = min(Decimal(held.quantity), surplus)
+                    self._write_down(
+                        uow,
+                        strategy_id=strategy_id,
+                        symbol=symbol,
+                        quantity=quantity,
+                        price=Decimal(held.avg_cost),
+                        timestamp=timestamp,
+                        run_id=run_id,
+                    )
+                    written_down.append(
+                        SleeveWriteDown(strategy_id=strategy_id, symbol=symbol, quantity=quantity)
+                    )
+                    surplus -= quantity
+            if account_qty < ZERO:
+                unresolved.append(mismatch)
+
+        return SleeveResyncReport(
+            timestamp=timestamp,
+            adopted_symbols=adopted,
+            written_down=written_down,
+            skipped=skipped,
+            unresolved=unresolved,
+        )
+
+    def _write_down(
+        self,
+        uow: SorUnitOfWork,
+        *,
+        strategy_id: str,
+        symbol: str,
+        quantity: Decimal,
+        price: Decimal,
+        timestamp: datetime,
+        run_id: UUID | None,
+    ) -> SleeveLedgerEntry:
+        """Remove sleeve quantity at the sleeve's own cost (no realized P&L, no fill)."""
+        fill = _synthetic_fill(symbol, Side.SELL, quantity, price, timestamp)
+        result = self._compute(uow, strategy_id=strategy_id, fill=fill)
+        self._persist_position(
+            uow, strategy_id=strategy_id, symbol=symbol, result=result, at=timestamp
+        )
+        entry = SleeveLedgerEntry(
+            entry_id=_entry_id("resync", f"{symbol}:{timestamp.isoformat()}", strategy_id),
+            strategy_id=strategy_id,
+            symbol=symbol,
+            side=Side.SELL,
+            quantity=Decimal(quantity),
+            price=Decimal(price),
+            fees=ZERO,
+            realized_pnl=result.realized_pnl,
+            source=SleeveEntrySource.RESYNC,
+            run_id=run_id,
+            timestamp=timestamp,
+        )
+        uow.strategy_sleeves.insert_entry(_entry_row(uow.strategy_sleeves, entry))
+        return entry
 
     # ------------------------------------------------------------------
     # Internals

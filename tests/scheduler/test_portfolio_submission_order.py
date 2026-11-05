@@ -1,5 +1,5 @@
-"""Finding 19 / 20 helpers: exits go first under the per-bar throttle, and symbols with
-an open broker order are kept out of internal crossing."""
+"""Finding 19 / 23 helpers: exits go first under the per-bar throttle, and symbols with
+an open broker order get no new intent until the order resolves."""
 
 from __future__ import annotations
 
@@ -118,7 +118,7 @@ def test_ordering_is_stable_within_each_group(construction) -> None:
     ]
 
 
-def test_split_by_symbols_keeps_open_order_symbols_out_of_crossing(construction) -> None:
+def test_split_by_symbols_holds_back_open_order_symbols(construction) -> None:
     intents = [
         _intent(construction, "a", "AAPL", -2),
         _intent(construction, "b", "AAPL", 2),

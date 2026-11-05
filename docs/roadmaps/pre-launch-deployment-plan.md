@@ -475,7 +475,7 @@ is a finding.
           uncrossed. Still open: the nightly sleeve-vs-broker resync (drift that already
           happened is cleared by the ledger resync below, which rebuilds the sleeves
           from the broker book).
-    - [ ] **Finding 21: the position / cash ledger is $24k off the broker, and the drawdown
+    - [x] **Finding 21: the position / cash ledger is $24k off the broker, and the drawdown
           ladder reads it.** Ledger equity $121,007 vs broker $97,215 (cash $29,786 vs
           $5,853); positions AMZN 7 / 0, TSLA 1 / 4, AAPL 2 / 3, META 3 / 4. This predates
           today (ledger $116k at Monday's close) and is the drift the ledger-resync runbook
@@ -484,6 +484,11 @@ is a finding.
           not run; it would have been overwritten anyway). The `atp execution
           validate-broker-consistency` check reports `drifted`. Fix: resync per the runbook
           after the close, then point the ladder at broker equity.
+          **Resynced 2026-11-04 01:19 UTC** per the runbook: cash matched to the cent, peak
+          reset to the resynced $96,513. The validator still said `drifted` on equity /
+          buying power only: after-hours marks had moved $9 between the sync and the check
+          (tolerance is $0.01), so that is noise, now noted in the runbook. Still open:
+          the ladder reads ledger equity, and the validator has no mark-to-market tolerance.
     - [ ] **Finding 22 (cadence, no fix needed yet):** `macd_crossover_v1` moved BENCH →
           ON_DECK at the first tick (`selected_on_deck`): the active-set refresh fills
           on-deck seats from eligible candidates, so the "bench until re-sim evidence" seed
@@ -495,22 +500,66 @@ is a finding.
       adopted; symbol cap ($25k) rejected momentum's DIA buys because the orphan sleeve
       already holds $25k DIA.
     - **After the fix deploys (manual, on A, after the close):**
-      1. [ ] Ledger resync per `docs/operations/runbooks/ledger-resync.md` (Finding 21):
+      1. [x] Ledger resync per `docs/operations/runbooks/ledger-resync.md` (Finding 21):
          kill switch on, `sync-broker-state` + `sync-position-snapshot` with one fresh
          run id, `validate-broker-consistency --paper-only` must print `ok`, then the
          runbook's step-4 peak reset (this replaces Finding 18's hand-written reset: the
          resynced equity is the right peak), kill switch off with `--confirm-release`.
-      2. [ ] `MAX_ORDERS_PER_BAR=6`, `MAX_ORDERS_PER_HOUR=60` in A's `.env`, then
+      2. [x] `MAX_ORDERS_PER_BAR=6`, `MAX_ORDERS_PER_HOUR=60` in A's `.env`, then
          `docker compose up -d scheduler`. Three books (two members + the orphan sleeve
          winding down) need more than two slots a bar; 6 lets the orphan exits and both
          members trade in the same bar, and 60/hour still caps a runaway loop at ~1
          order a minute. Revisit once the orphan book is flat.
       3. [ ] Optional: `min_active_strategies` 3 -> 2 in `operator_settings` (Finding 22)
          to stop the per-tick `below_minimum` warning.
-      4. [ ] Next session, check: `pre_evaluation_reconciliation` step rows in
-         `runtime_job_run_steps` for every tick; orphan DIA / QQQ / TLT sells filling in
-         the first bars; no `fill_not_applied` errors; the EOD sleeve reconciliation
-         mismatch count near zero.
+      4. [x] Next session checked below (the trading cycle does not write step rows;
+         the evidence is two `RECONCILIATION_COMPLETED` audit rows per tick).
+  - **Second session, Wed 2026-11-04 (reviewed after the close).** Both fixes held: 79
+    ticks, no `cycle_failed`, 156 reconciliation audit rows (two per tick), 5 internal
+    crosses all applied, throttle rejections 49 (829 on Tuesday). The orphan book
+    unwound in the morning: TLT 306 and QQQ 45 sold inside the first six minutes, DIA 48
+    by 12:36 ET. Broker equity $97,901 at the close, +$856 on Alpaca's daily change
+    (a good part of it the inherited book getting out). Sleeve mismatch warnings fired
+    78 times, but every one was AMZN 8 / AAPL 4 carried over from Tuesday (Finding 24)
+    plus the TLT short below; nothing new drifted in-session. Two findings:
+    - [x] **Finding 23: a partial fill across a tick boundary left the account short.**
+          The orphan sleeve's 306-share TLT sell filled 304 at 14:34:52 and 2 at 14:35:50.
+          The 14:35:10 tick ran in between: pre-evaluation reconciliation applied the 304,
+          the sleeve showed 2 left, the account showed 2 held (committed to the open
+          order, which the sell clamp does not see), so a second 2-share sell went out.
+          Both filled; TLT is -2 at the broker. Knock-on: `momentum_v1` wanted ~20 TLT all
+          day and Alpaca refused 29 times (a buy that flips a short to long is rejected),
+          and the second fill was dropped as `fill_not_applied`. Finding 20's open-order
+          check only kept such symbols out of *crossing*. **Code fixed 2026-11-04:**
+          intents on a symbol with an open broker order are held back from submission
+          entirely for that bar (`portfolio_evaluation.intents_held_open_orders`); the
+          order resolves, the fill lands via pre-evaluation reconciliation, and the next
+          bar re-evaluates from the true sleeve. Manual: cover the 2 TLT on the dashboard.
+    - [x] **Finding 24: the ledger resync does not touch the sleeves.** `sync-broker-state`
+          / `sync-position-snapshot` rebuild the account ledger only; the sleeve tables
+          kept Tuesday's AMZN 8 / AAPL 4 over-claims and warned all day. **Code fixed
+          2026-11-04:** `StrategySleeveLedgerService.resync` writes sleeves down to the
+          account (unattributed sleeve first, then members, at the sleeve's own cost, no
+          P&L), adopts unowned shares, skips symbols with an open order, and reports a
+          broker short as unresolved. Exposed as `atp execution sync-sleeves [--dry-run]`
+          (added to the ledger-resync runbook) and as the nightly EOD step
+          `sleeve_resync` after `broker_reconciliation` (portfolio mode only). This is
+          the "nightly sleeve-vs-broker resync" from Finding 20.
+    - Also seen: the six sells from the 15:55 ET tick filled 1-5 s after that tick's
+      reconciliation and sat `SUBMITTED` in our table overnight (the 15:59:59 degraded
+      tick and the EOD chain do not apply fills); Thursday's first tick applies them.
+      `below_minimum` warned 92 times: `min_active_strategies` is still 3.
+    - **After this fix deploys (manual, on A, after the close):**
+      1. [ ] Buy 2 TLT on the Alpaca dashboard to close the short (nothing in the system
+         will: the orphan sleeve is empty and momentum's buys are refused while short).
+      2. [ ] `docker compose exec app atp execution sync-sleeves --paper-only --dry-run`,
+         then without `--dry-run`. Expect AMZN 8 and AAPL 4 written down; symbols with an
+         open order are listed as skipped and are fine to leave (Thursday's first tick
+         applies their fills).
+      3. [ ] Optional: `min_active_strategies` 3 -> 2 (Finding 22).
+      4. [ ] Next session, check: no `intents_held_open_orders` storm (a handful per day
+         is expected), no broker rejections, the EOD `sleeve_resync` step output in
+         `runtime_job_runs`, and the sleeve mismatch warnings gone.
 - [ ] (a) Weekly bench re-sims + scorecards from B, plus the weekly review DAG on A
   - [x] Read endpoint on A: `GET /api/v1/worker/bench-inputs` (`worker` role) returns the
         ACTIVE / ON_DECK / BENCH strategies with their stored parameters, the shared window

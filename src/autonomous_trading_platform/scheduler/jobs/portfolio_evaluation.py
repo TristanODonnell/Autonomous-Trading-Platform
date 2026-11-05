@@ -44,7 +44,6 @@ from autonomous_trading_platform.execution.services.portfolio_signal_aggregator 
     PortfolioSignalAggregator,
 )
 from autonomous_trading_platform.execution.services.sleeve_crossing_service import (
-    CrossingPlan,
     PlannedCross,
     SleeveCrossingService,
 )
@@ -119,8 +118,8 @@ def run_portfolio_evaluation(
         open_orders = execution_context.order_runtime_state_service.list_reconciliation_inputs(
             uow=uow
         )
-        # Symbols with an order still open at the broker (Finding 20): their sleeves may
-        # change before this bar's intents are submitted, so they are not crossed.
+        # Symbols with an order still open at the broker (Findings 20 and 23): the
+        # order's remaining quantity is not in the sleeve yet, so no new intent on them.
         open_symbols = {
             str(row.symbol).upper() for row in uow.tracked_orders.list_reconcilable_orders()
         }
@@ -339,24 +338,24 @@ def run_portfolio_evaluation(
             },
         )
 
-    # 4. Internal crossing between sleeves. A symbol with an open broker order is sent
-    # uncrossed: a fill from the previous bar that has not reached the sleeve yet would
-    # otherwise be exited twice, once at the broker and once by the cross (Finding 20).
-    crossable, held_back = _split_by_symbols(intents, open_symbols)
+    # 4. Intents on a symbol with an open broker order wait for the next bar (Findings
+    # 20 and 23). The order's unfilled remainder is not in the sleeve yet, so a fresh
+    # intent would exit the same shares twice: crossed to another sleeve, or sold again
+    # at the broker, which left the account short when the first order then filled in
+    # full (a 306-share TLT exit filled 304 + 2 across a tick boundary).
+    intents, held_back = _split_by_symbols(intents, open_symbols)
     if held_back:
         logger.info(
-            "portfolio_evaluation.cross_skipped_open_orders",
+            "portfolio_evaluation.intents_held_open_orders",
             extra={
                 "symbols": sorted({i.symbol for i in held_back}),
+                "held_count": len(held_back),
                 "run_id": str(manifest.run_id),
             },
         )
-    plan = SleeveCrossingService(construction).plan(
-        crossable, prices=prices, run_id=manifest.run_id
-    )
-    plan = CrossingPlan(
-        residual_intents=list(plan.residual_intents) + held_back, crosses=plan.crosses
-    )
+
+    # 5. Internal crossing between sleeves.
+    plan = SleeveCrossingService(construction).plan(intents, prices=prices, run_id=manifest.run_id)
     crosses: list[PlannedCross] = []
     if plan.crosses:
         try:

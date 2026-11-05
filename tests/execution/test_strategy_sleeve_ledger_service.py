@@ -426,3 +426,90 @@ class TestShadowBook:
     def test_liquidate_is_rejected_on_the_real_book(self, uow, service) -> None:
         with pytest.raises(SleeveAccountingError, match="shadow sleeve book"):
             service.liquidate(uow, strategy_id="A", prices={}, timestamp=_T0)
+
+
+class TestResync:
+    """Finding 24: the sleeves are rebuilt to the broker book, not just reported."""
+
+    def test_over_claim_is_written_down_unattributed_sleeve_first(self, uow, service) -> None:
+        service.adopt(
+            uow,
+            strategy_id=UNATTRIBUTED_SLEEVE_ID,
+            symbol="AAPL",
+            quantity=Decimal("3"),
+            avg_cost=Decimal("90"),
+            timestamp=_T0,
+        )
+        service.apply_fill(uow, fill=_fill("f1", Side.BUY, "10", "100"), strategy_id="A")
+        service.apply_fill(uow, fill=_fill("f2", Side.BUY, "4", "100"), strategy_id="B")
+
+        report = service.resync(
+            uow,
+            account_positions={
+                "AAPL": Position(symbol="AAPL", quantity=Decimal("9"), avg_cost=Decimal("100"))
+            },
+            timestamp=_T0 + timedelta(hours=7),
+        )
+
+        # 17 claimed, 9 held: the orphan 3 go first, then 5 of A's; B is untouched.
+        assert [(w.strategy_id, w.quantity) for w in report.written_down] == [
+            (UNATTRIBUTED_SLEEVE_ID, Decimal("3")),
+            ("A", Decimal("5")),
+        ]
+        assert report.unresolved == [] and report.skipped == []
+        assert service.positions(uow, UNATTRIBUTED_SLEEVE_ID) == {}
+        assert service.positions(uow, "A")["AAPL"].quantity == Decimal("5")
+        assert service.positions(uow, "B")["AAPL"].quantity == Decimal("4")
+        entries = [e for e in uow.strategy_sleeves.get_entries("A") if e.source == "resync"]
+        assert [(e.side, Decimal(e.quantity), Decimal(e.realized_pnl)) for e in entries] == [
+            ("sell", Decimal("5"), Decimal("0"))
+        ]
+        again = service.reconcile(
+            uow,
+            account_positions={"AAPL": Decimal("9")},
+            timestamp=_T0 + timedelta(hours=8),
+        )
+        assert again.is_balanced
+
+    def test_unowned_shares_are_adopted(self, uow, service) -> None:
+        report = service.resync(
+            uow,
+            account_positions={
+                "MSFT": Position(symbol="MSFT", quantity=Decimal("3"), avg_cost=Decimal("400"))
+            },
+            timestamp=_T0,
+        )
+
+        assert report.adopted_symbols == ["MSFT"]
+        assert report.written_down == []
+        assert service.positions(uow, UNATTRIBUTED_SLEEVE_ID)["MSFT"].quantity == Decimal("3")
+
+    def test_open_order_symbols_are_skipped(self, uow, service) -> None:
+        service.apply_fill(uow, fill=_fill("f1", Side.BUY, "10", "100"), strategy_id="A")
+
+        report = service.resync(
+            uow, account_positions={"AAPL": Decimal("8")}, timestamp=_T0, skip_symbols={"aapl"}
+        )
+
+        assert not report.changed
+        assert [(m.symbol, m.difference) for m in report.skipped] == [("AAPL", Decimal("-2"))]
+        assert service.positions(uow, "A")["AAPL"].quantity == Decimal("10")
+
+    def test_short_at_the_broker_writes_sleeves_to_zero_and_stays_unresolved(
+        self, uow, service
+    ) -> None:
+        service.apply_fill(uow, fill=_fill("f1", Side.BUY, "2", "81"), strategy_id="A")
+
+        report = service.resync(
+            uow,
+            account_positions={
+                "AAPL": Position(symbol="AAPL", quantity=Decimal("-2"), avg_cost=Decimal("81"))
+            },
+            timestamp=_T0,
+        )
+
+        assert [(w.strategy_id, w.quantity) for w in report.written_down] == [("A", Decimal("2"))]
+        assert [(m.symbol, m.account_quantity) for m in report.unresolved] == [
+            ("AAPL", Decimal("-2"))
+        ]
+        assert service.positions(uow, "A") == {}
