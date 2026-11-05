@@ -567,6 +567,36 @@ is a finding.
     - [ ] After Finding 14: re-run the dry run, confirm `daily_returns` has one entry per
           session and `market_returns` is populated, then install the timer
           (`sudo infra/ops/install_worker_timers.sh` on B)
+    - [ ] **Backfill the bench window instead of waiting for it (2026-11-04).** A has held
+          five-minute bars only since 2026-10-09 (19 sessions), so a 63-session re-sim
+          scores on a fraction of its window until mid-January. Alpaca serves historical
+          five-minute bars and `atp ingestion run-backfill` already writes them as a
+          validated `raw_bars` version tagged `dataset_type = historical_backfill`; the
+          rolling-window build just never used those. **Code (branch
+          `feat/bench-backfill-window`):** `RollingRawBarsService.build` now merges every
+          validated backfill version overlapping the window in as a base source before
+          the per-session versions (live sessions win on an overlapping day; the version
+          records `backfill_versions`; idempotency includes them). Nothing changes for the
+          re-sim, publish, pull or B. Scores from the same job over the same data, just a
+          full window. Not a substitute for the research sims' numbers: those come from a
+          different dataset and cost model and must not be mixed into bench scores.
+          *Operator step on A, after a close* (22 names = the rolling version's manifest;
+          `--max-days` is 31, so three chunks; each takes a minute):
+          ```bash
+          SYMS=AAPL,ADBE,AMD,AMZN,AVGO,BKNG,COST,CRM,DIA,GOOGL,HD,IWM,MA,META,MSFT,NVDA,QQQ,SPY,TLT,TSLA,UNH,V
+          docker compose exec app atp ingestion run-backfill --symbols "$SYMS" --start 2026-08-01 --end 2026-08-31 --actor "$USER"
+          docker compose exec app atp ingestion run-backfill --symbols "$SYMS" --start 2026-09-01 --end 2026-09-30 --actor "$USER"
+          docker compose exec app atp ingestion run-backfill --symbols "$SYMS" --start 2026-10-01 --end 2026-10-08 --actor "$USER"
+          ```
+          The next EOD `rolling_raw_bars` step picks them up (new sources, so a new rolling
+          version), `publish_datasets` ships it, B's 20:30 ET pull registers it, and the
+          re-sim window is 63 real sessions from then on. Verify: the rolling version's
+          `metadata_json.backfill_versions` lists the three, and the dry run on B reports
+          ~63 `daily_returns`. Note: a stray 3-symbol `active_daily_incremental` version
+          dated 2024-06-03 (dev dump) already sets the rolling coverage start to 2024, so
+          `resolve_bench_window` reports a full window today that is mostly empty; delete
+          that version row (and directory) when running the backfill, or the coverage
+          dates stay misleading.
     - [x] **Finding 15: the `rolling_raw_bars` step failed every EOD after deploy (10/27-10/30).**
           `checksums.dataset_version` is a foreign key to `dataset_versions` on Postgres;
           the service committed the checksum rows before it saved the version row. The
