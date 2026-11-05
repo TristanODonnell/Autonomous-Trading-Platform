@@ -46,6 +46,9 @@ class SleeveEntrySource(enum.StrEnum):
     CORPORATE_ACTION = "corporate_action"
     # Shadow book: positions closed at the mark when the strategy leaves on-deck.
     TIER_EXIT = "tier_exit"
+    # Sleeve quantity written down (or adopted) to match the broker account, with no
+    # fill: the nightly / operator resync.
+    RESYNC = "resync"
 
 
 class SleevePosition(BaseModel):
@@ -116,3 +119,28 @@ class SleeveReconciliationReport(BaseModel):
     @property
     def is_balanced(self) -> bool:
         return not self.mismatches
+
+
+class SleeveWriteDown(BaseModel):
+    """Sleeve quantity removed by a resync because the account does not hold it."""
+
+    strategy_id: str
+    symbol: str
+    quantity: Quantity
+
+
+class SleeveResyncReport(BaseModel):
+    """What a resync changed to make the sleeves sum to the broker account."""
+
+    timestamp: UTCDateTime
+    # Symbols whose unowned account quantity was assigned to the unattributed sleeve.
+    adopted_symbols: list[str] = []
+    written_down: list[SleeveWriteDown] = []
+    # Mismatches left alone because a broker order is still open on the symbol.
+    skipped: list[SleeveMismatch] = []
+    # Gaps a resync cannot close: the account is short, or has no cost basis to adopt at.
+    unresolved: list[SleeveMismatch] = []
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.adopted_symbols or self.written_down)

@@ -44,7 +44,21 @@ tick in flight (outside market hours, or with the kill switch on).
    docker compose exec app atp execution validate-broker-consistency --paper-only
    ```
 
-   The last command must print `"status": "ok"`.
+   The last command must print `"status": "ok"`. Outside market hours it can report
+   `drifted` on `equity` / `buying_power` alone while `cash` matches: that is after-hours
+   marks moving between the sync and the check, not ledger drift.
+
+   Then rebuild the strategy sleeves to the same broker book (the snapshots above do not
+   touch them). Symbols with an order still open are left for the next session's first
+   tick, so run this when nothing is pending, or accept the `skipped_symbols` it lists:
+
+   ```bash
+   docker compose exec app atp execution sync-sleeves --paper-only --dry-run
+   docker compose exec app atp execution sync-sleeves --paper-only
+   ```
+
+   Exit code 1 with `unresolved` means a gap the resync cannot close by itself: a short
+   position at the broker (close it on the dashboard), or a symbol with no cost basis.
 
 4. **Reset the portfolio drawdown peak** to the account's real equity, or the governance
    check will report a permanent drawdown against the old (wrong) peak:
