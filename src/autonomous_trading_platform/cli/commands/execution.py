@@ -815,7 +815,10 @@ def handle_sync_position_snapshot(args: argparse.Namespace) -> int:
         _assert_broker_cli_safety(settings, args)
         run_id = _parse_uuid(args.run_id, field_name="run_id")
         service = _build_broker_runtime_sync_service(session=session, settings=settings)
-        snapshot = service.sync_positions_from_broker(run_id=run_id, observed_at=now_utc)
+        pending = service.pending_fills()
+        snapshot = service.sync_positions_from_broker(
+            run_id=run_id, observed_at=now_utc, pending=pending
+        )
         audit_event_id = _record_execution_cli_audit_event(
             session,
             action="execution_sync_position_snapshot",
@@ -825,6 +828,7 @@ def handle_sync_position_snapshot(args: argparse.Namespace) -> int:
                 "run_id": str(run_id),
                 "snapshot_id": str(snapshot.snapshot_id),
                 "position_count": len(snapshot.positions or []),
+                "pending_fill_count": len(pending),
             },
             occurred_at=now_utc,
         )
@@ -833,6 +837,7 @@ def handle_sync_position_snapshot(args: argparse.Namespace) -> int:
             "audit_event_id": audit_event_id,
             "position_snapshot": _model_to_dict(snapshot),
             "positions": [_model_to_dict(item) for item in (snapshot.positions or [])],
+            "pending_fills": _serialize_value(pending),
         }
         _emit_json_result(args, payload)
         return 0

@@ -557,9 +557,66 @@ is a finding.
          open order are listed as skipped and are fine to leave (Thursday's first tick
          applies their fills).
       3. [ ] Optional: `min_active_strategies` 3 -> 2 (Finding 22).
-      4. [ ] Next session, check: no `intents_held_open_orders` storm (a handful per day
+      4. [x] Next session, check: no `intents_held_open_orders` storm (a handful per day
          is expected), no broker rejections, the EOD `sleeve_resync` step output in
-         `runtime_job_runs`, and the sleeve mismatch warnings gone.
+         `runtime_job_runs`, and the sleeve mismatch warnings gone. (Checked Thu, below:
+         one hold-back, 33 TLT rejections from the uncovered short, resync output present,
+         mismatch warnings still the stale AAPL / AMZN / TLT until the EOD step cleared
+         the first two.)
+  - **Third session, Thu 2026-11-05 (reviewed after the close; PR #167 deployed 00:30
+    UTC, steps 1-3 above not yet run).** Mechanics clean: 79 ticks, no `cycle_failed`,
+    156 reconciliation rows (two per tick), `intents_held_open_orders` once all day, no
+    `fill_not_applied`, no `cross_skipped_open_orders`. 403 intents (344 Wed), throttle
+    rejections 91 (49 Wed; 65 of them momentum buys), 33 broker rejections, all momentum
+    TLT buys refused while the account is short 2 (09:31 to 13:46 ET). Broker equity
+    $97,393 at the close, -$487 on Alpaca's daily change: the first down day in portfolio
+    mode, with heavy 5-minute round-tripping (AAPL bought and sold 17 shares each for
+    about $2 net). Step 2 above turned out to be moot: the new EOD `sleeve_resync` step
+    ran at 18:00 ET and wrote AAPL down 1 + 3 and AMZN 6 + 2, skipped CRM / IWM / META /
+    MSFT (15:55 orders still open) and reported `unresolved: TLT -2`. The sleeve mismatch
+    warning fired on all 78 ticks with the stale AAPL -4 / AMZN -8 / TLT -2; Friday should
+    show only TLT until the short is covered. `below_minimum` warned 79 times. One finding:
+    - [x] **Finding 25: the ledger resync double-counts fills that are still open in our
+          table.** EOD `broker_reconciliation` and `validate-broker-consistency` both say
+          `drifted`: the account ledger holds AAPL 3 the broker does not, and its cash is
+          about $1,000 low, while equity is within $20 of the broker. Trace: Tuesday's
+          15:55 tick bought 3 AAPL, the fill landed at 15:56 after that tick's
+          reconciliation, so the tracked order sat `SUBMITTED` overnight. The Finding 21
+          resync at 20:19 ET copied the broker book, which already held those 3 shares.
+          Wednesday's 09:30 tick then applied the open tracked order on top: ledger AAPL 3
+          -> 6, cash -$995 (`position_snapshot_items` 20:19 BROKER_RECONCILED AAPL 3, 09:30
+          LEDGER AAPL 6). Two days of flat round-trips carried the extra 3 forward. The
+          sleeve resync (Finding 24) already skips open-order symbols; the account-ledger
+          resync did not know about them. The missing TLT in the ledger (broker -2) is the
+          Finding 23 second sell the ledger could not book below zero; covering the short
+          makes both sides zero. **Code fixed 2026-11-05** (`BrokerRuntimeSyncService`):
+          `sync-broker-state` / `sync-position-snapshot` compute the fills the broker has
+          executed on our open tracked orders that no tick has applied yet (same
+          incremental-fill extraction as the reconciliation job) and write the broker book
+          *net of* them (cash and shares held back, a flat symbol with a pending sell
+          carried at the fill price), so the next tick's application lands the ledger on
+          the broker; `validate-broker-consistency` compares cash against the same
+          expectation and all three print the `pending_fills` they held back. Also done,
+          the open half of Finding 21: both drawdown guards (`run_trading_cycle` and the EOD
+          `allocation_rebalance`) now measure live broker equity (`fetch_broker_equity`)
+          and fall back to the ledger's cash snapshot only when the broker does not
+          answer, so ledger drift is a bookkeeping problem, not a safety one.
+    - **After this fix deploys (manual, on A, after the close):**
+      1. [ ] Ledger resync per `docs/operations/runbooks/ledger-resync.md` (kill switch
+         on, `sync-broker-state` + `sync-position-snapshot` with one run id,
+         `validate-broker-consistency --paper-only` must print `ok` and list the four
+         15:55 orders under `pending_fills`, step-4 peak reset, kill switch off). Safe
+         with the four open orders because of the fix.
+      2. [ ] Buy 2 TLT on the Alpaca dashboard (carried over; the only item left from
+         Wednesday's list that still matters).
+      3. [ ] Optional: `min_active_strategies` 3 -> 2 (Finding 22).
+      4. [ ] Friday, check: `validate-broker-consistency` reads `ok` after the first tick
+         applies the four fills; no TLT broker rejections once covered; sleeve mismatch
+         warnings gone; `trading_cycle` logs show no `equity_source: ledger` fallbacks.
+  - **Where 3.3(0) stands after three sessions:** two clean sessions under the fixed code
+    (Wed, Thu), both strategies filling. Order limits unchanged (`MAX_ORDERS_PER_BAR=6`,
+    `MAX_ORDERS_PER_HOUR=60`); the orphan book is flat, so revisit on the weekend with
+    Thu's 91 throttle rejections in hand. Start (a) next week, not this one.
 - [ ] (a) Weekly bench re-sims + scorecards from B, plus the weekly review DAG on A
   - [x] Read endpoint on A: `GET /api/v1/worker/bench-inputs` (`worker` role) returns the
         ACTIVE / ON_DECK / BENCH strategies with their stored parameters, the shared window
