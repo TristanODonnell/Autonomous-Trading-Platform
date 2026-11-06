@@ -13,6 +13,7 @@ from autonomous_trading_platform.execution.errors import ExecutionError
 from autonomous_trading_platform.execution.services.portfolio_drawdown_governance_service import (
     PortfolioDrawdownConfig,
     PortfolioDrawdownGovernanceService,
+    fetch_broker_equity,
 )
 from autonomous_trading_platform.execution.services.trading_freeze_service import (
     TradingFreezeService,
@@ -326,6 +327,7 @@ def run_trading_cycle(
         session=session,
         logger=logger,
         component=component,
+        broker_client=getattr(trading_cycle_dependencies.execution_context, "broker_client", None),
     )
     if portfolio_governance_skip is not None:
         logger.warning(
@@ -1161,10 +1163,15 @@ def run_trading_cycle(
             session.close()
 
 
-def _evaluate_portfolio_governance_for_trading(*, session, logger, component: str) -> str | None:
+def _evaluate_portfolio_governance_for_trading(
+    *, session, logger, component: str, broker_client: object | None = None
+) -> str | None:
     """
     Evaluate portfolio drawdown governance and return a skip_reason string if
     trading should be blocked, or None if it may proceed.
+
+    Equity is the broker's live account equity when the broker answers (the ledger
+    drifts, Findings 21 / 25), else the ledger's latest cash snapshot.
 
     Fails open: infrastructure errors never block trading.  The governance
     check is a safety enrichment; it must not become a single point of failure.
@@ -1175,15 +1182,21 @@ def _evaluate_portfolio_governance_for_trading(*, session, logger, component: st
         if not config.enabled:
             return None
 
-        snap = CashSnapshotRepository(session).get_latest()
+        equity = fetch_broker_equity(broker_client)
+        equity_source = "broker"
+        if equity is None:
+            snap = CashSnapshotRepository(session).get_latest()
+            if snap is not None and snap.equity is not None:
+                equity = float(snap.equity)
+                equity_source = "ledger"
         governance_svc = PortfolioDrawdownGovernanceService(
             governance_repo=PortfolioDrawdownGovernanceRepository(session),
             audit_repo=AuditLogRepository(session),
         )
 
-        if snap is not None and snap.equity is not None:
+        if equity is not None:
             evaluation = governance_svc.evaluate(
-                current_equity=float(snap.equity),
+                current_equity=equity,
                 config=config,
             )
             if evaluation.trading_blocked:
@@ -1191,6 +1204,7 @@ def _evaluate_portfolio_governance_for_trading(*, session, logger, component: st
                     "trading_cycle_blocked_portfolio_drawdown_governance",
                     extra={
                         "component": component,
+                        "equity_source": equity_source,
                         "drawdown_pct": round(evaluation.drawdown_pct, 6),
                         "threshold_pct": evaluation.threshold_pct,
                         "triggered_action": evaluation.triggered_action,

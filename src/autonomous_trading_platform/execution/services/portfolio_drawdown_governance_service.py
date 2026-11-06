@@ -6,8 +6,35 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+def fetch_broker_equity(broker_client: Any) -> float | None:
+    """The account's live equity from the broker, or None when it cannot be read.
+
+    The drawdown ladder measures the real account, not the platform's fill-by-fill ledger:
+    the ledger drifts (Findings 21, 25) and a drifted peak either hides a drawdown or
+    reports one the account never had. Callers fall back to the ledger's latest cash
+    snapshot when this returns None, so a broker outage never blocks the cycle.
+    """
+    get_account = getattr(broker_client, "get_account", None)
+    if get_account is None:
+        return None
+    try:
+        value = get_account().get("equity")
+        equity = float(value) if value is not None else None
+    except Exception:
+        logger.warning(
+            "portfolio_drawdown_governance.broker_equity_unavailable",
+            extra={"fallback": "ledger_cash_snapshot"},
+            exc_info=True,
+        )
+        return None
+    if equity is None or equity <= 0.0:
+        return None
+    return equity
 
 
 # ---------------------------------------------------------------------------

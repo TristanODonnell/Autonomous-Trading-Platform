@@ -531,7 +531,10 @@ class PaperTradingGoldenPathOrchestrator:
         """Interim weekly re-weight trigger until the portfolio review is on (plan 1.3 §4.1);
         the engine's own interval guard and auto_rebalance_enabled switch gate it."""
         result = run_allocation_rebalance_cycle(
-            now_utc=ctx.now_utc, trigger_source="scheduler", session=self.session
+            now_utc=ctx.now_utc,
+            trigger_source="scheduler",
+            session=self.session,
+            broker_client=self._broker_client_factory(),
         )
         return dict(result) if isinstance(result, dict) else {"status": str(result)}
 
