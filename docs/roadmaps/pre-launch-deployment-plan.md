@@ -686,7 +686,7 @@ is a finding.
     - [ ] After Finding 14: re-run the dry run, confirm `daily_returns` has one entry per
           session and `market_returns` is populated, then install the timer
           (`sudo infra/ops/install_worker_timers.sh` on B)
-    - [ ] **Backfill the bench window instead of waiting for it (2026-11-04).** A has held
+    - [x] **Backfill the bench window instead of waiting for it (2026-11-04).** A has held
           five-minute bars only since 2026-10-09 (19 sessions), so a 63-session re-sim
           scores on a fraction of its window until mid-January. Alpaca serves historical
           five-minute bars and `atp ingestion run-backfill` already writes them as a
@@ -716,6 +716,31 @@ is a finding.
           `resolve_bench_window` reports a full window today that is mostly empty; delete
           that version row (and directory) when running the backfill, or the coverage
           dates stay misleading.
+          **Done 2026-11-06 08:11-08:14 UTC (PR #169 deployed 08:08):** three
+          `market_backfill_cycle` runs `completed` (70 s, 69 s, 18 s), versions
+          `raw_bars_20261106T081118Z_094d195a` (08-01..08-31),
+          `..T081235Z_17b465d4` (09-01..09-30), `..T081350Z_69256cdb` (10-01..10-08),
+          each `validated`, `dataset_type = historical_backfill`, 22 symbols / 22 Parquet
+          files, 8.6 MB in all (disk 61% used). The stray 2024-06-03 version
+          (`raw_bars_20260724T204756Z_12e641bc`) has no directory on disk, only its row,
+          referenced by one `ingestion_checkpoints` and two `ingestion_runs` rows (all
+          dev-dump, 2024-06-03) and nothing else. **Still to delete** (one transaction on A;
+          not run from the laptop session, which refuses deletes on the box's DB):
+          ```sql
+          begin;
+          delete from ingestion_checkpoints where dataset_version = 'raw_bars_20260724T204756Z_12e641bc';
+          delete from ingestion_runs where dataset_version = 'raw_bars_20260724T204756Z_12e641bc';
+          delete from dataset_versions where dataset_version_id = 'raw_bars_20260724T204756Z_12e641bc';
+          commit;
+          ```
+          Not blocking: the rolling build reads nothing from it, it only drags
+          `date_coverage_start` back to 2024. Every rolling version so far lists it under
+          `source_versions`, so Friday's EOD `rolling_raw_bars` sees a new source set either
+          way and builds the first full-window version. **Verify Sat morning:** the newest
+          rolling version has `metadata_json.backfill_versions` listing the three and
+          `date_coverage_start` 2026-08-03 once the stray row is gone; the Fri 20:30 ET
+          pull on B registered it; then the dry run on B (step above) should report ~63
+          `daily_returns`.
     - [x] **Finding 15: the `rolling_raw_bars` step failed every EOD after deploy (10/27-10/30).**
           `checksums.dataset_version` is a foreign key to `dataset_versions` on Postgres;
           the service committed the checksum rows before it saved the version row. The
