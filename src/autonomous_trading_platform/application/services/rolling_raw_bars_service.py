@@ -10,16 +10,23 @@ file checksums, and registered as ``validated`` with
 prefers the newest rolling version; the publish step ships it like any other, so the
 worker pulls it unchanged.
 
+Historical backfill versions (``atp ingestion run-backfill``, tagged
+``metadata_json.dataset_type = "historical_backfill"``) that overlap the window are merged
+in as base sources, so the window reaches back before live ingestion started instead of
+being clamped to it. On a day both a backfill and a live session cover, the live
+session's bars are used.
+
 Idempotent per set of sources: when the newest rolling version was built from the same
-daily versions, nothing is written.
+backfill and daily versions, nothing is written.
 """
 
 from __future__ import annotations
 
 import hashlib
+import math
 import shutil
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +53,7 @@ logger = get_logger(__name__)
 
 DAILY_LIFECYCLE = "active_daily_incremental"
 ROLLING_LIFECYCLE = "rolling_bench_window"
+BACKFILL_DATASET_TYPE = "historical_backfill"
 ROLLING_SOURCE = "rolling_raw_bars"
 
 # Stored columns only; write_table re-derives the partition columns (date/year/month).
@@ -94,11 +102,13 @@ class RollingRawBarsService:
 
     def build(self, *, as_of: date, sessions: int, now_utc: datetime) -> RollingRawBarsResult:
         sessions = max(int(sessions), 1)
-        sources = self.daily_versions(as_of=as_of, sessions=sessions)
-        if not sources:
+        daily = self.daily_versions(as_of=as_of, sessions=sessions)
+        if not daily:
             return RollingRawBarsResult(
                 status="skipped", sessions_requested=sessions, reason="no_daily_versions"
             )
+        backfills = self.backfill_versions(as_of=as_of, sessions=sessions)
+        sources = backfills + daily
         source_ids = [row.dataset_version_id for row in sources]
 
         latest = self.latest_rolling()
@@ -115,7 +125,9 @@ class RollingRawBarsService:
             )
 
         symbols = sorted({sym for row in sources for sym in _declared_symbols(row)})
-        table = self._merge(sources, symbols)
+        # Live sessions win: a backfill contributes only the days before the first one.
+        first_live = min(row.date_coverage_start for row in daily if row.date_coverage_start)
+        table = self._merge(sources, symbols, backfill_until=first_live - timedelta(days=1))
         if table.num_rows == 0:
             return RollingRawBarsResult(
                 status="skipped",
@@ -151,13 +163,15 @@ class RollingRawBarsService:
                         "pipeline": ROLLING_SOURCE,
                         "symbols": symbols,
                         "source_versions": source_ids,
-                        "sessions": len(source_ids),
+                        "backfill_versions": [row.dataset_version_id for row in backfills],
+                        "sessions": len(daily),
                         "as_of": as_of.isoformat(),
                     },
                     metadata_json={
                         "dataset_lifecycle": ROLLING_LIFECYCLE,
                         "source_versions": source_ids,
-                        "sessions": len(source_ids),
+                        "backfill_versions": [row.dataset_version_id for row in backfills],
+                        "sessions": len(daily),
                         "as_of": as_of.isoformat(),
                     },
                 )
@@ -209,6 +223,25 @@ class RollingRawBarsService:
         newest = sorted(by_day.values(), key=lambda r: r.date_coverage_end or date.min)
         return newest[-sessions:]
 
+    def backfill_versions(self, *, as_of: date, sessions: int) -> list[DatasetVersions]:
+        """Validated historical backfill versions overlapping the ``sessions``-long window
+        ending at as_of (the same calendar span ``resolve_bench_window`` uses), oldest
+        first. Overlapping backfills are fine: the merge deduplicates by ``bar_id``."""
+        window_start = as_of - timedelta(days=math.ceil(sessions * 7 / 5))
+        rows = (
+            self._session.query(DatasetVersions)
+            .filter(DatasetVersions.dataset_name == RAW_BARS_DATASET.dataset_key)
+            .filter(DatasetVersions.validation_status == "validated")
+            .filter(
+                DatasetVersions.metadata_json["dataset_type"].as_string() == BACKFILL_DATASET_TYPE
+            )
+            .filter(DatasetVersions.date_coverage_end >= window_start)
+            .filter(DatasetVersions.date_coverage_start <= as_of)
+            .order_by(DatasetVersions.date_coverage_start.asc(), DatasetVersions.created_at.asc())
+            .all()
+        )
+        return [row for row in rows if isinstance(row, DatasetVersions)]
+
     def latest_rolling(self) -> DatasetVersions | None:
         row = (
             self._session.query(DatasetVersions)
@@ -224,12 +257,22 @@ class RollingRawBarsService:
 
     # ----------------------------------------------------------------- private
 
-    def _merge(self, sources: list[DatasetVersions], symbols: list[str]) -> pa.Table:
+    def _merge(
+        self,
+        sources: list[DatasetVersions],
+        symbols: list[str],
+        *,
+        backfill_until: date | None = None,
+    ) -> pa.Table:
         tables: list[pa.Table] = []
         for row in sources:
             start, end = row.date_coverage_start, row.date_coverage_end
             if start is None or end is None:
                 continue
+            if backfill_until is not None and _is_backfill(row):
+                end = min(end, backfill_until)
+                if end < start:
+                    continue
             for symbol in _declared_symbols(row) or symbols:
                 table = self._reader.read(
                     dataset=RAW_BARS_DATASET,
@@ -273,6 +316,11 @@ def _aggregate_checksum(files: list[tuple[Path, str]]) -> str:
     for path, value in files:
         aggregate.update(f"{path}|{value}\n".encode())
     return aggregate.hexdigest()
+
+
+def _is_backfill(row: DatasetVersions) -> bool:
+    meta = row.metadata_json or {}
+    return meta.get("dataset_type") == BACKFILL_DATASET_TYPE
 
 
 def _declared_symbols(row: DatasetVersions) -> list[str]:

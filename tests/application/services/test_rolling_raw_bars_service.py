@@ -18,6 +18,7 @@ from autonomous_trading_platform.application.services.platform_replay import (
     research_hooks,
 )
 from autonomous_trading_platform.application.services.rolling_raw_bars_service import (
+    BACKFILL_DATASET_TYPE,
     DAILY_LIFECYCLE,
     ROLLING_LIFECYCLE,
     RollingRawBarsService,
@@ -95,6 +96,41 @@ def seed_daily_version(
             checksum="x",
             source_manifest={"symbols": symbols},
             metadata_json={"dataset_lifecycle": lifecycle},
+        )
+    )
+    session.flush()
+    return version_id
+
+
+def seed_backfill_version(
+    session: Session,
+    base_path: Path,
+    *,
+    start: date,
+    end: date,
+    tables: list[pa.Table],
+    version_id: str,
+) -> str:
+    """A version as ``atp ingestion run-backfill`` registers it (no lifecycle tag,
+    ``dataset_type = historical_backfill``, multi-day coverage)."""
+    write_table(pa.concat_tables(tables), RAW_BARS_DATASET, base_path, version_id)
+    symbols = sorted({t.column("symbol")[0].as_py() for t in tables})
+    session.add(
+        DatasetVersions(
+            dataset_version_id=version_id,
+            dataset_name="raw_bars",
+            created_at=datetime(end.year, end.month, end.day, 23, tzinfo=UTC),
+            source="alpaca",
+            price_basis=PriceBasis.RAW,
+            interval=BarInterval.FIVE_MIN,
+            schema_version="1.0.0",
+            symbol_coverage=len(symbols),
+            date_coverage_start=start,
+            date_coverage_end=end,
+            validation_status="validated",
+            checksum="x",
+            source_manifest={"pipeline": "market_backfill", "symbols": symbols},
+            metadata_json={"dataset_type": BACKFILL_DATASET_TYPE},
         )
     )
     session.flush()
@@ -339,3 +375,136 @@ def test_registration_failure_removes_the_written_version(
         .count()
         == 0
     )
+
+
+# ---------------------------------------------------------------------------------------
+# Historical backfills as base sources: the bench window reaches back before live
+# ingestion started, instead of being clamped to it.
+
+
+def test_backfill_versions_extend_the_window_and_live_sessions_win_on_overlap(
+    db_session: Session, base_path: Path
+) -> None:
+    b1, b2 = date(2026, 9, 1), date(2026, 9, 30)
+    d1, d2 = date(2026, 10, 22), date(2026, 10, 23)
+    seed_backfill_version(
+        db_session,
+        base_path,
+        start=b1,
+        end=b2,
+        tables=[_bars("AAPL", b1, [0.1, 0.2]), _bars("AAPL", b2, [0.3])],
+        version_id="raw_bars_backfill_sep",
+    )
+    # A second backfill that runs into the first live session, with its own bar ids for
+    # that day: the live session's bars must be the ones kept.
+    seed_backfill_version(
+        db_session,
+        base_path,
+        start=date(2026, 10, 1),
+        end=d1,
+        tables=[
+            _bars("AAPL", date(2026, 10, 1), [0.5]),
+            _bars("AAPL", d1, [77.0, 78.0], bar_prefix="bf-"),
+        ],
+        version_id="raw_bars_backfill_oct",
+    )
+    seed_daily_version(db_session, base_path, day=d1, tables=[_bars("AAPL", d1, [1.0, 2.0])])
+    seed_daily_version(db_session, base_path, day=d2, tables=[_bars("AAPL", d2, [3.0])])
+
+    result = RollingRawBarsService(db_session, base_path=base_path).build(
+        as_of=d2, sessions=63, now_utc=_NOW
+    )
+
+    assert result.status == "created"
+    assert result.dataset_version_id is not None
+    assert result.source_versions == [
+        "raw_bars_backfill_sep",
+        "raw_bars_backfill_oct",
+        "raw_bars_2026-10-22",
+        "raw_bars_2026-10-23",
+    ]
+    assert (result.coverage_start, result.coverage_end) == (b1, d2)
+    # 3 September bars + 1 October backfill bar + 2 + 1 live bars; the backfill's two
+    # bars for 10-22 are dropped in favour of the live session's.
+    assert result.rows == 7
+    table = HistoricalBarDatasetReader(db_session, base_path=base_path).read(
+        dataset=RAW_BARS_DATASET,
+        dataset_version=result.dataset_version_id,
+        symbol="AAPL",
+        start_date=b1,
+        end_date=d2,
+    )
+    assert table.column("close").to_pylist() == [0.1, 0.2, 0.3, 0.5, 1.0, 2.0, 3.0]
+    row = db_session.get(DatasetVersions, result.dataset_version_id)
+    assert row is not None
+    assert row.metadata_json["backfill_versions"] == [
+        "raw_bars_backfill_sep",
+        "raw_bars_backfill_oct",
+    ]
+    assert row.metadata_json["sessions"] == 2
+
+    # Same sources again: nothing new is written.
+    again = RollingRawBarsService(db_session, base_path=base_path).build(
+        as_of=d2, sessions=63, now_utc=_NOW
+    )
+    assert again.status == "up_to_date"
+    assert again.dataset_version_id == result.dataset_version_id
+
+
+def test_backfills_outside_the_window_are_ignored(db_session: Session, base_path: Path) -> None:
+    d1 = date(2026, 10, 23)
+    # 63 sessions ≈ 89 calendar days: a backfill ending before 2026-07-26 is out of scope.
+    seed_backfill_version(
+        db_session,
+        base_path,
+        start=date(2026, 5, 1),
+        end=date(2026, 6, 30),
+        tables=[_bars("AAPL", date(2026, 6, 30), [0.1])],
+        version_id="raw_bars_backfill_old",
+    )
+    seed_daily_version(db_session, base_path, day=d1, tables=[_bars("AAPL", d1, [3.0])])
+
+    result = RollingRawBarsService(db_session, base_path=base_path).build(
+        as_of=d1, sessions=63, now_utc=_NOW
+    )
+
+    assert result.status == "created"
+    assert result.source_versions == ["raw_bars_2026-10-23"]
+    assert result.rows == 1
+
+
+def test_bench_window_is_not_clamped_once_a_backfill_covers_it(
+    db_session: Session, base_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        research_hooks,
+        "_resolve_research_universe_scope",
+        lambda **kwargs: SimpleNamespace(member_symbols={"AAPL"}),
+    )
+    as_of = date(2026, 10, 26)
+    live_days = [as_of - timedelta(days=n) for n in (10, 5, 0)]
+    for day in live_days:
+        seed_daily_version(db_session, base_path, day=day, tables=[_bars("AAPL", day, [1.0])])
+    seed_backfill_version(
+        db_session,
+        base_path,
+        start=as_of - timedelta(days=120),
+        end=as_of - timedelta(days=11),
+        tables=[_bars("AAPL", as_of - timedelta(days=120), [0.5])],
+        version_id="raw_bars_backfill",
+    )
+
+    rolling = RollingRawBarsService(db_session, base_path=base_path).build(
+        as_of=as_of, sessions=63, now_utc=_NOW
+    )
+    assert rolling.status == "created"
+    assert rolling.coverage_start == as_of - timedelta(days=120)
+
+    window = bench_hooks.resolve_bench_window(
+        session=db_session, as_of=as_of, trading_days=63, replay_symbols=[]
+    )
+    assert window is not None
+    assert window.dataset_version == rolling.dataset_version_id
+    # The full 63-session span, no longer clamped to the first live session.
+    assert window.start_date == as_of - timedelta(days=89)
+    assert window.end_date == as_of
