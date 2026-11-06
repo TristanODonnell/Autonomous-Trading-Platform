@@ -50,6 +50,11 @@ from autonomous_trading_platform.execution.services.broker_startup_health_check_
 from autonomous_trading_platform.execution.services.external_broker_reconciliation_service import (
     ExternalBrokerReconciliationService,
 )
+from autonomous_trading_platform.execution.services.strategy_sleeve_ledger_service import (
+    StrategySleeveLedgerService,
+    fetch_account_positions,
+    plain_quantity,
+)
 from autonomous_trading_platform.portfolio.portfolio_engine import PortfolioEngine
 from autonomous_trading_platform.safety.contexts.build_safety_context import (
     build_safety_context,
@@ -324,6 +329,23 @@ def register(subparsers) -> None:
     _add_broker_safety_options(sync_position_snapshot_parser)
     _add_output_option(sync_position_snapshot_parser)
     sync_position_snapshot_parser.set_defaults(func=handle_sync_position_snapshot)
+
+    sync_sleeves_parser = execution_subparsers.add_parser(
+        "sync-sleeves",
+        help=(
+            "Make the strategy sleeves sum to the broker positions: write down what the "
+            "account does not hold, adopt what no sleeve owns (symbols with an open order "
+            "are left alone)"
+        ),
+    )
+    sync_sleeves_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report the sleeve/account mismatches without changing the sleeves",
+    )
+    _add_broker_safety_options(sync_sleeves_parser)
+    _add_output_option(sync_sleeves_parser)
+    sync_sleeves_parser.set_defaults(func=handle_sync_sleeves)
 
     sync_open_orders_parser = execution_subparsers.add_parser(
         "sync-open-orders",
@@ -793,7 +815,10 @@ def handle_sync_position_snapshot(args: argparse.Namespace) -> int:
         _assert_broker_cli_safety(settings, args)
         run_id = _parse_uuid(args.run_id, field_name="run_id")
         service = _build_broker_runtime_sync_service(session=session, settings=settings)
-        snapshot = service.sync_positions_from_broker(run_id=run_id, observed_at=now_utc)
+        pending = service.pending_fills()
+        snapshot = service.sync_positions_from_broker(
+            run_id=run_id, observed_at=now_utc, pending=pending
+        )
         audit_event_id = _record_execution_cli_audit_event(
             session,
             action="execution_sync_position_snapshot",
@@ -803,6 +828,7 @@ def handle_sync_position_snapshot(args: argparse.Namespace) -> int:
                 "run_id": str(run_id),
                 "snapshot_id": str(snapshot.snapshot_id),
                 "position_count": len(snapshot.positions or []),
+                "pending_fill_count": len(pending),
             },
             occurred_at=now_utc,
         )
@@ -811,9 +837,81 @@ def handle_sync_position_snapshot(args: argparse.Namespace) -> int:
             "audit_event_id": audit_event_id,
             "position_snapshot": _model_to_dict(snapshot),
             "positions": [_model_to_dict(item) for item in (snapshot.positions or [])],
+            "pending_fills": _serialize_value(pending),
         }
         _emit_json_result(args, payload)
         return 0
+    finally:
+        session.close()
+
+
+def handle_sync_sleeves(args: argparse.Namespace) -> int:
+    print_header("Sync Sleeves")
+    session = get_session()
+    now_utc = datetime.now(UTC)
+    try:
+        settings = Settings()
+        _assert_broker_cli_safety(settings, args)
+        account_positions = fetch_account_positions(_build_broker_client(settings))
+        ledger = StrategySleeveLedgerService()
+        dry_run = bool(getattr(args, "dry_run", False))
+        with SorUnitOfWork(session) as uow:
+            open_symbols = sorted(
+                {str(row.symbol).upper() for row in uow.tracked_orders.list_reconcilable_orders()}
+            )
+            if dry_run:
+                preview = ledger.reconcile(
+                    uow, account_positions=account_positions, timestamp=now_utc
+                )
+                payload: dict[str, Any] = {
+                    "status": "dry_run",
+                    "open_order_symbols": open_symbols,
+                    "mismatches": [
+                        {
+                            "symbol": m.symbol,
+                            "account_quantity": plain_quantity(m.account_quantity),
+                            "sleeve_quantity": plain_quantity(m.sleeve_quantity),
+                            "would_skip": m.symbol.upper() in open_symbols,
+                        }
+                        for m in preview.mismatches
+                    ],
+                }
+                _emit_json_result(args, payload)
+                return 0
+            report = ledger.resync(
+                uow,
+                account_positions=account_positions,
+                timestamp=now_utc,
+                skip_symbols=open_symbols,
+            )
+        report_payload = {
+            "adopted_symbols": list(report.adopted_symbols),
+            "written_down": [
+                {
+                    "strategy_id": w.strategy_id,
+                    "symbol": w.symbol,
+                    "quantity": plain_quantity(w.quantity),
+                }
+                for w in report.written_down
+            ],
+            "skipped_symbols": [m.symbol for m in report.skipped],
+            "unresolved": {m.symbol: plain_quantity(m.difference) for m in report.unresolved},
+        }
+        audit_event_id = _record_execution_cli_audit_event(
+            session,
+            action="execution_sync_sleeves",
+            run_id=None,
+            message="execution sync-sleeves",
+            metadata=report_payload,
+            occurred_at=now_utc,
+        )
+        payload = {
+            "status": "ok" if not report.unresolved else "unresolved",
+            "audit_event_id": audit_event_id,
+            "sleeves": report_payload,
+        }
+        _emit_json_result(args, payload)
+        return 0 if not report.unresolved else 1
     finally:
         session.close()
 

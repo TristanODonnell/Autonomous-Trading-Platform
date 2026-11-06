@@ -9,7 +9,7 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.config.settings import Settings
-from autonomous_trading_platform.contracts.common.enums import OrderSource
+from autonomous_trading_platform.contracts.common.enums import OrderSource, Side
 from autonomous_trading_platform.execution.errors import BrokerRuntimeSyncError
 from autonomous_trading_platform.execution.mappers.broker_order_mapper import BrokerOrderMapper
 from autonomous_trading_platform.observability.lifecycle import record_order_execution_latency
@@ -38,6 +38,37 @@ class BrokerRuntimeClient(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class PendingFill:
+    """A fill the broker has executed that no tick has applied to the ledger yet.
+
+    The ledger chains forward from its newest snapshot, and a tracked order that filled
+    after its bar's reconciliation is applied by the *next* tick. A broker-sourced
+    snapshot written in between already contains that fill, so the later application
+    double-counts it (Finding 25: AAPL 3 bought Tue 2026-11-03 15:56 ET, ledger resynced
+    at 20:19, the same 3 applied again at Wed 09:30 -> ledger 6 vs broker 3). The resync
+    therefore writes the broker book *net of* pending fills, so the ledger lands on the
+    broker once the tick applies them, and the validator compares against the same.
+    """
+
+    broker_order_id: str
+    symbol: str
+    side: str
+    quantity: Decimal
+    price: Decimal
+
+    @property
+    def cash_delta(self) -> Decimal:
+        """Cash to hold back from the broker figure until this fill is applied."""
+        notional = self.quantity * self.price
+        return notional if self.side == Side.BUY.value else -notional
+
+    @property
+    def quantity_delta(self) -> Decimal:
+        """Shares to hold back from the broker position until this fill is applied."""
+        return -self.quantity if self.side == Side.BUY.value else self.quantity
+
+
+@dataclass(frozen=True, slots=True)
 class BrokerRuntimeSyncResult:
     account_snapshot_id: UUID
     cash_snapshot_id: UUID | None
@@ -46,6 +77,7 @@ class BrokerRuntimeSyncResult:
     position_snapshot_id: UUID | None = None
     synced_broker_order_ids: tuple[str, ...] = ()
     synced_fill_ids: tuple[str, ...] = ()
+    pending_fills: tuple[PendingFill, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +86,7 @@ class BrokerRuntimeConsistencyResult:
     mismatches: list[str] = field(default_factory=list)
     account_snapshot_id: UUID | None = None
     cash_snapshot_id: UUID | None = None
+    pending_fills: tuple[PendingFill, ...] = ()
 
 
 class BrokerRuntimeSyncService:
@@ -120,18 +153,96 @@ class BrokerRuntimeSyncService:
 
         return snapshot
 
+    def pending_fills(self) -> tuple[PendingFill, ...]:
+        """Fills the broker reports on our open tracked orders that no tick has applied yet.
+
+        Uses the same incremental-fill extraction as the reconciliation job, so what is
+        held back here is exactly what the next tick will apply.
+        """
+        with SorUnitOfWork(self.session) as uow:
+            tracked = [
+                (
+                    row.broker_order_id,
+                    row.intent_id,
+                    row.run_id,
+                    row.account_id,
+                    Decimal(str(row.previous_filled_qty)),
+                    (
+                        Decimal(str(row.previous_avg_fill_price))
+                        if row.previous_avg_fill_price is not None
+                        else None
+                    ),
+                )
+                for row in uow.tracked_orders.list_reconcilable_orders()
+                if row.broker_order_id is not None
+            ]
+
+        pending: list[PendingFill] = []
+        for broker_order_id, intent_id, run_id, account_id, prev_qty, prev_price in tracked:
+            try:
+                payload = self.broker_client.get_order_by_id(broker_order_id)
+            except Exception as exc:
+                raise BrokerRuntimeSyncError(
+                    f"Broker order fetch failed for open order {broker_order_id}: {exc}"
+                ) from exc
+            if payload.get("status") == "not_found":
+                continue
+            broker_order = self.broker_order_mapper.to_broker_order(
+                payload=payload,
+                intent_id=intent_id,
+                run_id=run_id,
+                account_id=account_id,
+            )
+            extracted = self.broker_order_mapper.extract_incremental_fill(
+                broker_order=broker_order,
+                previous_filled_qty=prev_qty,
+                previous_avg_fill_price=prev_price,
+            )
+            if extracted.fill is None:
+                continue
+            pending.append(
+                PendingFill(
+                    broker_order_id=broker_order_id,
+                    symbol=extracted.fill.symbol,
+                    side=extracted.fill.side.value,
+                    quantity=Decimal(str(extracted.fill.quantity)),
+                    price=Decimal(str(extracted.fill.price)),
+                )
+            )
+
+        if pending:
+            logger.info(
+                "broker_runtime_sync.pending_fills_held_back",
+                extra={
+                    "count": len(pending),
+                    "symbols": sorted({fill.symbol for fill in pending}),
+                    "cash_held_back": str(_cash_held_back(pending)),
+                },
+            )
+        return tuple(pending)
+
     def sync_broker_runtime_state(
         self,
         *,
         run_id: UUID | None = None,
         observed_at: datetime | None = None,
+        pending: tuple[PendingFill, ...] | None = None,
     ) -> BrokerRuntimeSyncResult:
+        """Snapshot the broker account; with ``run_id`` also write the ledger's cash row.
+
+        The cash row is the broker's cash net of pending fills (see ``PendingFill``), so the
+        ledger ends up on the broker's number once the next tick applies them.
+        """
         resolved_observed_at = observed_at or datetime.now(UTC)
         account = self._fetch_account()
         account_snapshot = self._map_account_snapshot(
             account=account,
             observed_at=resolved_observed_at,
         )
+        resolved_pending: tuple[PendingFill, ...] = ()
+        if run_id is not None:
+            resolved_pending = pending if pending is not None else self.pending_fills()
+        held_back = _cash_held_back(resolved_pending)
 
         cash_snapshot = None
         with SorUnitOfWork(self.session) as uow:
@@ -142,8 +253,8 @@ class BrokerRuntimeSyncService:
                     run_id=run_id,
                     timestamp=resolved_observed_at,
                     currency=str(account.get("currency") or "USD"),
-                    cash=_required_decimal(account, "cash"),
-                    buying_power=_required_decimal(account, "buying_power"),
+                    cash=_required_decimal(account, "cash") + held_back,
+                    buying_power=_required_decimal(account, "buying_power") + held_back,
                     reserved_cash=Decimal("0"),
                     equity=_optional_decimal(account, "equity"),
                     source=OrderSource.BROKER_RECONCILED,
@@ -156,15 +267,25 @@ class BrokerRuntimeSyncService:
             cash_snapshot_id=cash_snapshot.snapshot_id if cash_snapshot else None,
             broker_account_id=account_snapshot.broker_account_id,
             observed_at=resolved_observed_at,
+            pending_fills=resolved_pending,
         )
 
     def validate_broker_runtime_consistency(
         self,
         *,
         tolerance: Decimal = Decimal("0.01"),
+        pending: tuple[PendingFill, ...] | None = None,
     ) -> BrokerRuntimeConsistencyResult:
+        """Compare persisted account / cash state with the broker.
+
+        The ledger's cash row is expected to equal the broker's cash net of pending fills
+        (the amount a resync holds back and the next tick applies), so a resync followed
+        by this check reads ``ok`` even while fills from the last bar are still open.
+        """
         account = self._fetch_account()
         mismatches: list[str] = []
+        resolved_pending = pending if pending is not None else self.pending_fills()
+        held_back = _cash_held_back(resolved_pending)
 
         with SorUnitOfWork(self.session) as uow:
             account_snapshot = uow.broker_account_snapshots.get_latest()
@@ -211,14 +332,14 @@ class BrokerRuntimeSyncService:
                 mismatches,
                 "cash.cash",
                 cash_snapshot.cash,
-                _required_decimal(account, "cash"),
+                _required_decimal(account, "cash") + held_back,
                 tolerance,
             )
             _compare_required_decimal(
                 mismatches,
                 "cash.buying_power",
                 cash_snapshot.buying_power,
-                _required_decimal(account, "buying_power"),
+                _required_decimal(account, "buying_power") + held_back,
                 tolerance,
             )
             _compare_optional_decimal(
@@ -236,6 +357,7 @@ class BrokerRuntimeSyncService:
                 account_snapshot.snapshot_id if account_snapshot is not None else None
             ),
             cash_snapshot_id=cash_snapshot.snapshot_id if cash_snapshot is not None else None,
+            pending_fills=resolved_pending,
         )
 
     def sync_positions_from_broker(
@@ -243,11 +365,29 @@ class BrokerRuntimeSyncService:
         *,
         run_id: UUID,
         observed_at: datetime | None = None,
+        pending: tuple[PendingFill, ...] | None = None,
     ) -> PositionSnapshot:
+        """Write the broker's positions as the ledger's newest snapshot.
+
+        Quantities are net of pending fills (see ``PendingFill``): a share the broker
+        already holds from a fill no tick has applied is left out, a share a pending sell
+        has already removed is kept, so the ledger lands on the broker book once the next
+        tick applies those fills. A symbol flat at the broker but with a pending sell is
+        carried at the fill price.
+        """
         try:
             positions = self.broker_client.get_positions()
         except Exception as exc:
             raise BrokerRuntimeSyncError(f"Broker positions fetch failed: {exc}") from exc
+
+        resolved_pending = pending if pending is not None else self.pending_fills()
+        held_back: dict[str, Decimal] = {}
+        last_fill_price: dict[str, Decimal] = {}
+        for fill in resolved_pending:
+            held_back[fill.symbol] = held_back.get(fill.symbol, Decimal("0")) + fill.quantity_delta
+            last_fill_price[fill.symbol] = fill.price
+
+        broker_by_symbol = {str(position["symbol"]): position for position in positions}
 
         snapshot = PositionSnapshot(
             snapshot_id=uuid4(),
@@ -255,18 +395,53 @@ class BrokerRuntimeSyncService:
             timestamp=observed_at or datetime.now(UTC),
             source=OrderSource.BROKER_RECONCILED,
         )
-        snapshot.positions = [
-            PositionSnapshotItem(
-                snapshot_id=snapshot.snapshot_id,
-                symbol=str(position["symbol"]),
-                quantity=_required_decimal(position, "qty"),
-                avg_cost=_optional_decimal(position, "avg_entry_price"),
-                market_price=_optional_decimal(position, "current_price"),
-                market_value=_optional_decimal(position, "market_value"),
-                unrealized_pnl=_optional_decimal(position, "unrealized_pl"),
+        items: list[PositionSnapshotItem] = []
+        for symbol in sorted(set(broker_by_symbol) | set(held_back)):
+            position = broker_by_symbol.get(symbol)
+            delta = held_back.get(symbol, Decimal("0"))
+            broker_qty = (
+                _required_decimal(position, "qty") if position is not None else Decimal("0")
             )
-            for position in positions
-        ]
+            quantity = broker_qty + delta
+            if quantity == 0:
+                continue
+            if position is not None and delta == 0:
+                items.append(
+                    PositionSnapshotItem(
+                        snapshot_id=snapshot.snapshot_id,
+                        symbol=symbol,
+                        quantity=quantity,
+                        avg_cost=_optional_decimal(position, "avg_entry_price"),
+                        market_price=_optional_decimal(position, "current_price"),
+                        market_value=_optional_decimal(position, "market_value"),
+                        unrealized_pnl=_optional_decimal(position, "unrealized_pl"),
+                    )
+                )
+                continue
+            if position is not None:
+                avg_cost = _optional_decimal(position, "avg_entry_price")
+                market_price = _optional_decimal(position, "current_price")
+            else:
+                avg_cost = last_fill_price.get(symbol)
+                market_price = last_fill_price.get(symbol)
+            market_value = market_price * quantity if market_price is not None else None
+            unrealized_pnl = (
+                (market_price - avg_cost) * quantity
+                if market_price is not None and avg_cost is not None
+                else None
+            )
+            items.append(
+                PositionSnapshotItem(
+                    snapshot_id=snapshot.snapshot_id,
+                    symbol=symbol,
+                    quantity=quantity,
+                    avg_cost=avg_cost,
+                    market_price=market_price,
+                    market_value=market_value,
+                    unrealized_pnl=unrealized_pnl,
+                )
+            )
+        snapshot.positions = items
 
         with SorUnitOfWork(self.session) as uow:
             uow.position_snapshots.upsert(snapshot)
@@ -420,6 +595,10 @@ class BrokerRuntimeSyncService:
             portfolio_value=_optional_decimal(account, "portfolio_value"),
             observed_at=observed_at,
         )
+
+
+def _cash_held_back(pending: tuple[PendingFill, ...] | list[PendingFill]) -> Decimal:
+    return sum((fill.cash_delta for fill in pending), Decimal("0"))
 
 
 def _optional_decimal(payload: dict[str, Any], key: str) -> Decimal | None:

@@ -15,6 +15,7 @@ from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.execution.services.portfolio_drawdown_governance_service import (
     PortfolioDrawdownConfig,
     PortfolioDrawdownGovernanceService,
+    fetch_broker_equity,
 )
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
@@ -80,9 +81,13 @@ def run_allocation_rebalance_cycle(
     now_utc: datetime | None = None,
     trigger_source: str = "scheduler",
     session: Session | None = None,
+    broker_client: object | None = None,
 ) -> dict:
     return run_strategy_allocation_rebalance_cycle(
-        now_utc=now_utc, trigger_source=trigger_source, session=session
+        now_utc=now_utc,
+        trigger_source=trigger_source,
+        session=session,
+        broker_client=broker_client,
     )
 
 
@@ -90,11 +95,14 @@ def run_strategy_allocation_rebalance_cycle(
     now_utc: datetime | None = None,
     trigger_source: str = "scheduler",
     session: Session | None = None,
+    broker_client: object | None = None,
 ) -> dict:
     """Re-weight the active strategies when the interval guard and operator switch allow.
 
     ``session``: run inside this session (the end-of-day chain passes its own so the step
     shares the chain's transaction); when omitted the cycle opens and closes one of its own.
+    ``broker_client``: the drawdown guard reads live account equity from it; without one
+    (or when the broker does not answer) the guard uses the ledger's latest cash snapshot.
     """
     if now_utc is None:
         now_utc = datetime.now(UTC)
@@ -139,6 +147,7 @@ def run_strategy_allocation_rebalance_cycle(
                 session=session,
                 settings=settings,
                 logger=logger,
+                broker_client=broker_client,
             )
             if portfolio_skip is not None:
                 payload = {"status": "skipped", "skip_reason": portfolio_skip}
@@ -263,10 +272,15 @@ def _emit_rebalance_stability_metrics(result: QualityReallocationResult) -> None
         rebalance_duration_seconds.record(float(duration), attrs)
 
 
-def _evaluate_portfolio_governance_for_rebalance(*, session, settings, logger) -> str | None:
+def _evaluate_portfolio_governance_for_rebalance(
+    *, session, settings, logger, broker_client: object | None = None
+) -> str | None:
     """
     Evaluate portfolio drawdown governance and return a skip_reason string if
     rebalancing should be blocked, or None if it may proceed.
+
+    Equity is the broker's live account equity when the broker answers (the ledger
+    drifts, Findings 21 / 25), else the ledger's latest cash snapshot.
 
     Fails open: infrastructure errors never block rebalancing.
     """
@@ -275,21 +289,28 @@ def _evaluate_portfolio_governance_for_rebalance(*, session, settings, logger) -
         if not config.enabled:
             return None
 
-        snap = CashSnapshotRepository(session).get_latest()
+        equity = fetch_broker_equity(broker_client)
+        equity_source = "broker"
+        if equity is None:
+            snap = CashSnapshotRepository(session).get_latest()
+            if snap is not None and snap.equity is not None:
+                equity = float(snap.equity)
+                equity_source = "ledger"
         governance_svc = PortfolioDrawdownGovernanceService(
             governance_repo=PortfolioDrawdownGovernanceRepository(session),
             audit_repo=AuditLogRepository(session),
         )
 
-        if snap is not None and snap.equity is not None:
+        if equity is not None:
             evaluation = governance_svc.evaluate(
-                current_equity=float(snap.equity),
+                current_equity=equity,
                 config=config,
             )
             if evaluation.rebalancing_blocked:
                 logger.warning(
                     "rebalance_skipped_portfolio_drawdown_governance",
                     extra={
+                        "equity_source": equity_source,
                         "drawdown_pct": round(evaluation.drawdown_pct, 6),
                         "threshold_pct": evaluation.threshold_pct,
                         "triggered_action": evaluation.triggered_action,

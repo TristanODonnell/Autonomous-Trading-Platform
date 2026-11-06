@@ -45,6 +45,11 @@ from autonomous_trading_platform.execution.services.external_broker_reconciliati
     BrokerClient,
     ExternalBrokerReconciliationService,
 )
+from autonomous_trading_platform.execution.services.strategy_sleeve_ledger_service import (
+    StrategySleeveLedgerService,
+    fetch_account_positions,
+    plain_quantity,
+)
 from autonomous_trading_platform.runtime.clock import MarketCalendar, RealMarketCalendar
 from autonomous_trading_platform.runtime.interruptible_sleep import InterruptibleSleeper
 from autonomous_trading_platform.runtime.services.pipeline_failure_notification_service import (
@@ -79,12 +84,16 @@ from autonomous_trading_platform.scheduler.services.market_calendar_cross_check 
 from autonomous_trading_platform.storage.parquet.object_store import ObjectStore, S3ObjectStore
 from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
+    OperatorSettingsRepository,
+)
 from autonomous_trading_platform.storage.sor.repositories.core.reconciliation_snapshot_repository import (
     ReconciliationSnapshotRepository,
 )
 from autonomous_trading_platform.storage.sor.repositories.core.runtime_job_run_repository import (
     RuntimeJobRunRepository,
 )
+from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUnitOfWork
 
 _ET = ZoneInfo("America/New_York")
 
@@ -310,6 +319,11 @@ class PaperTradingGoldenPathOrchestrator:
                 max_attempts=1,
             ),
             ChainStep("broker_reconciliation", self._step_broker_reconciliation),
+            ChainStep(
+                "sleeve_resync",
+                self._step_sleeve_resync,
+                applies=lambda ctx: self._portfolio_mode_enabled(),
+            ),
             ChainStep("corporate_actions", self._step_corporate_actions, blocking=True),
             ChainStep("features", self._step_features, blocking=True),
             ChainStep("risk", self._step_risk),
@@ -447,6 +461,42 @@ class PaperTradingGoldenPathOrchestrator:
             "failed_checks": failed_checks,
         }
 
+    def _portfolio_mode_enabled(self) -> bool:
+        return bool(
+            OperatorSettingsRepository(self.session).get_or_create_default().portfolio_mode_enabled
+        )
+
+    def _step_sleeve_resync(self, ctx: ChainContext) -> dict[str, Any]:
+        """Make the sleeve books sum to the broker account (Finding 24): sleeves that
+        claim shares the account does not hold are written down, unowned shares are
+        adopted. A symbol with an order still open is left for the next session's
+        first tick, which applies the fill before evaluating."""
+        account_positions = fetch_account_positions(self._broker_client_factory())
+        with SorUnitOfWork(self.session) as uow:
+            open_symbols = {
+                str(row.symbol).upper() for row in uow.tracked_orders.list_reconcilable_orders()
+            }
+            report = StrategySleeveLedgerService().resync(
+                uow,
+                account_positions=account_positions,
+                timestamp=ctx.now_utc,
+                skip_symbols=open_symbols,
+            )
+        self.session.flush()
+        return {
+            "adopted_symbols": list(report.adopted_symbols),
+            "written_down": [
+                {
+                    "strategy_id": w.strategy_id,
+                    "symbol": w.symbol,
+                    "quantity": plain_quantity(w.quantity),
+                }
+                for w in report.written_down
+            ],
+            "skipped_symbols": [m.symbol for m in report.skipped],
+            "unresolved": {m.symbol: plain_quantity(m.difference) for m in report.unresolved},
+        }
+
     def _live_context(self, ctx: ChainContext) -> PlatformReplayContext:
         """The context the replay hooks take; here it carries the live chain's identity."""
         context = PlatformReplayContext.create(
@@ -481,7 +531,10 @@ class PaperTradingGoldenPathOrchestrator:
         """Interim weekly re-weight trigger until the portfolio review is on (plan 1.3 §4.1);
         the engine's own interval guard and auto_rebalance_enabled switch gate it."""
         result = run_allocation_rebalance_cycle(
-            now_utc=ctx.now_utc, trigger_source="scheduler", session=self.session
+            now_utc=ctx.now_utc,
+            trigger_source="scheduler",
+            session=self.session,
+            broker_client=self._broker_client_factory(),
         )
         return dict(result) if isinstance(result, dict) else {"status": str(result)}
 

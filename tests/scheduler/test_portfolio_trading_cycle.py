@@ -146,3 +146,59 @@ def test_sleeves_buying_the_same_symbol_share_the_symbol_cap(
             by_symbol[row.symbol] = by_symbol.get(row.symbol, 0.0) + float(row.notional or 0)
     cap = float(Settings().max_symbol_exposure)
     assert by_symbol and all(total <= cap for total in by_symbol.values())
+
+
+def test_open_broker_order_holds_back_new_intents_on_that_symbol(
+    seeded_paper_trading_cycle_fixture, db_session, monkeypatch
+) -> None:
+    """Finding 23: while an order is open at the broker, no sleeve gets a new intent on
+    its symbol. A 306-share exit that filled 304 + 2 across a tick boundary had the
+    remaining 2 sold a second time, leaving the account short."""
+    from uuid import uuid4
+
+    from autonomous_trading_platform.contracts.common.enums import OrderStatus
+    from autonomous_trading_platform.storage.sor.models.tracked_orders import TrackedOrder
+    from tests.utilities.paper_trading_cycle_fixture import FakePaperBrokerClient
+
+    fixture = seeded_paper_trading_cycle_fixture
+    monkeypatch.setenv("MAX_SYMBOL_EXPOSURE", "10000000")
+    _enable_portfolio_mode(db_session)
+    # The broker still shows the order open, so reconciliation leaves it open too.
+    monkeypatch.setattr(
+        FakePaperBrokerClient,
+        "get_order_by_id",
+        lambda self, order_id: {
+            "id": order_id,
+            "client_order_id": order_id,
+            "symbol": fixture.symbol,
+            "qty": "2",
+            "side": "sell",
+            "type": "market",
+            "time_in_force": "day",
+            "status": "new",
+            "filled_qty": "0",
+            "filled_avg_price": None,
+            "submitted_at": fixture.now_utc.isoformat(),
+            "updated_at": fixture.now_utc.isoformat(),
+        },
+    )
+    db_session.add(
+        TrackedOrder(
+            order_id=uuid4(),
+            intent_id=uuid4(),
+            run_id=uuid4(),
+            strategy_id="baseline_strategy",
+            account_id=fixture.account_id,
+            symbol=fixture.symbol,
+            broker_order_id="broker-open-1",
+            current_status=OrderStatus.SUBMITTED,
+            is_open=True,
+        )
+    )
+    db_session.flush()
+
+    run_trading_cycle(now_utc=fixture.now_utc)
+
+    manifest = _latest_manifest(db_session)
+    assert manifest.status == "completed", manifest.error_message
+    assert _intent_strategies(db_session, manifest.run_id) == set()
