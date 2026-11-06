@@ -602,13 +602,26 @@ is a finding.
           and fall back to the ledger's cash snapshot only when the broker does not
           answer, so ledger drift is a bookkeeping problem, not a safety one.
     - **After this fix deploys (manual, on A, after the close):**
-      1. [ ] Ledger resync per `docs/operations/runbooks/ledger-resync.md` (kill switch
+      1. [x] Ledger resync per `docs/operations/runbooks/ledger-resync.md` (kill switch
          on, `sync-broker-state` + `sync-position-snapshot` with one run id,
          `validate-broker-consistency --paper-only` must print `ok` and list the four
          15:55 orders under `pending_fills`, step-4 peak reset, kill switch off). Safe
-         with the four open orders because of the fix.
-      2. [ ] Buy 2 TLT on the Alpaca dashboard (carried over; the only item left from
-         Wednesday's list that still matters).
+         with the four open orders because of the fix. **Done 2026-11-06 06:51 UTC**
+         (PR #168 deployed 06:48): the four 15:55 fills (CRM sell 2, IWM 4, META 1, MSFT
+         1) were held back, the ledger now has CRM 6 / MSFT 1 / no IWM or META / no
+         AAPL, `cash.cash` matched the broker to the cent; the validator still said
+         `drifted` on equity / buying power / portfolio value only, which is the
+         after-hours marks moving in the 10 s between sync and check (runbook note).
+         Peak reset to $97,389.53. Two things to know: `enable-kill-switch` reports
+         `canceled_order_count: 4` for the four already-filled tracked orders (Alpaca
+         ignores the cancels; the rows stay open for Friday's first tick) and left the
+         dashboard TLT buy untouched. And the snapshot copied the broker's TLT -2 into
+         the ledger, so once the cover fills Friday morning the ledger will carry TLT -2
+         (about $164) against a flat broker until the next resync; harmless (the
+         pre-trade caps read broker positions), fold it into the weekend resync.
+      2. [x] Buy 2 TLT on the Alpaca dashboard (carried over; the only item left from
+         Wednesday's list that still matters). Placed 2026-11-06 06:48 UTC as a day
+         market order, queued for Friday's 09:30 ET open.
       3. [ ] Optional: `min_active_strategies` 3 -> 2 (Finding 22).
       4. [ ] Friday, check: `validate-broker-consistency` reads `ok` after the first tick
          applies the four fills; no TLT broker rejections once covered; sleeve mismatch
