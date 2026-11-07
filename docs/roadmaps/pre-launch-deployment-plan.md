@@ -724,23 +724,28 @@ is a finding.
           files, 8.6 MB in all (disk 61% used). The stray 2024-06-03 version
           (`raw_bars_20260724T204756Z_12e641bc`) has no directory on disk, only its row,
           referenced by one `ingestion_checkpoints` and two `ingestion_runs` rows (all
-          dev-dump, 2024-06-03) and nothing else. **Still to delete** (one transaction on A;
-          not run from the laptop session, which refuses deletes on the box's DB):
-          ```sql
-          begin;
-          delete from ingestion_checkpoints where dataset_version = 'raw_bars_20260724T204756Z_12e641bc';
-          delete from ingestion_runs where dataset_version = 'raw_bars_20260724T204756Z_12e641bc';
-          delete from dataset_versions where dataset_version_id = 'raw_bars_20260724T204756Z_12e641bc';
-          commit;
-          ```
-          Not blocking: the rolling build reads nothing from it, it only drags
-          `date_coverage_start` back to 2024. Every rolling version so far lists it under
-          `source_versions`, so Friday's EOD `rolling_raw_bars` sees a new source set either
-          way and builds the first full-window version. **Verify Sat morning:** the newest
-          rolling version has `metadata_json.backfill_versions` listing the three and
-          `date_coverage_start` 2026-08-03 once the stray row is gone; the Fri 20:30 ET
-          pull on B registered it; then the dry run on B (step above) should report ~63
-          `daily_returns`.
+          dev-dump, 2024-06-03) and nothing else. Deleted by the operator on A on
+          2026-11-07 00:45 UTC (one transaction: the checkpoint row, the two run rows, the
+          version row). It was **not** cosmetic, see Finding 26.
+    - [x] **Finding 26: the rolling build silently dropped the whole backfill (2026-11-06).**
+          Friday's EOD `rolling_raw_bars` listed the three backfill versions under
+          `backfill_versions` yet wrote 23,658 rows, all Oct 9 to Nov 6, no August or
+          September. The stray 2024-06-03 version carries the daily lifecycle
+          (`active_daily_incremental`), so `daily_versions` returned it as the oldest live
+          session and `_merge` capped every backfill at `first_live - 1 day` = 2024-06-02,
+          i.e. nothing. The earlier note above that the row was "not blocking" was wrong.
+          **Done 2026-11-07 00:52 UTC:** after the delete, a one-off `RollingRawBarsService.build`
+          (same call as the EOD step, `as_of` 2026-11-06, 63 sessions) created
+          `raw_bars_20261107T005243Z_8097b17d`: 83,988 rows (Aug 26,526 / Sep 27,049 /
+          Oct 23,448 / Nov 6,965), coverage 2026-08-01..2026-11-06, 22 symbols, 88 files,
+          the three backfills under `backfill_versions`; `atp datasets publish
+          --trading-date 2026-11-06` uploaded it (89 files, 11.1 MB) into the 2026-11-06
+          index before B's 20:30 ET pull. **Code fix still to do:** `daily_versions` must
+          ignore versions whose `date_coverage_end` is older than the window start (the way
+          `backfill_versions` already does), so one stale daily row can never zero the
+          backfill again; add a test with a 2024 daily row in the way. **Verify Sat
+          morning:** B's Fri 20:30 ET pull registered `raw_bars_20261107T005243Z_8097b17d`;
+          the 06:00 ET bench re-sim (or the dry run, step above) reports ~63 `daily_returns`.
     - [x] **Finding 15: the `rolling_raw_bars` step failed every EOD after deploy (10/27-10/30).**
           `checksums.dataset_version` is a foreign key to `dataset_versions` on Postgres;
           the service committed the checksum rows before it saved the version row. The
