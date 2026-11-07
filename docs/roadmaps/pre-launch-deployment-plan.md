@@ -602,21 +602,52 @@ is a finding.
           and fall back to the ledger's cash snapshot only when the broker does not
           answer, so ledger drift is a bookkeeping problem, not a safety one.
     - **After this fix deploys (manual, on A, after the close):**
-      1. [ ] Ledger resync per `docs/operations/runbooks/ledger-resync.md` (kill switch
+      1. [x] Ledger resync per `docs/operations/runbooks/ledger-resync.md` (kill switch
          on, `sync-broker-state` + `sync-position-snapshot` with one run id,
          `validate-broker-consistency --paper-only` must print `ok` and list the four
          15:55 orders under `pending_fills`, step-4 peak reset, kill switch off). Safe
-         with the four open orders because of the fix.
-      2. [ ] Buy 2 TLT on the Alpaca dashboard (carried over; the only item left from
-         Wednesday's list that still matters).
+         with the four open orders because of the fix. **Done 2026-11-06 06:51 UTC**
+         (PR #168 deployed 06:48): the four 15:55 fills (CRM sell 2, IWM 4, META 1, MSFT
+         1) were held back, the ledger now has CRM 6 / MSFT 1 / no IWM or META / no
+         AAPL, `cash.cash` matched the broker to the cent; the validator still said
+         `drifted` on equity / buying power / portfolio value only, which is the
+         after-hours marks moving in the 10 s between sync and check (runbook note).
+         Peak reset to $97,389.53. Two things to know: `enable-kill-switch` reports
+         `canceled_order_count: 4` for the four already-filled tracked orders (Alpaca
+         ignores the cancels; the rows stay open for Friday's first tick) and left the
+         dashboard TLT buy untouched. And the snapshot copied the broker's TLT -2 into
+         the ledger, so once the cover fills Friday morning the ledger will carry TLT -2
+         (about $164) against a flat broker until the next resync; harmless (the
+         pre-trade caps read broker positions), fold it into the weekend resync.
+      2. [x] Buy 2 TLT on the Alpaca dashboard (carried over; the only item left from
+         Wednesday's list that still matters). Placed 2026-11-06 06:48 UTC as a day
+         market order, queued for Friday's 09:30 ET open.
       3. [ ] Optional: `min_active_strategies` 3 -> 2 (Finding 22).
-      4. [ ] Friday, check: `validate-broker-consistency` reads `ok` after the first tick
+      4. [x] Friday, check: `validate-broker-consistency` reads `ok` after the first tick
          applies the four fills; no TLT broker rejections once covered; sleeve mismatch
          warnings gone; `trading_cycle` logs show no `equity_source: ledger` fallbacks.
-  - **Where 3.3(0) stands after three sessions:** two clean sessions under the fixed code
-    (Wed, Thu), both strategies filling. Order limits unchanged (`MAX_ORDERS_PER_BAR=6`,
-    `MAX_ORDERS_PER_HOUR=60`); the orphan book is flat, so revisit on the weekend with
-    Thu's 91 throttle rejections in hand. Start (a) next week, not this one.
+         **Fri 2026-11-06:** 79/79 ticks, 0 failed runs, 0 broker rejections, 369 orders
+         generated, 48 throttled; the TLT cover filled at the open and momentum traded TLT
+         44/44; close equity $97,557.90 (-$322.91 on the day, +0.9% on the week from
+         Monday's low). 45 `SLA_BREACH` rows (Thu 11), the thin IEX names COST / DIA /
+         BKNG / TLT / MA, feed not code (SIP is the fix; see section 6). EOD chain 14/14
+         completed; `broker_reconciliation` reported `drifted` on the six 15:55 sells that
+         filled at 15:56 ET after the last tick (AMZN 1, AVGO 4, COST 1, CRM 8, HD 5,
+         MSFT 2), `sleeve_resync` skipped exactly those six; the ladder raised the peak
+         to $97,556.96 from broker equity (Finding 21 live).
+      5. [x] **Full ledger resync, Fri 2026-11-07 01:02-01:03 UTC** (after the close, per
+         the runbook, all steps): kill switch on (`canceled_order_count: 6`, the six
+         already-filled 15:55 orders, harmless as on Thursday); `sync-broker-state` and
+         `sync-position-snapshot` held back the six sells; `validate-broker-consistency`
+         printed `ok` with no mismatches at all; `sync-sleeves` dry run and real run:
+         nothing adopted or written down, the six symbols skipped for Monday's first tick;
+         peak reset to $97,442.60; kill switch off. The ledger's TLT -2 is gone (broker
+         flat, no pending TLT fill). Ledger now: cash $76,339.55 (broker $83,317.21 less
+         the $6,977.66 held back), 13 symbols, sleeves unchanged.
+  - **Where 3.3(0) stands after four sessions:** three clean sessions under the fixed code
+    (Wed, Thu, Fri), both strategies filling, ledger reconciled to the cent. Order limits
+    unchanged (`MAX_ORDERS_PER_BAR=6`, `MAX_ORDERS_PER_HOUR=60`); the orphan book is flat,
+    so revisit with Thu's 91 / Fri's 48 throttle rejections in hand. Start (a) next week.
 - [ ] (a) Weekly bench re-sims + scorecards from B, plus the weekly review DAG on A
   - [x] Read endpoint on A: `GET /api/v1/worker/bench-inputs` (`worker` role) returns the
         ACTIVE / ON_DECK / BENCH strategies with their stored parameters, the shared window
@@ -673,7 +704,7 @@ is a finding.
     - [ ] After Finding 14: re-run the dry run, confirm `daily_returns` has one entry per
           session and `market_returns` is populated, then install the timer
           (`sudo infra/ops/install_worker_timers.sh` on B)
-    - [ ] **Backfill the bench window instead of waiting for it (2026-11-04).** A has held
+    - [x] **Backfill the bench window instead of waiting for it (2026-11-04).** A has held
           five-minute bars only since 2026-10-09 (19 sessions), so a 63-session re-sim
           scores on a fraction of its window until mid-January. Alpaca serves historical
           five-minute bars and `atp ingestion run-backfill` already writes them as a
@@ -703,6 +734,36 @@ is a finding.
           `resolve_bench_window` reports a full window today that is mostly empty; delete
           that version row (and directory) when running the backfill, or the coverage
           dates stay misleading.
+          **Done 2026-11-06 08:11-08:14 UTC (PR #169 deployed 08:08):** three
+          `market_backfill_cycle` runs `completed` (70 s, 69 s, 18 s), versions
+          `raw_bars_20261106T081118Z_094d195a` (08-01..08-31),
+          `..T081235Z_17b465d4` (09-01..09-30), `..T081350Z_69256cdb` (10-01..10-08),
+          each `validated`, `dataset_type = historical_backfill`, 22 symbols / 22 Parquet
+          files, 8.6 MB in all (disk 61% used). The stray 2024-06-03 version
+          (`raw_bars_20260724T204756Z_12e641bc`) has no directory on disk, only its row,
+          referenced by one `ingestion_checkpoints` and two `ingestion_runs` rows (all
+          dev-dump, 2024-06-03) and nothing else. Deleted by the operator on A on
+          2026-11-07 00:45 UTC (one transaction: the checkpoint row, the two run rows, the
+          version row). It was **not** cosmetic, see Finding 26.
+    - [x] **Finding 26: the rolling build silently dropped the whole backfill (2026-11-06).**
+          Friday's EOD `rolling_raw_bars` listed the three backfill versions under
+          `backfill_versions` yet wrote 23,658 rows, all Oct 9 to Nov 6, no August or
+          September. The stray 2024-06-03 version carries the daily lifecycle
+          (`active_daily_incremental`), so `daily_versions` returned it as the oldest live
+          session and `_merge` capped every backfill at `first_live - 1 day` = 2024-06-02,
+          i.e. nothing. The earlier note above that the row was "not blocking" was wrong.
+          **Done 2026-11-07 00:52 UTC:** after the delete, a one-off `RollingRawBarsService.build`
+          (same call as the EOD step, `as_of` 2026-11-06, 63 sessions) created
+          `raw_bars_20261107T005243Z_8097b17d`: 83,988 rows (Aug 26,526 / Sep 27,049 /
+          Oct 23,448 / Nov 6,965), coverage 2026-08-01..2026-11-06, 22 symbols, 88 files,
+          the three backfills under `backfill_versions`; `atp datasets publish
+          --trading-date 2026-11-06` uploaded it (89 files, 11.1 MB) into the 2026-11-06
+          index before B's 20:30 ET pull. **Code fix still to do:** `daily_versions` must
+          ignore versions whose `date_coverage_end` is older than the window start (the way
+          `backfill_versions` already does), so one stale daily row can never zero the
+          backfill again; add a test with a 2024 daily row in the way. **Verify Sat
+          morning:** B's Fri 20:30 ET pull registered `raw_bars_20261107T005243Z_8097b17d`;
+          the 06:00 ET bench re-sim (or the dry run, step above) reports ~63 `daily_returns`.
     - [x] **Finding 15: the `rolling_raw_bars` step failed every EOD after deploy (10/27-10/30).**
           `checksums.dataset_version` is a foreign key to `dataset_versions` on Postgres;
           the service committed the checksum rows before it saved the version row. The
