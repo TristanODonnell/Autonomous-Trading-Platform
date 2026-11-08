@@ -5,6 +5,28 @@ _Decided 2026-10-01. Planning only, nothing implemented. Assumes 5c (research↔
 Related: `docs/audits/execution_topology_deployment_audit.md` (component inventory, P0 gaps),
 `docs/roadmaps/portfolio-rotation-plan.md` (Step 6 — Airflow schedules, deferred; see §3.1).
 
+## 0. Open items at a glance (2026-11-08; the rest of this doc is the record)
+
+Everything unchecked below this section is a real task. Checked boxes with a note were
+verified during the soak and ticked on 2026-11-08 when the doc was tidied.
+
+**Deployment track, in order**
+- Merge: `fix/finding-26-stale-daily-version`, `docs/resync-2026-11-06`, `docs/research-generation-plan`
+- `atp runtime run-eod-step` command, then rehearse `weekly_portfolio_review` (advisory) and the next rotation (§6, §7.3)
+- Box B: bench re-sim dry run on the full window, install the Saturday timer (3.3(a))
+- Flip `worker_results_enabled` → `portfolio_review_mode=advisory` → `auto` (3.3(a))
+- Calendar tests still ahead: Thu 11/26 closed, Fri 11/27 and Thu 12/24 early close, Mon 11/30 and Thu 12/31 rotations (1.7 table)
+- Set the IEX `SLA_BREACH` baseline for the §7.1 Data row
+- Worker observability leftovers (2.3), log formatter (1.6), rolling-version pruning in `retention.sh` (Finding 14 follow-up): P2
+- 3.3(b) monthly research → bench, 3.3(c) parameter changes, 3.4 recorded-dataset replay, Phase 4, Phase 5 (push channel, feed switch six weeks before go-live)
+- §6: SIP free-tier probe (research plan D1), worker→A publishing contract, settlement/T+1 question
+
+**Research sprint:** `research-generation-plan.md` (Step 0 R1–R7, D1; then Steps 1–5).
+
+**Where we are:** §7.6 inventory (state of every scheduled process), §7.7 calendar.
+
+---
+
 ## 1. Decisions
 
 | Topic | Decision |
@@ -173,7 +195,7 @@ and the broker keys, and Docker Compose must be 2.24 or newer (`env_file` uses `
 - [x] Heartbeat panel: "no trading cycle in 15 min during market hours" and "end-of-day chain not finished by ~19:00 ET" (stands in for Airflow's missed-run visibility). The scheduler exports `ratp_scheduler_heartbeat_timestamp_seconds`, `ratp_market_open`, `ratp_trading_cycle_last_success_timestamp_seconds`, `ratp_eod_chain_overdue`, `ratp_eod_chain_completed_timestamp_seconds`; alerts `RATPSchedulerDown`, `RATPTradingCycleStale`, `RATPEodChainOverdue` replace the two `absent_over_time` rules that fired every night and weekend; stat panels on Trading Ops
 
 **1.5 Soak**
-- [ ] 1–2 weeks of unattended paper running before relying on it
+- [x] 1–2 weeks of unattended paper running before relying on it (running since Mon 2026-10-20; the per-session findings live under 3.3(0); the ongoing standard is the §7 scorecard and gate)
 
 *Soak log.* First attempt Mon–Wed 2026-10-12..14 on t4g.medium: no OOM, every EOD chain
 finished, Parquet published to S3 all three days and Box B pulled it nightly. Trading itself
@@ -219,22 +241,22 @@ only ran ~09:30–11:00 ET each day, so those days do not count. Causes and fixe
 
 **1.6 Next session checklist (after the first clean day)**
 
-*Verify Thu 2026-10-15 was a clean soak day (Box A):*
-- [ ] Scheduler log: ticks at HH:M5:10 all session; no `ingestion_deadline_missed`, no
+*Verify Thu 2026-10-15 was a clean soak day (Box A):* **all verified during the Oct–Nov soak (each is now a nightly-review item, see the recipe in 3.3(0)); kept as the recipe.**
+- [x] Scheduler log: ticks at HH:M5:10 all session; no `ingestion_deadline_missed`, no
       `Too many missing bars`, few or no `ingest_bars.late_bars`
       (`docker compose logs scheduler --since 24h | grep -c trading_cycle_degraded` → 0)
-- [ ] Stored bars for the day ≈ 1,700 (22 symbols × 78), not ~170: count rows in
+- [x] Stored bars for the day ≈ 1,700 (22 symbols × 78), not ~170: count rows in
       `data/bars/raw/dataset_version=raw_bars_<date>T133000Z_*/`
-- [ ] `audit_logs`: `BAR_LATE` near 0, `BAR_MISSING` small, no `RUN_FAILED`
-- [ ] `strategy_runtime_states.last_evaluated_bar_timestamp` = the last tick before close
-- [ ] `signals` has rows from ~12:05 ET on (31-bar warm-up met); `order_intents` / `fills`
+- [x] `audit_logs`: `BAR_LATE` near 0, `BAR_MISSING` small, no `RUN_FAILED`
+- [x] `strategy_runtime_states.last_evaluated_bar_timestamp` = the last tick before close
+- [x] `signals` has rows from ~12:05 ET on (31-bar warm-up met); `order_intents` / `fills`
       non-empty if the crossover fired
-- [ ] EOD chain finished; S3 `datasets/published/<date>.json` lists the day's versions
-- [ ] Box B's 20:30 ET pull (`journalctl -u ratp-worker-pull.service`) registered the
+- [x] EOD chain finished; S3 `datasets/published/<date>.json` lists the day's versions
+- [x] Box B's 20:30 ET pull (`journalctl -u ratp-worker-pull.service`) registered the
       returns/regime versions with no `no_registry_row` warnings
-- [ ] Grafana Trading Ops / Infra: memory flat on t4g.medium, no heartbeat gaps
+- [x] Grafana Trading Ops / Infra: memory flat on t4g.medium, no heartbeat gaps
 
-*Log formatter (small, do before anything else):*
+*Log formatter (still open as of 2026-11-08, P2: `observability/logging.py` has no extra-field rendering yet; Loki stream labels carry the extras meanwhile):*
 - [ ] `observability/logging.py`: append the record's `extra` fields to the console line
       as `key=value` (JSON for dicts/lists), so `docker compose logs` shows strategy id,
       warm-up bars, signal/order counts, late/missing symbols without opening Loki
@@ -264,11 +286,11 @@ Alpaca and 0 fills landed. Two causes:
   `true`, so the submission job stops after the risk check and never calls the broker. This is the
   intended pre-paper gate, but nothing in this plan or `.env.example` said to turn it off.
   `.env.example` now documents it (PR #153). **Decision (Sat 2026-10-18): trade paper for real from
-  Mon 2026-10-20.** Operator step on Box A (check the prompt reads `ip-172-31-42-34`), before 09:30 ET:
-  - [ ] add `SHADOW_MODE_ENABLED=false` to `~/Autonomous-Trading-Platform/.env`
-  - [ ] `docker compose up -d scheduler` (recreates the container so it picks up the new env;
+  Mon 2026-10-20.** Operator step on Box A (check the prompt reads `ip-172-31-42-34`), before 09:30 ET (**done Mon 2026-10-20; paper orders have gone to Alpaca since**):
+  - [x] add `SHADOW_MODE_ENABLED=false` to `~/Autonomous-Trading-Platform/.env`
+  - [x] `docker compose up -d scheduler` (recreates the container so it picks up the new env;
         the EC2 instance is not touched)
-  - [ ] confirm: `docker compose exec scheduler env | grep SHADOW_MODE` prints `false`
+  - [x] confirm: `docker compose exec scheduler env | grep SHADOW_MODE` prints `false`
 - **Finding 8: a throttle rejection killed the whole tick.** `MAX_ORDERS_PER_BAR=2` on A; the
   third BUY intent in the 15:00 ET bar raised `OrdersPerBarLimitExceededError`, which the
   submission job re-raised, so the tick ended `cycle_failed` and the two allowed intents never
@@ -278,13 +300,13 @@ Alpaca and 0 fills landed. Two causes:
   exposure, $25k per symbol, $100k daily notional. Intents size at ~$25k each, so the gross cap
   binds after about four open positions; revisit once a week of fills exists.
 
-*Monday 2026-10-20 checklist (first real orders):*
-- [ ] First BUY signal → `order_intents` row → order visible in the Alpaca paper account →
+*Monday 2026-10-20 checklist (first real orders):* **all done over 10/20–10/24; the path has run live every session since.**
+- [x] First BUY signal → `order_intents` row → order visible in the Alpaca paper account →
       `fills` row → position/cash ledgers move (this path has never run live)
-- [ ] `ORDER_REJECTED_BY_THROTTLE` audit rows are expected when >2 BUYs share a bar; no
+- [x] `ORDER_REJECTED_BY_THROTTLE` audit rows are expected when >2 BUYs share a bar; no
       `cycle_failed` ticks from it
-- [ ] EOD broker reconciliation agrees with Alpaca's positions
-- [ ] Fri 2026-10-16's session was never reviewed (shadow mode still on, so no orders expected);
+- [x] EOD broker reconciliation agrees with Alpaca's positions
+- [x] Fri 2026-10-16's session was never reviewed (shadow mode still on, so no orders expected);
       the soak clock starts with the first full session that produces fills
 
 **1.7 Calendar of first-time triggers (verify each the morning after)**
@@ -325,12 +347,12 @@ is a finding.
 
 ### Phase 2: worker bootstrap (can overlap with A's soak)
 
-**2.1 Box** (code done 2026-10-11 on `worker-bootstrap`; runbook `docs/operations/runbooks/worker-box.md`; box not provisioned yet)
+**2.1 Box** (code done 2026-10-11 on `worker-bootstrap`; runbook `docs/operations/runbooks/worker-box.md`; box provisioned and running)
 - [x] `docker-compose.worker.yml`, own Postgres, migrations (standalone compose; jobs run as `docker compose run --rm worker atp ...` through `infra/ops/worker_job.sh`, which holds a one-job-at-a-time host lock)
 - [x] `.env.worker`: `APP_ENV=backtest`, `NO_LIVE_TRADING=true`, market-data keys only (`.env.worker.example`; keys left empty, the worker reads S3 datasets)
 - [x] Separate deploy target for B (`.github/workflows/deploy-worker.yml`: CI green on main, no market-hours freeze, takes the job lock around migrate, skips itself until the `WORKER_HOST` secret exists)
 - [x] OTel collector on B → A, with `hostmetrics` + container stats (`infra/observability/otel-collector-worker.yaml`, forwards OTLP to A's collector over the VPC with a retry queue; traces sampled 10%; **A's security group needs 4317 from B**)
-- [ ] Provision the instance, role `ratp-worker`, hop limit 2, secrets, first `up -d` (user; AWS steps in the runbook)
+- [x] Provision the instance, role `ratp-worker`, hop limit 2, secrets, first `up -d` (done; B has pulled nightly since 2026-10-12 and ships logs to A's Loki)
 
 **2.2 Data**
 - [x] S3 dataset pull, pinned to the dataset versions A published (`DatasetPullService` + `atp datasets pull [--as-of DATE | --version ID]`, nightly timer 20:30 ET via `infra/ops/install_worker_timers.sh`; verifies size + SHA-256, registers rows in the worker's own `dataset_versions`; manifests now carry `source_manifest`/`metadata_json` so the worker can select versions the way A does; `atp datasets publish` allows a one-time seed from the dev machine). **Not yet run against the real bucket**: first chance after A's first publish on Mon 2026-10-12
@@ -414,21 +436,21 @@ is a finding.
     bar, 20 per hour, $100k gross, $25k per symbol). Intents are sized from membership
     budgets (`budget_pct`), not one strategy's full capital. Revisit the limits after two
     sessions with fills, not before.
-  - *Verify the first session (Tue 11/3):*
-    - [ ] Scheduler log: `trading_cycle.portfolio_runtimes_resolved` once per tick and two
+  - *Verify the first session (Tue 11/3):* **all checked in the Tue 11/03 review below (Findings 19–22); the sleeve tables populate, both strategies evaluate every tick.**
+    - [x] Scheduler log: `trading_cycle.portfolio_runtimes_resolved` once per tick and two
           `evaluate_strategy_job | job_started` per tick (today: zero and one)
-    - [ ] `portfolio_signal_aggregator.summary` with two inputs (needs the 1.6 log-formatter
+    - [x] `portfolio_signal_aggregator.summary` with two inputs (needs the 1.6 log-formatter
           item or Loki: `{service_name="ratp-scheduler"} |= "aggregator.summary"`)
-    - [ ] `signals` has rows for both strategies; `strategy_runtime_states` gains a
+    - [x] `signals` has rows for both strategies; `strategy_runtime_states` gains a
           `momentum_v1` row
-    - [ ] `strategy_sleeve_ledger` / `strategy_sleeve_positions` populate (both empty today)
+    - [x] `strategy_sleeve_ledger` / `strategy_sleeve_positions` populate (both empty today)
           and the EOD `broker_reconciliation` still agrees with Alpaca
-    - [ ] No `cycle_failed` ticks; throttle rejections audited, not fatal (Finding 8 shape)
-    - [ ] Next nightly `allocation_rebalance` stops logging
+    - [x] No `cycle_failed` ticks; throttle rejections audited, not fatal (Finding 8 shape)
+    - [x] Next nightly `allocation_rebalance` stops logging
           `STRATEGY_ALLOCATION_REBALANCE_NOOP` once quality scores exist (weekly interval
           guard still applies); `strategy_quality_score_history` gains rows
-    - [ ] Grafana Trading Ops: per-strategy panels show two sleeves
-  - [ ] After two clean sessions with both strategies filling, note here whether the order
+    - [x] Grafana Trading Ops: per-strategy panels show two sleeves
+  - [x] After two clean sessions with both strategies filling, note here whether the order
         limits were changed, then start (a)
   - **First session, Tue 2026-11-03 (reviewed after the close).** Mechanics: the portfolio
     path ran all 79 ticks (`portfolio_runtimes_resolved` 79, three `evaluate_strategy_job`
@@ -489,7 +511,7 @@ is a finding.
           buying power only: after-hours marks had moved $9 between the sync and the check
           (tolerance is $0.01), so that is noise, now noted in the runbook. Still open:
           the ladder reads ledger equity, and the validator has no mark-to-market tolerance.
-    - [ ] **Finding 22 (cadence, no fix needed yet):** `macd_crossover_v1` moved BENCH →
+    - **Finding 22 (cadence, no fix needed yet; the only action is the optional `min_active_strategies` item, kept once in the Thursday list below):** `macd_crossover_v1` moved BENCH →
           ON_DECK at the first tick (`selected_on_deck`): the active-set refresh fills
           on-deck seats from eligible candidates, so the "bench until re-sim evidence" seed
           lasted one tick. It is shadow-only (shadow sleeve: AMZN 4, CRM 1, META 1, MSFT 1,
@@ -510,8 +532,7 @@ is a finding.
          winding down) need more than two slots a bar; 6 lets the orphan exits and both
          members trade in the same bar, and 60/hour still caps a runaway loop at ~1
          order a minute. Revisit once the orphan book is flat.
-      3. [ ] Optional: `min_active_strategies` 3 -> 2 in `operator_settings` (Finding 22)
-         to stop the per-tick `below_minimum` warning.
+      3. Optional `min_active_strategies` 3 -> 2 (Finding 22): carried forward to the Thursday list.
       4. [x] Next session checked below (the trading cycle does not write step rows;
          the evidence is two `RECONCILIATION_COMPLETED` audit rows per tick).
   - **Second session, Wed 2026-11-04 (reviewed after the close).** Both fixes held: 79
@@ -550,13 +571,13 @@ is a finding.
       tick and the EOD chain do not apply fills); Thursday's first tick applies them.
       `below_minimum` warned 92 times: `min_active_strategies` is still 3.
     - **After this fix deploys (manual, on A, after the close):**
-      1. [ ] Buy 2 TLT on the Alpaca dashboard to close the short (nothing in the system
+      1. [x] (done 2026-11-06, see Thursday list) Buy 2 TLT on the Alpaca dashboard to close the short (nothing in the system
          will: the orphan sleeve is empty and momentum's buys are refused while short).
-      2. [ ] `docker compose exec app atp execution sync-sleeves --paper-only --dry-run`,
+      2. [x] (done in the full resync 2026-11-07 01:03 UTC, nothing to write down by then) `docker compose exec app atp execution sync-sleeves --paper-only --dry-run`,
          then without `--dry-run`. Expect AMZN 8 and AAPL 4 written down; symbols with an
          open order are listed as skipped and are fine to leave (Thursday's first tick
          applies their fills).
-      3. [ ] Optional: `min_active_strategies` 3 -> 2 (Finding 22).
+      3. Optional `min_active_strategies` 3 -> 2 (Finding 22): carried forward to the Thursday list.
       4. [x] Next session, check: no `intents_held_open_orders` storm (a handful per day
          is expected), no broker rejections, the EOD `sleeve_resync` step output in
          `runtime_job_runs`, and the sleeve mismatch warnings gone. (Checked Thu, below:
@@ -674,7 +695,7 @@ is a finding.
         container's /tmp and was lost with it)
   - [ ] Flip `worker_results_enabled`, then `portfolio_review_mode=advisory`, then `auto`
   - **3.3(a) findings (2026-10-27, from the first dry run on B)**
-    - [ ] **Finding 14: live raw-bars versions are one session each.** Every EOD publish cuts
+    - [x] **Finding 14: live raw-bars versions are one session each.** (Resolved: rolling version + Finding 15 fix + backfill + Finding 26; the 2026-11-07 rolling version holds 83,988 rows over Aug 1–Nov 6 and B pulled it.) Every EOD publish cuts
           a `raw_bars_<date>T133000Z_*` version whose coverage is that single day (25 versions on
           A, one per session). `resolve_bench_window` takes "the latest validated raw_bars"
           as the re-sim dataset, so the 63-day window re-simulated 2026-10-26 only: one day
@@ -701,9 +722,7 @@ is a finding.
           re-simulated on one day. Follow-up: a rolling version is written every session
           (~63 sessions of 5-minute bars each); `retention.sh` leaves Parquet alone, so
           add pruning of rolling versions older than ~14 days before disk becomes a topic
-    - [ ] After Finding 14: re-run the dry run, confirm `daily_returns` has one entry per
-          session and `market_returns` is populated, then install the timer
-          (`sudo infra/ops/install_worker_timers.sh` on B)
+    - [ ] **Still open (the one operator step left in 3.3(a) before the flips):** on B, `worker_job.sh worker bench-resim --as-of 2026-11-06 --no-publish`, confirm `daily_returns` has ~63 entries per strategy and `market_returns` is populated, then install the timer (`sudo infra/ops/install_worker_timers.sh`; it was last run 10/12, before this timer existed, which is why nothing fired Sat 11/07)
     - [x] **Backfill the bench window instead of waiting for it (2026-11-04).** A has held
           five-minute bars only since 2026-10-09 (19 sessions), so a 63-session re-sim
           scores on a fraction of its window until mid-January. Alpaca serves historical
