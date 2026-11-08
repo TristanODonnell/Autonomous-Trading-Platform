@@ -966,3 +966,27 @@ zero open P0 or P1; the SIP switch weekend done at least six weeks before the da
 4. Research sprint Step 0: R1 (Monte Carlo bootstrap) first; D1's free-tier probe.
 5. Set the IEX `SLA_BREACH` baseline from the November sessions so the Data row has a
    number.
+
+### 7.6 Rough calendar (as of Sun 2026-11-08; adjust as we go, this is for visibility not commitment)
+
+Assumptions: deployment track and research sprint run in parallel; one person-week of
+attention per week; the four-week gate clock starts only when every scorecard row is live;
+the SIP switch precedes go-live by at least six weeks and the clean weeks that count are
+the ones after it. Holidays (11/26, 12/24, 12/25, 1/1) thin out both markets and attention.
+
+| Week of | Deployment track | Research sprint | Calendar events |
+|---|---|---|---|
+| Mon 11/10 | Merge open branches; `run-eod-step` PR; rehearse `weekly_portfolio_review` (advisory) before Mon's chain; B dry run + install Saturday timer; flip `worker_results_enabled` | R1 Monte Carlo bootstrap; D1 free-tier probe | Sat 11/15 first timed re-sim should post to A |
+| Mon 11/17 | Mon review runs with a `worker_run_id` for the first time; first full scorecard fill (weekend); set IEX `SLA_BREACH` baseline | R2 walk-forward range guard + fold evidence; R6 config validator | |
+| Mon 11/24 | `portfolio_review_mode=advisory` (decisions visible, nothing applied); rehearse `monthly_universe_rotation --dry-run` | R3 checkpoint wiring; R4 gate audits | Thu 11/26 closed, Fri 11/27 early close (calendar tests); Mon 11/30 rotation fires |
+| Mon 12/1 | `portfolio_review_mode=auto`: Phase 3.3(a) complete; all scorecard rows except Research live | Step 1 baseline on IEX (`feed=iex`); R5 score, R7 tests | |
+| Mon 12/8 | Step 3 candidate hand-off endpoint on A (additive) | Step 2 evolutionary search; rerun Step 1 with it | Decision point: set a go-live window → schedule SIP switch weekend |
+| Mon 12/15 | 3.4 recorded-dataset source; Step 5 worker research job + timer, rehearsed `--no-publish` | Step 0 follow-ups (cache/identity, observability, worker memory budget) | Earliest SIP switch weekend 12/13-14 if the window was set on 12/8 |
+| Mon 12/22 | Holiday week: watch, do not change | Suite `v1` window definitions (docs only) | Thu 12/24 early close; Thu 12/31 rotation |
+| Mon 1/5/2027 | First scheduled monthly research run (Sat 1/2 or 1/9); Research row goes live; gate clock running | Results log compares grid / evolutionary / `feed=sip` | |
+| Jan–Feb 2027 | Four clean weeks on SIP with everything on → gate met earliest **late Jan**; go-live no earlier than six weeks after the switch → **realistically February 2027** | Monthly run #2; generator iteration on the results | |
+
+If the sprint slips, the deployment track does not wait for it, but the go-live gate does
+(Research row). If the deployment track slips (a P0, a failed rehearsal), the gate clock
+restarts and everything below it shifts a week per incident. Re-date this table whenever a
+row moves; keep the old rows struck through rather than deleted so the drift is visible.
