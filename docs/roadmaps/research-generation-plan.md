@@ -14,7 +14,7 @@ pieces on A (Step 3's endpoint) and the worker timers (Step 5), and both stay in
 switched on. Deployment findings keep going into the pre-launch plan; research findings
 (numbered R1, R2, …) go here.
 
-Last updated: 2026-11-07 (Step 0 audit done; nothing built yet).
+Last updated: 2026-11-07 (Step 0 audit done, R4–R7 and D1 scoped; nothing built yet).
 
 ---
 
@@ -175,11 +175,104 @@ restarts.
 
 **Verify:** the e2e test above; `research inspect-checkpoints` lists a real run's store.
 
+**R4 — Audit the remaining gates the same way (not started).** Regime, stress, overfitting
+and parameter-stability stages (`pipeline/stages/regime_stage.py`, `stress_stage.py`,
+`overfitting_stage.py`, `pipeline/gates/*`, the `ParameterSensitivityAnalyzer`) were not
+read on 2026-11-07 and sit in the same funnel. Stress re-runs the simulation under cost
+multipliers (`_gate_stage_support.py` jobs carry `cost_multiplier`), regime slices by the
+classifier's labels, overfitting consumes the walk-forward evidence R2 found to be
+survivorship-biased. Same method: trace the real input path, compare with what the tests
+feed, look for fail-open branches and `None`-coercion.
+- [ ] One audit note per stage under this heading (what it measures, where its inputs
+      really come from, what the tests prove, fail-open paths); each confirmed problem
+      becomes its own R-number with a fix list.
+
+**Verify:** every stage has a note here, and each stage has at least one test on a real
+runner where the gate fails.
+
+**R5 — Composite score hides missing evidence (not started).** The validation framework
+redistributes an absent component's weight to the present ones
+(`docs/backend/research/advanced_validation_framework.md`, "When a component is absent"),
+so a strategy with no Monte Carlo or regime evidence is never penalised for the gap. After
+R1 that is exactly the hole that lets a thinly tested candidate outrank a well-tested one.
+- [ ] Decide and implement one of: a missing-evidence penalty per absent component, or a
+      required minimum evidence set before a composite score is produced at all (score
+      `None` + reason otherwise). Record the choice here.
+- [ ] Test: identical metrics with and without the Monte Carlo component must not produce
+      the same (or a higher) composite score for the one missing it.
+
+**R6 — Experiment-config and holdout validation (not started).** R2's range guard belongs
+in a general validator so the rules are enforced, not written in docs: no stage may read
+past a declared holdout date; walk-forward `test_start` after every earlier selection
+stage's `end_date`; `step_days >= test_days`; `min_folds_passed <= n_folds`; vacuous
+thresholds (e.g. `min_sharpe <= 0` with `min_trades == 0`) rejected unless the YAML says
+`smoke: true`. Home: `research/config/stage_configs.py` validation plus the existing
+`atp research validate-config` / `plan-experiment` commands. This is also what makes the
+suite `v1` rule "holdout never tuned on" (`pre-launch-deployment-plan.md` §5) enforceable.
+- [ ] Validator + tests; the current `experiments/staged/ma_sweep_staged.yaml` must fail
+      until fixed, `exp_mc_smoke_test.yaml` must carry `smoke: true`.
+- [ ] A repo-level holdout declaration (one date, one place) that every experiment YAML is
+      checked against.
+
+**R7 — Test hardening per stage (not started).** Every stage audited so far is tested with
+`MagicMock` results and permissive filters, so gating logic is never exercised.
+- [ ] One integration test per stage on synthetic bars with a real `SimulationRunner` and
+      realistic thresholds, asserting the gate can fail and that survivors change when the
+      inputs change. These are the regression net for every other item in this sprint.
+
+**Definition of done for any change under `research/simulation/`:** the research ↔
+trading-cycle parity check from `portfolio-rotation-plan.md` 5c (re-sim vs platform
+correlation ≥ 0.99 on the shared fixture) stays green. R1's bootstrap does not touch the
+simulator; stochastic fills or any execution-model change would, and must re-run it.
+
+**Step 0 follow-ups (trail the fixes above; do before Step 5):**
+- Cache and identity hygiene: `SimulationResultCache` keys and the checkpoint identity
+  disagree about what makes a run unique (seed in one, hardcoded `universe_version="v1"` in
+  the other; neither knows a bootstrap spec). Fix in one place before R3 wiring and before
+  the monthly job reuses cached runs.
+- Research observability (pre-launch plan 2.3, unchecked): `run.mode`, `backtest.run_id`,
+  `fixture`, `sim_timestamp` span/log attributes; heavy trace sampling for backtests; a
+  worker/research-runs dashboard. The checkpoint metrics
+  (`observability/metrics.py:1314-1321`) start firing once R3 lands.
+- Worker resource budget: one measured full pipeline run on B with peak memory and
+  wall-clock recorded in section 5, and a memory cap in `infra/ops/worker_job.sh` before
+  Step 5's timer (the runbook already warns research jobs are memory-hungry).
+
+**D1 — SIP bars for research (check in this sprint; re-pull only if free).** The window B
+holds is IEX: the backfill cycle takes its feed from the same `ALPACA_DATA_FEED` setting as
+live ingestion (`scheduler/cycles/run_market_backfill_cycle.py:270`, `get_data_feed()`),
+A leaves it at the default `iex`, and `atp ingestion run-backfill` has no feed flag. The
+2026-11-06 backfill itself had no problems (three `market_backfill_cycle` runs completed in
+~70 s each); the bars are just IEX-thin (zero-trade five-minute windows on COST / DIA /
+BKNG / TLT / MA, 45 missing-bar SLA breaches on Fri 11/06 alone), which distorts trade
+counts, slippage and every number in section 5. For live trading SIP is a paid-plan
+decision on the deployment track (`pre-launch-deployment-plan.md` §6); for research it may
+be free: Alpaca's free tier serves SIP *historical* bars older than 15 minutes, which is
+all a backfill needs.
+- [ ] Check: `ALPACA_DATA_FEED=sip atp ingestion run-backfill --symbols SPY --start
+      2026-10-01 --end 2026-10-02 --actor tristan` on A (or a laptop with the paper keys).
+      Success = a validated version with SIP bars; a 403/subscription error = not free,
+      stop here and leave the item to the deployment track.
+- [ ] If free: re-pull the three chunks (2026-08-01..08-31, 09-01..09-30, 10-01..10-08) with
+      `ALPACA_DATA_FEED=sip`, tagged so the rolling build prefers them (the merge
+      deduplicates by `bar_id`; confirm SIP and IEX bar ids for the same window do not
+      collide, or retire the IEX versions). Record bar counts per month for IEX vs SIP in
+      section 5 and note the switch date on every results-log row after it.
+- [ ] Do **not** flip live ingestion: `ALPACA_DATA_FEED` for the scheduler stays `iex`
+      until the paid plan decision; the SIP backfill runs with the env var set on that one
+      command only.
+
+**Verify:** `metadata_json` of the SIP backfill versions records `feed: sip` (add the field
+to `run_market_backfill_cycle` if it does not yet); the next rolling version's row count per
+month is materially higher than the IEX one logged in Finding 26 (Aug 26,526 / Sep 27,049 /
+Oct 23,448).
+
 ### Step 1 — Baseline measurement (not started)
 
 Run the existing pipeline on the window B now holds and record the numbers, so the
-generator change has a "before". Run it **after R1 and R2 land**, or the baseline is
-scored by a vacuous Monte Carlo and leaky folds and has to be redone.
+generator change has a "before". Run it **after R1, R2 and the D1 check land** (and after the SIP re-pull if it
+turns out free), or the baseline is scored by a vacuous Monte Carlo and leaky folds on thin
+bars and has to be redone.
 
 - [ ] Experiment YAML `experiments/research/baseline_composite_grid.yaml`: `composite_rule`
       via `grid` (all 652 skeletons), the 22-symbol A universe, dataset pinned to the rolling
@@ -281,8 +374,8 @@ every candidate with a recorded reason.
 - ML as a **ranker**, not a signal: predict holdout performance from
   `research_feature_vector_builder` output to decide which candidates get the expensive
   stages. Only after Step 2 shows the search finds things the pool cannot.
-- Suite `v1` historical windows (`pre-launch-deployment-plan.md` section 5) once SIP
-  historical access is confirmed; IEX 5-minute history distorts slippage.
+- Suite `v1` historical windows (`pre-launch-deployment-plan.md` section 5) once D1 has
+  answered the SIP question and R6's holdout declaration exists.
 
 ## 5. Results log
 
