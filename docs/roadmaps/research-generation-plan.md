@@ -238,34 +238,47 @@ simulator; stochastic fills or any execution-model change would, and must re-run
   wall-clock recorded in section 5, and a memory cap in `infra/ops/worker_job.sh` before
   Step 5's timer (the runbook already warns research jobs are memory-hungry).
 
-**D1 — SIP bars for research (check in this sprint; re-pull only if free).** The window B
-holds is IEX: the backfill cycle takes its feed from the same `ALPACA_DATA_FEED` setting as
-live ingestion (`scheduler/cycles/run_market_backfill_cycle.py:270`, `get_data_feed()`),
-A leaves it at the default `iex`, and `atp ingestion run-backfill` has no feed flag. The
-2026-11-06 backfill itself had no problems (three `market_backfill_cycle` runs completed in
-~70 s each); the bars are just IEX-thin (zero-trade five-minute windows on COST / DIA /
-BKNG / TLT / MA, 45 missing-bar SLA breaches on Fri 11/06 alone), which distorts trade
-counts, slippage and every number in section 5. For live trading SIP is a paid-plan
-decision on the deployment track (`pre-launch-deployment-plan.md` §6); for research it may
-be free: Alpaca's free tier serves SIP *historical* bars older than 15 minutes, which is
-all a backfill needs.
-- [ ] Check: `ALPACA_DATA_FEED=sip atp ingestion run-backfill --symbols SPY --start
-      2026-10-01 --end 2026-10-02 --actor tristan` on A (or a laptop with the paper keys).
-      Success = a validated version with SIP bars; a 403/subscription error = not free,
-      stop here and leave the item to the deployment track.
-- [ ] If free: re-pull the three chunks (2026-08-01..08-31, 09-01..09-30, 10-01..10-08) with
-      `ALPACA_DATA_FEED=sip`, tagged so the rolling build prefers them (the merge
-      deduplicates by `bar_id`; confirm SIP and IEX bar ids for the same window do not
-      collide, or retire the IEX versions). Record bar counts per month for IEX vs SIP in
-      section 5 and note the switch date on every results-log row after it.
-- [ ] Do **not** flip live ingestion: `ALPACA_DATA_FEED` for the scheduler stays `iex`
-      until the paid plan decision; the SIP backfill runs with the env var set on that one
-      command only.
+**D1 — SIP bars: one feed everywhere, switched together (check now, switch later).**
+The window B holds is IEX: the backfill cycle takes its feed from the same
+`ALPACA_DATA_FEED` setting as live ingestion (`scheduler/cycles/run_market_backfill_cycle.py:270`,
+`get_data_feed()`), A leaves it at the default `iex`, and `atp ingestion run-backfill` has no
+feed flag. The 2026-11-06 backfill itself had no problems; the bars are just IEX-thin.
+Measured over the 21 live sessions since 10/09 (audit `BAR_MISSING` rows): coverage is
+94-100% for AAPL / NVDA / GOOGL / SPY / TSLA / META / AMZN / MSFT / AVGO / IWM / QQQ, 92%
+for V / BKNG, 66-86% for AMD / UNH / MA / HD / ADBE / TLT, and 39-61% for CRM / COST / DIA.
+It is a price-per-share effect (fewer prints on IEX for $500-$5,000 names), not a liquidity
+effect, and the gaps cluster 11:00-15:00 ET. The universe machinery reads IEX too: the
+screener hardcodes `feed="iex"` (`universe/providers/alpaca_screener_provider.py:205`) and
+the daily bar source uses `get_data_feed()` (`alpaca_daily_bar_source.py:116`), so the
+pool's dollar-volume scores are IEX volume (the 11/30 dry run removed CRM and DIA, the two
+worst-coverage names).
 
-**Verify:** `metadata_json` of the SIP backfill versions records `feed: sip` (add the field
-to `run_market_backfill_cycle` if it does not yet); the next rolling version's row count per
-month is materially higher than the IEX one logged in Finding 26 (Aug 26,526 / Sep 27,049 /
-Oct 23,448).
+**Rule (2026-11-08):** research, universe and live must read the same tape. Validating a
+strategy on SIP bars and trading it on IEX bars scores signals it will never see live; a
+SIP-ranked pool promotes names the live loop cannot follow; a SIP backfill under IEX daily
+versions puts a seam in the rolling window on 10/09. So no half-measures:
+- [ ] Now, free, no data change: confirm the free tier serves SIP *historical* bars older
+      than 15 minutes with a one-symbol, two-day backfill run with `ALPACA_DATA_FEED=sip`
+      set on that command only (success = a validated version; a subscription error means
+      the research side of a future switch is not free). Do **not** re-pull the window or
+      touch the screener yet. Delete the test version afterwards.
+- [ ] Through the paper soak: everything stays IEX. Live cannot be SIP without the paid
+      plan (real-time), and the live feed decides the others.
+- [ ] If the go-live decision is the paid real-time SIP plan
+      (`pre-launch-deployment-plan.md` §6, Algo Trader Plus, ~$99/mo as of 2026-11), flip
+      in one weekend, all together: `ALPACA_DATA_FEED=sip` for the scheduler; make the
+      screener's feed configurable and set it to SIP; re-pull the three backfill chunks
+      (2026-08-01..08-31, 09-01..09-30, 10-01..10-08) on SIP and retire the IEX versions
+      (confirm `bar_id`s do not collide); record `feed` in each version's `metadata_json`
+      (add the field to `run_market_backfill_cycle` if missing). Then re-baseline: rerun
+      Step 1 and the rotation dry run, and mark every results-log row with the feed, because
+      coverage, volume levels (20-50× on SIP) and ranges all move for feed reasons alone.
+- [ ] If the go-live decision is to stay IEX: give the rotation scorer IEX coverage as a
+      weighted input (not a hard gate), so thin names must earn a seat on merit, and accept
+      the tilt toward lower-priced names and index ETFs that this implies.
+
+**Verify:** the free-tier check is recorded here with the result; after any switch, no
+rolling version mixes feeds (`metadata_json.feed` uniform across `source_versions`).
 
 ### Step 1 — Baseline measurement (not started)
 
