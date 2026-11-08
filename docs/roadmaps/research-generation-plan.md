@@ -263,7 +263,15 @@ versions puts a seam in the rolling window on 10/09. So no half-measures:
       the research side of a future switch is not free). Do **not** re-pull the window or
       touch the screener yet. Delete the test version afterwards.
 - [ ] Through the paper soak: everything stays IEX. Live cannot be SIP without the paid
-      plan (real-time), and the live feed decides the others.
+      plan (real-time), and the live feed decides the others. Step 0 (R1-R7) is
+      feed-independent and proceeds now; Steps 1-2 run on IEX with every results-log row
+      labelled `feed=iex` (they are relative comparisons on identical bars, so the
+      conclusion survives a switch; only the absolute scores need a re-run).
+- [ ] **Trigger (agreed 2026-11-08): the feed switch happens when a go-live date is set,
+      at least six weeks before the first real dollar**, so the switch gets one full
+      universe rotation, several weekly reviews and a re-baselined bench on SIP before real
+      money, and the soak sessions after it are the ones that count as the clean record.
+      Put the switch weekend on the deployment plan's calendar the day the date is set.
 - [ ] If the go-live decision is the paid real-time SIP plan
       (`pre-launch-deployment-plan.md` §6, Algo Trader Plus, ~$99/mo as of 2026-11), flip
       in one weekend, all together: `ALPACA_DATA_FEED=sip` for the scheduler; make the
