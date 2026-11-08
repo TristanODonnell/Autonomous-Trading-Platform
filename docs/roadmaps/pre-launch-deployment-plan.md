@@ -967,7 +967,40 @@ zero open P0 or P1; the SIP switch weekend done at least six weeks before the da
 5. Set the IEX `SLA_BREACH` baseline from the November sessions so the Data row has a
    number.
 
-### 7.6 Rough calendar (as of Sun 2026-11-08; adjust as we go, this is for visibility not commitment)
+### 7.6 Scheduled-process inventory (status as of Sun 2026-11-08; update when a row changes)
+
+One row per process the finished system runs on a schedule. **State** is what it is today:
+`timer` (fires on its own), `gated step` (inside the EOD chain, fires when its calendar rule
+says so), `on demand` (code exists, a human runs it), `unwired` (code exists, nothing runs
+it), `not built`. **Rehearsed** means a recorded off-schedule dry run per 7.3. The intended
+cadence is section 3; this table is the gap between intended and actual.
+
+| Process | Where | Intended cadence | State today | Switched on? | On-demand entry point | Rehearsed | Next |
+|---|---|---|---|---|---|---|---|
+| Intraday tick (ingest → features → trading cycle) | A scheduler | every 5 min, market hours | gated step | yes | `atp runtime soak-loop paper` (the runner itself) | n/a, runs daily | — |
+| EOD chain (16 steps, 3.3) | A scheduler | after close | gated step | yes | none per step → `run-eod-step` (section 6) | partially (Finding 15/26 rebuilds were by hand) | build `run-eod-step` |
+| Rolling bench window (`rolling_raw_bars`) | A EOD step | every session | gated step | yes | one-off python (2026-11-07) → `run-eod-step` | yes, 11/07 | rerun under Finding 26 fix |
+| Dataset publish to S3 | A EOD step | every session | gated step | yes | `atp datasets publish --trading-date` | yes, 11/07 | — |
+| Weekly portfolio review | A EOD step | first session of week | gated step, **no-op** | `portfolio_review_mode=off` | none → `run-eod-step` | no | flip to `advisory` (11/24), rehearse first |
+| Monthly universe rotation | A EOD step | last session of month | gated step | yes (churn guard) | `atp universe monthly-rotation --dry-run` | yes, 11/03 dry run | fires Mon 11/30; rehearse again week before |
+| Drawdown ladder / governance / allocation rebalance | A, per tick + EOD | per tick / daily | gated step | yes (rebalance proposals `noop` under manual override) | none | n/a | — |
+| Postgres backup → S3 | A host timer | nightly 23:30 ET | timer | yes | `infra/ops/backup.sh` | n/a | — |
+| Retention | A host timer | Sun 03:00 ET | timer | yes | `infra/ops/retention.sh` | n/a | add rolling-version pruning (Finding 14 follow-up) |
+| Dataset pull from S3 | B host timer | nightly 20:30 ET | timer | yes | `infra/ops/worker_job.sh datasets pull` | n/a | — |
+| Bench re-sim → `POST /worker/results` | B host timer | Sat 06:00 ET | **on demand** (timer defined, never installed) | A: `worker_results_enabled=false` | `worker_job.sh worker bench-resim --as-of --no-publish` | 10/27 on a 1-day window; redo on full window | dry run, install timer, flip `worker_results_enabled` |
+| Worker result apply (A consumes re-sims in the review) | A EOD step | Monday, with the review | gated step | depends on the two flags above | none | no | first real pass Mon 11/17 |
+| Monthly research / strategy generation → bench candidates | B | monthly + triggers | **not built** (pipeline on demand via `atp research … run-pipeline`; no worker job, no hand-off, no timer) | — | `atp research` full pipeline with a YAML | no | research sprint Steps 3, 5 |
+| Recorded-dataset replay (scheduled fixtures) | B | monthly (Phase 4) | **not built** | — | `worker_job.sh worker run --fixture` (Alpaca-sourced) | no | 3.4 |
+| Research checkpoint / resume | B | per research run | **unwired** (service exists, never instantiated) | — | `research inspect-checkpoints`, `plan-restart` (read-only) | tests only | research sprint R3 |
+| Alert rules | A Grafana/Prometheus | continuous | live (18 rules) | yes | — | n/a | push channel (Phase 5) |
+| Heartbeat panel | A Grafana | continuous | live | yes | — | n/a | — |
+| Regime-suite portfolio/governance sims | B | monthly (Phase 4) | **not built** | — | — | no | after suite `v1` |
+
+Reading it: everything on A that trades or keeps books is live and gated; the two things
+the dynamic portfolio needs from B (re-sim timer, results flag) are one weekend of operator
+steps away; the research side is where the "not built" rows are, and that is the sprint.
+
+### 7.7 Rough calendar (as of Sun 2026-11-08; adjust as we go, this is for visibility not commitment)
 
 Assumptions: deployment track and research sprint run in parallel; one person-week of
 attention per week; the four-week gate clock starts only when every scorecard row is live;
