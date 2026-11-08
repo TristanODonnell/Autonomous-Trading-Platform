@@ -853,8 +853,15 @@ two runs of the same fixture are not guaranteed to match; every run re-downloads
 - [ ] Turn on the worker's campaign timer (section 3, Box B table)
 
 ### Phase 5: real money
-- [ ] Only after A has a clean paper record with all Phase 3 automation on
+- [ ] Only after A has a clean paper record with all Phase 3 automation on: **four
+      consecutive weeks with every row of the readiness scorecard (section 7) passing, all
+      automation on, zero open P0 or P1**
 - [ ] Add a push channel for kill switch + the heartbeat conditions from 1.4
+- [ ] **Feed switch (agreed 2026-11-08):** the day a go-live date is set, schedule the
+      SIP switch weekend at least six weeks before it. One feed everywhere, switched
+      together (live ingestion, universe screener, backfill re-pull, re-baseline); details
+      and the reasoning in `research-generation-plan.md` D1. Until then everything stays
+      IEX, and the research sprint's Step 0 proceeds regardless.
 
 ## 5. Historical sim windows (suite_v1)
 - Pick windows by **regime classifier coverage** (TASK-2.2) so every trend/volatility bucket is covered
@@ -876,7 +883,86 @@ two runs of the same fixture are not guaranteed to match; every run re-downloads
   backtests at no cost
 
 ## 6. Still open
-- [ ] Verify free-plan SIP historical access (affects backtest realism)
+- [ ] Verify free-plan SIP historical access (affects backtest realism): the check itself
+      is scoped in `research-generation-plan.md` D1 (one-symbol two-day backfill with
+      `ALPACA_DATA_FEED=sip` on that command only, then delete the test version); the
+      switch is gated on the Phase 5 trigger above
+- [ ] `atp runtime run-eod-step <step> --as-of DATE [--dry-run]` (section 7, rehearsal
+      rule): run any EOD chain step through the same orchestrator with the calendar gate
+      bypassed; `--dry-run` mandatory outside the schedule for `monthly_universe_rotation`
+      and for `weekly_portfolio_review` in `auto` mode. Next small PR after Finding 26.
 - [ ] Exact API contract for worker → A publishing (design doc once 5c lands)
 - [ ] Settlement/T+1: does the live ledger need a daily pass, or is it simulation only?
 - [x] Confirm risk/sleeve snapshots run inside the trading cycle or need their own schedule: they run inside every trading cycle, with order reconciliation and portfolio drawdown governance; no separate schedule (see `pre-launch-1.3-scheduling.md` §1)
+
+## 7. Launch readiness scorecard and operating rules (agreed 2026-11-08)
+
+Why: "the soak is working" so far meant the trading loop, the ledger and the EOD chain.
+The bench, the portfolio review, the universe rotation, the worker's schedule and the
+research job are layers of the same system and were not being scored. One weekly table,
+one pass rule per row, one sentence for the go-live gate.
+
+### 7.1 Weekly scorecard
+
+Filled in every weekend from A's `runtime_job_runs`, `audit_logs`, the validator, B's
+Loki stream on A, and the worker submissions table. A row is **n/a** until its automation
+is switched on; n/a rows do not count against the gate but the gate cannot be met while
+any row is n/a.
+
+| Layer | Check | Pass |
+|---|---|---|
+| Trading loop | ticks completed per session; `RUN_FAILED`; `ORDER_REJECTED_BY_BROKER` | ≥ 99%; 0; 0 |
+| Ledger | `validate-broker-consistency` after the first tick of the week; EOD `broker_reconciliation` drift explained only by fills after the last tick | `ok`; yes |
+| Data | `SLA_BREACH` per session vs the feed's baseline (IEX baseline to be set from Nov 2026 sessions); EOD chain complete | at or below baseline; by 18:30 ET every session |
+| Ops | nightly backup present; B's 20:30 ET pull registered the day's versions; disk | yes; yes; < 75% |
+| Bench | Saturday `bench_resims` accepted on A (`worker_result_submissions.status`), ~63 `daily_returns` per strategy, `market_returns` present | yes, every week |
+| Portfolio | Monday `weekly_portfolio_review` ran, `worker_run_id` points at that re-sim, every decision has a reason | yes, every week |
+| Universe | `monthly_universe_rotation` ran on the last trading day, pool snapshot captured, churn under the 30% guard, no `screener_refresh_failed` | yes, monthly |
+| Research | monthly research job posted candidates; A admitted or rejected each with a recorded reason | yes, once Phase 4 exists |
+| Alerts | Grafana alert rules firing only on real conditions; no alert unacknowledged > 24 h; no heartbeat gap | yes |
+
+### 7.2 Bug classes
+
+| Class | Definition | Rule |
+|---|---|---|
+| P0 | Money or ledger wrong (cash/positions off vs broker beyond pending fills), or an order the system did not intend (wrong symbol, side, size, or outside the kill switch) | Blocks go-live. Fix, then one full clean week of soak under the fix before the gate clock resumes. |
+| P1 | A scheduled process failed, skipped, or ran with wrong inputs (a Finding 14/26-class problem) | Fix **and rehearse** (7.3) within the week. The row stays failed for that week. |
+| P2 | A logged finding with no behaviour change (cosmetic, docs, a metric mislabelled) | Record in the plan; no effect on the gate. |
+
+### 7.3 Rehearsal rule for scheduled processes
+
+Do not wait a month to learn whether a monthly step works. Every scheduled step gets an
+on-demand invocation that runs **the same step function** with an injected trading date
+(`atp runtime run-eod-step <step> --as-of DATE [--dry-run]`, section 6; the rotation
+already has `atp universe monthly-rotation --dry-run`, the worker has
+`bench-resim --as-of --no-publish`). After a failure or a fix:
+
+1. Re-run the step for the missed date in `--dry-run`, compare the output with what the
+   schedule would have produced, and record "rehearsed <date>" against the step here.
+2. Only then let the next scheduled firing be the proof of **timing**, not of logic. The
+   first scheduled firing of any step is still watched.
+3. `--dry-run` is mandatory outside the schedule for steps that apply state
+   (`monthly_universe_rotation`; `weekly_portfolio_review` in `auto` mode). In `advisory`
+   mode the review is already a dry run (decisions recorded, nothing applied), so it can
+   run off-schedule on any weekday.
+4. A rehearsal is a deploy requirement for any **new** scheduled step: no timer or
+   `applies` gate goes live without one recorded dry run on A or B.
+
+### 7.4 Go-live gate (one sentence)
+
+Four consecutive weeks with every scorecard row passing, every Phase 3 automation on, and
+zero open P0 or P1; the SIP switch weekend done at least six weeks before the date.
+
+### 7.5 What can be done now (Sun 2026-11-08 onward), in order
+
+1. Merge the four open branches (Finding 26 fix; this docs branch; the research plan with
+   Step 0; nothing else pending).
+2. `run-eod-step` command (section 6), then rehearse `weekly_portfolio_review` in advisory
+   mode for Mon 11/10 before it fires, and `rolling_raw_bars` for 11/06 against the fixed
+   selector.
+3. Box B: `worker bench-resim --as-of 2026-11-06 --no-publish` dry run on the full window
+   (expect ~63 `daily_returns`), then `sudo infra/ops/install_worker_timers.sh` so the
+   Saturday timer exists; this is the open 3.3(a) step.
+4. Research sprint Step 0: R1 (Monte Carlo bootstrap) first; D1's free-tier probe.
+5. Set the IEX `SLA_BREACH` baseline from the November sessions so the Data row has a
+   number.
