@@ -281,6 +281,41 @@ versions puts a seam in the rolling window on 10/09. So no half-measures:
       (add the field to `run_market_backfill_cycle` if missing). Then re-baseline: rerun
       Step 1 and the rotation dry run, and mark every results-log row with the feed, because
       coverage, volume levels (20-50× on SIP) and ranges all move for feed reasons alone.
+- [ ] **Switch-weekend checklist (do all, in this order; by then the plumbing bugs are
+      closed and these are plain to-dos).** The switch is a break in the *inputs*, not in
+      the strategies: fills before it are real outcomes and keep their P&L; signals and
+      evidence change. Price-driven signals barely move (closes differ by cents, gaps
+      vanish); volume-driven rules move a lot (SIP volume is 20-50× IEX and smooth, so
+      ratio rules fire at a different rate and absolute volume thresholds are simply wrong);
+      every scorecard / re-sim / health reading before the switch was made on IEX inputs.
+      1. [ ] **Tag everything with the feed** before the switch: `feed` on dataset
+             versions (`metadata_json`), fills (`fills.metadata` or a column), portfolio
+             scorecards, bench evaluations, worker result submissions. Nothing is compared
+             across the seam by accident afterwards.
+      2. [ ] **Re-pull the whole research window on SIP**, the live period since
+             2026-10-09 included, not only the Aug-Oct backfill chunks (historical SIP is
+             free). Re-sims and the bench then read one tape from day one. Keep the IEX
+             versions (tagged) as the audit trail of what live actually saw.
+      3. [ ] Flip `ALPACA_DATA_FEED=sip` for the scheduler; make the screener's feed
+             configurable (`alpaca_screener_provider.py:205` hardcodes `iex`) and set it.
+      4. [ ] **Re-baseline the same weekend:** rerun the bench re-sim on the SIP window and
+             the rotation dry run; those become the backtest evidence of record. Forward
+             evidence from the switch date onward is the record that counts for the Phase 5
+             gate.
+      5. [ ] **Freeze demotions / restart health windows** for the first two weeks after
+             the switch (operator setting or a dated exemption), so no incumbent is demoted
+             for a behaviour change that is really an input change. The bucket skew is
+             expected: incumbents were partly selected for coping with IEX gaps; candidates
+             rejected for trading COST / DIA into empty windows may come back on the first
+             post-switch monthly run. That is the switch working, provided SIP-era
+             candidates are never ranked against IEX-era incumbents on mixed evidence.
+      6. [ ] **Re-derive volume thresholds** in the composite generator from the SIP
+             distribution, or make them quantile-based so the feed level cannot matter
+             (`_THRESHOLD_VARIANTS["ratio"]` and `_volume_confirm` in
+             `composite_generation.py`). Rerun Step 1 so the results log has a `feed=sip`
+             baseline next to the `feed=iex` one.
+      7. [ ] Record the switch date here and in `pre-launch-deployment-plan.md` Phase 5;
+             the scorecard's Data row gets a new SIP `SLA_BREACH` baseline (expected ≈ 0).
 - [ ] If the go-live decision is to stay IEX: give the rotation scorer IEX coverage as a
       weighted input (not a hard gate), so thin names must earn a seat on merit, and accept
       the tilt toward lower-priced names and index ETFs that this implies.
