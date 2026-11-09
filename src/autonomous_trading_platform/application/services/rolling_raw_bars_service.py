@@ -202,12 +202,19 @@ class RollingRawBarsService:
 
     def daily_versions(self, *, as_of: date, sessions: int) -> list[DatasetVersions]:
         """The newest ``sessions`` validated per-session versions ending on or before as_of,
-        oldest first."""
+        oldest first.
+
+        Only versions inside the window count (Finding 26): a stale daily row far older
+        than the window (a dev-dump day from 2024, say) would otherwise become the "first
+        live session", and ``build`` would cap every backfill at the day before it, i.e.
+        drop the backfill entirely while still listing it as a source.
+        """
         rows = (
             self._session.query(DatasetVersions)
             .filter(DatasetVersions.dataset_name == RAW_BARS_DATASET.dataset_key)
             .filter(DatasetVersions.validation_status == "validated")
             .filter(DatasetVersions.date_coverage_end <= as_of)
+            .filter(DatasetVersions.date_coverage_end >= _window_start(as_of, sessions))
             .filter(
                 DatasetVersions.metadata_json["dataset_lifecycle"].as_string() == DAILY_LIFECYCLE
             )
@@ -227,7 +234,6 @@ class RollingRawBarsService:
         """Validated historical backfill versions overlapping the ``sessions``-long window
         ending at as_of (the same calendar span ``resolve_bench_window`` uses), oldest
         first. Overlapping backfills are fine: the merge deduplicates by ``bar_id``."""
-        window_start = as_of - timedelta(days=math.ceil(sessions * 7 / 5))
         rows = (
             self._session.query(DatasetVersions)
             .filter(DatasetVersions.dataset_name == RAW_BARS_DATASET.dataset_key)
@@ -235,7 +241,7 @@ class RollingRawBarsService:
             .filter(
                 DatasetVersions.metadata_json["dataset_type"].as_string() == BACKFILL_DATASET_TYPE
             )
-            .filter(DatasetVersions.date_coverage_end >= window_start)
+            .filter(DatasetVersions.date_coverage_end >= _window_start(as_of, sessions))
             .filter(DatasetVersions.date_coverage_start <= as_of)
             .order_by(DatasetVersions.date_coverage_start.asc(), DatasetVersions.created_at.asc())
             .all()
@@ -316,6 +322,12 @@ def _aggregate_checksum(files: list[tuple[Path, str]]) -> str:
     for path, value in files:
         aggregate.update(f"{path}|{value}\n".encode())
     return aggregate.hexdigest()
+
+
+def _window_start(as_of: date, sessions: int) -> date:
+    """First calendar day a ``sessions``-long window ending at as_of can reach (the same
+    span ``resolve_bench_window`` uses: 7 calendar days per 5 sessions)."""
+    return as_of - timedelta(days=math.ceil(sessions * 7 / 5))
 
 
 def _is_backfill(row: DatasetVersions) -> bool:

@@ -473,6 +473,50 @@ def test_backfills_outside_the_window_are_ignored(db_session: Session, base_path
     assert result.rows == 1
 
 
+def test_a_stale_daily_version_outside_the_window_does_not_zero_the_backfill(
+    db_session: Session, base_path: Path
+) -> None:
+    """Finding 26: on 2026-11-06 a dev-dump daily version dated 2024-06-03 was the oldest
+    "live session", so every backfill day was capped at 2024-06-02 and dropped while the
+    version still listed the backfills as sources."""
+    stale = date(2024, 6, 3)
+    b1, b2 = date(2026, 8, 3), date(2026, 10, 8)
+    d1, d2 = date(2026, 10, 9), date(2026, 11, 6)
+    seed_daily_version(db_session, base_path, day=stale, tables=[_bars("AAPL", stale, [9.9])])
+    seed_backfill_version(
+        db_session,
+        base_path,
+        start=b1,
+        end=b2,
+        tables=[_bars("AAPL", b1, [0.1, 0.2]), _bars("AAPL", b2, [0.3])],
+        version_id="raw_bars_backfill",
+    )
+    seed_daily_version(db_session, base_path, day=d1, tables=[_bars("AAPL", d1, [1.0])])
+    seed_daily_version(db_session, base_path, day=d2, tables=[_bars("AAPL", d2, [2.0])])
+
+    result = RollingRawBarsService(db_session, base_path=base_path).build(
+        as_of=d2, sessions=63, now_utc=_NOW
+    )
+
+    assert result.status == "created"
+    assert result.source_versions == [
+        "raw_bars_backfill",
+        "raw_bars_2026-10-09",
+        "raw_bars_2026-11-06",
+    ]
+    assert (result.coverage_start, result.coverage_end) == (b1, d2)
+    assert result.rows == 5
+    assert result.dataset_version_id is not None
+    table = HistoricalBarDatasetReader(db_session, base_path=base_path).read(
+        dataset=RAW_BARS_DATASET,
+        dataset_version=result.dataset_version_id,
+        symbol="AAPL",
+        start_date=stale,
+        end_date=d2,
+    )
+    assert table.column("close").to_pylist() == [0.1, 0.2, 0.3, 1.0, 2.0]
+
+
 def test_bench_window_is_not_clamped_once_a_backfill_covers_it(
     db_session: Session, base_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
