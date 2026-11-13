@@ -14,7 +14,13 @@ pieces on A (Step 3's endpoint) and the worker timers (Step 5), and both stay in
 switched on. Deployment findings keep going into the pre-launch plan; research findings
 (numbered R1, R2, …) go here.
 
-Last updated: 2026-11-07 (Step 0 audit done, R4–R7 and D1 scoped; nothing built yet).
+Last updated: 2026-11-12 (Step 0 audit done, R1–R9 and D1–D2 scoped; nothing built yet).
+
+**Companion backlog:** `interview-study-revisit-backlog.md` (2026-11-12) holds every defect
+found while reading the codebase for interviews, tagged `[domain.section #item]`. The
+research-side items from it are folded in below with their tags, so the tag is the link
+back to the longer note. When one lands, tick it in both files and add a row to that
+file's fix log.
 
 ---
 
@@ -100,6 +106,14 @@ which always passes the drawdown test.
       separate, opt-in knob: they measure execution noise, not strategy fragility.
 - [ ] Fail closed: `None` trials and missing metrics count as failures; warn when
       `n_runs_completed < n_runs`.
+- [ ] Seeds: derive each trial's seed with `derive_seed(..., trial_id=run_index)` instead
+      of `base_seed + run_index`, so trial seeds cannot collide with neighbouring
+      experiments' base seeds **[7.10 #6]**.
+- Alternatives weighed (**[7.10 #1]**, confirmed from saved Parquet rows): MC-only
+  stochastic fills, `shuffle_timestamp`, per-run cost perturbation, block bootstrap.
+  Bootstrap first because it leaves the simulator untouched (parity rule below); cost
+  perturbation is the natural second axis and reuses the stress stage's
+  `cost_multiplier` plumbing.
 - [ ] Tests with a real runner on synthetic bars and realistic thresholds, asserting
       `sharpe_dist.std > 0` and that the verdict can differ from the simulation stage's.
       Fix the misleading comment in `experiments/staged/ma_sweep_staged.yaml` (~line 134).
@@ -161,17 +175,28 @@ resumed run would drop every already-completed strategy from the survivors. The 
 hardcodes `universe_version="v1"` and omits the seed; `experiment_id` must be stable across
 restarts.
 - [ ] Rehydrate skipped units from `cached_run_id` / `metadata.run_id` (reload the
-      `SimulationRunResult` from the SoR) so a resumed stage keeps its survivors.
-- [ ] Identity: thread the real `universe_version`, `random_seed` and `pipeline_id`.
+      `SimulationRunResult` from the SoR) so a resumed stage keeps its survivors. Store
+      the pass/fail verdict with the checkpoint as well, and re-filter on resume: resume
+      is currently wrong in both directions (a strategy that failed before the crash can
+      come back as a survivor, and a partial resume loses earlier passes) **[7.10 #3]**.
+- [ ] Identity: thread the real `universe_version`, `random_seed` and `pipeline_id`, and
+      include the `SimulationResultCache` key's `key_id` (today the identity lacks seed,
+      symbols, date range and cost model) **[7.10 #4]**.
 - [ ] Instantiate in `experiment_orchestration_service.py` (where
       `plan.staged_pipeline_config.stages` is built) with
       `persist_path=<artifacts>/research/<experiment_id>.checkpoints.json`, pass
       `checkpoint_service`, `resume_mode`, `force_rerun`, `dry_run` to the three stages;
-      same in `research_hooks.py` if replay research should resume.
+      same in `research_hooks.py` if replay research should resume. The concrete call
+      sites are `from_dict()` and `_build_replay_experiment_definition`, and
+      `SimulationResultCache` is wired there in the same change **[7.10 #2]**.
 - [ ] CLI: `--resume`, `--checkpoint-store`, `--force-rerun` on the full-pipeline command;
       retire the deprecated `resume-experiment` alias.
 - [ ] End-to-end test: run, kill after the first stage, rerun with `--resume`, assert only
-      the missing units execute and the final survivors match an uninterrupted run.
+      the missing units execute and the final survivors match an uninterrupted run; plus
+      the two directional cases from [7.10 #3] (failed-before-crash still fails, partial
+      resume keeps earlier passes).
+- [ ] Housekeeping while in the file: the replay hook's "42-day lookback" comment is
+      stale, the lookback is 90 days **[7.10 #10]**.
 
 **Verify:** the e2e test above; `research inspect-checkpoints` lists a real run's store.
 
@@ -186,6 +211,13 @@ feed, look for fail-open branches and `None`-coercion.
 - [ ] One audit note per stage under this heading (what it measures, where its inputs
       really come from, what the tests prove, fail-open paths); each confirmed problem
       becomes its own R-number with a fix list.
+- [ ] First confirmed gap to carry in: nothing on the backtest trading path reads the 12%
+      `max_drawdown_limit`, so a research run never experiences the kill that the live
+      path would apply at the same drawdown **[9.8 #5]**. Research scores therefore
+      overstate strategies that would have been halted. Wire it (observe-mode first, as
+      a recorded event; then enforce) and rerun the two-year backtest with
+      `ACTIVATE_KILL_SWITCH`. Read `docs/architecture/safety-doctrine.md` first; this is
+      a parity item, so it goes through the rehearsal rule.
 
 **Verify:** every stage has a note here, and each stage has at least one test on a real
 runner where the gate fails.
@@ -219,6 +251,35 @@ suite `v1` rule "holdout never tuned on" (`pre-launch-deployment-plan.md` §5) e
 - [ ] One integration test per stage on synthetic bars with a real `SimulationRunner` and
       realistic thresholds, asserting the gate can fail and that survivors change when the
       inputs change. These are the regression net for every other item in this sprint.
+- [ ] A cross-process replay test: the same experiment run twice in separate processes
+      produces artifacts with identical checksums **[7.4]**. This is the determinism
+      guarantee R8 and the cache work depend on; without it "same seed, same result" is
+      a hope.
+
+**R8 — Simulator RNG is positional, not keyed (not started).** The fill model draws from
+one RNG stream in intent order, so adding or removing one symbol changes every other
+symbol's fills in the same run **[7.5 #1]**; a config that sets any stochastic
+probability without a seeded RNG runs unseeded instead of failing, and
+`reset_for_run(rng=None)` keeps the previous RNG **[7.5 #2]**. Inert today only because
+the probabilities are `None` (R1); the moment stochastic fills become an opt-in knob
+this is live.
+- [ ] Keyed RNG per decision derived from (run seed, `intent_id`, bar timestamp, decision
+      kind), so one symbol's fills do not depend on which other symbols are in the run.
+- [ ] Raise when any stochastic probability is set and no seeded RNG was passed; make
+      `reset_for_run(rng=None)` either reset to a seed-derived RNG or raise.
+- [ ] `settlement_days` is applied as a count of bars: rename to `settlement_bars` or
+      convert with `BARS_PER_DAY` **[7.10 #8]**. Check which the existing fixtures assume
+      before changing the number.
+- [ ] Tests: same run with and without an extra symbol gives identical fills for the
+      shared symbols; the unseeded-stochastic case raises.
+
+**Verify:** R7's cross-process checksum test passes before and after; the 5c parity
+check is re-run because this touches `research/simulation/`.
+
+**R9 — Generator has no selection (folds into Step 2).** `evolutionary_generator.py`
+mutates without fitness, so today it is a mutation search, not evolution **[7.10 #7]**.
+Step 2 is the fix; if Step 2 slips, the fallback is to rename the method honestly. No
+separate checklist.
 
 **Definition of done for any change under `research/simulation/`:** the research ↔
 trading-cycle parity check from `portfolio-rotation-plan.md` 5c (re-sim vs platform
@@ -229,11 +290,17 @@ simulator; stochastic fills or any execution-model change would, and must re-run
 - Cache and identity hygiene: `SimulationResultCache` keys and the checkpoint identity
   disagree about what makes a run unique (seed in one, hardcoded `universe_version="v1"` in
   the other; neither knows a bootstrap spec). Fix in one place before R3 wiring and before
-  the monthly job reuses cached runs.
+  the monthly job reuses cached runs. Add the git SHA or an engine version string to the
+  cache key so a code change invalidates cached results **[7.10 #5]**.
 - Research observability (pre-launch plan 2.3, unchecked): `run.mode`, `backtest.run_id`,
   `fixture`, `sim_timestamp` span/log attributes; heavy trace sampling for backtests; a
   worker/research-runs dashboard. The checkpoint metrics
-  (`observability/metrics.py:1314-1321`) start firing once R3 lands.
+  (`observability/metrics.py:1314-1321`) start firing once R3 lands. Known breakage to
+  fix on the way: `research_pipeline.json` never loads (wrong folder and a
+  `${DS_PROMETHEUS}` import variable) **[1.8 #1]**; research stage survivor counts are
+  recorded as histograms and should be gauges **[1.8 #4, 7.10 #9]**; every duration
+  histogram uses ms-scale default buckets for second-scale values, so research p95s read
+  ~4.75 s regardless **[1.8 #7]**.
 - Worker resource budget: one measured full pipeline run on B with peak memory and
   wall-clock recorded in section 5, and a memory cap in `infra/ops/worker_job.sh` before
   Step 5's timer (the runbook already warns research jobs are memory-hungry).
@@ -323,12 +390,44 @@ versions puts a seam in the rolling window on 10/09. So no half-measures:
 **Verify:** the free-tier check is recorded here with the result; after any switch, no
 rolling version mixes feeds (`metadata_json.feed` uniform across `source_versions`).
 
+**D2 — Parquet integrity for research reads (not started).** The research engine, the
+bench re-sim and the dataset pull all read the Parquet layer, and the study found four
+ways it can hand them the wrong rows while every registry row still says `validated`
+(the same shape as Findings 26 and 27 on the deployment side):
+- [ ] Compaction in `platform_replay/ingestion_hooks.py` deletes fragments it failed to
+      read: delete only what was read, raise or log on read errors **[6.5 #2]**. Data
+      loss, do first.
+- [ ] The reader ignores fragments once `data.parquet` exists: read each file, normalise
+      with `_with_partition_columns`, then concat **[6.5 #1]**. Live appends after a
+      compaction are invisible until this is fixed.
+- [ ] The table checksum depends on chunk layout (confirmed): `sort_by` the key columns
+      and `combine_chunks()` before hashing in `compute_checksum.py` **[6.5 #5]**. Until
+      then a pull-side checksum comparison can fail on identical data, or pass on
+      reordered data.
+- [ ] Partition dates are UTC dates, not exchange dates **[6.5 #8]**: a 5-minute bar at
+      19:55 ET lands on the next UTC day. Any window built from partition dates (not
+      bar timestamps) is off by the after-hours tail. Decide whether the rolling window
+      and the bench window read by timestamp (then this is cosmetic) or by partition.
+- Not research-blocking, tracked in the backlog only: in-place `data.parquet` rewrite
+  [6.5 #4], `_metadata.json` overwritten per cycle [6.5 #3], checksum verification never
+  called on A [6.5 #6], small-file compaction [6.4], stale storage doc [6.5 #9].
+
+**Verify:** a fixture with one unreadable fragment keeps every readable row after
+compaction; a fixture with `data.parquet` plus a later fragment returns both; the same
+table written in two chunk layouts hashes identically.
+
 ### Step 1 — Baseline measurement (not started)
 
 Run the existing pipeline on the window B now holds and record the numbers, so the
 generator change has a "before". Run it **after R1, R2 and the D1 check land** (and after the SIP re-pull if it
 turns out free), or the baseline is scored by a vacuous Monte Carlo and leaky folds on thin
 bars and has to be redone.
+
+Also wait for the Finding 27 re-pull (`pre-launch-deployment-plan.md`): the 2026-11-12
+bench dry run on B showed the rolling window is missing 8/31, 9/30 and 10/08 (each
+backfill chunk's last session, dropped by a midnight-UTC `--end`), 10/09 (an empty daily
+version) and runs thin on 10/12–10/14. Pin the baseline to the first rolling version
+built after those sessions are back.
 
 - [ ] Experiment YAML `experiments/research/baseline_composite_grid.yaml`: `composite_rule`
       via `grid` (all 652 skeletons), the 22-symbol A universe, dataset pinned to the rolling
@@ -348,7 +447,8 @@ summary JSON lands under `artifacts/worker/`, and the numbers are in section 5.
 
 ### Step 2 — A real evolutionary search for composites (not started)
 
-Replace the aggregator flip with a search that uses fitness. Branch `feat/composite-evolution`.
+Replace the aggregator flip with a search that uses fitness (R9, **[7.10 #7]**). Branch
+`feat/composite-evolution`.
 
 Design (minimal, additive):
 
