@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast
 
 from autonomous_trading_platform.cli.formatters import print_header, print_json
-from autonomous_trading_platform.cli.helpers import parse_datetime
+from autonomous_trading_platform.cli.helpers import parse_datetime, parse_end_datetime
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.scheduler.cycles.run_corporate_action_ingestion_cycle import (
@@ -181,8 +181,19 @@ def register(subparsers) -> None:
         required=True,
         help="Comma-separated list of symbols, e.g. SPY,AAPL,MSFT",
     )
-    run_backfill_parser.add_argument("--start", required=True)
-    run_backfill_parser.add_argument("--end", required=True)
+    run_backfill_parser.add_argument(
+        "--start",
+        required=True,
+        help="Window start, ISO datetime or date (a date means 00:00 UTC that day)",
+    )
+    run_backfill_parser.add_argument(
+        "--end",
+        required=True,
+        help=(
+            "Window end, inclusive. ISO datetime or date; a date means the whole of "
+            "that day (through 23:59:59 UTC), so --start D --end D backfills day D"
+        ),
+    )
     run_backfill_parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -394,7 +405,9 @@ def handle_run_bars(args: argparse.Namespace) -> int:
 
 def handle_run_backfill(args: argparse.Namespace) -> int:
     start = parse_datetime(args.start)
-    end = parse_datetime(args.end)
+    # The cycle records `end.date()` as the version's inclusive coverage end, so a
+    # date-only --end has to fetch through the end of that day.
+    end = parse_end_datetime(args.end)
     symbols = _parse_symbols(args.symbols)
     _validate_symbol_limit(symbols, args.max_symbols)
     _validate_backfill_window(start, end, args.max_days)

@@ -11,9 +11,9 @@ Everything unchecked below this section is a real task. Checked boxes with a not
 verified during the soak and ticked on 2026-11-08 when the doc was tidied.
 
 **Deployment track, in order**
-- Merge: `fix/finding-26-stale-daily-version`, `docs/resync-2026-11-06`, `docs/research-generation-plan`
+- Finding 27 (added 2026-11-13): merge `fix/finding-27-backfill-end-of-day`, three one-day backfills on A (8/31, 9/30, 10/08), decide the empty 10/09 daily row (3.3(a) findings)
 - `atp runtime run-eod-step` command, then rehearse `weekly_portfolio_review` (advisory) and the next rotation (§6, §7.3)
-- Box B: bench re-sim dry run on the full window, install the Saturday timer (3.3(a))
+- Box B: install the Saturday timer (3.3(a); the full-window dry run passed 2026-11-12)
 - Flip `worker_results_enabled` → `portfolio_review_mode=advisory` → `auto` (3.3(a))
 - Calendar tests still ahead: Thu 11/26 closed, Fri 11/27 and Thu 12/24 early close, Mon 11/30 and Thu 12/31 rotations (1.7 table)
 - Set the IEX `SLA_BREACH` baseline for the §7.1 Data row
@@ -722,7 +722,7 @@ is a finding.
           re-simulated on one day. Follow-up: a rolling version is written every session
           (~63 sessions of 5-minute bars each); `retention.sh` leaves Parquet alone, so
           add pruning of rolling versions older than ~14 days before disk becomes a topic
-    - [ ] **Still open (the one operator step left in 3.3(a) before the flips):** on B, `worker_job.sh worker bench-resim --as-of 2026-11-06 --no-publish`, confirm `daily_returns` has ~63 entries per strategy and `market_returns` is populated, then install the timer (`sudo infra/ops/install_worker_timers.sh`; it was last run 10/12, before this timer existed, which is why nothing fired Sat 11/07)
+    - [ ] **Still open (the one operator step left in 3.3(a) before the flips):** install the timer on B (`sudo infra/ops/install_worker_timers.sh`; it was last run 10/12, before this timer existed, which is why nothing fired Sat 11/07). The dry run that gates it was done 2026-11-12 on the full window and passed as plumbing (3 strategies scored, 58 `daily_returns`); the gap to ~63 is Finding 27 below
     - [x] **Backfill the bench window instead of waiting for it (2026-11-04).** A has held
           five-minute bars only since 2026-10-09 (19 sessions), so a 63-session re-sim
           scores on a fraction of its window until mid-January. Alpaca serves historical
@@ -783,6 +783,56 @@ is a finding.
           backfill again; add a test with a 2024 daily row in the way. **Verify Sat
           morning:** B's Fri 20:30 ET pull registered `raw_bars_20261107T005243Z_8097b17d`;
           the 06:00 ET bench re-sim (or the dry run, step above) reports ~63 `daily_returns`.
+    - [ ] **Finding 27: each backfill chunk lost its last session (found 2026-11-12).** The
+          full-window dry run on B (`~/rehearsals/bench-resim-dryrun-2026-11-12.log`)
+          passed as plumbing, 3 strategies scored, but on 58 `daily_returns` rather than
+          ~63. The rolling window has no bars for **8/31, 9/30 and 10/08**, the last day
+          of each 11/06 backfill chunk. Cause: `handle_run_backfill` parsed a date-only
+          `--end 2026-08-31` as `2026-08-31T00:00Z` and handed that instant to Alpaca as
+          the fetch bound, so the fetch stopped before the session opened, while the cycle
+          recorded `date_coverage_end = end.date()` = 8/31 as covered. The `--dry-run`
+          plan counts `end.date()` as a calendar day too, so it listed the session the
+          real run then skipped. Proposed class: P1 under 7.2 (the re-sim ran on inputs
+          missing sessions); nothing traded on it, `worker_results_enabled` is still off.
+          **Fix (branch `fix/finding-27-backfill-end-of-day`):** `parse_end_datetime` in
+          `cli/helpers.py`: a date-only end resolves to 23:59:59.999999 UTC that day, an
+          end with a time is used as given. `run-backfill` uses it, so `--start D --end D`
+          is now one full day (it was an empty window) and `--max-days 31` means 31
+          calendar days inclusive. Tests in `tests/cli/commands/test_ingestion.py` (four of
+          the five fail on the old handler). Not verified against Alpaca from the laptop
+          (no market-data keys here); the first one-day backfill below is the live proof.
+          The three 11/06 versions keep their overstated `date_coverage_end`; harmless
+          once the one-day versions exist. `runtime replay-ingestion`,
+          `runtime soak-loop research` and `universe replay-timeline` still read a
+          date-only `--end` as midnight; not checked or changed here.
+          *Operator steps on A, after the fix deploys and after a close:*
+          ```bash
+          SYMS=AAPL,ADBE,AMD,AMZN,AVGO,BKNG,COST,CRM,DIA,GOOGL,HD,IWM,MA,META,MSFT,NVDA,QQQ,SPY,TLT,TSLA,UNH,V
+          # deploy check: the plan must print "end": "2026-08-31T23:59:59.999999+00:00"
+          docker compose exec app atp ingestion run-backfill --symbols "$SYMS" --start 2026-08-31 --end 2026-08-31 --dry-run
+          docker compose exec app atp ingestion run-backfill --symbols "$SYMS" --start 2026-08-31 --end 2026-08-31 --actor "$USER"
+          docker compose exec app atp ingestion run-backfill --symbols "$SYMS" --start 2026-09-30 --end 2026-09-30 --actor "$USER"
+          docker compose exec app atp ingestion run-backfill --symbols "$SYMS" --start 2026-10-08 --end 2026-10-08 --actor "$USER"
+          ```
+          Each should register a `validated` `historical_backfill` version with 22 Parquet
+          files. The next EOD `rolling_raw_bars` sees new sources and writes a new rolling
+          version, `publish_datasets` ships it, B's 20:30 ET pull registers it.
+          **Verify:** the new rolling version has rows on 8/31, 9/30 and 10/08 (a normal
+          backfilled session is about 1,300 rows: August's 26,526 over its 20 fetched
+          sessions), and a second dry run on B reports 61 `daily_returns`, 62 if 10/09
+          is filled too.
+          Found alongside, still open:
+      - [ ] **The 10/09 daily version is registered `validated` with no Parquet files.**
+            It is the oldest live-session row, so the merge caps every backfill at
+            10/08 and 10/09 stays a hole either way. Operator decision: delete the row
+            (then one more one-day backfill, `--start 2026-10-09 --end 2026-10-09`,
+            fills the day) or leave the hole and note it against the window.
+      - [ ] **10/12 to 10/14 are thin (~200 bars, against ~1,300 for a normal session).**
+            Cause not yet looked at. These are live daily versions, and live sessions
+            win over a backfill on the same day, so a backfill does not repair them as
+            the merge stands.
+      - [ ] P2: each pull on B logs 20 `dataset_pull.no_registry_row` warnings (orphan
+            versions still listed in the S3 index). No behaviour change.
     - [x] **Finding 15: the `rolling_raw_bars` step failed every EOD after deploy (10/27-10/30).**
           `checksums.dataset_version` is a foreign key to `dataset_versions` on Postgres;
           the service committed the checksum rows before it saved the version row. The
@@ -1006,7 +1056,7 @@ cadence is section 3; this table is the gap between intended and actual.
 | Postgres backup → S3 | A host timer | nightly 23:30 ET | timer | yes | `infra/ops/backup.sh` | n/a | — |
 | Retention | A host timer | Sun 03:00 ET | timer | yes | `infra/ops/retention.sh` | n/a | add rolling-version pruning (Finding 14 follow-up) |
 | Dataset pull from S3 | B host timer | nightly 20:30 ET | timer | yes | `infra/ops/worker_job.sh datasets pull` | n/a | — |
-| Bench re-sim → `POST /worker/results` | B host timer | Sat 06:00 ET | **on demand** (timer defined, never installed) | A: `worker_results_enabled=false` | `worker_job.sh worker bench-resim --as-of --no-publish` | 10/27 on a 1-day window; redo on full window | dry run, install timer, flip `worker_results_enabled` |
+| Bench re-sim → `POST /worker/results` | B host timer | Sat 06:00 ET | **on demand** (timer defined, never installed) | A: `worker_results_enabled=false` | `worker_job.sh worker bench-resim --as-of --no-publish` | yes, 11/12 on the full window (58 `daily_returns`; Finding 27 holes) | install timer, Finding 27 backfills, flip `worker_results_enabled` |
 | Worker result apply (A consumes re-sims in the review) | A EOD step | Monday, with the review | gated step | depends on the two flags above | none | no | first real pass Mon 11/17 |
 | Monthly research / strategy generation → bench candidates | B | monthly + triggers | **not built** (pipeline on demand via `atp research … run-pipeline`; no worker job, no hand-off, no timer) | — | `atp research` full pipeline with a YAML | no | research sprint Steps 3, 5 |
 | Recorded-dataset replay (scheduled fixtures) | B | monthly (Phase 4) | **not built** | — | `worker_job.sh worker run --fixture` (Alpaca-sourced) | no | 3.4 |
