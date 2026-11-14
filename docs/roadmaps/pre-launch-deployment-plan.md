@@ -12,8 +12,8 @@ verified during the soak and ticked on 2026-11-08 when the doc was tidied.
 
 **Deployment track, in order**
 - Finding 27 (fix and backfills done 2026-11-14, thin 10/12 to 10/14 repaired too): verify Monday 11/16's rolling version holds 8/31, 9/30, 10/08, 10/09 and full 10/12 to 10/14, and B's dry run reports 62 `daily_returns` (3.3(a) findings)
-- Finding 28 (found 2026-11-14): `final_ingestion` fetches the wrong window, so live days lack the 15:55 ET bar; small fix PR (3.3(a) findings)
-- `atp runtime run-eod-step` (built 2026-11-14, §6): first use on A, then rehearse `weekly_portfolio_review` (advisory) and the next rotation (§7.3)
+- Finding 28 (found 2026-11-14, fix built on `fix/finding-28-final-ingestion-window`): `final_ingestion` fetched the wrong window, so live days lack the 15:55 ET bar; merge, deploy, then verify Mon 11/16's daily version has 78 slots (3.3(a) findings)
+- `atp runtime run-eod-step` (deployed and smoke-tested on A 2026-11-14, §6): rehearse `weekly_portfolio_review` (advisory) and the next rotation (§7.3)
 - Box B: install the Saturday timer (3.3(a); the full-window dry run passed 2026-11-12)
 - Flip `worker_results_enabled` → `portfolio_review_mode=advisory` → `auto` (3.3(a))
 - Calendar tests still ahead: Thu 11/26 closed, Fri 11/27 and Thu 12/24 early close, Mon 11/30 and Thu 12/31 rotations (1.7 table)
@@ -873,12 +873,26 @@ is a finding.
           Effect: trading is untouched (that bar completes at the close), but a live
           day's close in the bench window and in research is the 15:50 bar while a
           backfilled day's is 15:55. Proposed class: P1 under 7.2 (a scheduled step
-          running with the wrong inputs every session). **Fix, not started:**
-          `final_ingestion` passes `cycle_start_override` / `cycle_end_override` for
-          the session's last window, taken from the calendar's close for the date so
-          early-close days (11/27, 12/24) get 12:55-13:00; test with a fake calendar;
-          rehearse with `run-eod-step final_ingestion --as-of`. Past live days keep
-          77 slots unless backfilled over, which is not worth doing.
+          running with the wrong inputs every session). **Fix built 2026-11-14 on
+          branch `fix/finding-28-final-ingestion-window`, not yet deployed:**
+          `_step_final_ingestion` passes `cycle_start_override` / `cycle_end_override`
+          for the session's last window, taken from the calendar's close for the date,
+          so early-close days (11/27, 12/24) get 12:55-13:00. It also passes
+          `enforce_lateness=False`: a bar fetched on purpose two hours after the close
+          is not a slow tick (no `BAR_LATE` rows), and names with no trade in the last
+          five minutes must not fail the step through the "Too many missing bars" stop
+          (they are still recorded as missing-bar incidents). Tests in
+          `tests/scheduler/test_eod_final_ingestion.py` run the real cycle against the
+          fake feed: the 15:55 ET bar is stored; one symbol in five trading still
+          completes; an early close moves the window. All three fail on the old step
+          (it wrote no bars at all).
+      - [ ] Verify on A: Mon 11/16's daily version has 78 slots ending 15:55 ET, and
+            the `final_ingestion` step output shows `cycle_start` / `cycle_end` of
+            20:55 / 21:00 UTC. Optional rehearsal before that, a real write (22 rows
+            into Friday's version): `atp runtime run-eod-step final_ingestion --as-of
+            2026-11-13 --force`. First early close to watch: Fri 11/27.
+      - Past live days (10/15 to 11/13) keep 77 slots unless the step is re-run for
+        each date, which is not worth doing.
       - [ ] P2: each pull on B logs 20 `dataset_pull.no_registry_row` warnings (orphan
             versions still listed in the S3 index). No behaviour change.
     - [x] **Finding 15: the `rolling_raw_bars` step failed every EOD after deploy (10/27-10/30).**
@@ -1010,7 +1024,8 @@ two runs of the same fixture are not guaranteed to match; every run re-downloads
       reported (`scheduled_for_date`) but not enforced. Steps after
       `resolve_raw_bars_dataset` resolve the day's dataset first, as in the chain. A real
       run is a `paper_trading_eod_step` job run, a name the chain's resume logic never
-      reads. Built on branch `feat/run-eod-step` (2026-11-14). **Not yet run on A.**
+      reads. Merged as PR #177, deployed to A 2026-11-14 03:10 UTC (`c9f058daa`),
+      smoke-tested on A the same night (last bullet).
   - **`--dry-run`** runs the step inside one outer database transaction that is always
     rolled back (`db.rollback_only_session`; a commit inside the step only releases a
     savepoint), so nothing is kept. It is offered only for steps whose every effect goes
@@ -1031,9 +1046,17 @@ two runs of the same fixture are not guaranteed to match; every run re-downloads
     completed the step for that date (`--force` overrides both); off its scheduled
     day, `monthly_universe_rotation` always and `weekly_portfolio_review` when the mode
     is `auto`.
-  - Known gap: the dry-run rollback is tested on SQLite only (commit, rollback and
-    commit again inside, nothing left after). First use on A's Postgres should be a
-    read-only step (`operations_health`) with a row count before and after.
+  - **Smoke test on A, 2026-11-14 (after the 03:10 UTC deploy):**
+    `operations_health --as-of 2026-11-13 --dry-run` and `broker_reconciliation
+    --as-of 2026-11-13 --dry-run` both completed and matched what Friday's scheduled
+    chain recorded (health `degraded`, 0 alerts; reconciliation 23 checks, `drifted`,
+    the same 9 failed checks). Row counts were identical before and after
+    (`runtime_job_runs` 50,641, of which `paper_trading_eod_step` 0;
+    `runtime_job_run_steps` 399; `audit_logs` 4,018,955; `reconciliation_snapshots`
+    315), so the savepoint rollback holds on Postgres, which the unit test (SQLite)
+    could not show. Refusals seen as designed: `rolling_raw_bars --dry-run`, a real
+    `risk` re-run for a completed date, `monthly_universe_rotation` off its day. No
+    real (non-dry) step has been run on A yet.
 - [ ] Exact API contract for worker → A publishing (design doc once 5c lands)
 - [ ] Settlement/T+1: does the live ledger need a daily pass, or is it simulation only?
 - [x] Confirm risk/sleeve snapshots run inside the trading cycle or need their own schedule: they run inside every trading cycle, with order reconciliation and portfolio drawdown governance; no separate schedule (see `pre-launch-1.3-scheduling.md` §1)
@@ -1121,7 +1144,7 @@ cadence is section 3; this table is the gap between intended and actual.
 | Process | Where | Intended cadence | State today | Switched on? | On-demand entry point | Rehearsed | Next |
 |---|---|---|---|---|---|---|---|
 | Intraday tick (ingest → features → trading cycle) | A scheduler | every 5 min, market hours | gated step | yes | `atp runtime soak-loop paper` (the runner itself) | n/a, runs daily | — |
-| EOD chain (16 steps, 3.3) | A scheduler | after close | gated step | yes | `atp runtime run-eod-step <step> --as-of` (section 6; `--dry-run` for ten of the steps) | partially (Finding 15/26 rebuilds were by hand) | first `run-eod-step` use on A |
+| EOD chain (16 steps, 3.3) | A scheduler | after close | gated step | yes | `atp runtime run-eod-step <step> --as-of` (section 6; `--dry-run` for ten of the steps) | partially (Finding 15/26 rebuilds were by hand; two steps dry-run on A 11/14) | Finding 28 deploy: `final_ingestion` stores the 15:55 bar from Mon 11/16 |
 | Rolling bench window (`rolling_raw_bars`) | A EOD step | every session | gated step | yes | `run-eod-step rolling_raw_bars --as-of` (no dry run: it writes Parquet) | yes, 11/07 | Mon 11/16 build picks up the Finding 27 backfills |
 | Dataset publish to S3 | A EOD step | every session | gated step | yes | `atp datasets publish --trading-date` | yes, 11/07 | — |
 | Weekly portfolio review | A EOD step | first session of week | gated step, **no-op** | `portfolio_review_mode=off` | `run-eod-step weekly_portfolio_review --as-of --dry-run` | no | flip to `advisory` (11/24), rehearse first |
