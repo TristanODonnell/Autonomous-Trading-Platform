@@ -11,7 +11,7 @@ Everything unchecked below this section is a real task. Checked boxes with a not
 verified during the soak and ticked on 2026-11-08 when the doc was tidied.
 
 **Deployment track, in order**
-- Finding 27 (added 2026-11-13): merge `fix/finding-27-backfill-end-of-day`, three one-day backfills on A (8/31, 9/30, 10/08), decide the empty 10/09 daily row (3.3(a) findings)
+- Finding 27 (fix and four one-day backfills done 2026-11-14): verify Monday 11/16's rolling version holds 8/31, 9/30, 10/08, 10/09 and B's dry run reports 62 `daily_returns`; decide the thin 10/12 to 10/14 sessions (3.3(a) findings)
 - `atp runtime run-eod-step` command, then rehearse `weekly_portfolio_review` (advisory) and the next rotation (§6, §7.3)
 - Box B: install the Saturday timer (3.3(a); the full-window dry run passed 2026-11-12)
 - Flip `worker_results_enabled` → `portfolio_review_mode=advisory` → `auto` (3.3(a))
@@ -799,8 +799,8 @@ is a finding.
           end with a time is used as given. `run-backfill` uses it, so `--start D --end D`
           is now one full day (it was an empty window) and `--max-days 31` means 31
           calendar days inclusive. Tests in `tests/cli/commands/test_ingestion.py` (four of
-          the five fail on the old handler). Not verified against Alpaca from the laptop
-          (no market-data keys here); the first one-day backfill below is the live proof.
+          the five fail on the old handler). PR #175, deployed to A 2026-11-14 02:05 UTC
+          (sha `b5c1049bc`); the backfills below are the live proof.
           The three 11/06 versions keep their overstated `date_coverage_end`; harmless
           once the one-day versions exist. `runtime replay-ingestion`,
           `runtime soak-loop research` and `universe replay-timeline` still read a
@@ -817,20 +817,36 @@ is a finding.
           Each should register a `validated` `historical_backfill` version with 22 Parquet
           files. The next EOD `rolling_raw_bars` sees new sources and writes a new rolling
           version, `publish_datasets` ships it, B's 20:30 ET pull registers it.
-          **Verify:** the new rolling version has rows on 8/31, 9/30 and 10/08 (a normal
-          backfilled session is about 1,300 rows: August's 26,526 over its 20 fetched
-          sessions), and a second dry run on B reports 61 `daily_returns`, 62 if 10/09
-          is filled too.
-          Found alongside, still open:
-      - [ ] **The 10/09 daily version is registered `validated` with no Parquet files.**
-            It is the oldest live-session row, so the merge caps every backfill at
-            10/08 and 10/09 stays a hole either way. Operator decision: delete the row
-            (then one more one-day backfill, `--start 2026-10-09 --end 2026-10-09`,
-            fills the day) or leave the hole and note it against the window.
-      - [ ] **10/12 to 10/14 are thin (~200 bars, against ~1,300 for a normal session).**
-            Cause not yet looked at. These are live daily versions, and live sessions
-            win over a backfill on the same day, so a backfill does not repair them as
-            the merge stands.
+          **Done 2026-11-14 02:10-02:13 UTC (Fri night, A idle after a clean session):**
+          the dry-run plan printed `"end": "2026-08-31T23:59:59.999999+00:00"`, then four
+          `market_backfill_cycle` runs `completed` (about 4 s each), every version
+          `validated`, 22 symbols / 22 Parquet files, rows read back from disk all on the
+          one day: `raw_bars_20261114T021003Z_23244cfb` (8/31, 1,219 rows),
+          `..T021022Z_d4baadb4` (9/30, 1,348), `..T021031Z_797173cc` (10/08, 1,431),
+          `..T021234Z_19598aed` (10/09, 1,324; see the next item). The same read of the
+          11/06 chunk `..T081350Z_69256cdb` shows rows for 10/01 to 10/07 only, which
+          is the bug on disk. Disk on A 63% used. Friday's rolling build and B's 20:30 ET
+          pull had already run, so these land in Monday 11/16's EOD rolling version and
+          reach B on Monday night's pull.
+          **Verify (still open, Mon 11/16 after EOD and Tue after B's pull):** the new
+          rolling version lists the four under `backfill_versions` and has rows on
+          8/31, 9/30, 10/08 and 10/09; a dry run on B reports 62 `daily_returns`.
+          Found alongside:
+      - [x] **The 10/09 daily version was registered `validated` with no Parquet files.**
+            `raw_bars_20261009T133007Z_3aa3121f` has no directory on A at all. As the
+            oldest validated live-session row it capped every backfill at 10/08, so
+            10/09 was a hole either way. **Done 2026-11-14 02:12 UTC:** the row's
+            `validation_status` set to `failed` (one UPDATE, nothing deleted; the failed
+            10/08 daily row `raw_bars_20261008T233920Z_0e88c7a9` is the precedent).
+            `daily_versions` counts only `validated` rows, so the oldest live session is
+            now 10/12 and the 10/09 one-day backfill above is inside the cap.
+      - [ ] **10/12 to 10/14 are thin.** Read from disk, the 10/12 daily version holds
+            221 rows against 1,227 for 11/13 (10/13 and 10/14 not counted yet). Cause
+            not yet looked at. These are live daily versions, and live sessions win
+            over a backfill on the same day, so a backfill does not repair them as the
+            merge stands. The 10/09 route would work here too (mark the three rows
+            `failed`, backfill 10/12 to 10/14), but these versions do hold real bars
+            the system traded on, so that is an operator decision, not a tidy-up.
       - [ ] P2: each pull on B logs 20 `dataset_pull.no_registry_row` warnings (orphan
             versions still listed in the S3 index). No behaviour change.
     - [x] **Finding 15: the `rolling_raw_bars` step failed every EOD after deploy (10/27-10/30).**
