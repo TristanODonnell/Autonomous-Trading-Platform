@@ -14,7 +14,7 @@ Pass verdict
 A strategy passes iff both hold:
 
     pass_rate >= min_pass_rate
-    the base run's trade count >= filter_config.min_trades
+    the base run clears every other threshold in filter_config
 
 where pass_rate = (paths that clear min_sharpe, min_total_return and
 max_drawdown together) / (all paths). Each path is one alternate history of
@@ -24,26 +24,53 @@ clears the thresholds, given how much history there is.
 Example: n_runs=2000, min_pass_rate=0.70 → at least 1,400 of the 2,000
 resampled paths must clear every threshold.
 
-min_trades is checked against the base run only: a resampled path is
-reshuffled session returns and has no trades to count.
+Everything else in filter_config (trade count, consistency, profit factor,
+win rate, return variance, turnover, the per-window robustness checks) is
+checked against the base run only: a resampled path is reshuffled session
+returns, with no trades or calendar windows to measure. base_run_filter_config
+gives the config for that check, so a threshold added to FilterConfig later
+lands on the base run without a change here.
 
 Why per-path filtering rather than filtering on aggregate means?
   Mean Sharpe of 1.2 could hide the fact that 40% of paths went badly negative.
   Per-path filtering surfaces that; aggregate-mean filtering masks it.
 
 Missing evidence fails: a non-finite path metric counts as a failed path, and
-a base run without a trade count does not pass.
+a base run whose checks were not evaluated does not pass.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import math
+from collections.abc import Sequence
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
 from autonomous_trading_platform.research.experiments.filtering.config import FilterConfig
 
 from .session_block_bootstrap import BootstrapPaths
+
+
+def base_run_filter_config(filter_config: FilterConfig) -> FilterConfig:
+    """
+    filter_config with the three per-path thresholds switched off.
+
+    Applying the single-run filter with the result to the base run checks
+    exactly the thresholds a resampled path cannot measure.
+    """
+    return replace(
+        filter_config,
+        min_sharpe=-math.inf,
+        min_total_return=-math.inf,
+        max_drawdown=-math.inf,
+    )
+
+
+def _share_text(share: float) -> str:
+    """A share as a whole percentage; one that is above zero and rounds to 0 reads "<1%"."""
+    return "<1%" if 0.0 < share < 0.005 else f"{share:.0%}"
+
 
 # ---------------------------------------------------------------------------
 # Output dataclasses
@@ -81,7 +108,7 @@ class MonteCarloAggregation:
     n_passed              : paths whose metrics cleared every path threshold.
     pass_rate             : n_passed / n_runs  (0.0 – 1.0).
     passed                : True iff pass_rate >= min_pass_rate and the base
-                            run has enough trades.
+                            run clears its own checks.
     sharpe_dist           : distribution of Sharpe ratio across paths.
     return_dist           : distribution of total return across paths.
     drawdown_dist         : distribution of max drawdown across paths
@@ -91,7 +118,10 @@ class MonteCarloAggregation:
     prob_sharpe_above_min : fraction of paths with Sharpe >= min_sharpe.
                             Reported for comparison; it moves with the config.
     n_sessions            : sessions in the base run that were resampled.
-    failure_reasons       : why the strategy or its paths failed (for logging).
+    failure_reasons       : base-run failures and the pass-rate shortfall
+                            first (these decide the verdict), then the share
+                            of paths failing each threshold (context, listed
+                            even when the strategy passes).
     """
 
     strategy_id: str
@@ -120,7 +150,8 @@ class MonteCarloAggregator:
     Parameters
     ----------
     filter_config   : min_sharpe, min_total_return and max_drawdown are applied
-                      to each path; min_trades to the base run.
+                      to each path. The caller applies the rest to the base
+                      run (base_run_filter_config) and passes what failed.
     min_pass_rate   : fraction of paths that must pass for the strategy to
                       survive the stage (e.g. 0.70 = 70%).
     """
@@ -141,15 +172,17 @@ class MonteCarloAggregator:
         *,
         strategy_id: str,
         paths: BootstrapPaths,
-        base_trade_count: int | None,
+        base_run_failures: Sequence[str] | None,
     ) -> MonteCarloAggregation:
         """
         Parameters
         ----------
-        strategy_id      : used to populate the output dataclass.
-        paths            : per-path metrics from session_block_bootstrap.
-        base_trade_count : closed trades in the base run; None means unknown
-                           and does not pass.
+        strategy_id       : used to populate the output dataclass.
+        paths             : per-path metrics from session_block_bootstrap.
+        base_run_failures : what the base run failed among the thresholds a
+                            path cannot measure; empty when it cleared them
+                            all. None means the check was not run, and does
+                            not pass.
         """
         n_runs = paths.n_paths
         if n_runs == 0:
@@ -172,25 +205,33 @@ class MonteCarloAggregator:
         n_passed = int(n_runs - path_failed.sum())
         pass_rate = n_passed / n_runs
 
-        failure_reasons = [
-            f"{label} on {share:.0%} of paths"
+        if base_run_failures is None:
+            failure_reasons = ["base run: checks not evaluated"]
+        else:
+            failure_reasons = [f"base run: {reason}" for reason in base_run_failures]
+        base_run_ok = not failure_reasons
+
+        enough_paths = pass_rate >= self._min_pass_rate
+        if not enough_paths:
+            # Counts, not a rounded percentage: 1199/2000 would print as "60%".
+            failure_reasons.append(
+                f"{n_passed}/{n_runs} paths clear the thresholds, need {self._min_pass_rate:.0%}"
+            )
+        failure_reasons.extend(
+            f"{label} on {_share_text(share)} of paths"
             for label, share in sorted(
                 ((label, float(failed.mean())) for label, failed in path_checks),
                 key=lambda item: -item[1],
             )
             if share > 0.0
-        ]
-        enough_trades = base_trade_count is not None and base_trade_count >= fc.min_trades
-        if not enough_trades:
-            shown = "unknown" if base_trade_count is None else str(base_trade_count)
-            failure_reasons.insert(0, f"base run trades {shown} < {fc.min_trades}")
+        )
 
         return MonteCarloAggregation(
             strategy_id=strategy_id,
             n_runs=n_runs,
             n_passed=n_passed,
             pass_rate=pass_rate,
-            passed=enough_trades and pass_rate >= self._min_pass_rate,
+            passed=base_run_ok and enough_paths,
             sharpe_dist=self._distribution(paths.sharpe),
             return_dist=self._distribution(paths.total_return),
             drawdown_dist=self._distribution(paths.max_drawdown),

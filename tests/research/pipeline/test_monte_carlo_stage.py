@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import date, timedelta
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -165,6 +166,27 @@ class TestVerdict:
         assert by_id["strong"].filter_result.passed
         assert not by_id["marginal"].filter_result.passed
 
+    def test_filter_output_carries_the_reasons_of_this_gate(self) -> None:
+        """A near miss passes every single-run check; the result must still say why it failed."""
+        runner = sharpe_runner({"strong": 8.0, "marginal": 1.5})
+        result = _run(_stage(runner), [strategy("strong"), strategy("marginal")])
+        by_id = {o.strategy_id: o for o in result.filter_outputs}
+
+        marginal = by_id["marginal"]
+        agg = result.diagnostics["marginal"].mc_aggregation
+        assert agg is not None
+        assert marginal.filter_result.failures == agg.failure_reasons
+        assert marginal.filter_result.failures[0] == (
+            f"{agg.n_passed}/500 paths clear the thresholds, need 70%"
+        )
+        assert any("sharpe < 1.0 on" in reason for reason in marginal.filter_result.failures)
+        assert marginal.score is None
+
+        strong = by_id["strong"]
+        assert strong.filter_result.failures == []
+        assert strong.filter_result.core_passed and strong.filter_result.robustness_passed
+        assert strong.score is not None
+
     def test_min_trades_is_checked_on_the_base_run(self) -> None:
         runner = sharpe_runner({"s1": 8.0}, trade_count=3)
         result = _run(_stage(runner), [strategy("s1")])
@@ -172,7 +194,79 @@ class TestVerdict:
 
         assert result.survivors == []
         assert agg is not None and agg.pass_rate > 0.95
-        assert agg.failure_reasons[0] == "base run trades 3 < 10"
+        assert agg.failure_reasons[0] == "base run: total_trades 3 < min_trades 10"
+
+    @pytest.mark.parametrize(
+        ("threshold", "trade_overrides", "stability_overrides", "expected"),
+        [
+            (
+                {"max_daily_turnover": 10.0},
+                {"daily_turnover": 13.8},
+                {},
+                "base run: daily_turnover 13.80x > max_daily_turnover 10.0x",
+            ),
+            (
+                {"min_consistency_score": 0.3},
+                {},
+                {"consistency_score": 0.2},
+                "base run: consistency_score 0.200 < min_consistency_score 0.3",
+            ),
+            (
+                {"min_profit_factor": 1.2},
+                {"profit_factor": 0.9},
+                {},
+                "base run: profit_factor 0.900 < min_profit_factor 1.2",
+            ),
+            (
+                {"min_win_rate": 0.5},
+                {"win_rate": 0.4},
+                {},
+                "base run: win_rate 0.400 < min_win_rate 0.5",
+            ),
+        ],
+    )
+    def test_thresholds_a_path_cannot_measure_are_checked_on_the_base_run(
+        self,
+        threshold: dict[str, Any],
+        trade_overrides: dict[str, Any],
+        stability_overrides: dict[str, Any],
+        expected: str,
+    ) -> None:
+        """Nearly every path clears the bar, and the strategy still fails on how it traded."""
+
+        class Runner:
+            def run(self, request: SimulationRunRequest) -> SimulationRunResult:
+                good = result_from_curve(
+                    request, curve_with_sharpe(start=START, end=END, sharpe=8.0, seed=1)
+                )
+                return replace(
+                    good,
+                    trade_metrics=replace(good.trade_metrics, **trade_overrides),
+                    stability_metrics=replace(good.stability_metrics, **stability_overrides),
+                )
+
+        stage = _stage(Runner(), filter_config=replace(REALISTIC, **threshold))  # type: ignore[arg-type]
+        result = _run(stage, [strategy("s1")])
+        agg = result.diagnostics["s1"].mc_aggregation
+
+        assert result.survivors == []
+        assert agg is not None and agg.pass_rate > 0.95
+        (output,) = result.filter_outputs
+        assert not output.filter_result.passed
+        assert output.filter_result.failures[0] == expected
+        assert output.score is None
+
+    def test_per_path_thresholds_are_not_rechecked_on_the_base_run(self) -> None:
+        """
+        min_sharpe is a per-path threshold. A base run just under it is judged
+        by its paths, so the reasons are the pass rate, not a base-run Sharpe.
+        """
+        result = _run(_stage(sharpe_runner({"s1": 0.9})), [strategy("s1")])
+        (output,) = result.filter_outputs
+
+        assert not output.filter_result.passed
+        assert not any(reason.startswith("base run") for reason in output.filter_result.failures)
+        assert "paths clear the thresholds" in output.filter_result.failures[0]
 
     def test_same_seed_same_verdict_different_seed_different_paths(self) -> None:
         def aggregation(random_seed: int):

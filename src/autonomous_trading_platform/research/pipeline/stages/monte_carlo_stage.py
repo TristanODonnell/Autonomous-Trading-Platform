@@ -1,23 +1,28 @@
 """
-MonteCarloStage — Stage 4 (Elite).
+MonteCarloStage — Monte Carlo robustness gate.
 
-Monte Carlo robustness gate: take one full-window run per surviving strategy,
-resample its equity curve in whole sessions with replacement n_runs times, and
-keep the strategy iff at least min_pass_rate of those resampled paths clear the
-filter thresholds.
+Take one full-window run per surviving strategy, resample its equity curve in
+whole sessions with replacement n_runs times, and keep the strategy iff at
+least min_pass_rate of those resampled paths clear the per-path thresholds
+and the base run itself clears every other threshold.
 
 ---------------------
-Walk-forward (Stage 3) tests *time robustness* — does the strategy work across
-different periods? Monte Carlo asks how much of the full-window result could be
-luck: over a history of the same length, how often would this strategy still
-clear the bar? On a short window the honest answer is often "cannot tell", and
-the gate then fails strategies whose observed edge is small next to that
+Walk-forward tests *time robustness* — does the strategy work across different
+periods? Monte Carlo asks how much of the full-window result could be luck:
+over a history of the same length, how often would this strategy still clear
+the bar? On a short window the honest answer is often "cannot tell", and the
+gate then fails strategies whose observed edge is small next to that
 uncertainty.
 
-By the time strategies reach this stage, they have already:
-  - survived a cheap quick-simulation filter  (Stage 1)
-  - survived a full-window simulation filter  (Stage 2)
-  - survived walk-forward fold filtering      (Stage 3)
+Place in the pipeline
+---------------------
+The current pipeline has six stages (research_hooks.py):
+
+  initial_quality_filter → walk_forward → monte_carlo → regime → stress → overfitting
+
+so this stage sees walk-forward's survivors, and the regime and stress gates
+after it reuse its base run. The older four-stage layout
+(experiments/staged/ma_sweep_staged.yaml) ends with this stage.
 
 Why resampling and not re-running with different seeds
 ------------------------------------------------------
@@ -43,6 +48,21 @@ No base run (the simulation returned nothing, e.g. a resume that skipped it),
 an empty equity curve, or a curve too short to resample eliminates the
 strategy. Not being able to measure is not a pass.
 
+Two kinds of threshold
+----------------------
+A resampled path is a reshuffled equity curve, so it has a Sharpe, a total
+return and a drawdown, and nothing else. min_sharpe, min_total_return and
+max_drawdown are therefore checked on every path. Every other threshold in
+filter_config (trades, consistency, profit factor, win rate, turnover, ...)
+describes how the strategy traded, which only the base run records, so those
+are checked once, on the base run, and any failure eliminates the strategy.
+
+Failure reasons
+---------------
+A failed strategy's filter result carries this gate's reasons: the base-run
+checks it failed ("base run: ...") and, when too few paths cleared the bar,
+the count and which per-path threshold was missed how often.
+
 Aggregation
 -----------
 The distributions and the verdict are computed by MonteCarloAggregator,
@@ -58,9 +78,10 @@ YAML block example
     n_runs: 2000            # resampled paths, not simulations
     min_pass_rate: 0.70
     filter_config:
-      min_sharpe: 1.0       # per path
-      max_drawdown: -0.20   # per path
-      min_trades: 10        # base run only
+      min_sharpe: 1.0             # per path
+      max_drawdown: -0.20         # per path
+      min_trades: 10              # base run only
+      min_consistency_score: 0.5  # base run only
     scoring_weights:
       w_sharpe: 0.5
       w_return: 0.25
@@ -95,6 +116,7 @@ from autonomous_trading_platform.research.experiments.filtering.config import (
     FilterConfig,
     ScoringWeights,
 )
+from autonomous_trading_platform.research.experiments.filtering.filters import FilterResult
 from autonomous_trading_platform.research.experiments.filtering.services.filter_score_service import (
     FilterScoreInput,
     FilterScoreOutput,
@@ -107,8 +129,8 @@ from autonomous_trading_platform.research.simulation.simulation_runner import (
 )
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
-from ..aggregation.monte_carlo_aggregator import MonteCarloAggregation, MonteCarloAggregator
-from ..aggregation.session_block_bootstrap import session_block_bootstrap
+from ..aggregation.monte_carlo_aggregator import MonteCarloAggregator, base_run_filter_config
+from ..aggregation.session_block_bootstrap import BootstrapPaths, session_block_bootstrap
 from ._gate_stage_support import GateWindow, find_reusable_reference, gate_filter_output
 from .base_stage import BaseStage, StageDiagnostics, StageResult
 
@@ -179,14 +201,14 @@ class MonteCarloStageConfig:
 
 class MonteCarloStage(BaseStage):
     """
-    Stage 4 Elite — Monte Carlo robustness gate.
+    Monte Carlo robustness gate.
 
     For every surviving strategy:
       1. Take a full-window base run: reused from an earlier stage when the
          window matches, otherwise simulated once.
       2. Resample its equity curve in whole sessions, n_runs paths.
-      3. Strategy survives iff pass_rate >= min_pass_rate and the base run has
-         at least min_trades trades (see MonteCarloAggregator).
+      3. Strategy survives iff pass_rate >= min_pass_rate and the base run
+         clears every threshold a path cannot measure (see MonteCarloAggregator).
 
     Only base runs simulated here go into StageResult.simulation_results; a
     reused run was already reported by the stage that produced it.
@@ -220,11 +242,12 @@ class MonteCarloStage(BaseStage):
             filter_config=stage_config.filter_config,
             min_pass_rate=stage_config.min_pass_rate,
         )
-        # FilterScoreService produces the FilterScoreOutput entries that
-        # StageResult expects — one per strategy, scored on the base run so the
-        # score is comparable with upstream stages.
-        self._filter_score_service = FilterScoreService(
-            filter_config=stage_config.filter_config,
+        # The single-run filter with the per-path thresholds switched off: it
+        # applies to the base run every threshold a resampled path cannot
+        # measure, and scores the base run so the score is comparable with
+        # upstream stages.
+        self._base_run_service = FilterScoreService(
+            filter_config=base_run_filter_config(stage_config.filter_config),
             scoring_weights=stage_config.scoring_weights,
         )
         self._prior_results: list[StageResult] = []
@@ -324,13 +347,13 @@ class MonteCarloStage(BaseStage):
         for config in survivors:
             sid = config.strategy_id
             base = base_runs.get(sid)
-            aggregation, missing_reason = self._resample(
+            paths, missing_reason = self._resample(
                 config=config,
                 base=base,
                 experiment_id=experiment_id,
                 base_seed=random_seed,
             )
-            if aggregation is None or base is None:
+            if paths is None or base is None:
                 reason = missing_reason or "no base run available"
                 logger.warning("  FAILED  %s | no Monte Carlo evidence: %s", sid, reason)
                 all_filter_outputs.append(
@@ -338,14 +361,7 @@ class MonteCarloStage(BaseStage):
                 )
                 continue
 
-            diagnostics[sid] = StageDiagnostics(
-                mc_aggregation=aggregation,
-                reference_result=base,
-            )
-            # One FilterScoreOutput per strategy, scored on the base run so
-            # scores are comparable across stages. The pass/fail verdict comes
-            # from the aggregation, not the base run's own filter.
-            filter_outputs, _ = self._filter_score_service.filter_and_rank(
+            base_outputs, _ = self._base_run_service.filter_and_rank(
                 [
                     FilterScoreInput(
                         strategy_id=sid,
@@ -357,9 +373,31 @@ class MonteCarloStage(BaseStage):
                     )
                 ]
             )
-            fo = filter_outputs[0]
-            fo.filter_result.passed = aggregation.passed  # type: ignore[attr-defined]
-            all_filter_outputs.append(fo)
+            base_output = base_outputs[0]
+            aggregation = self._aggregator.aggregate(
+                strategy_id=sid,
+                paths=paths,
+                base_run_failures=base_output.filter_result.failures,
+            )
+            diagnostics[sid] = StageDiagnostics(
+                mc_aggregation=aggregation,
+                reference_result=base,
+            )
+            # One FilterScoreOutput per strategy. Verdict and reasons are the
+            # gate's own; the score is the base run's, so it is comparable
+            # across stages, and is kept only for a strategy that passed.
+            all_filter_outputs.append(
+                FilterScoreOutput(
+                    strategy_id=sid,
+                    filter_result=FilterResult(
+                        passed=aggregation.passed,
+                        failures=[] if aggregation.passed else list(aggregation.failure_reasons),
+                        core_passed=aggregation.passed,
+                        robustness_passed=aggregation.passed,
+                    ),
+                    score=base_output.score if aggregation.passed else None,
+                )
+            )
 
             if aggregation.passed:
                 final_survivors.append(config)
@@ -498,8 +536,8 @@ class MonteCarloStage(BaseStage):
         base: SimulationRunResult | None,
         experiment_id: str,
         base_seed: int,
-    ) -> tuple[MonteCarloAggregation | None, str | None]:
-        """Returns (aggregation, None), or (None, why there is no evidence)."""
+    ) -> tuple[BootstrapPaths | None, str | None]:
+        """Returns (resampled paths, None), or (None, why there is no evidence)."""
         if base is None:
             return None, "no base run available"
         if base.equity_curve is None or base.equity_curve.empty:
@@ -524,14 +562,7 @@ class MonteCarloStage(BaseStage):
             )
         except ValueError as exc:
             return None, f"base run cannot be resampled: {exc}"
-
-        trade_count = base.trade_metrics.total_trades if base.trade_metrics is not None else None
-        aggregation = self._aggregator.aggregate(
-            strategy_id=config.strategy_id,
-            paths=paths,
-            base_trade_count=trade_count,
-        )
-        return aggregation, None
+        return paths, None
 
     def _derive_seed(
         self,
