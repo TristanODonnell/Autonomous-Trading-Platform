@@ -288,7 +288,10 @@ reasons").**
 **R1 verification (2026-11-14, on the laptop, real bars).**
 - Setup: B's rolling raw-bars version `raw_bars_20261113T230046Z_ce936880` copied to the
   laptop read-only (22 symbols, IEX five-minute bars, 2026-08-03 to 2026-11-13, 70
-  sessions, 90,310 rows). The hook's own six-stage experiment definition for tick
+  sessions, 90,310 rows). This is the rolling version from before the 2026-11-14 repair:
+  8/31, 9/30, 10/08 and 10/09 are absent, which is why the curves have 60 sessions and
+  not 64. The repaired version is `raw_bars_20261114T041002Z_c2faf2e7` (74 sessions,
+  99,118 rows). Both sides of every comparison here used the same data. The hook's own six-stage experiment definition for tick
   2026-11-13 (window 2026-08-15 to 2026-11-13; 60 sessions in the resampled curve).
   `main` at `413d16472` and the branch at `4dd0671ae`, side by side in two git worktrees,
   same harness (a pytest file kept outside the repo).
@@ -916,6 +919,46 @@ behind a fixture flag; default stays `alpaca`.
   are adjusted until they pass them, hence a frozen suite and an untouched holdout. The
   90 days itself was chosen so walk-forward's 75 days always fit (`research_hooks.py:486`
   comment), not for statistical reasons.
+- Research-history dataset (noted 2026-11-14 for when work returns to deployment
+  logistics; user: "our rolling dataset currently on B will still be useful ... just
+  fetch historical to fill in the past?"). Yes to both, as two datasets:
+  - The rolling version keeps its job: the weekly bench re-sims and the "still working
+    now" check. Its length is `bench_resim_window_days` and it slides, so making it
+    longer would slow every bench re-sim and move bench scores for a reason unrelated to
+    the strategies.
+  - The long history is a second dataset built the same way the bench window was filled
+    on 2026-11-04/06: `atp ingestion run-backfill` chunks (each a validated
+    `historical_backfill` version) for the past, live daily versions for the recent end.
+  - [ ] Decide where it is built and how it reaches B (the rolling version is built on A
+        and pulled from S3; a multi-year build on A is a write on the trading box).
+  - [ ] Check the dataset after building and before scoring anything on it: the same
+        number of bars per session throughout, no missing sessions, no unexplained
+        bar-to-bar price jumps. Known seams, all from `pre-launch-deployment-plan.md`
+        3.3(a): backfill chunks used to skip their last day (fixed, PR #175; 8/31, 9/30,
+        10/08 and 10/09 re-fetched 2026-11-14 02:10 UTC); live days ended at the 15:50
+        bar where backfilled days end at 15:55 (fixed going forward, PR #178; whether the
+        live days recorded before the fix were repaired beyond 10/09 and 10/12 to 10/14
+        is not checked here).
+  - [ ] Splits: none in the 60 sessions used so far; a multi-year window will cross
+        some, and the hook reads raw prices (`PriceBasis.RAW`).
+- Verifying runs as they get longer (noted 2026-11-14, user's question). Rule: a long
+  run is never where a code defect is first found. Keep "is the code right" apart from
+  "is the conclusion right" and answer each with the cheapest check that can.
+  - Already planned: per-stage tests on a real runner and the cross-process checksum
+    (R7); before/after on identical bars (ground rules); a rehearsed dry run before the
+    timer (this step).
+  - [ ] Planted controls in every campaign: a strategy built to have no edge and a
+        synthetic one with a strong edge. A no-edge control that passes more often than
+        the gate's design rate means something leaks.
+  - [ ] One frozen reference window (medium length, fixed dataset version) for
+        before/after comparisons of code changes, so a change is never judged on a full
+        campaign.
+  - [ ] Step the window up (60 sessions, six months, two years) and check that time and
+        memory grow as expected before scheduling the long one.
+  - [ ] In-run checks written into the summary: stage counts add up, every failure has a
+        reason, nothing passes with a failure attached (checked by hand on 2026-11-14).
+  - How the 2026-11-14 window was chosen: it was not. It was the data on B cut by the
+    hook's 90-day lookback; the 17 to 60 minute run times followed from that.
 
 **Verify:** one full dry run (`--no-publish`) on B from the timer's unit; the plan's 3.3(b)
 box ticks only after the first scheduled run has posted and A has admitted or rejected
