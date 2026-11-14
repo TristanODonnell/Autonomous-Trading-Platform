@@ -880,6 +880,42 @@ behind a fixture flag; default stays `alpaca`.
       the admitted set via Step 3 → summary to S3. Same shape as `bench-resim`.
 - [ ] `ratp-worker-research.timer` in `infra/ops/install_worker_timers.sh`, first Saturday
       of the month after the bench re-sim; `worker-box.md` table row and runbook section.
+- Spreading the campaign over several days (user, 2026-11-14: the long windows are what
+  the scheduled worker is for, "maybe a way to split those long hours over the last week
+  or last 2 weeks of month"; not written down before in either plan, which has one job
+  on one Saturday). Why it is needed, a linear scaling from the laptop and not a
+  measurement on B: 30 strategies over 60 sessions took 17 minutes on 2026-11-14; 652
+  skeletons over two years is tens of hours. B runs one job at a time and must yield to
+  the nightly pull (20:30 ET) and the Saturday bench re-sim (06:00 ET).
+  - [ ] Measure first: one full pipeline run on B at the intended window, wall time and
+        peak memory (the worker resource budget item above).
+  - [ ] Split by piece of work: the month is a list of independent jobs (selection on
+        the long window; one regime window per job; holdout and hand-off last), each
+        finishing and recording its own result. This is the "campaign YAML" of
+        `pre-launch-deployment-plan.md` ("which fixtures and research jobs run when").
+  - [ ] R3 (checkpoint and resume) for any single job longer than one night. This moves
+        R3 from "before Step 5" to "before the first long run".
+  - [ ] The window comes from a rule fixed in advance and rolls forward each month (for
+        example the most recent 24 months with the last 6 held out). Choosing it after
+        seeing results is one more way to fit.
+- Window design (proposed 2026-11-14 in answer to the user's "is 90 days the correct
+  timing ... does extending the time overall help or adding the market condition
+  timespans"; not agreed, and not to be fixed before the history depth is known):
+
+  | Question | Data that answers it |
+  |---|---|
+  | Is the edge real? | One long continuous stretch. Sharpe uncertainty is about 1/√years: ±2.0 on 60 sessions, ±1.0 on one year, ±0.7 on two, ±0.5 on four. |
+  | Does it break in bad conditions? | Regime windows of 2 to 6 months, chosen by classifier coverage (`suite_v1`, deployment plan section 5, not built). Each is as noisy as today's window, so the pass rule is "does not blow up", not "is profitable". |
+  | Is it still working now? | The recent 60 to 90 days. This is what the hook's 90-day window is good for; it is not enough to admit a strategy on. |
+  | Did we fool ourselves? | A holdout, read once at the end. Six months still has an uncertainty near ±1.4: it can reject, it cannot prove. |
+
+  Proposed ranges: about two years at five-minute bars, split near 12 months selection,
+  6 evaluation, 6 holdout; 3 or 4 regime windows as a robustness gate beside the
+  synthetic stress scenarios; the recent 90 days kept as the "still working" check. Named
+  periods are legitimate for robustness and become training data the moment strategies
+  are adjusted until they pass them, hence a frozen suite and an untouched holdout. The
+  90 days itself was chosen so walk-forward's 75 days always fit (`research_hooks.py:486`
+  comment), not for statistical reasons.
 
 **Verify:** one full dry run (`--no-publish`) on B from the timer's unit; the plan's 3.3(b)
 box ticks only after the first scheduled run has posted and A has admitted or rejected
