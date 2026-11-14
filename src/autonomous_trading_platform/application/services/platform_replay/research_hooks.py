@@ -188,6 +188,12 @@ def run_scheduled_research_at_timestamp(
         if r.strategy_id not in sim_by_id:
             sim_by_id[r.strategy_id] = r
 
+    # The run a governance record points at, which promotion reads its metrics
+    # from: the full-window reference run when the robustness stages recorded
+    # one, stage 1's run otherwise. Stage 1 covers the selection window only
+    # once walk-forward follows it, so its run is not the whole-window result.
+    source_sim_by_id: dict = dict(sim_by_id)
+
     # Phase 2 — validation + intelligence pipeline on Stage 3 survivors
     intelligence_summaries: list = []
     intel_svc = None
@@ -231,6 +237,7 @@ def run_scheduled_research_at_timestamp(
             sim_result = evidence.reference_result or sim_by_id.get(sid)
             if sim_result is None:
                 continue
+            source_sim_by_id[sid] = sim_result
             equity_curve = sim_result.equity_curve
             if equity_curve is None or equity_curve.empty:
                 continue
@@ -327,7 +334,7 @@ def run_scheduled_research_at_timestamp(
         session=session,
         summaries=deployable,
         config_by_id=config_by_id,
-        sim_by_id=sim_by_id,
+        sim_by_id=source_sim_by_id,
         experiment_id=experiment_def.experiment_id,
         now_utc=timestamp,
     )
@@ -401,7 +408,9 @@ def _build_replay_experiment_definition(
     """Build an ExperimentDefinition with the staged pipeline for the monthly research tick.
 
     Stage 1 always runs. Walk-forward and everything after it (Monte Carlo,
-    regime, stress, overfitting) need >= 75 days of data.
+    regime, stress, overfitting) need >= 75 days of data. When they are built,
+    stage 1 selects on the days before the first walk-forward test fold only;
+    the later stages still run on the whole window.
 
     Returns None if no validated dataset is available.
     """
@@ -546,12 +555,25 @@ def _build_replay_experiment_definition(
         max_daily_turnover=RESEARCH_MAX_DAILY_TURNOVER,
     )
 
+    # Walk-forward needs train_days + test_days of data (75 days); the stages
+    # after it (Monte Carlo, regime, stress, overfitting) are built only with it.
+    _wf_train_days, _wf_test_days = 45, 30
+    has_walk_forward = available_days >= _wf_train_days + _wf_test_days
+
+    # Stage 1 picks the candidates. When walk-forward follows, stage 1 sees only
+    # the days before the first test fold starts, so every test fold is data
+    # that had no say in the selection (plan R2). On its own it gets the whole
+    # window.
+    selection_end = (
+        start_date + timedelta(days=_wf_train_days - 1) if has_walk_forward else tick_date
+    )
+
     # Stage 1 — always runs (just needs start_date < end_date)
     stage1 = SimulationStage(
         stage_config=SimulationStageConfig(
             name="initial_quality_filter",
             start_date=start_date,
-            end_date=tick_date,
+            end_date=selection_end,
             symbols=symbols,
             filter_config=FilterConfig(
                 min_sharpe=0.5,
@@ -569,11 +591,11 @@ def _build_replay_experiment_definition(
 
     stages: list = [stage1]
 
-    # Stage 2 — WalkForwardStage requires train_days + test_days of data (75 days).
-    # With a 42-day lookback this rarely triggers until month 3+; survivors from
-    # stage 1 are already filtered so the fold simulations are cheap.
-    _wf_train_days, _wf_test_days = 45, 30
-    if available_days >= _wf_train_days + _wf_test_days:
+    # Stage 2 — WalkForwardStage: the same fixed config evaluated on rolling
+    # train/test sub-periods. Its first test fold starts the day after stage 1's
+    # selection window ends. Survivors of stage 1 are already filtered, so the
+    # fold simulations are cheap.
+    if has_walk_forward:
         stage2 = WalkForwardStage(
             stage_config=WalkForwardStageConfig(
                 name="walk_forward_robustness",

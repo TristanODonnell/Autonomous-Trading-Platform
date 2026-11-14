@@ -208,9 +208,10 @@ class OverfittingAnalyzer:
                     f"(train={wf_result.avg_train_sharpe:.2f}, test={wf_result.avg_test_sharpe:.2f})."
                 )
 
-        # 2. Fold instability
+        # 2. Fold instability. One fold has no fold-to-fold spread (its CoV is
+        # reported as 0), so it is no evidence of stability: leave the indicator out.
         fi: float | None = None
-        if wf_result is not None:
+        if wf_result is not None and wf_result.n_folds >= 2:
             fi = _clamp(wf_result.fold_sharpe_cv / 2.0)  # normalise: CoV=2 = fully suspicious
             if fi > 0.5:
                 warnings.append(

@@ -235,24 +235,54 @@ def test_replay_definition_has_all_six_stages_with_smoke_budget(
     assert full_mc._cfg.n_runs == 2000
 
 
-def test_every_new_stage_runs_on_real_simulations(
+def test_stage_one_selects_before_the_first_walk_forward_test_fold(
     smoke_data_root, pit_universe, db_session, replay_context
 ) -> None:
-    """Permissive upstream filters so survivors reach regime → stress → overfitting."""
-    from autonomous_trading_platform.research.pipeline.pipeline_runner import (
-        StagedPipelineConfig,
-    )
-    from autonomous_trading_platform.research.pipeline.stages.stage_registry import StageRegistry
-
+    """Test folds are out of sample only if stage 1 never saw their dates (plan R2)."""
     ctx = _build_context(db_session)
     exp = _replay_experiment(db_session, replay_context, ctx.simulation_runner)
+    sim, wf, *later = exp.staged_pipeline_config.stages
+
+    first_test_start = wf._cfg.start_date + timedelta(days=wf._cfg.train_days)
+    assert sim._stage_config.start_date == wf._cfg.start_date == exp.start_date
+    assert sim._stage_config.end_date == first_test_start - timedelta(days=1)
+    # Walk-forward and the robustness stages after it keep the whole window.
+    assert wf._cfg.end_date == exp.end_date
+    assert all(s._cfg.end_date == exp.end_date for s in later if hasattr(s._cfg, "end_date"))
+
+
+def test_stage_one_alone_keeps_the_whole_window(
+    smoke_data_root, pit_universe, db_session, replay_context
+) -> None:
+    """Under 75 days of data there is no walk-forward, so nothing to hold back for."""
+    import autonomous_trading_platform.application.services.platform_replay.research_hooks as rh
+
+    early_tick = datetime(2023, 3, 1, 21, 0, tzinfo=UTC)  # 57 days after the data starts
+    ctx = _build_context(db_session)
+    exp = rh._build_replay_experiment_definition(
+        session=db_session,
+        timestamp=early_tick,
+        replay_context=replay_context,
+        simulation_runner=ctx.simulation_runner,
+        dataset_version_id_override=_DATASET_VERSION_ID,
+        profile="smoke",
+    )
+
+    assert exp is not None
+    (only_stage,) = exp.staged_pipeline_config.stages
+    assert only_stage._stage_config.end_date == early_tick.date() == exp.end_date
+
+
+def _permissive_stage_dicts(exp, *, selection_end: date | None = None) -> list[dict]:
+    """The six stages with gates that pass everything; stage 1 ends at selection_end."""
     window = {
         "symbols": list(exp.symbols),
         "start_date": exp.start_date.isoformat(),
         "end_date": exp.end_date.isoformat(),
     }
-    raw_stages = [
-        {"type": "simulation", "name": "sim", "filter_config": _PERMISSIVE_FILTER, **window},
+    sim_window = {**window, "end_date": (selection_end or exp.end_date).isoformat()}
+    return [
+        {"type": "simulation", "name": "sim", "filter_config": _PERMISSIVE_FILTER, **sim_window},
         {
             "type": "walk_forward",
             "name": "wf",
@@ -291,7 +321,22 @@ def test_every_new_stage_runs_on_real_simulations(
         },
         {"type": "overfitting", "name": "overfit", "max_overfitting_probability": 1.0},
     ]
-    stages = [StageRegistry.load(raw, ctx.simulation_runner) for raw in raw_stages]
+
+
+def test_every_new_stage_runs_on_real_simulations(
+    smoke_data_root, pit_universe, db_session, replay_context
+) -> None:
+    """Permissive upstream filters so survivors reach regime → stress → overfitting."""
+    from autonomous_trading_platform.research.pipeline.pipeline_runner import (
+        StagedPipelineConfig,
+    )
+    from autonomous_trading_platform.research.pipeline.stages.stage_registry import StageRegistry
+
+    ctx = _build_context(db_session)
+    exp = _replay_experiment(db_session, replay_context, ctx.simulation_runner)
+    stages = [
+        StageRegistry.load(raw, ctx.simulation_runner) for raw in _permissive_stage_dicts(exp)
+    ]
     exp = replace(
         exp,
         strategy_set=_MINIMAL_STRATEGY_SET,
@@ -368,6 +413,59 @@ def test_research_hook_runs_with_smoke_profile(
     # Funnel counts never increase from one stage to the next.
     passed = [c["passed"] for c in funnel.values()]
     assert passed == sorted(passed, reverse=True)
+
+
+def test_governance_source_run_is_the_full_window_run(
+    smoke_data_root, pit_universe, db_session, replay_context, monkeypatch
+) -> None:
+    """Promotion reads its metrics from the run a governance record points at.
+    Stage 1 covers the selection window only, so that run must be the
+    full-window reference run the robustness stages recorded."""
+    import autonomous_trading_platform.application.services.platform_replay.research_hooks as rh
+    from autonomous_trading_platform.research.pipeline.pipeline_runner import (
+        StagedPipelineConfig,
+    )
+    from autonomous_trading_platform.research.pipeline.stages.stage_registry import StageRegistry
+
+    build_real = rh._build_replay_experiment_definition
+    built: dict = {}
+    seeded: dict = {}
+
+    def _build_permissive(**kwargs):
+        exp = build_real(**kwargs)
+        selection_end = exp.staged_pipeline_config.stages[0]._stage_config.end_date
+        stages = [
+            StageRegistry.load(raw, kwargs["simulation_runner"])
+            for raw in _permissive_stage_dicts(exp, selection_end=selection_end)
+        ]
+        built["exp"] = replace(
+            exp,
+            strategy_set=_MINIMAL_STRATEGY_SET,
+            staged_pipeline_config=StagedPipelineConfig(stages=stages),
+        )
+        built["selection_end"] = selection_end
+        return built["exp"]
+
+    monkeypatch.setattr(rh, "_build_replay_experiment_definition", _build_permissive)
+    monkeypatch.setattr(
+        rh, "_seed_research_governance_from_intelligence", lambda **kw: seeded.update(kw)
+    )
+
+    result = rh.run_scheduled_research_at_timestamp(
+        session=db_session,
+        timestamp=_TICK_TS,
+        replay_context=replay_context,
+        dataset_version_id=_DATASET_VERSION_ID,
+        research_options={"profile": "smoke"},
+    )
+
+    assert result.status == "ok", result.errors
+    exp = built["exp"]
+    assert built["selection_end"] < exp.end_date
+    assert seeded["config_by_id"], "permissive gates should leave final survivors"
+    for sid in seeded["config_by_id"]:
+        source = seeded["sim_by_id"][sid]
+        assert (source.start_date, source.end_date) == (exp.start_date, exp.end_date)
 
 
 def test_unknown_research_profile_falls_back_to_full() -> None:

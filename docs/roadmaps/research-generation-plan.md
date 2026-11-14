@@ -14,7 +14,9 @@ pieces on A (Step 3's endpoint) and the worker timers (Step 5), and both stay in
 switched on. Deployment findings keep going into the pre-launch plan; research findings
 (numbered R1, R2, …) go here.
 
-Last updated: 2026-11-12 (Step 0 audit done, R1–R9 and D1–D2 scoped; nothing built yet).
+Last updated: 2026-11-14 (R1 built, verified on real bars and pushed, no PR yet; R1
+follow-up and the small R2 set built, checked on real bars and committed on the same
+branch, not pushed; the rest of R2 and R3–R9 not started).
 
 **Companion backlog:** `interview-study-revisit-backlog.md` (2026-11-12) holds every defect
 found while reading the codebase for interviews, tagged `[domain.section #item]`. The
@@ -82,6 +84,19 @@ Three suspicions the user raised while studying the backtesting funnel, each con
 reading the code (three parallel audits, key claims re-verified by hand). Fix these before
 trusting any before/after number from Steps 1–2.
 
+Order from here (proposed 2026-11-14, not yet agreed by the user):
+1. One PR from `research/r1-monte-carlo-bootstrap` with three commits: R1 (pushed), the R1
+   follow-up, the small R2 set with these notes. R2 stays open; the PR is "R2, partial".
+   The real-bars check of the R2 change is done (under R2). Still before the PR: the
+   low-spread question under "R1 verification", because a cause in the resampling would
+   be an R1 defect and belongs in the same PR.
+2. The longer-history data question (read-only first). It unblocks the selection / test
+   split and holdout the user chose for R2, and Step 1 waits on R2.
+3. R4, starting with the stress gate: in every real-bars run on 2026-11-14 it eliminated
+   every strategy that reached it.
+4. R5 and R6.
+5. R3, before Step 5 (it changes cost, not what a score means).
+
 **R1 — Monte Carlo is not a Monte Carlo (blocks trust in scores).**
 `pipeline/stages/monte_carlo_stage.py:371-392` builds `n_runs` identical
 `SimulationRunRequest`s whose only difference is `random_seed = base_seed + i`. The seeded
@@ -125,9 +140,13 @@ which always passes the drawdown test.
       `tests/research/test_research_stages_smoke.py`, with permissive thresholds only.
       The comment in `experiments/staged/ma_sweep_staged.yaml` is fixed.
 
-**Verify (not run yet):** on the 63-session window, rerun `ma_sweep_staged.yaml`'s Monte
-Carlo stage before and after; before, every strategy's `sharpe_dist.std` is 0.0; after, it
-is not, and at least one strategy that passed the simulation stage fails the gate.
+**Verify (run 2026-11-14, results under "R1 verification" below):** on the rolling window B holds, run the current
+six-stage pipeline (`research_hooks.py`: initial_quality_filter → walk_forward →
+monte_carlo → regime → stress → overfitting) before and after; before, every strategy's
+`sharpe_dist.std` is 0.0; after, it is not, and at least one strategy that entered Monte
+Carlo fails it. (User, 2026-11-14: the six-stage pipeline is the current one;
+`ma_sweep_staged.yaml` is the older four-stage layout, and its 2022–2025 window is not
+on B, so it is not the verification target.)
 
 **R1 design investigation (2026-11-14, code re-read plus a synthetic probe; nothing built).**
 - Raw material exists: `SimulationRunResult.equity_curve` is the live (post-warm-up)
@@ -190,8 +209,8 @@ is not, and at least one strategy that passed the simulation stage fails the gat
 - Full write-up of the investigation: `Claude outputs/r1-monte-carlo-investigation.md`
   (untracked).
 
-**R1 implementation (2026-11-14, local branch `research/r1-monte-carlo-bootstrap`,
-uncommitted, nothing pushed).**
+**R1 implementation (2026-11-14, branch `research/r1-monte-carlo-bootstrap`, commit
+`4dd0671ae`, pushed, no PR yet).**
 - Decisions (user): (1) reuse `n_runs` / `min_pass_rate` / `filter_config`; (2) the three
   scorers read P(Sharpe > 0), with the Sharpe spread and P(Sharpe ≥ `min_sharpe`) reported
   but not scored; (3) `min_trades` on the base run only.
@@ -212,9 +231,121 @@ uncommitted, nothing pushed).**
     is open, and belongs with R5.
   - A resumed stage whose base run is skipped by a checkpoint now eliminates the strategy
     (it used to keep it). Nothing in production resumes; R3's rehydration fixes it.
+  - (Found during verification, 2026-11-14; missing from this list when R1 was committed.)
+    The gate applies `min_sharpe`, `min_total_return` and `max_drawdown` to each path and
+    `min_trades` to the base run. `min_consistency_score`, `min_profit_factor`,
+    `min_win_rate` and `max_daily_turnover` in the stage's `filter_config` are not
+    enforced here. Corrected 2026-11-14: this note first said R1 had dropped them. It had
+    not. `main`'s aggregator checked Sharpe, total return, drawdown and trade count on
+    each run and nothing else (`_evaluate_runs`), so these four were never enforced at
+    this stage on any version; the real-bars run on `main` shows it (below). The
+    follow-up below adds the enforcement; it is new, not a restoration.
+  - (Same.) The reasons on a Monte Carlo `FilterScoreOutput` are the base run's single-run
+    filter failures, not the gate's own (`MonteCarloAggregation.failure_reasons`, which is
+    only logged). `main` did the same; there the two verdicts could never differ. Fixed by
+    the follow-up below.
 - Checked: the identity path reproduces `risk_metrics.py` to 1e-9 relative; chunk size
-  does not change results; research tests pass on the laptop. Not checked: the Verify step
-  above on real bars.
+  does not change results; research tests pass on the laptop. The Verify step on real bars
+  is recorded under "R1 verification" below.
+
+**R1 follow-up (2026-11-14, same branch, commit `0cf733584`; user: "yes this" to "check those four thresholds
+on the real run, the same rule you chose for `min_trades`, and report the gate's own
+reasons").**
+- This is stricter than `main`, not a return to it: `main` never applied consistency,
+  profit factor, win rate or turnover at this stage (see the corrected note above). The
+  user approved it when the notes still said R1 had dropped those checks; told
+  2026-11-14, reverting is a small change if the old leniency is wanted.
+- Rule: `min_sharpe`, `min_total_return` and `max_drawdown` are checked on every resampled
+  path. Every other threshold in the stage's `filter_config` is checked once, on the base
+  run, and any failure eliminates the strategy whatever its pass rate. It is done by
+  running the existing single-run filter on the base run with those three thresholds
+  switched off (`base_run_filter_config` in `monte_carlo_aggregator.py`), so a threshold
+  added to `FilterConfig` later is enforced here without a change to this stage.
+- Reasons: a failed strategy's `FilterScoreOutput.filter_result.failures` is now the
+  gate's own list. Base-run failures come first, prefixed `base run: `; then, when too
+  few paths cleared the bar, a count such as `1199/2000 paths clear the thresholds, need
+  60%` (a count because 59.95% prints as 60%); then each per-path threshold with the share
+  of paths that missed it. A passed strategy has an empty list and the base run's score; a
+  failed one has no score.
+- `MonteCarloAggregator.aggregate` takes `base_run_failures` in place of
+  `base_trade_count`; the stage is its only caller.
+- Real bars (2026-11-14, the 30-strategy run under "R1 verification", working tree
+  against `4dd0671ae`): all 30 verdicts and every Monte Carlo number are identical (3
+  pass, 27 fail). No passed strategy carries a reason and no failed one lacks one. The
+  near miss reads `1196/2000 paths clear the thresholds, need 60%`; the high-turnover
+  strategy reads `base run: daily_turnover 13.77x > max_daily_turnover 10.0x` first. No
+  verdict changed because every strategy that broke a base-run rule here also missed the
+  pass rate. A share above zero that rounds to 0% prints as `<1%` (seen in that run as
+  "on 0% of paths", fixed after it).
+- Why it matters more after the R2 change below: stage 1 now selects on the first 45
+  days, so "stage 1 already applied these on the same window" no longer holds in the hook.
+- Tests: `test_monte_carlo_aggregator.py` (base-run failure with a full pass rate, both
+  kinds of reason together, the count wording, only three fields differ in
+  `base_run_filter_config`) and `test_monte_carlo_stage.py` (turnover, consistency, profit
+  factor and win rate each fail a strategy whose paths nearly all pass; a near miss
+  carries the count; a base run just under `min_sharpe` gets no base-run reason).
+
+**R1 verification (2026-11-14, on the laptop, real bars).**
+- Setup: B's rolling raw-bars version `raw_bars_20261113T230046Z_ce936880` copied to the
+  laptop read-only (22 symbols, IEX five-minute bars, 2026-08-03 to 2026-11-13, 70
+  sessions, 90,310 rows). The hook's own six-stage experiment definition for tick
+  2026-11-13 (window 2026-08-15 to 2026-11-13; 60 sessions in the resampled curve).
+  `main` at `413d16472` and the branch at `4dd0671ae`, side by side in two git worktrees,
+  same harness (a pytest file kept outside the repo).
+- What the harness is not: production. SQLite test database with the 22 symbols
+  registered as the universe; a shortened experiment id (Windows path limit); no
+  corporate-action rows (the data has no bar-to-bar gap over 25%); 30 strategies
+  generated where the hook asks for 36 (not explained); run on the laptop, not on B.
+- Hook as is. Funnel identical on both: 30 generated, 4 pass stage 1, 2 pass
+  walk-forward, 2 of 2 pass Monte Carlo, 2 of 2 pass regime, 0 of 2 pass stress. No
+  survivors on either.
+
+  | Monte Carlo stage | `main` | branch |
+  |---|---|---|
+  | Simulations run | 10 (5 identical per strategy) | 2 |
+  | Sharpe spread (std), strategy 1 / 2 | 0.00 / 0.00 | 1.54 / 0.95 |
+  | Pass rate, strategy 1 / 2 | 1.00 / 1.00 | 0.81 / 0.67 |
+  | P(Sharpe > 0), strategy 1 / 2 | not computed | 0.85 / 0.78 |
+
+  Strategy 1: composite rule, base Sharpe 1.61. Strategy 2: mean reversion, base Sharpe
+  0.70. The first half of Verify holds (spread 0 before, not 0 after). The second half
+  does not show here: both strategies that reached the gate pass it.
+- Upstream gates opened so that all 30 strategies reach Monte Carlo (stage 1 and
+  walk-forward thresholds made permissive in the harness; the Monte Carlo thresholds are
+  the hook's: `min_sharpe` 0.3, `min_pass_rate` 0.6, 2,000 paths):
+  - Branch: 3 pass, 27 fail. Passes: base Sharpe 1.61 (rate 0.81), 0.96 (0.61), 0.70
+    (0.67). Sharpe spread: 2.0 to 2.3 for 23 strategies, 1.54 for one, 0.47 to 0.95 for
+    four with few trades (155 to 729), 0 for two that never traded. With a spread near 2,
+    "60% of paths at or above 0.3" needs a base Sharpe of about 0.85; the 0.70 strategy
+    passes because its spread is 0.95.
+  - Open, not explained: the four low spreads. Independent session returns give a spread
+    of about √(252/60) ≈ 2.05 whatever the trade count, so a spread under 1 means the
+    bar returns of those curves are not independent within a session (or something else
+    is off). It matters because a narrow spread makes the gate easier to pass at a low
+    Sharpe, which is how the 0.70 strategy got through. To look at: those four equity
+    curves. If the cause is in how the curve is cut into sessions or resampled, it is a
+    defect in R1 and is fixed on this branch before the PR; if the bar returns really are
+    dependent within a session, the gate is reading them correctly and the note stays as
+    a property of those strategies.
+  - After the gate in that run: 2 of the 3 pass regime, 0 of 2 pass stress. No survivors.
+  - The two cases behind the follow-up above: base Sharpe 0.76 fails with 1,196 of 2,000
+    paths (0.598, shown as 0.60) and its result carried no reason; base Sharpe 0.70
+    trading 13.77× equity a day (cap 10×) fails on pass rate 0.58, and would not have
+    failed on turnover.
+  - `main`, same setup: 5 pass, 25 fail, from 150 simulations (the branch: 30). All 30
+    strategies have a Sharpe spread of exactly 0 and a pass rate of exactly 0 or 1. Base
+    Sharpes are identical on the two versions, strategy by strategy. After the gate: 3 of
+    5 pass regime, 0 of 3 pass stress.
+  - The two strategies `main` passes and the branch fails are the two cases above: base
+    Sharpe 0.76 (1,196 of 2,000 paths) and base Sharpe 0.70 at 13.77× daily turnover.
+    `main` passed the second with `daily_turnover 13.77x > max_daily_turnover 10.0x`
+    listed on a result marked passed: its Monte Carlo stage never checked turnover. So
+    the second half of Verify holds: strategies that entered Monte Carlo and passed on
+    `main` fail on the branch.
+  - Wrong prediction, recorded: before this run finished the expectation was 4 passes on
+    `main`, on the belief that the old stage enforced turnover. It did not.
+- Not verified: anything on B itself; the same comparison on a window longer than 60
+  sessions.
 
 **R2 — Walk-forward test folds are not out of sample (blocks trust in scores).**
 - Selection leakage: in `ma_sweep_staged.yaml` the `intermediate` simulation stage ranks
@@ -262,6 +393,111 @@ uncommitted, nothing pushed).**
         gives 3 folds; more folds and longer folds compete for the same sessions.
   - [ ] Longer folds are blocked on more history: schedule with the SIP historical-bars
         check in the data section below.
+- R2 in the six-stage replay hook (2026-11-14, read-only investigation; the findings above
+  were written against the four-stage YAML):
+  - Selection leakage applies, and more broadly: `initial_quality_filter` and
+    `walk_forward_robustness` both run `start_date → tick_date`
+    (`research_hooks.py:553-554, 581-582`), and so do Monte Carlo, regime and stress. No
+    stage sees a date the others did not; there is no holdout.
+  - Geometry on a 90-day window: 45 train / 30 test / 15 step gives two folds whose test
+    windows overlap by half, and `min_folds_passed=1` passes on either.
+  - Does not apply: the daily-resample items (the hook never sets `resample_to_daily`).
+  - New: with one completed fold, `fold_sharpe_cv` is 0
+    (`walk_forward_validation.py:117-123`), so `fold_instability` is 0.0 and counts as a
+    present indicator at weight 0.20 (`overfitting_analysis.py:84, 213-214`), lowering the
+    overfitting probability. Train-failed folds are dropped, so one-fold evidence is common.
+  - New: under 75 days of data the hook builds stage 1 only (`research_hooks.py:576`); the
+    other five stages are absent, with no warning.
+  - Size of the leak, random daily returns of known true Sharpe in the hook's fold layout,
+    Sharpe thresholds only (an illustration, not a pipeline measurement): after stage 1,
+    walk-forward passes 68% of no-edge strategies and 80% of true-Sharpe-2 ones. With
+    stage 1 restricted to the first 45 days: 55% and 78%.
+  - Direction (user, 2026-11-14): the target is a selection / test split plus a final
+    holdout over a longer history ("combining A and C and maybe just an overall longer
+    timespan"); for now "no other changes to the walk forward aside from anything else you
+    recommend ... without a big update". Fold lengths, overlap, the pass rule and the
+    holdout wait for more history.
+  - Small set (user, 2026-11-14: "the 3 small changes"), implemented the same day:
+    1. Stage 1 selects on the first 45 days when walk-forward follows
+       (`selection_end` in `_build_replay_experiment_definition`), so the first
+       walk-forward test fold starts after the selection window. The second test fold
+       still overlaps the first, and Monte Carlo, regime and stress still run the whole
+       window, selection days included. Under 75 days stage 1 keeps the whole window, as
+       before.
+    2. A single completed fold yields no `fold_instability` (`overfitting_analysis.py`).
+       Not changed: `research_feature_vector_builder.py:325` and
+       `validation_artifact_repository.py:149-150` still read a one-fold CV of 0 as stable.
+    3. Docstrings in `walk_forward_stage.py` say what the stage is (a fixed config
+       evaluated on rolling sub-periods; no fitting) and where it sits.
+    Consequence handled with item 1: stage 1's run now covers 45 days, so the governance
+    `source_run_id` is taken from the strategy's full-window run (the reference run of
+    the later stages) and falls back to stage 1's run only when no later stage recorded
+    one.
+    Tests: `test_research_stages_smoke.py` (selection window, the stage-1-only case, the
+    source run) and `test_overfitting_analysis.py` (one fold against two).
+  - Real-bars check of the small set (2026-11-14; data, harness and caveats as under "R1
+    verification"; hook as is, working tree against `4dd0671ae`):
+
+    | Passed | Stage 1 on 90 days (`4dd0671ae`) | Stage 1 on the first 45 days |
+    |---|---|---|
+    | Stage 1, of 30 | 4 | 2 |
+    | Walk-forward | 2 | 1 |
+    | Monte Carlo | 2 of 2 | 1 of 1 |
+    | Regime | 2 of 2 | 1 of 1 |
+    | Stress | 0 of 2 | 0 of 1 |
+
+    The strategy that still reaches Monte Carlo is the composite rule with base Sharpe
+    1.61, with the same Monte Carlo numbers as before (its base run is the full window in
+    both). The one that no longer does is the mean-reversion strategy with base Sharpe
+    0.70; the harness records counts per stage only, so whether it dropped at stage 1 or
+    at walk-forward is not known. One window and 30 strategies: this shows the change
+    takes effect on real bars, not how much selection leakage it removes.
+  - More history, what it takes (not started): the rolling version's length is the
+    operator setting `bench_resim_window_days` (default 63,
+    `paper_trading_golden_path_orchestrator.py:778`) and is shared with the bench re-sims,
+    so research history wants its own dataset; `atp ingestion run-backfill` takes 31 days
+    per run by default (`--max-days`) and follows `ALPACA_DATA_FEED`. Unchecked: how far
+    back Alpaca serves IEX five-minute bars, and whether a year fits in B's 3 GB (a
+    70-session run used about 1 GB on the laptop). Undecided: which universe applies to
+    old dates. The hook resolves the universe active at the window's start and the
+    survivorship guard rejects symbols outside it, so a year-old window needs either
+    universe versions that reach back that far or a fixed symbol list declared in the
+    experiment (the CUSTOM mode), which reintroduces survivorship if it is today's list.
+  - Tasks for the six-stage hook (added 2026-11-14; the checkboxes above were written
+    against the four-stage YAML and none of them changes the hook. User: "this seems all
+    super doable everything in the sprint"). The code is small; what is short is the
+    history loaded today (70 sessions on B), not the history that exists (user,
+    2026-11-14: backfill can fetch many years, in any span or market condition). On 60
+    sessions a three-way split leaves a 15-session holdout whose Sharpe has a standard
+    error near 4 (√(252/15)), so these follow the longer-history item except where noted.
+    With years loaded the holdout can be a separate period, not the last 15 sessions.
+    - [ ] The hook's lookback is a hard-coded 90 days (`research_hooks.py:486`). Loading
+          more history changes nothing for the hook until this is a setting, or until
+          long-window research runs from an experiment file.
+    - [x] Stage 1 selects on days walk-forward does not test (small set, above).
+    - [ ] Window layout in one place in `_build_replay_experiment_definition`: selection
+          days, evaluation days, holdout days, derived from the sessions available, with a
+          minimum length for each and a logged reason when the window is too short.
+    - [ ] Walk-forward, Monte Carlo, regime and stress read evaluation days only (the
+          overfitting stage reads their evidence). Today Monte Carlo, regime and stress
+          run the whole window, selection days included, so the run Monte Carlo resamples
+          is flattered by the days the strategy was picked on.
+          The governance source run becomes the evaluation-window run.
+    - [ ] Holdout: the last N sessions, read by no gate, scored once for the final
+          survivors and stored with the candidate. Open decision for the user: report
+          only, or a final pass/fail.
+    - [ ] Fold geometry in the hook: test folds that do not overlap (`step_days >=
+          test_days`), no train window covering another fold's test days, and a pooled or
+          median pass rule in place of "any one fold" (`min_folds_passed=1`).
+    - [ ] The R2 and R6 validators cover stage configs built in Python, not only YAML;
+          otherwise the hook can drift from its own rules the way the four-stage file did.
+    - [ ] Repeated attempts. Research in the platform backtest runs on a monthly cadence
+          (`platform_backtest_service.py:1035-1051`; the cadence comes from the run's
+          scheduled-jobs config, not traced through every config) with a 90-day lookback,
+          so consecutive runs share about two thirds of their days and a strategy that
+          fails gets another attempt on mostly the same data. First confirm the cadence
+          the real runs use; then decide between counting attempts per strategy identity
+          and accepting it with the holdout as the guard.
 
 **Verify:** the config validator rejects the current `ma_sweep_staged.yaml`; a fixture with
 one train-failed fold shows it in the overfitting evidence; a daily-resampled fold's Sharpe
@@ -317,6 +553,14 @@ multipliers (`_gate_stage_support.py` jobs carry `cost_multiplier`), regime slic
 classifier's labels, overfitting consumes the walk-forward evidence R2 found to be
 survivorship-biased. Same method: trace the real input path, compare with what the tests
 feed, look for fail-open branches and `None`-coercion.
+- Observed 2026-11-14 (R1 verification, real bars, 60 sessions): the stress gate
+  eliminated every strategy that reached it in all five runs: 2 of 2 in the hook as is
+  on `main` and on the branch, 1 of 1 with the R2 small set, and with the upstream gates
+  opened 2 of 2 on the branch and 3 of 3 on `main`. Regime passed 2 of 2, 2 of 2, 1 of
+  1, 2 of 3 and 3 of 5.
+  So on this window stress decides the outcome. Whether its thresholds are right or the
+  gate is too strict for a 60-session window is not known; it has not been read. Audit it
+  first.
 - [ ] One audit note per stage under this heading (what it measures, where its inputs
       really come from, what the tests prove, fail-open paths); each confirmed problem
       becomes its own R-number with a fix list.
@@ -545,6 +789,15 @@ built after those sessions are back.
       (~14 sessions), `random_seed: 42`.
 - [ ] Run on B with `infra/ops/worker_job.sh research run-pipeline --config …` (one job at a
       time, lock respected) or on a laptop after `atp datasets pull --version <id>`.
+      (2026-11-14: the CLI command that exists is `atp research run-experiment --config`;
+      there is no `run-pipeline`.)
+- Entry points (2026-11-14): the six-stage layout exists only as Python in
+  `research_hooks.py`, which runs inside a platform backtest (the backtest creates its own
+  universe version first, `platform_backtest_service.py:618-673`). This YAML therefore has
+  to declare the six stages itself, or it will measure the older four-stage layout. B's
+  `universe_versions` table is empty at rest (the worker reset clears it before every
+  run), which is fine here: a YAML with a `symbols` list resolves in CUSTOM mode and needs
+  no universe version.
 - [ ] Record in section 5: candidates generated / accepted / rejected / duplicates
       (`GenerationSummary`), survivors per gate, cluster count after dedup, best and
       median walk-forward score, best and median **holdout** Sharpe / return / drawdown of
