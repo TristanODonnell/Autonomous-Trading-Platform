@@ -199,6 +199,116 @@ def test_run_backfill_dry_run_does_not_execute_cycle(
     assert payload["actor"] == "operator"
 
 
+def _backfill_args(*, start: str, end: str, dry_run: bool = False) -> argparse.Namespace:
+    return argparse.Namespace(
+        symbols="SPY,AAPL",
+        start=start,
+        end=end,
+        dry_run=dry_run,
+        max_days=31,
+        max_symbols=50,
+        actor="operator",
+    )
+
+
+def _capture_backfill_cycle(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    captured: dict[str, Any] = {}
+
+    def fake_cycle(**kwargs):
+        captured.update(kwargs)
+        return {"dataset_version_id": "dataset-version-id"}
+
+    monkeypatch.setattr(ingestion, "run_market_backfill_cycle", fake_cycle)
+    return captured
+
+
+def test_run_backfill_date_only_end_fetches_through_the_end_day(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    """The cycle records `end.date()` as inclusive coverage, so a date-only --end
+    must reach past that day's session, not stop at its midnight."""
+    captured = _capture_backfill_cycle(monkeypatch)
+
+    assert ingestion.handle_run_backfill(_backfill_args(start="2026-08-01", end="2026-08-31")) == 0
+    capsys.readouterr()
+
+    last_session_close = datetime(2026, 8, 31, 20, 0, tzinfo=UTC)
+    assert captured["start"] == datetime(2026, 8, 1, tzinfo=UTC)
+    assert captured["end"] > last_session_close
+    assert captured["end"] < datetime(2026, 9, 1, tzinfo=UTC)
+    assert captured["end"].date() == date(2026, 8, 31)
+
+
+def test_run_backfill_same_date_start_and_end_is_one_full_day(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    captured = _capture_backfill_cycle(monkeypatch)
+
+    assert ingestion.handle_run_backfill(_backfill_args(start="2026-10-08", end="2026-10-08")) == 0
+    capsys.readouterr()
+
+    assert captured["start"] <= datetime(2026, 10, 8, 13, 30, tzinfo=UTC)
+    assert captured["end"] >= datetime(2026, 10, 8, 20, 0, tzinfo=UTC)
+    assert captured["start"].date() == captured["end"].date() == date(2026, 10, 8)
+
+
+def test_run_backfill_end_with_a_time_is_used_as_given(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    captured = _capture_backfill_cycle(monkeypatch)
+
+    assert (
+        ingestion.handle_run_backfill(
+            _backfill_args(start="2026-08-31T13:30:00Z", end="2026-08-31T15:00:00Z")
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    assert captured["end"] == datetime(2026, 8, 31, 15, 0, tzinfo=UTC)
+
+
+def test_run_backfill_max_days_counts_inclusive_calendar_days(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    _capture_backfill_cycle(monkeypatch)
+
+    # A 31-day month fits the default --max-days 31 ...
+    assert ingestion.handle_run_backfill(_backfill_args(start="2026-08-01", end="2026-08-31")) == 0
+    capsys.readouterr()
+
+    # ... and a 32nd day does not.
+    with pytest.raises(ValueError, match="exceeds --max-days 31"):
+        ingestion.handle_run_backfill(_backfill_args(start="2026-07-31", end="2026-08-31"))
+
+
+def test_run_backfill_dry_run_reports_the_end_of_day_bound(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    monkeypatch.setattr(
+        ingestion,
+        "run_market_backfill_cycle",
+        lambda **_: pytest.fail("dry-run must not execute the live cycle"),
+    )
+
+    assert (
+        ingestion.handle_run_backfill(
+            _backfill_args(start="2026-09-29", end="2026-09-30", dry_run=True)
+        )
+        == 0
+    )
+    payload = _extract_json(capsys.readouterr().out)
+
+    assert payload["end"] == "2026-09-30T23:59:59.999999+00:00"
+    assert payload["calendar_days"] == 2
+    assert payload["trading_session_dates"] == ["2026-09-29", "2026-09-30"]
+
+
 def test_run_corporate_actions_dry_run_resolves_latest_raw_dataset(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
