@@ -14,8 +14,9 @@ verified during the soak and ticked on 2026-11-08 when the doc was tidied.
 - Finding 27 (fix and backfills done 2026-11-14, thin 10/12 to 10/14 repaired too): verify Monday 11/16's rolling version holds 8/31, 9/30, 10/08, 10/09 and full 10/12 to 10/14, and B's dry run reports 62 `daily_returns` (3.3(a) findings)
 - Finding 28 (fix deployed 2026-11-14, PR #178, rehearsed on A for Fri 11/13: 78 slots): verify Mon 11/16's scheduled chain stores the 15:55 ET bar (3.3(a) findings)
 - `atp runtime run-eod-step` (deployed and smoke-tested on A 2026-11-14, §6): rehearse `weekly_portfolio_review` (advisory) and the next rotation (§7.3)
-- Box B: install the Saturday timer (3.3(a); the full-window dry run passed 2026-11-12)
-- Flip `worker_results_enabled` → `portfolio_review_mode=advisory` → `auto` (3.3(a))
+- Finding 29 (found 2026-11-14, fix on `fix/finding-29-pull-index-fallback`): the Saturday re-sim's pull fails on a day with no publish index; merge before Sat 06:00 ET or re-run by hand after (3.3(a) findings)
+- Box B: Saturday timer installed 2026-11-14; verify the first timed run and that A accepts it (3.3(a))
+- Flips: `worker_results_enabled` on since 2026-11-14; next `portfolio_review_mode=advisory`, then `auto` (3.3(a))
 - Calendar tests still ahead: Thu 11/26 closed, Fri 11/27 and Thu 12/24 early close, Mon 11/30 and Thu 12/31 rotations (1.7 table)
 - Set the IEX `SLA_BREACH` baseline for the §7.1 Data row
 - Worker observability leftovers (2.3), log formatter (1.6), rolling-version pruning in `retention.sh` (Finding 14 follow-up): P2
@@ -694,7 +695,17 @@ is a finding.
         `sudo infra/ops/install_worker_timers.sh` to install). Payload default path moved under
         the mounted `artifacts/worker/bench_resims/` (the first dry run wrote into the job
         container's /tmp and was lost with it)
+  - [x] Timers installed on B 2026-11-14 about 04:11 UTC (`sudo infra/ops/install_worker_timers.sh`):
+        `ratp-worker-bench-resim.timer` enabled, next run Sat 2026-11-14 11:00 UTC (06:00
+        ET), did not fire on install. A and B's worker image were both on `3e87eff7e`.
   - [ ] Flip `worker_results_enabled`, then `portfolio_review_mode=advisory`, then `auto`
+    - [x] `worker_results_enabled=true` on A, 2026-11-14 about 04:11 UTC (`atp settings set`).
+          Review mode still `off`, so an accepted result is stored and nothing acts on it.
+          Needed before the first timed run: a rejected `run_id` is final (the gate
+          answers a repeat with the first decision) and the default id is per date.
+    - [ ] `portfolio_review_mode=advisory`: rehearse first with `run-eod-step
+          weekly_portfolio_review --as-of <Monday> --dry-run`
+    - [ ] `portfolio_review_mode=auto`
   - **3.3(a) findings (2026-10-27, from the first dry run on B)**
     - [x] **Finding 14: live raw-bars versions are one session each.** (Resolved: rolling version + Finding 15 fix + backfill + Finding 26; the 2026-11-07 rolling version holds 83,988 rows over Aug 1–Nov 6 and B pulled it.) Every EOD publish cuts
           a `raw_bars_<date>T133000Z_*` version whose coverage is that single day (25 versions on
@@ -829,11 +840,27 @@ is a finding.
           is the bug on disk. Disk on A 63% used. Friday's rolling build and B's 20:30 ET
           pull had already run, so these land in Monday 11/16's EOD rolling version and
           reach B on Monday night's pull.
-          **Verify (still open, Mon 11/16 after EOD and Tue after B's pull):** the new
-          rolling version lists the five new versions (these four and the 10/12 to
-          10/14 one below) under `backfill_versions`, has rows on 8/31, 9/30, 10/08 and
-          10/09 and full sessions on 10/12 to 10/14; a dry run on B reports 62
-          `daily_returns`.
+          **Rolling window rebuilt early, 2026-11-14 04:10 UTC (so Saturday's first timed
+          re-sim runs on repaired data):** `RollingRawBarsService.build(as_of=2026-11-13)`
+          called directly on A wrote `raw_bars_20261114T041002Z_c2faf2e7`: 99,118 rows,
+          22 symbols, 74 sessions 8/03 to 11/13, 8 backfill + 22 daily sources, the
+          repaired days at their backfill row counts (8/31 1,219; 9/30 1,348; 10/08
+          1,431; 10/09 1,324; 10/12 to 10/14 1,298 / 1,335 / 1,411), no day under 1,000
+          rows, Friday with its closing bar (1,249). `atp datasets publish --trading-date
+          2026-11-13` then shipped it and the five backfill versions (204 files) and
+          rewrote Friday's index.
+          **Verify (still open):** Saturday's re-sim on B reports about 63 `daily_returns`
+          per strategy; Mon 11/16's EOD rolling version lists the same eight backfill
+          versions.
+      - [ ] **P2: a same-day rolling rebuild through `run-eod-step` is invisible.**
+            `latest_rolling` orders by `date_coverage_end`, then `created_at`, and the
+            step stamps `created_at` with the chain clock. `run-eod-step rolling_raw_bars
+            --as-of 2026-11-13` would have stamped 23:00:00.000000 UTC, 980 microseconds
+            before Friday's own version (23:00:00.00098), so the re-sim would have kept
+            the old one. Caught by reading the service before running it; the rebuild
+            above passed the real time instead. Fix when convenient: break the tie on
+            `dataset_version_id` (it embeds the wall-clock time), or stamp rolling
+            versions with the wall clock.
           Found alongside:
       - [x] **The 10/09 daily version was registered `validated` with no Parquet files.**
             `raw_bars_20261009T133007Z_3aa3121f` has no directory on A at all. As the
@@ -910,6 +937,25 @@ is a finding.
         time, `manual_cli` and the actor, so the run is still traceable.
       - Other past live days (10/15 to 11/12) keep 77 slots unless the step is re-run
         for each date, which is not worth doing.
+    - [ ] **Finding 29: the Saturday bench re-sim could never pull its data (found
+          2026-11-14, before its first timed run).** The timer runs `worker bench-resim`
+          with no `--as-of`, so the date is today in UTC, a Saturday. Its pull step calls
+          `DatasetPullService.pull(as_of=Saturday)`, and `versions_as_of` raised `no
+          publish index for <date>` unless that exact day's index existed. Box A writes
+          an index only after a session, so the job would have failed every week before
+          simulating. Reproduced read-only on A: `atp datasets list-remote --as-of
+          2026-11-14` raises. Every dry run so far used a session date (10/26, 11/06,
+          11/12), which is why it never showed. Proposed class: P1 under 7.2 (a
+          scheduled job that cannot run at its scheduled time). **Fix (branch
+          `fix/finding-29-pull-index-fallback`):** `index_date_as_of` resolves a day
+          without an index to the newest earlier one; a date before any index still
+          raises; the pull summary reports `index_date`. Test in
+          `tests/application/services/test_dataset_pull_service.py`.
+      - [ ] Verify: Sat 11/14 06:00 ET timed run on B exits 0 with `pull.index_date`
+            2026-11-13, and A holds `bench_resims_2026-11-14` as `accepted`.
+      - [ ] P2: the submission's `dataset_as_of` is the request date, not the index
+            date, so A's `worker_result_max_age_days` check always sees age 0 on a
+            timed run. With `index_date` now reported, the re-sim could send that.
       - [ ] P2: each pull on B logs 20 `dataset_pull.no_registry_row` warnings (orphan
             versions still listed in the S3 index). No behaviour change.
     - [x] **Finding 15: the `rolling_raw_bars` step failed every EOD after deploy (10/27-10/30).**
@@ -1171,7 +1217,7 @@ cadence is section 3; this table is the gap between intended and actual.
 | Postgres backup → S3 | A host timer | nightly 23:30 ET | timer | yes | `infra/ops/backup.sh` | n/a | — |
 | Retention | A host timer | Sun 03:00 ET | timer | yes | `infra/ops/retention.sh` | n/a | add rolling-version pruning (Finding 14 follow-up) |
 | Dataset pull from S3 | B host timer | nightly 20:30 ET | timer | yes | `infra/ops/worker_job.sh datasets pull` | n/a | — |
-| Bench re-sim → `POST /worker/results` | B host timer | Sat 06:00 ET | **on demand** (timer defined, never installed) | A: `worker_results_enabled=false` | `worker_job.sh worker bench-resim --as-of --no-publish` | yes, 11/12 on the full window (58 `daily_returns`; Finding 27 holes) | install timer, Finding 27 backfills, flip `worker_results_enabled` |
+| Bench re-sim → `POST /worker/results` | B host timer | Sat 06:00 ET | **timer installed 11/14**, first timed run Sat 11/14 | A: `worker_results_enabled=true` since 11/14 | `worker_job.sh worker bench-resim --as-of --no-publish` | yes, 11/12 on the full window (58 `daily_returns`; Finding 27 holes), session dates only | Finding 29 fix, then verify the first timed run is accepted |
 | Worker result apply (A consumes re-sims in the review) | A EOD step | Monday, with the review | gated step | depends on the two flags above | none | no | first real pass Mon 11/17 |
 | Monthly research / strategy generation → bench candidates | B | monthly + triggers | **not built** (pipeline on demand via `atp research … run-pipeline`; no worker job, no hand-off, no timer) | — | `atp research` full pipeline with a YAML | no | research sprint Steps 3, 5 |
 | Recorded-dataset replay (scheduled fixtures) | B | monthly (Phase 4) | **not built** | — | `worker_job.sh worker run --fixture` (Alpaca-sourced) | no | 3.4 |
@@ -1193,7 +1239,7 @@ the ones after it. Holidays (11/26, 12/24, 12/25, 1/1) thin out both markets and
 
 | Week of | Deployment track | Research sprint | Calendar events |
 |---|---|---|---|
-| Mon 11/10 | Merge open branches; `run-eod-step` PR; rehearse `weekly_portfolio_review` (advisory) before Mon's chain; B dry run + install Saturday timer; flip `worker_results_enabled` | R1 Monte Carlo bootstrap; D1 free-tier probe | Sat 11/15 first timed re-sim should post to A |
+| Mon 11/10 | Merge open branches; `run-eod-step` PR; rehearse `weekly_portfolio_review` (advisory) before Mon's chain; B dry run + install Saturday timer; flip `worker_results_enabled` | R1 Monte Carlo bootstrap; D1 free-tier probe | Sat 11/14 first timed re-sim should post to A |
 | Mon 11/17 | Mon review runs with a `worker_run_id` for the first time; first full scorecard fill (weekend); set IEX `SLA_BREACH` baseline | R2 walk-forward range guard + fold evidence; R6 config validator | |
 | Mon 11/24 | `portfolio_review_mode=advisory` (decisions visible, nothing applied); rehearse `monthly_universe_rotation --dry-run` | R3 checkpoint wiring; R4 gate audits | Thu 11/26 closed, Fri 11/27 early close (calendar tests); Mon 11/30 rotation fires |
 | Mon 12/1 | `portfolio_review_mode=auto`: Phase 3.3(a) complete; all scorecard rows except Research live | Step 1 baseline on IEX (`feed=iex`); R5 score, R7 tests | |

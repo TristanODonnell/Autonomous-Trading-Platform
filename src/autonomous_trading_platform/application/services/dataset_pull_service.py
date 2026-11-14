@@ -13,7 +13,8 @@ version is left as it is. Nothing is ever deleted locally or remotely.
 
 Pinning: ``as_of`` selects the day index ``<prefix>/published/<date>.json`` that Box A wrote
 at the end of that session; the set of versions it lists (new and previously published) is
-exactly what A held at that point.
+exactly what A held at that point. A day without an index (weekend, holiday) resolves to
+the newest earlier one, and the result reports which (``index_date``).
 """
 
 from __future__ import annotations
@@ -57,10 +58,13 @@ class PullResult:
     pulled: list[PulledVersion] = field(default_factory=list)
     unchanged: list[str] = field(default_factory=list)
     as_of: date | None = None
+    # The publish index actually read: as_of itself, or the newest earlier one.
+    index_date: date | None = None
 
     def summary(self) -> dict[str, Any]:
         return {
             "as_of": self.as_of.isoformat() if self.as_of else None,
+            "index_date": self.index_date.isoformat() if self.index_date else None,
             "pulled": [p.dataset_version_id for p in self.pulled],
             "unchanged_count": len(self.unchanged),
             "files_downloaded": sum(p.files_downloaded for p in self.pulled),
@@ -97,11 +101,38 @@ class DatasetPullService:
             if key.endswith(".json")
         )
 
-    def versions_as_of(self, trading_date: date) -> list[str]:
-        """The versions Box A held after the given session, from that day's index."""
-        key = f"{self._prefix}/published/{trading_date.isoformat()}.json"
-        if not self._store.exists(key):
-            raise DatasetPullError(f"no publish index for {trading_date.isoformat()} ({key})")
+    def index_date_as_of(self, as_of: date) -> date:
+        """The date of the publish index in force on ``as_of``: that day's own, or, when Box A
+        published nothing that day (weekend, holiday, a chain that did not run), the newest
+        earlier one. Finding 29: the Saturday bench re-sim asks for a day with no session."""
+        prefix = f"{self._prefix}/published/"
+        if self._store.exists(f"{prefix}{as_of.isoformat()}.json"):
+            return as_of
+        earlier: list[date] = []
+        for key in self._store.list_keys(prefix):
+            if not key.endswith(".json"):
+                continue
+            try:
+                day = date.fromisoformat(key[len(prefix) : -len(".json")])
+            except ValueError:
+                continue
+            if day < as_of:
+                earlier.append(day)
+        if not earlier:
+            raise DatasetPullError(f"no publish index on or before {as_of.isoformat()} ({prefix})")
+        index_date = max(earlier)
+        logger.info(
+            "dataset_pull.index_fallback",
+            extra={"as_of": as_of.isoformat(), "index_date": index_date.isoformat()},
+        )
+        return index_date
+
+    def versions_as_of(self, as_of: date) -> list[str]:
+        """The versions Box A held as of the given date (see ``index_date_as_of``)."""
+        return self._versions_in_index(self.index_date_as_of(as_of))
+
+    def _versions_in_index(self, index_date: date) -> list[str]:
+        key = f"{self._prefix}/published/{index_date.isoformat()}.json"
         index = json.loads(self._store.get_bytes(key))
         return sorted({*index.get("published", []), *index.get("already_published", [])})
 
@@ -115,14 +146,16 @@ class DatasetPullService:
         """Download and register the selected versions (default: every published one)."""
         if versions is not None and as_of is not None:
             raise ValueError("pass either versions or as_of, not both")
+        index_date: date | None = None
         if as_of is not None:
-            selected = self.versions_as_of(as_of)
+            index_date = self.index_date_as_of(as_of)
+            selected = self._versions_in_index(index_date)
         elif versions is not None:
             selected = sorted(set(versions))
         else:
             selected = self.remote_versions()
 
-        result = PullResult(as_of=as_of)
+        result = PullResult(as_of=as_of, index_date=index_date)
         for version_id in selected:
             pulled = self._pull_version(version_id, register=register)
             if pulled.files_downloaded == 0 and not pulled.registered:
