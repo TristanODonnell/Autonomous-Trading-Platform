@@ -125,6 +125,41 @@ def test_as_of_pins_to_the_day_index(tmp_path: Path) -> None:
         service.versions_as_of(date(2026, 1, 1))
 
 
+def test_as_of_a_day_without_an_index_uses_the_newest_earlier_one(tmp_path: Path) -> None:
+    """Finding 29: the Saturday bench re-sim pulls as of a day Box A never publishes on."""
+    store = _published_store(tmp_path)  # Monday 2026-10-12
+    friday, saturday = date(2026, 10, 16), date(2026, 10, 17)
+    extra = tmp_path / "box_a" / "bars" / "raw" / "dataset_version=raw_bars_v3" / "symbol=AAPL"
+    extra.mkdir(parents=True)
+    (extra / "data.parquet").write_bytes(b"v3")
+    DatasetPublishService(
+        store, data_root=tmp_path / "box_a", prefix="datasets"
+    ).publish_new_versions(trading_date=friday, now_utc=NOW)
+    # Something that is not an index must not be read as one.
+    store.put_bytes(b"{}", "datasets/published/README.json")
+    service = DatasetPullService(store, data_root=tmp_path / "worker", prefix="datasets")
+
+    assert service.index_date_as_of(friday) == friday
+    assert service.index_date_as_of(saturday) == friday
+    # Wednesday sits between the two publishes: Monday's set, not Friday's.
+    assert service.index_date_as_of(date(2026, 10, 14)) == DAY
+    assert service.versions_as_of(date(2026, 10, 14)) == [
+        "raw_bars_v1",
+        "raw_bars_v2",
+        "returns_v1",
+    ]
+
+    pulled = service.pull(as_of=saturday)
+
+    assert "raw_bars_v3" in [p.dataset_version_id for p in pulled.pulled]
+    assert pulled.as_of == saturday
+    assert pulled.index_date == friday
+    assert pulled.summary()["index_date"] == "2026-10-16"
+    assert service.pull().summary()["index_date"] is None
+    with pytest.raises(DatasetPullError, match="no publish index on or before 2026-10-11"):
+        service.pull(as_of=date(2026, 10, 11))
+
+
 def test_corrupt_object_is_rejected_and_nothing_is_left_behind(tmp_path: Path) -> None:
     store = _published_store(tmp_path)
     key = "datasets/features/returns/dataset_version=returns_v1/data.parquet"
