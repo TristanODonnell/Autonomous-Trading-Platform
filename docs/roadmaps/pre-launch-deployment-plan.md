@@ -12,7 +12,7 @@ verified during the soak and ticked on 2026-11-08 when the doc was tidied.
 
 **Deployment track, in order**
 - Finding 27 (fix and backfills done 2026-11-14, thin 10/12 to 10/14 repaired too): verify Monday 11/16's rolling version holds 8/31, 9/30, 10/08, 10/09 and full 10/12 to 10/14, and B's dry run reports 62 `daily_returns` (3.3(a) findings)
-- Finding 28 (found 2026-11-14, fix built on `fix/finding-28-final-ingestion-window`): `final_ingestion` fetched the wrong window, so live days lack the 15:55 ET bar; merge, deploy, then verify Mon 11/16's daily version has 78 slots (3.3(a) findings)
+- Finding 28 (fix deployed 2026-11-14, PR #178, rehearsed on A for Fri 11/13: 78 slots): verify Mon 11/16's scheduled chain stores the 15:55 ET bar (3.3(a) findings)
 - `atp runtime run-eod-step` (deployed and smoke-tested on A 2026-11-14, §6): rehearse `weekly_portfolio_review` (advisory) and the next rotation (§7.3)
 - Box B: install the Saturday timer (3.3(a); the full-window dry run passed 2026-11-12)
 - Flip `worker_results_enabled` → `portfolio_review_mode=advisory` → `auto` (3.3(a))
@@ -873,8 +873,8 @@ is a finding.
           Effect: trading is untouched (that bar completes at the close), but a live
           day's close in the bench window and in research is the 15:50 bar while a
           backfilled day's is 15:55. Proposed class: P1 under 7.2 (a scheduled step
-          running with the wrong inputs every session). **Fix built 2026-11-14 on
-          branch `fix/finding-28-final-ingestion-window`, not yet deployed:**
+          running with the wrong inputs every session). **Fix merged as PR #178,
+          deployed to A 2026-11-14 03:31 UTC (`612c2b62d`):**
           `_step_final_ingestion` passes `cycle_start_override` / `cycle_end_override`
           for the session's last window, taken from the calendar's close for the date,
           so early-close days (11/27, 12/24) get 12:55-13:00. It also passes
@@ -886,13 +886,30 @@ is a finding.
           fake feed: the 15:55 ET bar is stored; one symbol in five trading still
           completes; an early close moves the window. All three fail on the old step
           (it wrote no bars at all).
-      - [ ] Verify on A: Mon 11/16's daily version has 78 slots ending 15:55 ET, and
-            the `final_ingestion` step output shows `cycle_start` / `cycle_end` of
-            20:55 / 21:00 UTC. Optional rehearsal before that, a real write (22 rows
-            into Friday's version): `atp runtime run-eod-step final_ingestion --as-of
-            2026-11-13 --force`. First early close to watch: Fri 11/27.
-      - Past live days (10/15 to 11/13) keep 77 slots unless the step is re-run for
-        each date, which is not worth doing.
+      - [x] Rehearsed on A 2026-11-14 03:36 UTC, a real run for Friday (first
+            non-dry `run-eod-step` use): `atp runtime run-eod-step final_ingestion
+            --as-of 2026-11-13 --force`, exit 0, window 20:55-21:00 UTC. Friday's
+            version `raw_bars_20261113T143000Z_9c839040` went from 1,227 rows / 77
+            slots (last 15:50 ET) to 1,249 rows / 78 slots (last 15:55 ET, all 22
+            symbols), no duplicates, still one version for the date, still
+            `validated`. Rows written: one `paper_trading_eod_step` job
+            (`manual_cli`), one `market_ingestion_cycle` job, `RUN_STARTED` /
+            `RUN_COMPLETED` audit rows; no `BAR_LATE`, no new missing-bar incidents.
+            Friday's features and the rolling window were built before the bar
+            existed; Monday's rolling rebuild picks it up.
+      - [ ] Verify the scheduled run: Mon 11/16's daily version has 78 slots ending
+            15:55 ET, and the chain's `final_ingestion` output shows `cycle_start` /
+            `cycle_end` of 20:55 / 21:00 UTC. First early close to watch: Fri 11/27.
+      - **Do not run `final_ingestion` for 10/09 or 10/12 to 10/14.** The cycle finds
+        a day's version by date and lifecycle, whatever its status, and a successful
+        cycle sets it back to `validated`: that would undo the Finding 27 repairs
+        (those daily rows are `failed` on purpose, and backfills cover the days).
+      - P2: the ingestion job row a manual run writes says `trigger_type=scheduler`
+        and is backdated to the chain clock (the step does not pass a trigger type
+        or actor to the cycle). The `paper_trading_eod_step` row carries the real
+        time, `manual_cli` and the actor, so the run is still traceable.
+      - Other past live days (10/15 to 11/12) keep 77 slots unless the step is re-run
+        for each date, which is not worth doing.
       - [ ] P2: each pull on B logs 20 `dataset_pull.no_registry_row` warnings (orphan
             versions still listed in the S3 index). No behaviour change.
     - [x] **Finding 15: the `rolling_raw_bars` step failed every EOD after deploy (10/27-10/30).**
@@ -1055,8 +1072,9 @@ two runs of the same fixture are not guaranteed to match; every run re-downloads
     `runtime_job_run_steps` 399; `audit_logs` 4,018,955; `reconciliation_snapshots`
     315), so the savepoint rollback holds on Postgres, which the unit test (SQLite)
     could not show. Refusals seen as designed: `rolling_raw_bars --dry-run`, a real
-    `risk` re-run for a completed date, `monthly_universe_rotation` off its day. No
-    real (non-dry) step has been run on A yet.
+    `risk` re-run for a completed date, `monthly_universe_rotation` off its day.
+    First real (non-dry) run: `final_ingestion --as-of 2026-11-13 --force`, the
+    Finding 28 rehearsal (3.3(a) findings).
 - [ ] Exact API contract for worker → A publishing (design doc once 5c lands)
 - [ ] Settlement/T+1: does the live ledger need a daily pass, or is it simulation only?
 - [x] Confirm risk/sleeve snapshots run inside the trading cycle or need their own schedule: they run inside every trading cycle, with order reconciliation and portfolio drawdown governance; no separate schedule (see `pre-launch-1.3-scheduling.md` §1)
