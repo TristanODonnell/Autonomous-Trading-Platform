@@ -11,7 +11,8 @@ Everything unchecked below this section is a real task. Checked boxes with a not
 verified during the soak and ticked on 2026-11-08 when the doc was tidied.
 
 **Deployment track, in order**
-- Finding 27 (fix and four one-day backfills done 2026-11-14): verify Monday 11/16's rolling version holds 8/31, 9/30, 10/08, 10/09 and B's dry run reports 62 `daily_returns`; decide the thin 10/12 to 10/14 sessions (3.3(a) findings)
+- Finding 27 (fix and backfills done 2026-11-14, thin 10/12 to 10/14 repaired too): verify Monday 11/16's rolling version holds 8/31, 9/30, 10/08, 10/09 and full 10/12 to 10/14, and B's dry run reports 62 `daily_returns` (3.3(a) findings)
+- Finding 28 (found 2026-11-14): `final_ingestion` fetches the wrong window, so live days lack the 15:55 ET bar; small fix PR (3.3(a) findings)
 - `atp runtime run-eod-step` command, then rehearse `weekly_portfolio_review` (advisory) and the next rotation (§6, §7.3)
 - Box B: install the Saturday timer (3.3(a); the full-window dry run passed 2026-11-12)
 - Flip `worker_results_enabled` → `portfolio_review_mode=advisory` → `auto` (3.3(a))
@@ -829,8 +830,10 @@ is a finding.
           pull had already run, so these land in Monday 11/16's EOD rolling version and
           reach B on Monday night's pull.
           **Verify (still open, Mon 11/16 after EOD and Tue after B's pull):** the new
-          rolling version lists the four under `backfill_versions` and has rows on
-          8/31, 9/30, 10/08 and 10/09; a dry run on B reports 62 `daily_returns`.
+          rolling version lists the five new versions (these four and the 10/12 to
+          10/14 one below) under `backfill_versions`, has rows on 8/31, 9/30, 10/08 and
+          10/09 and full sessions on 10/12 to 10/14; a dry run on B reports 62
+          `daily_returns`.
           Found alongside:
       - [x] **The 10/09 daily version was registered `validated` with no Parquet files.**
             `raw_bars_20261009T133007Z_3aa3121f` has no directory on A at all. As the
@@ -840,13 +843,42 @@ is a finding.
             10/08 daily row `raw_bars_20261008T233920Z_0e88c7a9` is the precedent).
             `daily_versions` counts only `validated` rows, so the oldest live session is
             now 10/12 and the 10/09 one-day backfill above is inside the cap.
-      - [ ] **10/12 to 10/14 are thin.** Read from disk, the 10/12 daily version holds
-            221 rows against 1,227 for 11/13 (10/13 and 10/14 not counted yet). Cause
-            not yet looked at. These are live daily versions, and live sessions win
-            over a backfill on the same day, so a backfill does not repair them as the
-            merge stands. The 10/09 route would work here too (mark the three rows
-            `failed`, backfill 10/12 to 10/14), but these versions do hold real bars
-            the system traded on, so that is an operator decision, not a tidy-up.
+      - [x] **10/12 to 10/14 were thin: the first soak attempt's dropped bars (1.5 soak
+            log), not a calendar or backfill problem.** On disk the live versions held
+            221 / 167 / 192 rows in 12 / 8 / 10 five-minute slots, ending 10:25 / 10:05 /
+            10:15 ET, although 79 ticks ran each day (NYSE was open on Columbus Day
+            10/12). Tick drift of ~3 s per tick against the 30 s lateness window is
+            about ten ticks, after which every bar was flagged LATE and discarded;
+            fixed by PRs #150 and #151, deployed 10/15 03:25-04:10 UTC, so 10/15 is the
+            first normal day. In the bench window a thin day is worse than a missing
+            one: its "close" is the last stored bar, mid-morning. No signals, order
+            intents or fills happened on those days (1.5), so nothing depends on the
+            thin versions. **Done 2026-11-14 02:20 UTC:** the three daily rows
+            (`raw_bars_20261012T133000Z_7fb57f71`, `..1013T133000Z_52f483c4`,
+            `..1014T133000Z_f6c1a639`) set to `failed`, files left on disk, and one
+            backfill `raw_bars_20261114T022013Z_807b63bb` (`--start 2026-10-12 --end
+            2026-10-14`) holds 1,298 / 1,335 / 1,411 rows, 22 symbols, 78 slots a day,
+            09:30-15:55 ET. Oldest validated live session is now 10/15.
+      - [ ] The 10/15 live version has no bars for the 13:00 ET hour (61 slots, not 77).
+            Not looked at. It is a validated live day with real orders, so it stays.
+    - [ ] **Finding 28: live sessions never store the last five-minute bar (found
+          2026-11-14).** Every live daily version ends at the 15:50 ET bar, 77 slots
+          (checked 10/16 to 10/21 and 11/10 to 11/13); the backfilled days above have
+          the 15:55 bar, 78 slots. `run_market_ingestion_cycle` fetches the window
+          ending at `floor_to_five_minutes(now)`: the session's last tick starts before
+          16:00, so the newest window it can ask for is 15:50-15:55, no tick runs
+          after the close, and the EOD `final_ingestion` step calls the same cycle at
+          18:00 ET, so it asks for 17:55-18:00 and gets nothing. The step has never done what its docstring
+          says ("pick up the closing bars the last intraday tick may have missed").
+          Effect: trading is untouched (that bar completes at the close), but a live
+          day's close in the bench window and in research is the 15:50 bar while a
+          backfilled day's is 15:55. Proposed class: P1 under 7.2 (a scheduled step
+          running with the wrong inputs every session). **Fix, not started:**
+          `final_ingestion` passes `cycle_start_override` / `cycle_end_override` for
+          the session's last window, taken from the calendar's close for the date so
+          early-close days (11/27, 12/24) get 12:55-13:00; test with a fake calendar;
+          rehearse with `run-eod-step final_ingestion --as-of`. Past live days keep
+          77 slots unless backfilled over, which is not worth doing.
       - [ ] P2: each pull on B logs 20 `dataset_pull.no_registry_row` warnings (orphan
             versions still listed in the S3 index). No behaviour change.
     - [x] **Finding 15: the `rolling_raw_bars` step failed every EOD after deploy (10/27-10/30).**
