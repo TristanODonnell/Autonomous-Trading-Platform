@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -646,9 +646,27 @@ class PaperTradingGoldenPathOrchestrator:
         return {"features_dataset_version_id": features_version_id}
 
     def _step_final_ingestion(self, ctx: ChainContext) -> dict[str, Any]:
-        """Pick up the closing bars the last intraday tick may have missed."""
-        run_market_ingestion_cycle(now_utc=ctx.now_utc)
-        return {"now_utc": ctx.now_utc.isoformat()}
+        """Store the session's last five-minute bar.
+
+        No intraday tick can: a tick fetches the window that ended before it started,
+        and the last tick starts before the close. The window comes from the calendar,
+        so an early close gets its own last bar (12:55-13:00 ET).
+        """
+        close_utc = self._calendar.market_close(ctx.trading_date)
+        window_start = close_utc - timedelta(minutes=5)
+        run_market_ingestion_cycle(
+            now_utc=ctx.now_utc,
+            cycle_start_override=window_start,
+            cycle_end_override=close_utc,
+            # Fetched on purpose after the close: not a slow tick, so no LATE flag, and
+            # thin names missing this one bar must not fail the step.
+            enforce_lateness=False,
+        )
+        return {
+            "now_utc": ctx.now_utc.isoformat(),
+            "cycle_start": window_start.isoformat(),
+            "cycle_end": close_utc.isoformat(),
+        }
 
     def _step_broker_reconciliation(self, ctx: ChainContext) -> dict[str, Any]:
         """Read-only comparison of platform state with the broker; the report is persisted."""
