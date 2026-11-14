@@ -8,6 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from autonomous_trading_platform.cli.commands.runtime_eod_step import register_run_eod_step
 from autonomous_trading_platform.cli.commands.runtime_soak_loop import register_soak_loop_commands
 from autonomous_trading_platform.cli.formatters import print_error, print_header, print_json
 from autonomous_trading_platform.cli.helpers import parse_datetime
@@ -371,6 +372,8 @@ def register(subparsers) -> None:
     )
     soak_loop_subparsers = soak_loop_parser.add_subparsers(dest="soak_command", required=True)
     register_soak_loop_commands(soak_loop_subparsers)
+
+    register_run_eod_step(runtime_subparsers)
 
 
 # ---------------------------------------------------------------------------

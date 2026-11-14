@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from autonomous_trading_platform.application.services.dataset_publish_service import (
@@ -39,7 +40,9 @@ from autonomous_trading_platform.application.services.worker_result_apply_servic
 )
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
+from autonomous_trading_platform.contracts.governance.portfolio_review import PortfolioReviewMode
 from autonomous_trading_platform.contracts.runtime.platform_replay import PlatformReplayContext
+from autonomous_trading_platform.contracts.runtime.runtime_job_run import RuntimeJobRun
 from autonomous_trading_platform.execution.clients.alpaca_broker_client import AlpacaBrokerClient
 from autonomous_trading_platform.execution.services.external_broker_reconciliation_service import (
     BrokerClient,
@@ -84,6 +87,7 @@ from autonomous_trading_platform.scheduler.services.market_calendar_cross_check 
 from autonomous_trading_platform.storage.parquet.object_store import ObjectStore, S3ObjectStore
 from autonomous_trading_platform.storage.parquet.versioning import generate_dataset_version
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from autonomous_trading_platform.storage.sor.models.runtime_job_runs import RuntimeJobRuns
 from autonomous_trading_platform.storage.sor.repositories.core.operator_settings_repository import (
     OperatorSettingsRepository,
 )
@@ -98,12 +102,49 @@ from autonomous_trading_platform.storage.sor.services.unit_of_work import SorUni
 _ET = ZoneInfo("America/New_York")
 
 EOD_CHAIN_JOB_NAME = "paper_trading_eod_maintenance"
+# Job name for one step run on demand. Deliberately not the chain's name: the chain's
+# resume logic reads rows by that name and must never count a manual run.
+EOD_STEP_JOB_NAME = "paper_trading_eod_step"
+
+_RESOLVE_STEP = "resolve_raw_bars_dataset"
+_WEEKLY_REVIEW_STEP = "weekly_portfolio_review"
+# Steps that change what trades. Off their scheduled day they are never run for real.
+_SCHEDULE_BOUND_STEPS = frozenset({"monthly_universe_rotation"})
+# Where to rehearse a step that run-eod-step cannot dry-run.
+_REHEARSE_WITH = {
+    "final_ingestion": "atp ingestion run-bars --dry-run",
+    "corporate_actions": "atp ingestion run-corporate-actions --dry-run",
+    "monthly_universe_rotation": "atp universe monthly-rotation --dry-run",
+}
 
 
 @dataclass(frozen=True)
 class PaperTradingGoldenPathResult:
     correlation_id: str
     chain: ChainResult | None = None
+
+
+class EodStepRefused(ValueError):
+    """A single-step run was not allowed as asked. Nothing was run."""
+
+
+def _rehearsal_hint(step_name: str) -> str:
+    command = _REHEARSE_WITH.get(step_name)
+    return f"; rehearse it with `{command}`" if command else ""
+
+
+@dataclass(frozen=True)
+class EodStepResult:
+    step: str
+    trading_date: date
+    now_utc: datetime
+    dry_run: bool
+    # Whether the scheduled chain runs this step on trading_date (its calendar gate).
+    scheduled_for_date: bool
+    status: str
+    job_run_id: str
+    output: dict[str, Any] | None = None
+    error: str | None = None
 
 
 class PaperTradingGoldenPathOrchestrator:
@@ -309,31 +350,47 @@ class PaperTradingGoldenPathOrchestrator:
         is independent so one failing service leaves the others running, exactly as the
         replay hooks swallow per-service errors into warnings.
         """
+        # rollback_safe marks the steps whose every effect goes through self.session
+        # (broker and calendar calls in them are reads). The others fetch and store
+        # through a session of their own, write Parquet, or upload; the rotation's
+        # candidate scoring commits on its own session (run_candidate_generation).
         return [
-            ChainStep("calendar_cross_check", self._step_calendar_cross_check, max_attempts=2),
+            ChainStep(
+                "calendar_cross_check",
+                self._step_calendar_cross_check,
+                max_attempts=2,
+                rollback_safe=True,
+            ),
             ChainStep("final_ingestion", self._step_final_ingestion),
             ChainStep(
                 "resolve_raw_bars_dataset",
                 self._step_resolve_raw_bars_dataset,
                 blocking=True,
                 max_attempts=1,
+                rollback_safe=True,
             ),
-            ChainStep("broker_reconciliation", self._step_broker_reconciliation),
+            ChainStep(
+                "broker_reconciliation", self._step_broker_reconciliation, rollback_safe=True
+            ),
             ChainStep(
                 "sleeve_resync",
                 self._step_sleeve_resync,
                 applies=lambda ctx: self._portfolio_mode_enabled(),
+                rollback_safe=True,
             ),
             ChainStep("corporate_actions", self._step_corporate_actions, blocking=True),
             ChainStep("features", self._step_features, blocking=True),
-            ChainStep("risk", self._step_risk),
-            ChainStep("governance", self._step_governance),
-            ChainStep("correlation_monitoring", self._step_correlation_monitoring),
-            ChainStep("allocation_rebalance", self._step_allocation_rebalance),
+            ChainStep("risk", self._step_risk, rollback_safe=True),
+            ChainStep("governance", self._step_governance, rollback_safe=True),
+            ChainStep(
+                "correlation_monitoring", self._step_correlation_monitoring, rollback_safe=True
+            ),
+            ChainStep("allocation_rebalance", self._step_allocation_rebalance, rollback_safe=True),
             ChainStep(
                 "weekly_portfolio_review",
                 self._step_weekly_portfolio_review,
                 applies=lambda ctx: self._calendar.is_first_trading_day_of_week(ctx.trading_date),
+                rollback_safe=True,
             ),
             ChainStep(
                 "monthly_universe_rotation",
@@ -341,13 +398,167 @@ class PaperTradingGoldenPathOrchestrator:
                 applies=lambda ctx: self._calendar.is_last_trading_day_of_month(ctx.trading_date),
             ),
             ChainStep("rolling_raw_bars", self._step_rolling_raw_bars),
-            ChainStep("operations_health", self._step_operations_health),
+            ChainStep("operations_health", self._step_operations_health, rollback_safe=True),
             ChainStep(
                 "publish_datasets",
                 self._step_publish_datasets,
                 applies=lambda ctx: Settings().dataset_s3_bucket is not None,
             ),
         ]
+
+    def run_eod_step(
+        self,
+        step_name: str,
+        *,
+        trading_date: date,
+        dry_run: bool,
+        force: bool = False,
+        actor: str | None = None,
+    ) -> EodStepResult:
+        """Run one step of the end-of-day chain for ``trading_date``, outside the chain.
+
+        It is the chain's own step function with the clock set to when the chain runs
+        for that date. The step's calendar gate is reported, not enforced: rehearsing a
+        weekly or monthly step off its day is the point. A step that comes after
+        ``resolve_raw_bars_dataset`` gets that step's values first, as it does in the
+        chain. One attempt, no retries.
+
+        With ``dry_run`` the caller must pass a session whose work is rolled back
+        (``db.rollback_only_session``); only steps marked ``rollback_safe`` are accepted.
+        A real run is recorded as an ``EOD_STEP_JOB_NAME`` job run.
+        """
+        steps = self.eod_chain_steps()
+        names = [step.name for step in steps]
+        if step_name not in names:
+            raise EodStepRefused(f"unknown step {step_name!r}; the steps are: {', '.join(names)}")
+        step = steps[names.index(step_name)]
+        if dry_run and not step.rollback_safe:
+            raise EodStepRefused(
+                f"{step_name} has effects a rollback cannot undo (its own database "
+                "session, files or uploads), so it has no dry run here" + _rehearsal_hint(step_name)
+            )
+
+        now_utc = self._calendar.eod_window_open(trading_date)
+        job_run_id = str(uuid4())
+        ctx = ChainContext(
+            chain_name=EOD_STEP_JOB_NAME,
+            trading_date=trading_date,
+            now_utc=now_utc,
+            session=self.session,
+            parent_job_run_id=job_run_id,
+        )
+        scheduled = self._calendar.is_trading_day(trading_date) and (
+            step.applies is None or step.applies(ctx)
+        )
+        self._check_eod_step_allowed(
+            step_name, trading_date=trading_date, scheduled=scheduled, dry_run=dry_run, force=force
+        )
+
+        runs = RuntimeJobRunRepository(self.session)
+        started_at = datetime.now(UTC)
+
+        def job_row(
+            status: str, *, output: dict[str, Any] | None = None, error: str | None = None
+        ) -> RuntimeJobRun:
+            completed_at = None if status == "running" else datetime.now(UTC)
+            return RuntimeJobRun(
+                job_run_id=job_run_id,
+                job_name=EOD_STEP_JOB_NAME,
+                parent_job_run_id=None,
+                status=status,
+                trigger_type="manual_cli",
+                started_at=started_at,
+                completed_at=completed_at,
+                duration_ms=(
+                    int((completed_at - started_at).total_seconds() * 1000)
+                    if completed_at is not None
+                    else None
+                ),
+                error_message=error[:2000] if error else None,
+                correlation_id=job_run_id,
+                input_summary_json={
+                    "step": step_name,
+                    "trading_date": trading_date.isoformat(),
+                    "now_utc": now_utc.isoformat(),
+                    "dry_run": dry_run,
+                    "scheduled_for_date": scheduled,
+                    "forced": force,
+                    "actor": actor,
+                },
+                output_summary_json=output,
+            )
+
+        def result(
+            status: str, *, output: dict[str, Any] | None = None, error: str | None = None
+        ) -> EodStepResult:
+            return EodStepResult(
+                step=step_name,
+                trading_date=trading_date,
+                now_utc=now_utc,
+                dry_run=dry_run,
+                scheduled_for_date=scheduled,
+                status=status,
+                job_run_id=job_run_id,
+                output=output,
+                error=error,
+            )
+
+        runs.save(job_row("running"))
+        try:
+            if names.index(step_name) > names.index(_RESOLVE_STEP):
+                self._step_resolve_raw_bars_dataset(ctx)
+            raw_output = step.run(ctx)
+            output = dict(raw_output) if raw_output is not None else None
+        except Exception as exc:
+            self.session.rollback()
+            runs.save(job_row("failed", error=str(exc)))
+            return result("failed", error=str(exc))
+        runs.save(job_row("completed", output=output))
+        return result("completed", output=output)
+
+    def _check_eod_step_allowed(
+        self,
+        step_name: str,
+        *,
+        trading_date: date,
+        scheduled: bool,
+        dry_run: bool,
+        force: bool,
+    ) -> None:
+        if not dry_run and not scheduled:
+            if step_name in _SCHEDULE_BOUND_STEPS:
+                raise EodStepRefused(
+                    f"{step_name} is not scheduled for {trading_date}; off its scheduled "
+                    "day it can only be rehearsed" + _rehearsal_hint(step_name)
+                )
+            if (
+                step_name == _WEEKLY_REVIEW_STEP
+                and review_mode(self.session) is PortfolioReviewMode.AUTO
+            ):
+                raise EodStepRefused(
+                    f"{step_name} is not scheduled for {trading_date} and "
+                    "portfolio_review_mode is auto, so it would apply decisions; "
+                    "run it with --dry-run"
+                )
+        if force:
+            return
+        chain_running = self.session.scalars(
+            select(RuntimeJobRuns.job_run_id)
+            .where(RuntimeJobRuns.job_name == EOD_CHAIN_JOB_NAME)
+            .where(RuntimeJobRuns.status == "running")
+        ).first()
+        if chain_running is not None:
+            raise EodStepRefused(
+                f"the scheduled chain is running (job run {chain_running}); wait for it, "
+                "or pass --force if that row is a leftover from a crash"
+            )
+        if not dry_run and step_name in EodChainRunner(self.session).completed_steps_for(
+            chain_name=EOD_CHAIN_JOB_NAME, trading_date=trading_date
+        ):
+            raise EodStepRefused(
+                f"the scheduled chain already completed {step_name} for {trading_date}; "
+                "pass --force to run it a second time, or --dry-run to rehearse it"
+            )
 
     # -- end-of-day steps -------------------------------------------------------------
 

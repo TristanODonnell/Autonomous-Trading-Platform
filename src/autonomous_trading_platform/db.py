@@ -57,6 +57,30 @@ def get_session() -> Session:
 
 
 @contextmanager
+def rollback_only_session() -> Generator[Session, None, None]:
+    """A session whose work never reaches the database, for dry runs of code that
+    commits as it goes.
+
+    The session runs inside one outer transaction that is always rolled back; a commit
+    on the session only releases a savepoint inside it. Rows the code changes stay
+    locked until the block exits, so keep the block short on a box that is trading.
+    """
+    connection = get_engine().connect()
+    outer = connection.begin()
+    session = Session(
+        bind=connection,
+        autoflush=False,
+        join_transaction_mode="create_savepoint",
+    )
+    try:
+        yield session
+    finally:
+        session.close()
+        outer.rollback()
+        connection.close()
+
+
+@contextmanager
 def session_scope() -> Generator[Session, None, None]:
     session = get_session()
     try:

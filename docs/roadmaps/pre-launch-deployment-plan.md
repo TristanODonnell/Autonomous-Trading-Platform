@@ -13,7 +13,7 @@ verified during the soak and ticked on 2026-11-08 when the doc was tidied.
 **Deployment track, in order**
 - Finding 27 (fix and backfills done 2026-11-14, thin 10/12 to 10/14 repaired too): verify Monday 11/16's rolling version holds 8/31, 9/30, 10/08, 10/09 and full 10/12 to 10/14, and B's dry run reports 62 `daily_returns` (3.3(a) findings)
 - Finding 28 (found 2026-11-14): `final_ingestion` fetches the wrong window, so live days lack the 15:55 ET bar; small fix PR (3.3(a) findings)
-- `atp runtime run-eod-step` command, then rehearse `weekly_portfolio_review` (advisory) and the next rotation (§6, §7.3)
+- `atp runtime run-eod-step` (built 2026-11-14, §6): first use on A, then rehearse `weekly_portfolio_review` (advisory) and the next rotation (§7.3)
 - Box B: install the Saturday timer (3.3(a); the full-window dry run passed 2026-11-12)
 - Flip `worker_results_enabled` → `portfolio_review_mode=advisory` → `auto` (3.3(a))
 - Calendar tests still ahead: Thu 11/26 closed, Fri 11/27 and Thu 12/24 early close, Mon 11/30 and Thu 12/31 rotations (1.7 table)
@@ -1004,10 +1004,36 @@ two runs of the same fixture are not guaranteed to match; every run re-downloads
       is scoped in `research-generation-plan.md` D1 (one-symbol two-day backfill with
       `ALPACA_DATA_FEED=sip` on that command only, then delete the test version); the
       switch is gated on the Phase 5 trigger above
-- [ ] `atp runtime run-eod-step <step> --as-of DATE [--dry-run]` (section 7, rehearsal
-      rule): run any EOD chain step through the same orchestrator with the calendar gate
-      bypassed; `--dry-run` mandatory outside the schedule for `monthly_universe_rotation`
-      and for `weekly_portfolio_review` in `auto` mode. Next small PR after Finding 26.
+- [x] `atp runtime run-eod-step <step> --as-of DATE [--dry-run] [--force]` (section 7,
+      rehearsal rule): runs one EOD chain step through the same orchestrator and step
+      function, with the clock the chain has on that date (18:00 ET) and the calendar gate
+      reported (`scheduled_for_date`) but not enforced. Steps after
+      `resolve_raw_bars_dataset` resolve the day's dataset first, as in the chain. A real
+      run is a `paper_trading_eod_step` job run, a name the chain's resume logic never
+      reads. Built on branch `feat/run-eod-step` (2026-11-14). **Not yet run on A.**
+  - **`--dry-run`** runs the step inside one outer database transaction that is always
+    rolled back (`db.rollback_only_session`; a commit inside the step only releases a
+    savepoint), so nothing is kept. It is offered only for steps whose every effect goes
+    through the chain's session (`ChainStep.rollback_safe`, set from a call-tree audit
+    and pinned by a test): `calendar_cross_check`, `resolve_raw_bars_dataset`,
+    `broker_reconciliation`, `sleeve_resync`, `risk`, `governance`,
+    `correlation_monitoring`, `allocation_rebalance`, `weekly_portfolio_review`,
+    `operations_health`. A dry run holds row locks (and the rebalance advisory lock)
+    until it ends: run it outside market hours.
+  - **No dry run:** `final_ingestion`, `corporate_actions`, `features` (their cycles
+    open their own session), `rolling_raw_bars` (Parquet), `publish_datasets` (S3), and
+    `monthly_universe_rotation`: its candidate scoring (`run_candidate_generation`)
+    opens and commits its own session whatever session the step was given, so a rolled
+    back run would still leave a candidate universe version. The rotation keeps
+    `atp universe monthly-rotation --dry-run` as its rehearsal, and `run-eod-step`
+    refuses it off its scheduled day either way.
+  - **Refusals for a real run:** the scheduled chain is running; the chain already
+    completed the step for that date (`--force` overrides both); off its scheduled
+    day, `monthly_universe_rotation` always and `weekly_portfolio_review` when the mode
+    is `auto`.
+  - Known gap: the dry-run rollback is tested on SQLite only (commit, rollback and
+    commit again inside, nothing left after). First use on A's Postgres should be a
+    read-only step (`operations_health`) with a row count before and after.
 - [ ] Exact API contract for worker → A publishing (design doc once 5c lands)
 - [ ] Settlement/T+1: does the live ledger need a daily pass, or is it simulation only?
 - [x] Confirm risk/sleeve snapshots run inside the trading cycle or need their own schedule: they run inside every trading cycle, with order reconciliation and portfolio drawdown governance; no separate schedule (see `pre-launch-1.3-scheduling.md` §1)
@@ -1095,10 +1121,10 @@ cadence is section 3; this table is the gap between intended and actual.
 | Process | Where | Intended cadence | State today | Switched on? | On-demand entry point | Rehearsed | Next |
 |---|---|---|---|---|---|---|---|
 | Intraday tick (ingest → features → trading cycle) | A scheduler | every 5 min, market hours | gated step | yes | `atp runtime soak-loop paper` (the runner itself) | n/a, runs daily | — |
-| EOD chain (16 steps, 3.3) | A scheduler | after close | gated step | yes | none per step → `run-eod-step` (section 6) | partially (Finding 15/26 rebuilds were by hand) | build `run-eod-step` |
-| Rolling bench window (`rolling_raw_bars`) | A EOD step | every session | gated step | yes | one-off python (2026-11-07) → `run-eod-step` | yes, 11/07 | rerun under Finding 26 fix |
+| EOD chain (16 steps, 3.3) | A scheduler | after close | gated step | yes | `atp runtime run-eod-step <step> --as-of` (section 6; `--dry-run` for ten of the steps) | partially (Finding 15/26 rebuilds were by hand) | first `run-eod-step` use on A |
+| Rolling bench window (`rolling_raw_bars`) | A EOD step | every session | gated step | yes | `run-eod-step rolling_raw_bars --as-of` (no dry run: it writes Parquet) | yes, 11/07 | Mon 11/16 build picks up the Finding 27 backfills |
 | Dataset publish to S3 | A EOD step | every session | gated step | yes | `atp datasets publish --trading-date` | yes, 11/07 | — |
-| Weekly portfolio review | A EOD step | first session of week | gated step, **no-op** | `portfolio_review_mode=off` | none → `run-eod-step` | no | flip to `advisory` (11/24), rehearse first |
+| Weekly portfolio review | A EOD step | first session of week | gated step, **no-op** | `portfolio_review_mode=off` | `run-eod-step weekly_portfolio_review --as-of --dry-run` | no | flip to `advisory` (11/24), rehearse first |
 | Monthly universe rotation | A EOD step | last session of month | gated step | yes (churn guard) | `atp universe monthly-rotation --dry-run` | yes, 11/03 dry run | fires Mon 11/30; rehearse again week before |
 | Drawdown ladder / governance / allocation rebalance | A, per tick + EOD | per tick / daily | gated step | yes (rebalance proposals `noop` under manual override) | none | n/a | — |
 | Postgres backup → S3 | A host timer | nightly 23:30 ET | timer | yes | `infra/ops/backup.sh` | n/a | — |
