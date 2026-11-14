@@ -70,6 +70,11 @@ class ChainStep:
     retry_delay_seconds: float = 30.0
     # Return False to leave the step out for this date; it is recorded as skipped.
     applies: Callable[[ChainContext], bool] | None = None
+    # True only when every effect of the step goes through the chain's session, so that
+    # running it inside a transaction that is rolled back leaves nothing behind. A step
+    # that opens its own session, writes files, uploads, or writes to the broker must
+    # leave this False; it then cannot be dry-run with ``run-eod-step --dry-run``.
+    rollback_safe: bool = False
 
 
 class ChainStatus(StrEnum):

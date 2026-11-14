@@ -11,8 +11,9 @@ Everything unchecked below this section is a real task. Checked boxes with a not
 verified during the soak and ticked on 2026-11-08 when the doc was tidied.
 
 **Deployment track, in order**
-- Finding 27 (fix and four one-day backfills done 2026-11-14): verify Monday 11/16's rolling version holds 8/31, 9/30, 10/08, 10/09 and B's dry run reports 62 `daily_returns`; decide the thin 10/12 to 10/14 sessions (3.3(a) findings)
-- `atp runtime run-eod-step` command, then rehearse `weekly_portfolio_review` (advisory) and the next rotation (§6, §7.3)
+- Finding 27 (fix and backfills done 2026-11-14, thin 10/12 to 10/14 repaired too): verify Monday 11/16's rolling version holds 8/31, 9/30, 10/08, 10/09 and full 10/12 to 10/14, and B's dry run reports 62 `daily_returns` (3.3(a) findings)
+- Finding 28 (found 2026-11-14): `final_ingestion` fetches the wrong window, so live days lack the 15:55 ET bar; small fix PR (3.3(a) findings)
+- `atp runtime run-eod-step` (built 2026-11-14, §6): first use on A, then rehearse `weekly_portfolio_review` (advisory) and the next rotation (§7.3)
 - Box B: install the Saturday timer (3.3(a); the full-window dry run passed 2026-11-12)
 - Flip `worker_results_enabled` → `portfolio_review_mode=advisory` → `auto` (3.3(a))
 - Calendar tests still ahead: Thu 11/26 closed, Fri 11/27 and Thu 12/24 early close, Mon 11/30 and Thu 12/31 rotations (1.7 table)
@@ -829,8 +830,10 @@ is a finding.
           pull had already run, so these land in Monday 11/16's EOD rolling version and
           reach B on Monday night's pull.
           **Verify (still open, Mon 11/16 after EOD and Tue after B's pull):** the new
-          rolling version lists the four under `backfill_versions` and has rows on
-          8/31, 9/30, 10/08 and 10/09; a dry run on B reports 62 `daily_returns`.
+          rolling version lists the five new versions (these four and the 10/12 to
+          10/14 one below) under `backfill_versions`, has rows on 8/31, 9/30, 10/08 and
+          10/09 and full sessions on 10/12 to 10/14; a dry run on B reports 62
+          `daily_returns`.
           Found alongside:
       - [x] **The 10/09 daily version was registered `validated` with no Parquet files.**
             `raw_bars_20261009T133007Z_3aa3121f` has no directory on A at all. As the
@@ -840,13 +843,42 @@ is a finding.
             10/08 daily row `raw_bars_20261008T233920Z_0e88c7a9` is the precedent).
             `daily_versions` counts only `validated` rows, so the oldest live session is
             now 10/12 and the 10/09 one-day backfill above is inside the cap.
-      - [ ] **10/12 to 10/14 are thin.** Read from disk, the 10/12 daily version holds
-            221 rows against 1,227 for 11/13 (10/13 and 10/14 not counted yet). Cause
-            not yet looked at. These are live daily versions, and live sessions win
-            over a backfill on the same day, so a backfill does not repair them as the
-            merge stands. The 10/09 route would work here too (mark the three rows
-            `failed`, backfill 10/12 to 10/14), but these versions do hold real bars
-            the system traded on, so that is an operator decision, not a tidy-up.
+      - [x] **10/12 to 10/14 were thin: the first soak attempt's dropped bars (1.5 soak
+            log), not a calendar or backfill problem.** On disk the live versions held
+            221 / 167 / 192 rows in 12 / 8 / 10 five-minute slots, ending 10:25 / 10:05 /
+            10:15 ET, although 79 ticks ran each day (NYSE was open on Columbus Day
+            10/12). Tick drift of ~3 s per tick against the 30 s lateness window is
+            about ten ticks, after which every bar was flagged LATE and discarded;
+            fixed by PRs #150 and #151, deployed 10/15 03:25-04:10 UTC, so 10/15 is the
+            first normal day. In the bench window a thin day is worse than a missing
+            one: its "close" is the last stored bar, mid-morning. No signals, order
+            intents or fills happened on those days (1.5), so nothing depends on the
+            thin versions. **Done 2026-11-14 02:20 UTC:** the three daily rows
+            (`raw_bars_20261012T133000Z_7fb57f71`, `..1013T133000Z_52f483c4`,
+            `..1014T133000Z_f6c1a639`) set to `failed`, files left on disk, and one
+            backfill `raw_bars_20261114T022013Z_807b63bb` (`--start 2026-10-12 --end
+            2026-10-14`) holds 1,298 / 1,335 / 1,411 rows, 22 symbols, 78 slots a day,
+            09:30-15:55 ET. Oldest validated live session is now 10/15.
+      - [ ] The 10/15 live version has no bars for the 13:00 ET hour (61 slots, not 77).
+            Not looked at. It is a validated live day with real orders, so it stays.
+    - [ ] **Finding 28: live sessions never store the last five-minute bar (found
+          2026-11-14).** Every live daily version ends at the 15:50 ET bar, 77 slots
+          (checked 10/16 to 10/21 and 11/10 to 11/13); the backfilled days above have
+          the 15:55 bar, 78 slots. `run_market_ingestion_cycle` fetches the window
+          ending at `floor_to_five_minutes(now)`: the session's last tick starts before
+          16:00, so the newest window it can ask for is 15:50-15:55, no tick runs
+          after the close, and the EOD `final_ingestion` step calls the same cycle at
+          18:00 ET, so it asks for 17:55-18:00 and gets nothing. The step has never done what its docstring
+          says ("pick up the closing bars the last intraday tick may have missed").
+          Effect: trading is untouched (that bar completes at the close), but a live
+          day's close in the bench window and in research is the 15:50 bar while a
+          backfilled day's is 15:55. Proposed class: P1 under 7.2 (a scheduled step
+          running with the wrong inputs every session). **Fix, not started:**
+          `final_ingestion` passes `cycle_start_override` / `cycle_end_override` for
+          the session's last window, taken from the calendar's close for the date so
+          early-close days (11/27, 12/24) get 12:55-13:00; test with a fake calendar;
+          rehearse with `run-eod-step final_ingestion --as-of`. Past live days keep
+          77 slots unless backfilled over, which is not worth doing.
       - [ ] P2: each pull on B logs 20 `dataset_pull.no_registry_row` warnings (orphan
             versions still listed in the S3 index). No behaviour change.
     - [x] **Finding 15: the `rolling_raw_bars` step failed every EOD after deploy (10/27-10/30).**
@@ -972,10 +1004,36 @@ two runs of the same fixture are not guaranteed to match; every run re-downloads
       is scoped in `research-generation-plan.md` D1 (one-symbol two-day backfill with
       `ALPACA_DATA_FEED=sip` on that command only, then delete the test version); the
       switch is gated on the Phase 5 trigger above
-- [ ] `atp runtime run-eod-step <step> --as-of DATE [--dry-run]` (section 7, rehearsal
-      rule): run any EOD chain step through the same orchestrator with the calendar gate
-      bypassed; `--dry-run` mandatory outside the schedule for `monthly_universe_rotation`
-      and for `weekly_portfolio_review` in `auto` mode. Next small PR after Finding 26.
+- [x] `atp runtime run-eod-step <step> --as-of DATE [--dry-run] [--force]` (section 7,
+      rehearsal rule): runs one EOD chain step through the same orchestrator and step
+      function, with the clock the chain has on that date (18:00 ET) and the calendar gate
+      reported (`scheduled_for_date`) but not enforced. Steps after
+      `resolve_raw_bars_dataset` resolve the day's dataset first, as in the chain. A real
+      run is a `paper_trading_eod_step` job run, a name the chain's resume logic never
+      reads. Built on branch `feat/run-eod-step` (2026-11-14). **Not yet run on A.**
+  - **`--dry-run`** runs the step inside one outer database transaction that is always
+    rolled back (`db.rollback_only_session`; a commit inside the step only releases a
+    savepoint), so nothing is kept. It is offered only for steps whose every effect goes
+    through the chain's session (`ChainStep.rollback_safe`, set from a call-tree audit
+    and pinned by a test): `calendar_cross_check`, `resolve_raw_bars_dataset`,
+    `broker_reconciliation`, `sleeve_resync`, `risk`, `governance`,
+    `correlation_monitoring`, `allocation_rebalance`, `weekly_portfolio_review`,
+    `operations_health`. A dry run holds row locks (and the rebalance advisory lock)
+    until it ends: run it outside market hours.
+  - **No dry run:** `final_ingestion`, `corporate_actions`, `features` (their cycles
+    open their own session), `rolling_raw_bars` (Parquet), `publish_datasets` (S3), and
+    `monthly_universe_rotation`: its candidate scoring (`run_candidate_generation`)
+    opens and commits its own session whatever session the step was given, so a rolled
+    back run would still leave a candidate universe version. The rotation keeps
+    `atp universe monthly-rotation --dry-run` as its rehearsal, and `run-eod-step`
+    refuses it off its scheduled day either way.
+  - **Refusals for a real run:** the scheduled chain is running; the chain already
+    completed the step for that date (`--force` overrides both); off its scheduled
+    day, `monthly_universe_rotation` always and `weekly_portfolio_review` when the mode
+    is `auto`.
+  - Known gap: the dry-run rollback is tested on SQLite only (commit, rollback and
+    commit again inside, nothing left after). First use on A's Postgres should be a
+    read-only step (`operations_health`) with a row count before and after.
 - [ ] Exact API contract for worker → A publishing (design doc once 5c lands)
 - [ ] Settlement/T+1: does the live ledger need a daily pass, or is it simulation only?
 - [x] Confirm risk/sleeve snapshots run inside the trading cycle or need their own schedule: they run inside every trading cycle, with order reconciliation and portfolio drawdown governance; no separate schedule (see `pre-launch-1.3-scheduling.md` §1)
@@ -1063,10 +1121,10 @@ cadence is section 3; this table is the gap between intended and actual.
 | Process | Where | Intended cadence | State today | Switched on? | On-demand entry point | Rehearsed | Next |
 |---|---|---|---|---|---|---|---|
 | Intraday tick (ingest → features → trading cycle) | A scheduler | every 5 min, market hours | gated step | yes | `atp runtime soak-loop paper` (the runner itself) | n/a, runs daily | — |
-| EOD chain (16 steps, 3.3) | A scheduler | after close | gated step | yes | none per step → `run-eod-step` (section 6) | partially (Finding 15/26 rebuilds were by hand) | build `run-eod-step` |
-| Rolling bench window (`rolling_raw_bars`) | A EOD step | every session | gated step | yes | one-off python (2026-11-07) → `run-eod-step` | yes, 11/07 | rerun under Finding 26 fix |
+| EOD chain (16 steps, 3.3) | A scheduler | after close | gated step | yes | `atp runtime run-eod-step <step> --as-of` (section 6; `--dry-run` for ten of the steps) | partially (Finding 15/26 rebuilds were by hand) | first `run-eod-step` use on A |
+| Rolling bench window (`rolling_raw_bars`) | A EOD step | every session | gated step | yes | `run-eod-step rolling_raw_bars --as-of` (no dry run: it writes Parquet) | yes, 11/07 | Mon 11/16 build picks up the Finding 27 backfills |
 | Dataset publish to S3 | A EOD step | every session | gated step | yes | `atp datasets publish --trading-date` | yes, 11/07 | — |
-| Weekly portfolio review | A EOD step | first session of week | gated step, **no-op** | `portfolio_review_mode=off` | none → `run-eod-step` | no | flip to `advisory` (11/24), rehearse first |
+| Weekly portfolio review | A EOD step | first session of week | gated step, **no-op** | `portfolio_review_mode=off` | `run-eod-step weekly_portfolio_review --as-of --dry-run` | no | flip to `advisory` (11/24), rehearse first |
 | Monthly universe rotation | A EOD step | last session of month | gated step | yes (churn guard) | `atp universe monthly-rotation --dry-run` | yes, 11/03 dry run | fires Mon 11/30; rehearse again week before |
 | Drawdown ladder / governance / allocation rebalance | A, per tick + EOD | per tick / daily | gated step | yes (rebalance proposals `noop` under manual override) | none | n/a | — |
 | Postgres backup → S3 | A host timer | nightly 23:30 ET | timer | yes | `infra/ops/backup.sh` | n/a | — |
