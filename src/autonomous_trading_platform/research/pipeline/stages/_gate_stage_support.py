@@ -64,7 +64,7 @@ def find_reusable_reference(
 ) -> SimulationRunResult | None:
     """Most recent earlier full-window run for this strategy over the same window.
 
-    Monte Carlo's representative run (and RegimeStage's own run) are recorded
+    Monte Carlo's base run (and RegimeStage's own run) are recorded
     as reference_result; when the window matches, later gates reuse it rather
     than re-simulating identical inputs.
     """

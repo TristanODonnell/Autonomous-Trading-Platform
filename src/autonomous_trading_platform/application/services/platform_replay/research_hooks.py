@@ -224,7 +224,7 @@ def run_scheduled_research_at_timestamp(
 
         for config in final_survivors:
             sid = config.strategy_id
-            # Evidence the robustness stages recorded (fold pairs, MC dispersion,
+            # Evidence the robustness stages recorded (fold pairs, MC resampling,
             # regime profile, full-window reference run) feeds the validation
             # layer, so its overfitting/regime checks see the same data as the gates.
             evidence = collect_overfitting_evidence(sid, stage_results)
@@ -596,13 +596,15 @@ def _build_replay_experiment_definition(
         stages.append(stage2)
 
         # Stage 3 — MonteCarloStage: only survivors of walk-forward enter (typically 2-5).
+        # One simulation per survivor; n_runs is the number of resampled paths of
+        # its equity curve, which cost milliseconds, so smoke only trims it a little.
         stage3 = MonteCarloStage(
             stage_config=MonteCarloStageConfig(
                 name="monte_carlo_structural_robustness",
                 symbols=symbols,
                 start_date=start_date,
                 end_date=tick_date,
-                n_runs=3 if smoke else 5,
+                n_runs=200 if smoke else 2000,
                 min_pass_rate=0.6,
                 filter_config=wf_mc_filter,
                 scoring_weights=default_weights,
@@ -613,7 +615,7 @@ def _build_replay_experiment_definition(
         stages.append(stage3)
 
         # Stage 4 — regime robustness on auto-classified daily regimes. Reuses
-        # the Monte Carlo representative run (same window), so it adds no
+        # the Monte Carlo base run (same window), so it adds no
         # simulations: one bar read + classification per research tick.
         stages.append(
             RegimeStage(

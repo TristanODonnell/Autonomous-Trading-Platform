@@ -34,14 +34,16 @@ staged_pipeline_config:
         w_drawdown: 0.2
         w_consistency: 0.1
 
-    # Monte Carlo — 5 runs, very loose gates, just proving the logic fires
+    # Monte Carlo — 200 resampled paths of one simulation, thresholds so loose
+    # that every path passes. This proves the stage runs end to end; it does not
+    # test the gate (the stage's own tests do that with realistic thresholds).
     - name: elite_monte_carlo
       type: monte_carlo
       start_date: "2024-01-01"
       end_date: "2024-06-30"
       symbols: [AAPL, MSFT]
-      n_runs: 5
-      min_pass_rate: 0.40        # 2/5 runs need to pass — nearly impossible to fail
+      n_runs: 200
+      min_pass_rate: 0.40
       filter_config:
         min_sharpe: -99.0
         min_trades: 0

@@ -111,14 +111,17 @@ staged_pipeline_config:
     # -------------------------------------------------------------------------
     # Stage 4 — Elite (Monte Carlo)
     # Only strategies that survived all three prior stages reach here.
-    # Run each strategy 50 times over the same window, each with a different
-    # deterministic seed (seed = base_seed + run_index).
+    # Each strategy is simulated once over the window; its equity curve is then
+    # resampled 2,000 times in whole sessions, with replacement. Each resampled
+    # path is an alternate history of the same length.
     #
-    # A strategy passes iff it clears the filter thresholds in >= 70% of runs.
-    # This catches strategies whose backtest performance was lucky trade ordering
-    # rather than structural edge — those will fail frequently across seeds.
+    # A strategy passes iff >= 70% of the paths clear the Sharpe, return and
+    # drawdown thresholds. This catches strategies whose full-window result
+    # rests on a few lucky sessions — their resampled paths fall below the bar
+    # too often.
     #
-    # min_pass_rate: 0.70 — must survive 35/50 randomised runs
+    # n_runs: 2000 — resampled paths, not simulations
+    # min_pass_rate: 0.70 — at least 1,400 of the 2,000 paths must pass
     # filter thresholds match Stage 2 (same full-window standard)
     # scoring weights shift toward Sharpe + stability at this elite bar
     # -------------------------------------------------------------------------
@@ -127,11 +130,11 @@ staged_pipeline_config:
       start_date: "2022-01-01"
       end_date: "2025-03-31"
       symbols: [AAPL, MSFT, SPY, AMZN, NVDA]
-      n_runs: 50
+      n_runs: 2000
       min_pass_rate: 0.70
       filter_config:
         min_sharpe: 1.0
-        min_trades: 10          # lower than Stage 2 — each seed-run is one sim
+        min_trades: 10          # checked on the single base run, not per path
         max_drawdown: -0.20
       scoring_weights:
         w_sharpe: 0.5

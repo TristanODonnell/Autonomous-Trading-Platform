@@ -286,7 +286,14 @@ class WalkForwardStageConfigModel(ParallelStageConfigMixin):
 
 
 class MonteCarloStageConfigModel(ParallelStageConfigMixin):
-    """Validated YAML input for MonteCarloStage."""
+    """Validated YAML input for MonteCarloStage.
+
+    n_runs is the number of resampled paths per strategy (one simulation is
+    run, then its equity curve is resampled), and min_pass_rate the fraction of
+    those paths that must clear filter_config. The pass rate is an estimate:
+    with 1,000 paths its standard error near 0.70 is about 0.015; with 30 it
+    would be about 0.08, enough to flip verdicts near the threshold.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -294,7 +301,7 @@ class MonteCarloStageConfigModel(ParallelStageConfigMixin):
     symbols: list[str]
     start_date: date
     end_date: date
-    n_runs: int = 30
+    n_runs: int = 1000
     min_pass_rate: float = 0.70
     filter_config: FilterConfigModel = FilterConfigModel()
     scoring_weights: ScoringWeightsModel = ScoringWeightsModel()

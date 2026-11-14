@@ -14,7 +14,8 @@ Already resumable through deterministic cache or artifact identity:
   `SimulationArtifactIdentity`.
 - Pipeline simulation stages use stable `stage_name` and `window_role`.
 - Walk-forward train/test windows use `fold_N_train` and `fold_N_test`.
-- Monte Carlo trials use `mc_run_N` and deterministic seed derivation.
+- Monte Carlo's single base run per strategy uses `mc_base` and deterministic
+  seed derivation; the resampling is recomputed, not checkpointed.
 - Validation, regime analysis, and intelligence artifacts already persist
   deterministic outputs, but their execution paths are not fully wrapped by
   checkpoint execution yet.

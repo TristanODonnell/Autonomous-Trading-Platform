@@ -10,12 +10,12 @@ Concrete stages
 ---------------
 SimulationStage   — single sim run per survivor over a defined window
 WalkForwardStage  — re-runs survivors across rolling train/test folds
-MonteCarloStage   — re-runs survivors N times with varied seeds
+MonteCarloStage   — one run per survivor, its equity curve resampled N times
 RegimeStage       — one run per survivor, gated on per-regime performance
                     using the auto-classified regime labels
 StressStage       — equity-curve shock scenarios + cost-multiplier re-runs
 OverfittingStage  — no simulations; gates on evidence produced by earlier
-                    stages (fold degradation, MC dispersion, regime spread)
+                    stages (fold degradation, MC resampling, regime spread)
 
 Cross-stage evidence
 --------------------
@@ -73,7 +73,7 @@ class StageDiagnostics:
     Every field is optional — each stage fills in only what it computed.
 
     fold_inputs         Walk-forward train/test metric pairs (completed folds only).
-    mc_aggregation      Monte Carlo distribution across seeded runs.
+    mc_aggregation      Monte Carlo distribution across resampled paths.
     regime_profile      Regime-conditioned performance profile.
     regime_verdict      RegimeStage gate decision and reasons.
     stress_verdict      StressStage gate decision and reasons.
@@ -98,8 +98,7 @@ class StageResult:
 
     stage_name          Human-readable label e.g. "cheap", "intermediate".
     simulation_results  Every raw SimulationRunResult produced in this stage.
-                        For multi-run stages (Monte Carlo) this includes all
-                        individual runs before aggregation.
+                        A run reused from an earlier stage is not repeated here.
     filter_outputs      Per-strategy filter verdict + score after aggregation.
                         One entry per survivor that entered this stage.
     survivors           Strategies that passed this stage's filters, ready to

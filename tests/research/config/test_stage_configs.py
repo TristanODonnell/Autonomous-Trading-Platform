@@ -353,5 +353,5 @@ def test_mc_stage_default_n_runs_and_pass_rate():
     del raw["n_runs"]
     del raw["min_pass_rate"]
     cfg = MonteCarloStageConfigModel.model_validate(raw)
-    assert cfg.n_runs == 30
+    assert cfg.n_runs == 1000  # resampled paths, cheap: enough for a stable pass rate
     assert cfg.min_pass_rate == 0.70

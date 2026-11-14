@@ -100,15 +100,23 @@ def test_high_trade_count_not_flagged():
 
 
 def test_mc_instability_detected():
-    """Simulate a MC aggregation with high Sharpe CoV."""
+    """A MC aggregation where most resampled paths have a non-positive Sharpe."""
     mc_agg = MagicMock()
-    mc_agg.sharpe_dist.coefficient_of_variation = 1.5  # very unstable
-    mc_agg.sharpe_dist.mean = 1.0
+    mc_agg.prob_positive_sharpe = 0.35
 
     analyzer = OverfittingAnalyzer()
     result = analyzer.analyze(strategy_id="s", mc_aggregation=mc_agg)
-    assert result.indicators.mc_instability is not None
-    assert result.indicators.mc_instability > 0.4
+    assert result.indicators.mc_instability == pytest.approx(0.65)
+    assert any("35% of resampled paths" in w for w in result.warnings)
+
+
+def test_mc_instability_low_when_paths_mostly_positive():
+    mc_agg = MagicMock()
+    mc_agg.prob_positive_sharpe = 0.96
+
+    result = OverfittingAnalyzer().analyze(strategy_id="s", mc_aggregation=mc_agg)
+    assert result.indicators.mc_instability == pytest.approx(0.04)
+    assert not any("resampled paths" in w for w in result.warnings)
 
 
 def test_most_suspicious_ordered():

@@ -4,7 +4,7 @@ Deterministic overfitting detection via explainable heuristics.
 Each indicator scores a specific overfitting signal in [0, 1]:
   1  train_test_degradation  — train Sharpe >> test Sharpe consistently
   2  fold_instability        — high CoV of test Sharpe across folds
-  3  mc_instability          — high CoV of Sharpe across Monte Carlo runs
+  3  mc_instability          — share of resampled Monte Carlo paths with Sharpe <= 0
   4  regime_concentration    — performance only works in a narrow regime
   5  low_trade_count         — too few trades for statistical significance
   6  narrow_period_alpha     — most returns concentrated in a few bars
@@ -56,7 +56,7 @@ class OverfittingIndicators:
 
     train_test_degradation: float | None  # [0, 1]; >0.5 suspicious
     fold_instability: float | None  # CoV of test Sharpe; high = unstable
-    mc_instability: float | None  # CoV of MC Sharpe; high = fragile
+    mc_instability: float | None  # 1 - P(MC Sharpe > 0); high = fragile
     regime_concentration: float | None  # [0, 1]; low = concentrated in one regime
     low_trade_count_flag: bool | None  # True when trade count < min threshold
     narrow_period_alpha: float | None  # [0, 1]; fraction of return from top-N bars
@@ -221,12 +221,12 @@ class OverfittingAnalyzer:
         # 3. Monte Carlo instability
         mc: float | None = None
         if mc_aggregation is not None:
-            mc_cv = mc_aggregation.sharpe_dist.coefficient_of_variation
-            mc = _clamp(mc_cv / 2.0)
+            prob_positive = mc_aggregation.prob_positive_sharpe
+            mc = _clamp(1.0 - prob_positive)
             if mc > 0.5:
                 warnings.append(
-                    f"Monte Carlo Sharpe CoV is {mc_cv:.2f} — "
-                    "performance sensitive to random execution ordering."
+                    f"Only {prob_positive:.0%} of resampled paths have a positive Sharpe — "
+                    "the full-window result is more likely luck than edge."
                 )
 
         # 4. Regime concentration

@@ -98,29 +98,123 @@ thresholds its own comment calls "nearly impossible to fail". Also: a strategy w
 all return `None` is kept (`monte_carlo_stage.py:276-278`), and `_safe_*` in
 `pipeline/aggregation/monte_carlo_aggregator.py:253-281` coerce a missing metric to 0.0,
 which always passes the drawdown test.
-- [ ] Resample something real: block bootstrap of per-bar (or per-trade) returns from the
-      single full-window simulation (`n_runs` resamples, block length ≈ one session), gate
-      on tail statistics (P5 Sharpe, P95 max drawdown, probability of breaching the
-      drawdown limit) instead of a per-run pass rate. Keep `base_seed + i` for
-      reproducibility. Stochastic fills (`SimulatedFillModelConfig` probabilities) stay a
-      separate, opt-in knob: they measure execution noise, not strategy fragility.
-- [ ] Fail closed: `None` trials and missing metrics count as failures; warn when
-      `n_runs_completed < n_runs`.
-- [ ] Seeds: derive each trial's seed with `derive_seed(..., trial_id=run_index)` instead
-      of `base_seed + run_index`, so trial seeds cannot collide with neighbouring
-      experiments' base seeds **[7.10 #6]**.
+- [x] Resample something real: block bootstrap of per-bar returns from the single
+      full-window simulation (`n_runs` resamples, block length = one session). Built
+      2026-11-14 with the gate form the user chose: `min_pass_rate` is the fraction of
+      resampled paths that clear the Sharpe, return and drawdown thresholds, not explicit
+      tail fields; P5/P95 of each metric are reported beside it. Stochastic fills
+      (`SimulatedFillModelConfig` probabilities) stay a separate, opt-in knob: they
+      measure execution noise, not strategy fragility.
+- [x] Fail closed: a missing base run, an empty or too-short equity curve and a
+      non-finite path metric all count as failures. (`n_runs_completed < n_runs` no longer
+      exists: the resamples are computed in-process from one run.)
+- [x] Seeds: the base run's seed and the resampling seed come from `derive_seed(...)`
+      with window roles `mc_base` and `mc_bootstrap`, so they cannot collide with
+      neighbouring experiments' base seeds **[7.10 #6]**. There are no per-trial seeds:
+      one generator draws every session index up front.
 - Alternatives weighed (**[7.10 #1]**, confirmed from saved Parquet rows): MC-only
   stochastic fills, `shuffle_timestamp`, per-run cost perturbation, block bootstrap.
   Bootstrap first because it leaves the simulator untouched (parity rule below); cost
   perturbation is the natural second axis and reuses the stress stage's
   `cost_multiplier` plumbing.
-- [ ] Tests with a real runner on synthetic bars and realistic thresholds, asserting
-      `sharpe_dist.std > 0` and that the verdict can differ from the simulation stage's.
-      Fix the misleading comment in `experiments/staged/ma_sweep_staged.yaml` (~line 134).
+- [x] Tests with realistic thresholds, asserting `sharpe_dist.std > 0` and that the
+      verdict can differ from the single-run filter's
+      (`tests/research/pipeline/test_monte_carlo_stage.py`: curves with a chosen
+      full-window Sharpe and metrics from the production functions). The real
+      `SimulationRunner` on synthetic bars is exercised by
+      `tests/research/test_research_stages_smoke.py`, with permissive thresholds only.
+      The comment in `experiments/staged/ma_sweep_staged.yaml` is fixed.
 
-**Verify:** on the 63-session window, rerun `ma_sweep_staged.yaml`'s Monte Carlo stage
-before and after; before, every strategy's `sharpe_dist.std` is 0.0; after, it is not, and
-at least one strategy that passed the simulation stage fails the tail gate.
+**Verify (not run yet):** on the 63-session window, rerun `ma_sweep_staged.yaml`'s Monte
+Carlo stage before and after; before, every strategy's `sharpe_dist.std` is 0.0; after, it
+is not, and at least one strategy that passed the simulation stage fails the gate.
+
+**R1 design investigation (2026-11-14, code re-read plus a synthetic probe; nothing built).**
+- Raw material exists: `SimulationRunResult.equity_curve` is the live (post-warm-up)
+  per-bar curve, and `risk_metrics.py` computes Sharpe and drawdown from bar returns of
+  exactly that frame. One simulation per strategy is enough; the stage runs `n_runs` today.
+- Stages can see earlier results (`bind_prior_results`, `find_reusable_reference`); regime
+  and stress already reuse a matching full-window run. Monte Carlo does not bind them yet.
+- Three consumers read `sharpe_dist.coefficient_of_variation`, which is 0 today:
+  `validation_orchestrator.py:297` (score `1 - cv`), `overfitting_analysis.py:224`
+  (`cv / 2`) and `robustness_score.py:153` (`1 / (1 + cv)`, weight 0.20). So every strategy
+  currently gets the maximum Monte Carlo stability score. With a real distribution the CV
+  is unusable: it divides by the mean Sharpe and reached 12 in the probe for a strategy
+  with mean near zero. These three must change in the same PR (overlaps R5).
+- Probe (synthetic 5-minute returns, 15% annual vol, 2,000 session-block resamples):
+
+  | Window | Bootstrap Sharpe std | Example: true Sharpe 2 |
+  |---|---|---|
+  | 63 sessions | 1.7 to 2.2 | P5 Sharpe −1.55, P(Sharpe > 0) 0.83 |
+  | 252 sessions | about 1.0 | P5 Sharpe −0.04, P(Sharpe > 0) 0.95 |
+  | 756 sessions | about 0.56 | (true Sharpe 1 draw) P5 1.90, P(Sharpe > 0) 1.00 |
+
+  A "P5 Sharpe ≥ `min_sharpe`" gate is close to unpassable on 63 sessions (needs an
+  observed Sharpe of about `min_sharpe` + 3.3). A probability gate is workable there.
+- Block length: with AR(1) bar noise (φ = 0.2) the Sharpe std was 1.95 for single bars,
+  2.39 for one-hour blocks, 2.72 for one-session blocks, 2.52 for one-week blocks. Single
+  bars understate the spread by about 30%; one session is the right default.
+- Reordering sessions without replacement cannot move Sharpe (std 0.0000) and only varies
+  drawdown, so it is not a substitute.
+- Cost: 2,000 resamples of a 63-session curve took 228 ms and 79 MB as one array. Longer
+  windows need the resamples computed in chunks (756 sessions would be about 940 MB).
+- Tests that encode "N simulations per strategy" and must be rewritten: five in
+  `test_monte_carlo_artifact_identity.py`, one each in `test_parallel_monte_carlo_stage.py`
+  and `test_monte_carlo_resume.py`. `research_hooks.py:599` builds the stage with
+  `n_runs=3 if smoke else 5`, which must become a resample count.
+- No storage model references the Monte Carlo distribution: it lives in the in-memory
+  `StageDiagnostics` and the validation summary only.
+- Proposed design (awaiting the user's go-ahead, nothing built):
+  1. Reuse a matching full-window run from earlier stages, or run one simulation.
+  2. Bar returns from its equity curve, grouped by session date (sessions have unequal
+     bar counts: early closes, missing IEX bars).
+  3. Draw `n_runs` paths of whole sessions with replacement from one generator seeded by
+     `derive_seed`; draw the session-index matrix up front so chunking cannot change results.
+  4. Sharpe, total return and max drawdown per path with the `risk_metrics.py` formulas.
+  5. Fail closed: no base run, an empty curve or a missing metric eliminates the strategy.
+  The simulator is untouched and `grid` stays the default.
+- Open decisions for the user, with the recommendation given on 2026-11-14:
+  1. Gate form. Recommended: keep `n_runs`, `min_pass_rate` and `filter_config`, with pass
+     rate redefined as the fraction of resampled paths that clear the thresholds (a real
+     probability; existing YAML stays valid), and report tail statistics alongside. The
+     alternative is the new explicit tail fields in the checkbox above. Catch: old configs
+     keep loading but mean something different.
+  2. What replaces the CV in the three scorers. Recommended: P(Sharpe > 0), already in
+     [0, 1] and stable near a zero mean.
+  3. `min_trades`. Recommended: apply to the base run only (a resampled path has no trade
+     count).
+- Scope if approved: the stage, the aggregator, the stage config validators, the three
+  scorers, `research_hooks.py:599`; the seven tests above plus new real-runner tests; the
+  two staged YAMLs. Not verified: the probe is synthetic; the real before/after on our bars
+  is the Verify step above and runs on B once the code exists.
+- Full write-up of the investigation: `Claude outputs/r1-monte-carlo-investigation.md`
+  (untracked).
+
+**R1 implementation (2026-11-14, local branch `research/r1-monte-carlo-bootstrap`,
+uncommitted, nothing pushed).**
+- Decisions (user): (1) reuse `n_runs` / `min_pass_rate` / `filter_config`; (2) the three
+  scorers read P(Sharpe > 0), with the Sharpe spread and P(Sharpe ≥ `min_sharpe`) reported
+  but not scored; (3) `min_trades` on the base run only.
+- Code: `pipeline/aggregation/session_block_bootstrap.py` (new, pure numpy),
+  `monte_carlo_aggregator.py` (paths in, verdict out), `monte_carlo_stage.py` (one base
+  run, reused via `find_reusable_reference` when an earlier stage recorded one), the three
+  scorers, `stage_configs.py` (default `n_runs` 30 → 1000), `research_hooks.py`
+  (`n_runs` 3/5 → 200/2000), both staged YAMLs.
+- Differs from the investigation notes: `SimulationStage` records no `reference_result`,
+  so in the usual order (simulation → walk-forward → Monte Carlo) there is nothing to
+  reuse and the stage runs one simulation per survivor, where it ran `n_runs`.
+- Behaviour changes to expect:
+  - The replay hook's Monte Carlo gate (`min_sharpe` 0.3, `min_pass_rate` 0.6) used to
+    repeat the single-run filter. It is now a 60% probability test on a window of at most
+    90 days, so fewer candidates will reach regime, stress and the bench.
+  - `mc_instability` is `1 − P(Sharpe > 0)`: about 0.5 for a strategy with no edge, where
+    the old formula reached 1.0 at a coefficient of variation of 2. Whether to rescale it
+    is open, and belongs with R5.
+  - A resumed stage whose base run is skipped by a checkpoint now eliminates the strategy
+    (it used to keep it). Nothing in production resumes; R3's rehydration fixes it.
+- Checked: the identity path reproduces `risk_metrics.py` to 1e-9 relative; chunk size
+  does not change results; research tests pass on the laptop. Not checked: the Verify step
+  above on real bars.
 
 **R2 — Walk-forward test folds are not out of sample (blocks trust in scores).**
 - Selection leakage: in `ma_sweep_staged.yaml` the `intermediate` simulation stage ranks
@@ -153,6 +247,21 @@ at least one strategy that passed the simulation stage fails the tail gate.
 - [ ] Either implement EXPANDING/ANCHORED windows or delete `WindowType` and fix the docs
       (`docs/backend/research/advanced_validation_framework.md`).
 - [ ] Daily resample: load daily warm-up bars and pass `bars_per_year=252`.
+- [ ] Fold geometry (added 2026-11-14, user's question: "more folds, maybe longer?"). The
+      items above make folds honest; none sets how many there are or how long they run.
+  - [ ] Folds in sessions from the trading calendar, not calendar days (also removes the
+        shared boundary day).
+  - [ ] A minimum test span per fold, validated in the config. A Sharpe estimate's
+        precision depends on the calendar span, not the bar count: a 10-session fold of
+        5-minute bars has 780 observations and an annualised-Sharpe standard error of
+        roughly 5 (√(252/10)), so short folds are near coin flips and the pooled gate
+        above is the one that carries weight.
+  - [ ] Fold count and length derived from the history available, with EXPANDING as the
+        way to get more test folds from a short history (ties to the `WindowType` item).
+        On the 74-session rolling window with 15 held out, 20 train / 10 test / 10 step
+        gives 3 folds; more folds and longer folds compete for the same sessions.
+  - [ ] Longer folds are blocked on more history: schedule with the SIP historical-bars
+        check in the data section below.
 
 **Verify:** the config validator rejects the current `ma_sweep_staged.yaml`; a fixture with
 one train-failed fold shows it in the overfitting evidence; a daily-resampled fold's Sharpe

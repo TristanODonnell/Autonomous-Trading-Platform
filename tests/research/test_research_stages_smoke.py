@@ -226,13 +226,13 @@ def test_replay_definition_has_all_six_stages_with_smoke_budget(
     ]
     mc = next(s for s in stages if isinstance(s, MonteCarloStage))
     stress = next(s for s in stages if isinstance(s, StressStage))
-    assert mc._cfg.n_runs == 3
+    assert mc._cfg.n_runs == 200
     assert stress._cfg.gate.cost_multipliers == (2.0,)
     assert all(item["options"]["n_samples"] == 2 for item in exp.strategy_set)
 
     full = _replay_experiment(db_session, replay_context, ctx.simulation_runner, profile="full")
     full_mc = next(s for s in full.staged_pipeline_config.stages if isinstance(s, MonteCarloStage))
-    assert full_mc._cfg.n_runs == 5
+    assert full_mc._cfg.n_runs == 2000
 
 
 def test_every_new_stage_runs_on_real_simulations(
@@ -267,7 +267,7 @@ def test_every_new_stage_runs_on_real_simulations(
         {
             "type": "monte_carlo",
             "name": "mc",
-            "n_runs": 3,
+            "n_runs": 200,
             "min_pass_rate": 0.5,
             "filter_config": _PERMISSIVE_FILTER,
             **window,
@@ -306,7 +306,16 @@ def test_every_new_stage_runs_on_real_simulations(
     assert survivors, "permissive filters should let strategies reach the robustness stages"
     assert [c.strategy_id for c in result.final_survivors] == survivors
 
-    # Regime: labels classified from real bars; MC's representative run reused.
+    # Monte Carlo: one real simulation per strategy, resampled into a real distribution.
+    mc = by_name["mc"]
+    assert len(mc.simulation_results) == len(mc.filter_outputs)
+    for sid in survivors:
+        aggregation = mc.diagnostics[sid].mc_aggregation
+        assert aggregation is not None
+        assert aggregation.n_runs == 200
+        assert aggregation.n_sessions > 30  # daily bars: one session per bar return
+
+    # Regime: labels classified from real bars; MC's base run reused.
     regime = by_name["regime"]
     assert regime.simulation_results == []
     for sid in survivors:

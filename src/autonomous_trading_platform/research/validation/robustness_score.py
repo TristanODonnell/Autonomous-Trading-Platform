@@ -6,7 +6,7 @@ Each component is normalised to [0, 1] before weighting.  The default
 weights reflect the platform's research philosophy:
 
   walk_forward_consistency  0.30  — most important: generalises across time
-  mc_stability              0.20  — Monte Carlo Sharpe CoV
+  mc_stability              0.20  — Monte Carlo P(Sharpe > 0) across resampled paths
   regime_robustness         0.20  — works across market regimes
   parameter_stability       0.15  — not a knife-edge parameter fit
   stress_resilience         0.10  — survives adverse scenarios
@@ -90,16 +90,6 @@ def _clamp(v: float) -> float:
     return max(0.0, min(1.0, v))
 
 
-def _cv_to_stability(cv: float) -> float:
-    """Convert coefficient-of-variation to a stability score in [0, 1].
-
-    CV = 0 → stability = 1.0 (perfectly stable)
-    CV = 1 → stability = 0.5
-    CV >= 2 → stability → 0 (very unstable)
-    """
-    return _clamp(1.0 / (1.0 + cv))
-
-
 class RobustnessScoreBuilder:
     """
     Fluent builder for constructing a RobustnessScore from validation
@@ -113,7 +103,7 @@ class RobustnessScoreBuilder:
     score = (
         RobustnessScoreBuilder()
         .with_walk_forward(folds_passed=8, total_folds=10)
-        .with_monte_carlo(sharpe_cv=0.25)
+        .with_monte_carlo(prob_positive_sharpe=0.9)
         .with_regime(is_regime_robust=True, worst_regime_sharpe=0.3)
         .with_stress(survival_rate=0.75)
         .with_overfitting(overfitting_probability=0.2)
@@ -150,11 +140,12 @@ class RobustnessScoreBuilder:
         )
         return self
 
-    def with_monte_carlo(self, *, sharpe_cv: float) -> RobustnessScoreBuilder:
-        score = _cv_to_stability(sharpe_cv)
+    def with_monte_carlo(self, *, prob_positive_sharpe: float) -> RobustnessScoreBuilder:
+        score = _clamp(prob_positive_sharpe)
         self._components["mc_stability"] = score
         self._explanation.append(
-            f"mc_stability: Sharpe CoV={sharpe_cv:.3f} → stability={score:.3f}"
+            f"mc_stability: P(Sharpe > 0) across resampled paths={prob_positive_sharpe:.3f} "
+            f"→ stability={score:.3f}"
         )
         return self
 

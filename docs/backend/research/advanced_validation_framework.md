@@ -60,7 +60,7 @@ Default weights:
 | Component | Default weight | Rationale |
 |-----------|---------------|-----------|
 | walk_forward_consistency | 0.30 | Most important: temporal generalisation |
-| mc_stability | 0.20 | Structural robustness across random orderings |
+| mc_stability | 0.20 | Share of resampled histories with a positive Sharpe |
 | regime_robustness | 0.20 | Conditions-agnostic performance |
 | parameter_stability | 0.15 | Not a knife-edge fit |
 | stress_resilience | 0.10 | Survives adverse market conditions |
@@ -83,10 +83,14 @@ A strategy that passes all folds with minimal degradation scores 1.0.
 ### Monte Carlo stability
 
 ```
-mc_stability = 1 / (1 + CoV(Sharpe across N MC runs))
+mc_stability = P(Sharpe > 0) across the resampled Monte Carlo paths
 ```
 
-CoV = 0 → stability = 1.0 (all runs are identical). CoV = 1 → stability = 0.5.
+The Monte Carlo stage simulates the strategy once and resamples its equity curve
+in whole sessions with replacement. 1.0 means every resampled path had a positive
+Sharpe; 0.5 means the full-window result is indistinguishable from no edge. The
+spread of the resampled Sharpe is reported (`sharpe_std`) but not scored: it
+depends mostly on how many sessions the window holds, not on the strategy.
 
 ### Regime robustness
 
@@ -214,7 +218,7 @@ Seven heuristic indicators, each in [0, 1]:
 |-----------|-----------|-------------|
 | `train_test_degradation` | > 0.5 suspicious | Normalised `(train − test) / |train|` |
 | `fold_instability` | > 0.5 suspicious | Normalised CoV of test Sharpe across folds |
-| `mc_instability` | > 0.5 suspicious | Normalised CoV of Sharpe across MC runs |
+| `mc_instability` | > 0.5 suspicious | 1 − P(Sharpe > 0) across resampled MC paths |
 | `regime_concentration` | < 0.4 suspicious | Fraction of regimes with positive Sharpe |
 | `low_trade_count` | < 30 trades | Binary flag |
 | `narrow_period_alpha` | > 0.7 suspicious | Fraction of return from top-10% of bars |

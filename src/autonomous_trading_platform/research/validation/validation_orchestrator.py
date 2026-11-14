@@ -294,19 +294,26 @@ class ValidationOrchestrator:
         # Stage 4: Monte Carlo stability
         # ------------------------------------------------------------------
         if request.mc_aggregation is not None:
-            mc_cv = request.mc_aggregation.sharpe_dist.coefficient_of_variation
+            # Stability = share of resampled paths with a positive Sharpe. The
+            # spread (sharpe_std) and the share above the configured threshold
+            # are reported beside it but not scored: the spread tracks window
+            # length, and the threshold share moves with the config.
+            mc_prob_positive = request.mc_aggregation.prob_positive_sharpe
             mc_passed = request.mc_aggregation.passed
-            mc_score = max(0.0, 1.0 - mc_cv)
             stage_results["monte_carlo"] = ValidationStageResult(
                 stage_name="monte_carlo",
                 passed=mc_passed,
-                score=min(1.0, mc_score),
+                score=max(0.0, min(1.0, mc_prob_positive)),
                 summary={
                     "n_runs": request.mc_aggregation.n_runs,
                     "n_passed": request.mc_aggregation.n_passed,
                     "pass_rate": round(request.mc_aggregation.pass_rate, 4),
+                    "n_sessions": request.mc_aggregation.n_sessions,
                     "sharpe_mean": round(request.mc_aggregation.sharpe_dist.mean, 4),
-                    "sharpe_cv": round(mc_cv, 4),
+                    "sharpe_std": round(request.mc_aggregation.sharpe_dist.std, 4),
+                    "sharpe_p05": round(request.mc_aggregation.sharpe_dist.p05, 4),
+                    "prob_positive_sharpe": round(mc_prob_positive, 4),
+                    "prob_sharpe_above_min": round(request.mc_aggregation.prob_sharpe_above_min, 4),
                 },
                 warnings=(
                     [f"Monte Carlo pass rate is {request.mc_aggregation.pass_rate:.0%}"]
@@ -314,15 +321,15 @@ class ValidationOrchestrator:
                     else []
                 ),
             )
-            score_builder.with_monte_carlo(sharpe_cv=mc_cv)
+            score_builder.with_monte_carlo(prob_positive_sharpe=mc_prob_positive)
             _vstatus = "passed" if mc_passed else "failed"
             research_validation_stage_runs.add(
                 1, {"environment": _env, "stage_name": "monte_carlo", "status": _vstatus}
             )
             logger.info(
-                "  monte_carlo: pass_rate=%.2f sharpe_cv=%.3f",
+                "  monte_carlo: pass_rate=%.2f prob_positive_sharpe=%.3f",
                 request.mc_aggregation.pass_rate,
-                mc_cv,
+                mc_prob_positive,
             )
 
         # ------------------------------------------------------------------
