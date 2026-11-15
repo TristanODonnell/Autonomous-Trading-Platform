@@ -10,7 +10,7 @@ research window used by the monthly platform replay.
 
 Per surviving strategy:
   1. Take a full-window run — reused from an earlier stage (Monte Carlo's
-     representative run) when the window matches, otherwise simulated once.
+     base run) when the window matches, otherwise simulated once.
   2. Split its bar returns by regime label and compute per-regime metrics
      (RegimeAnalysisService, TASK-2.3, in-memory — nothing persisted).
   3. Apply the regime gate (gates/regime_gate.py).

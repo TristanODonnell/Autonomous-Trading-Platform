@@ -1077,6 +1077,13 @@ two runs of the same fixture are not guaranteed to match; every run re-downloads
   backtests at no cost
 
 ## 6. Still open
+- [ ] Research-history dataset and the worker's long-run schedule (raised 2026-11-14 in
+      the research sprint; picked up when work returns here). A multi-year dataset
+      beside the rolling bench window, the monthly campaign split over several days, and
+      how long runs are verified: `research-generation-plan.md` Step 5 ("Spreading the
+      campaign over several days", "Research-history dataset", "Verifying runs as they
+      get longer"). Section 5 above (`suite_v1`) is the regime-window half of the same
+      design.
 - [ ] Verify free-plan SIP historical access (affects backtest realism): the check itself
       is scoped in `research-generation-plan.md` D1 (one-symbol two-day backfill with
       `ALPACA_DATA_FEED=sip` on that command only, then delete the test version); the

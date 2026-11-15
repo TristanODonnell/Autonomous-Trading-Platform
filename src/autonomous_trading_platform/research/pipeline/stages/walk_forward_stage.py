@@ -1,10 +1,33 @@
 """
-WalkForwardStage — Stage 3 (Heavy).
+WalkForwardStage — rolling sub-period evaluation of a fixed strategy config.
 
-Walk-forward analysis: for each fold, run a train simulation then a test
-simulation. A strategy survives the fold only if it passes filters on BOTH
-windows. A strategy survives the stage only if it passes ALL folds
-(or >= min_folds_passed when require_all_folds=False).
+For each fold, run a train simulation then a test simulation. A strategy
+survives the fold only if it passes filters on BOTH windows. A strategy
+survives the stage only if it passes ALL folds (or >= min_folds_passed when
+require_all_folds=False).
+
+What it is and is not
+---------------------
+Nothing is fitted on the train window: the same config runs unchanged on
+train and test, and the train window is a pass/fail filter. So this is a
+consistency check across sub-periods, not walk-forward optimisation.
+
+A test fold is out of sample only if no earlier stage picked the survivors
+on dates that fold covers. The stage cannot check that; the pipeline that
+builds it has to arrange it (research_hooks.py ends stage 1's window the day
+before the first test fold starts).
+
+Fold boundaries are calendar days, and train_end and test_start are the same
+date.
+
+Place in the pipeline
+---------------------
+Second of the six stages in the current pipeline (research_hooks.py):
+
+  initial_quality_filter → walk_forward → monte_carlo → regime → stress → overfitting
+
+The older four-stage layout (experiments/staged/ma_sweep_staged.yaml) has it
+third.
 """
 
 from __future__ import annotations
@@ -156,7 +179,7 @@ def _to_fold_input(fr: _FoldResult) -> FoldValidationInput | None:
 
 class WalkForwardStage(BaseStage):
     """
-    Stage 3 Heavy — walk-forward analysis.
+    Walk-forward analysis of a fixed config over rolling train/test sub-periods.
 
     For every fold:
       1. Run simulation over the TRAIN window for all current survivors.

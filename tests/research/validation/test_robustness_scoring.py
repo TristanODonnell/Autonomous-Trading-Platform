@@ -29,7 +29,7 @@ def test_perfect_score_all_components():
     score = (
         RobustnessScoreBuilder()
         .with_walk_forward(folds_passed=10, total_folds=10, train_test_degradation=0.0)
-        .with_monte_carlo(sharpe_cv=0.0)
+        .with_monte_carlo(prob_positive_sharpe=1.0)
         .with_regime(is_regime_robust=True, worst_regime_sharpe=2.0, overall_sensitivity=0.0)
         .with_parameter_stability(overall_stability_score=1.0)
         .with_stress(survival_rate=1.0)
@@ -46,7 +46,7 @@ def test_poor_score_all_components():
     score = (
         RobustnessScoreBuilder()
         .with_walk_forward(folds_passed=1, total_folds=10, train_test_degradation=2.0)
-        .with_monte_carlo(sharpe_cv=5.0)
+        .with_monte_carlo(prob_positive_sharpe=0.1)
         .with_regime(is_regime_robust=False, worst_regime_sharpe=-2.0, overall_sensitivity=5.0)
         .with_parameter_stability(overall_stability_score=0.0)
         .with_stress(survival_rate=0.0)
@@ -117,29 +117,30 @@ def test_as_dict_structure():
     assert 0.0 <= d["overall"] <= 1.0
 
 
-def test_mc_stability_cv_zero():
-    """CV=0 → stability=1.0."""
-    score = RobustnessScoreBuilder().with_monte_carlo(sharpe_cv=0.0).build()
-    assert score.mc_stability == pytest.approx(1.0)
+def test_mc_stability_is_prob_positive_sharpe():
+    """Stability is the share of resampled paths with a positive Sharpe, unchanged."""
+    for prob in (0.0, 0.5, 0.83, 1.0):
+        score = RobustnessScoreBuilder().with_monte_carlo(prob_positive_sharpe=prob).build()
+        assert score.mc_stability == pytest.approx(prob)
 
 
-def test_mc_stability_cv_large():
-    """Very large CV → stability approaches 0."""
-    score = RobustnessScoreBuilder().with_monte_carlo(sharpe_cv=100.0).build()
-    assert score.mc_stability < 0.05
+def test_mc_stability_clamped_to_unit_interval():
+    builder = RobustnessScoreBuilder()
+    assert builder.with_monte_carlo(prob_positive_sharpe=1.2).build().mc_stability == 1.0
+    assert builder.with_monte_carlo(prob_positive_sharpe=-0.1).build().mc_stability == 0.0
 
 
 def test_deterministic():
     builder1 = (
         RobustnessScoreBuilder()
         .with_walk_forward(folds_passed=7, total_folds=10)
-        .with_monte_carlo(sharpe_cv=0.3)
+        .with_monte_carlo(prob_positive_sharpe=0.8)
         .with_regime(is_regime_robust=True, worst_regime_sharpe=0.5)
     )
     builder2 = (
         RobustnessScoreBuilder()
         .with_walk_forward(folds_passed=7, total_folds=10)
-        .with_monte_carlo(sharpe_cv=0.3)
+        .with_monte_carlo(prob_positive_sharpe=0.8)
         .with_regime(is_regime_robust=True, worst_regime_sharpe=0.5)
     )
     assert builder1.build().overall == pytest.approx(builder2.build().overall)

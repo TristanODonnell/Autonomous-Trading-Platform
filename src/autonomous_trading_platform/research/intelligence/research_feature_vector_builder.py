@@ -420,7 +420,7 @@ _FIELD_DESCRIPTIONS: dict[str, str] = {
     "overfit_resistance": "Resistance score from OverfittingAnalyzer",
     "overfit_train_test_degradation": "1 - normalised T/T degradation (higher = lower degradation)",
     "overfit_fold_instability": "1 - fold CoV (higher = more stable folds)",
-    "overfit_mc_instability": "1 - MC CoV (higher = more stable MC)",
+    "overfit_mc_instability": "P(MC Sharpe > 0) across resampled paths (higher = more stable MC)",
     "overfit_regime_concentration": "Fraction of positive-Sharpe regime buckets",
     "overfit_narrow_period_alpha": "1 - narrow_period_alpha (higher = returns spread evenly)",
     "overfit_parameter_fragility": "1 - parameter_fragility (higher = more stable params)",

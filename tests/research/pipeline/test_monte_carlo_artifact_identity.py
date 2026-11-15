@@ -1,80 +1,29 @@
 """
-Tests that MonteCarloStage passes stage_name and unique mc_run_N window_role
-values to the SimulationRunner for every trial so artifacts cannot collide.
+Tests that MonteCarloStage sends exactly one base simulation per strategy to
+the SimulationRunner, identified by stage_name and the "mc_base" window_role,
+with a seed derived from the strategy's identity. n_runs is the number of
+resampled paths and never reaches the runner.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date
-from unittest.mock import MagicMock
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.research.experiments.filtering.config import (
     FilterConfig,
     ScoringWeights,
 )
+from autonomous_trading_platform.research.pipeline.stages.base_stage import StageResult
 from autonomous_trading_platform.research.pipeline.stages.monte_carlo_stage import (
     MonteCarloStage,
     MonteCarloStageConfig,
 )
-from autonomous_trading_platform.research.simulation.simulation_runner import (
-    SimulationRunRequest,
-    SimulationRunResult,
-)
-from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
-
-# ---------------------------------------------------------------------------
-# Capturing runner
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class CapturedRequest:
-    stage_name: str | None
-    window_role: str | None
-    strategy_id: str
-    random_seed: int
-
-
-class CapturingSimulationRunner:
-    def __init__(self) -> None:
-        self.captured: list[CapturedRequest] = []
-
-    def run(self, request: SimulationRunRequest) -> SimulationRunResult:
-        self.captured.append(
-            CapturedRequest(
-                stage_name=request.stage_name,
-                window_role=request.window_role,
-                strategy_id=request.strategy_id,
-                random_seed=request.random_seed,
-            )
-        )
-        return _make_passing_sim_result(request.strategy_id)
-
+from tests.research.pipeline.monte_carlo_support import CurveRunner, sharpe_runner, strategy
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _make_passing_sim_result(strategy_id: str) -> SimulationRunResult:
-    result = MagicMock(spec=SimulationRunResult)
-    result.strategy_id = strategy_id
-    result.return_metrics = MagicMock()
-    result.return_metrics.total_return = 0.1
-    result.risk_metrics = MagicMock()
-    result.risk_metrics.sharpe_ratio = 2.0
-    result.risk_metrics.max_drawdown = -0.05
-    result.risk_metrics.volatility = 0.1
-    result.trade_metrics = MagicMock()
-    result.trade_metrics.total_trades = 50
-    result.trade_metrics.win_rate = 0.6
-    result.trade_metrics.profit_factor = 1.5
-    result.stability_metrics = MagicMock()
-    result.stability_metrics.consistency_score = 0.8
-    result.equity_curve = MagicMock()
-    return result
 
 
 def _liberal_filter_config() -> FilterConfig:
@@ -89,29 +38,40 @@ def _liberal_filter_config() -> FilterConfig:
     )
 
 
-def _liberal_scoring_weights() -> ScoringWeights:
-    return ScoringWeights(w_sharpe=0.4, w_return=0.3, w_drawdown=0.2, w_consistency=0.1)
+def _runner(*strategy_ids: str) -> CurveRunner:
+    return sharpe_runner(dict.fromkeys(strategy_ids or ("strat-1",), 2.0))
 
 
-def _make_mc_stage(runner: CapturingSimulationRunner, n_runs: int = 5) -> MonteCarloStage:
+def _make_mc_stage(runner: CurveRunner, n_runs: int = 50) -> MonteCarloStage:
     cfg = MonteCarloStageConfig(
         name="elite_monte_carlo",
         symbols=["AAPL"],
-        start_date=date(2023, 1, 1),
-        end_date=date(2023, 6, 30),
+        start_date=date(2023, 1, 2),
+        end_date=date(2023, 2, 28),
         n_runs=n_runs,
         min_pass_rate=0.50,
         filter_config=_liberal_filter_config(),
-        scoring_weights=_liberal_scoring_weights(),
+        scoring_weights=ScoringWeights(
+            w_sharpe=0.4, w_return=0.3, w_drawdown=0.2, w_consistency=0.1
+        ),
     )
     return MonteCarloStage(stage_config=cfg, simulation_runner=runner)  # type: ignore[arg-type]
 
 
-def _make_strategy(strategy_id: str = "strat-1") -> StrategyConfig:
-    return StrategyConfig(
-        strategy_id=strategy_id,
-        type="moving_average_crossover",
-        parameters={"short_window": 5, "long_window": 20},
+def _run(
+    stage: MonteCarloStage,
+    strategy_ids: tuple[str, ...] = ("strat-1",),
+    *,
+    experiment_id: str = "exp-1",
+    random_seed: int = 100,
+) -> StageResult:
+    return stage.run(
+        survivors=[strategy(sid) for sid in strategy_ids],
+        experiment_id=experiment_id,
+        dataset_version="v1",
+        random_seed=random_seed,
+        price_basis=PriceBasis.RAW,
+        initial_cash=100_000.0,
     )
 
 
@@ -120,108 +80,54 @@ def _make_strategy(strategy_id: str = "strat-1") -> StrategyConfig:
 # ---------------------------------------------------------------------------
 
 
-def test_monte_carlo_all_requests_include_stage_name() -> None:
-    runner = CapturingSimulationRunner()
-    stage = _make_mc_stage(runner, n_runs=5)
+def test_monte_carlo_base_request_includes_stage_name_and_role() -> None:
+    runner = _runner()
+    _run(_make_mc_stage(runner))
 
-    stage.run(
-        survivors=[_make_strategy()],
-        experiment_id="exp-1",
-        dataset_version="v1",
-        random_seed=100,
-        price_basis=PriceBasis.RAW,
-        initial_cash=100_000.0,
-    )
-
-    assert len(runner.captured) == 5
-    for req in runner.captured:
-        assert req.stage_name == "elite_monte_carlo", (
-            f"MC request missing stage_name, got: {req.stage_name}"
-        )
+    (request,) = runner.requests
+    assert request.stage_name == "elite_monte_carlo"
+    assert request.window_role == "mc_base"
 
 
-def test_monte_carlo_each_run_has_unique_window_role() -> None:
-    n_runs = 5
-    runner = CapturingSimulationRunner()
-    stage = _make_mc_stage(runner, n_runs=n_runs)
+def test_monte_carlo_runs_one_simulation_whatever_n_runs_is() -> None:
+    for n_runs in (2, 50, 400):
+        runner = _runner()
+        result = _run(_make_mc_stage(runner, n_runs=n_runs))
 
-    stage.run(
-        survivors=[_make_strategy()],
-        experiment_id="exp-1",
-        dataset_version="v1",
-        random_seed=100,
-        price_basis=PriceBasis.RAW,
-        initial_cash=100_000.0,
-    )
-
-    window_roles = [r.window_role for r in runner.captured]
-    assert len(set(window_roles)) == n_runs, (
-        f"Expected {n_runs} distinct window_roles, got: {window_roles}"
-    )
+        assert len(runner.requests) == 1
+        assert len(result.simulation_results) == 1
+        aggregation = result.diagnostics["strat-1"].mc_aggregation
+        assert aggregation is not None and aggregation.n_runs == n_runs
 
 
-def test_monte_carlo_window_roles_follow_mc_run_n_pattern() -> None:
-    n_runs = 4
-    runner = CapturingSimulationRunner()
-    stage = _make_mc_stage(runner, n_runs=n_runs)
+def test_monte_carlo_base_seed_is_derived_and_stable() -> None:
+    def seed(strategy_id: str = "strat-1", **run_kwargs) -> int:
+        runner = _runner(strategy_id)
+        _run(_make_mc_stage(runner), (strategy_id,), **run_kwargs)
+        return runner.requests[0].random_seed
 
-    stage.run(
-        survivors=[_make_strategy()],
-        experiment_id="exp-1",
-        dataset_version="v1",
-        random_seed=100,
-        price_basis=PriceBasis.RAW,
-        initial_cash=100_000.0,
-    )
-
-    window_roles = sorted(r.window_role for r in runner.captured if r.window_role is not None)
-    expected = [f"mc_run_{i}" for i in range(n_runs)]
-    assert window_roles == expected
+    assert seed() == seed()  # same identity → same seed
+    # Not the pipeline seed itself, so neighbouring experiments' base seeds cannot collide.
+    assert seed() != 100
+    assert seed() != seed(random_seed=101)
+    assert seed() != seed(experiment_id="exp-2")
+    assert seed() != seed("strat-2")
 
 
-def test_monte_carlo_each_run_has_unique_seed() -> None:
-    n_runs = 5
-    base_seed = 200
-    runner = CapturingSimulationRunner()
-    stage = _make_mc_stage(runner, n_runs=n_runs)
+def test_monte_carlo_multiple_strategies_each_get_one_base_run() -> None:
+    ids = ("strat-0", "strat-1", "strat-2")
+    runner = _runner(*ids)
+    result = _run(_make_mc_stage(runner), ids)
 
-    stage.run(
-        survivors=[_make_strategy()],
-        experiment_id="exp-1",
-        dataset_version="v1",
-        random_seed=base_seed,
-        price_basis=PriceBasis.RAW,
-        initial_cash=100_000.0,
-    )
-
-    seeds = [r.random_seed for r in runner.captured]
-    assert len(set(seeds)) == n_runs, f"Expected {n_runs} unique seeds, got: {seeds}"
-    assert sorted(seeds) == [base_seed + i for i in range(n_runs)]
+    assert sorted(r.strategy_id for r in runner.requests) == list(ids)
+    assert {r.window_role for r in runner.requests} == {"mc_base"}
+    assert len({r.random_seed for r in runner.requests}) == len(ids)
+    assert [r.strategy_id for r in result.simulation_results] == list(ids)
 
 
-def test_monte_carlo_multiple_strategies_all_get_separate_runs() -> None:
-    n_runs = 3
-    runner = CapturingSimulationRunner()
-    stage = _make_mc_stage(runner, n_runs=n_runs)
+def test_monte_carlo_base_run_is_recorded_as_the_reference_result() -> None:
+    runner = _runner()
+    result = _run(_make_mc_stage(runner))
 
-    strategies = [_make_strategy(f"strat-{i}") for i in range(2)]
-
-    stage.run(
-        survivors=strategies,
-        experiment_id="exp-1",
-        dataset_version="v1",
-        random_seed=100,
-        price_basis=PriceBasis.RAW,
-        initial_cash=100_000.0,
-    )
-
-    # 2 strategies × 3 runs each = 6 total requests
-    assert len(runner.captured) == 2 * n_runs
-
-    for strategy_id in ["strat-0", "strat-1"]:
-        strategy_runs = [r for r in runner.captured if r.strategy_id == strategy_id]
-        assert len(strategy_runs) == n_runs
-        window_roles = [r.window_role for r in strategy_runs]
-        assert len(set(window_roles)) == n_runs, (
-            f"Expected {n_runs} unique window_roles for {strategy_id}"
-        )
+    (base,) = result.simulation_results
+    assert result.diagnostics["strat-1"].reference_result is base

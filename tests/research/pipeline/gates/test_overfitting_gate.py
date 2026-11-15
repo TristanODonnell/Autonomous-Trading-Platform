@@ -40,17 +40,21 @@ def _fold(i: int, train: float, test: float) -> FoldValidationInput:
     )
 
 
-def _mc(mean: float, std: float) -> MonteCarloAggregation:
-    dist = MetricDistribution(mean=mean, median=mean, std=std, min=mean - std, max=mean + std)
+def _mc(prob_positive_sharpe: float) -> MonteCarloAggregation:
+    """Only prob_positive_sharpe feeds the overfitting indicator; the rest is filler."""
+    dist = MetricDistribution(mean=1.0, median=1.0, std=1.0, min=-2.0, max=4.0, p05=-0.6, p95=2.6)
     return MonteCarloAggregation(
         strategy_id="s1",
-        n_runs=5,
-        n_passed=5,
+        n_runs=1000,
+        n_passed=1000,
         pass_rate=1.0,
         passed=True,
         sharpe_dist=dist,
         return_dist=dist,
         drawdown_dist=dist,
+        prob_positive_sharpe=prob_positive_sharpe,
+        prob_sharpe_above_min=prob_positive_sharpe,
+        n_sessions=63,
     )
 
 
@@ -63,7 +67,7 @@ CFG = OverfittingGateConfig()
 
 class TestCollectEvidence:
     def test_merges_across_stages_and_reindexes_folds(self) -> None:
-        mc = _mc(1.0, 0.1)
+        mc = _mc(0.95)
         ref = _ref()
         prior = [
             StageResult(stage_name="sim"),
@@ -80,7 +84,7 @@ class TestCollectEvidence:
                 diagnostics={"s1": StageDiagnostics(mc_aggregation=mc, reference_result=ref)},  # type: ignore[arg-type]
             ),
             StageResult(
-                stage_name="other", diagnostics={"s2": StageDiagnostics(mc_aggregation=_mc(0, 1))}
+                stage_name="other", diagnostics={"s2": StageDiagnostics(mc_aggregation=_mc(0.5))}
             ),
         ]
         evidence = collect_overfitting_evidence("s1", prior)
@@ -99,7 +103,7 @@ class TestOverfittingGate:
     def test_consistent_strategy_passes(self) -> None:
         evidence = OverfittingEvidence(
             fold_inputs=[_fold(0, 1.2, 1.1), _fold(1, 1.1, 1.0), _fold(2, 1.3, 1.2)],
-            mc_aggregation=_mc(1.1, 0.1),
+            mc_aggregation=_mc(0.97),
             reference_result=_ref(),  # type: ignore[arg-type]
         )
         verdict = evaluate_overfitting_gate(strategy_id="s1", evidence=evidence, config=CFG)
@@ -107,17 +111,17 @@ class TestOverfittingGate:
         assert verdict.n_core_indicators == 3
         assert verdict.analysis.overfitting_probability < 0.3
 
-    def test_train_test_collapse_and_mc_dispersion_eliminate(self) -> None:
+    def test_train_test_collapse_and_weak_mc_evidence_eliminate(self) -> None:
         evidence = OverfittingEvidence(
             fold_inputs=[_fold(0, 3.0, -0.5), _fold(1, 2.8, 0.2), _fold(2, 3.2, -1.0)],
-            mc_aggregation=_mc(0.3, 1.5),
+            mc_aggregation=_mc(0.3),  # only 30% of resampled paths have a positive Sharpe
             reference_result=_ref(trade_count=5),  # type: ignore[arg-type]
         )
         verdict = evaluate_overfitting_gate(strategy_id="s1", evidence=evidence, config=CFG)
         assert not verdict.passed
         assert "overfitting probability" in verdict.failure_reasons[0]
         assert verdict.analysis.indicators.train_test_degradation == pytest.approx(0.5, abs=0.1)
-        assert verdict.analysis.indicators.mc_instability == 1.0
+        assert verdict.analysis.indicators.mc_instability == pytest.approx(0.7)
 
     def test_weak_indicators_alone_are_insufficient_evidence(self) -> None:
         # Only low_trade_count is available → 0 core indicators → policy decides.
@@ -135,7 +139,7 @@ class TestOverfittingGate:
     def test_threshold_is_configurable(self) -> None:
         evidence = OverfittingEvidence(
             fold_inputs=[_fold(0, 2.0, 1.0), _fold(1, 2.0, 0.8)],
-            mc_aggregation=_mc(1.0, 0.6),
+            mc_aggregation=_mc(0.8),
         )
         prob = evaluate_overfitting_gate(
             strategy_id="s1", evidence=evidence, config=CFG

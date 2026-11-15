@@ -63,6 +63,21 @@ def test_stable_strategy_low_probability():
     assert result.resistance_score > 0.5
 
 
+def test_single_fold_is_not_evidence_of_fold_stability():
+    """One fold has no fold-to-fold spread: the indicator is absent, not a perfect 0."""
+    analyzer = OverfittingAnalyzer()
+    one = analyzer.analyze(strategy_id="one_fold", wf_result=_make_wf_result(n_folds=1))
+    two = analyzer.analyze(strategy_id="two_folds", wf_result=_make_wf_result(n_folds=2))
+
+    assert one.indicators.fold_instability is None
+    assert "fold_instability" not in one.indicators.active()
+    assert one.indicators.train_test_degradation is not None
+    # Two folds with identical test Sharpes are measured as stable, and only
+    # then does stability pull the overfitting probability down.
+    assert two.indicators.fold_instability == 0.0
+    assert one.overfitting_probability > two.overfitting_probability
+
+
 def test_unstable_strategy_high_probability():
     """Train Sharpe 4.0, test 0.1, few trades → high overfit signal."""
     analyzer = OverfittingAnalyzer(min_trade_count=50)
@@ -100,15 +115,23 @@ def test_high_trade_count_not_flagged():
 
 
 def test_mc_instability_detected():
-    """Simulate a MC aggregation with high Sharpe CoV."""
+    """A MC aggregation where most resampled paths have a non-positive Sharpe."""
     mc_agg = MagicMock()
-    mc_agg.sharpe_dist.coefficient_of_variation = 1.5  # very unstable
-    mc_agg.sharpe_dist.mean = 1.0
+    mc_agg.prob_positive_sharpe = 0.35
 
     analyzer = OverfittingAnalyzer()
     result = analyzer.analyze(strategy_id="s", mc_aggregation=mc_agg)
-    assert result.indicators.mc_instability is not None
-    assert result.indicators.mc_instability > 0.4
+    assert result.indicators.mc_instability == pytest.approx(0.65)
+    assert any("35% of resampled paths" in w for w in result.warnings)
+
+
+def test_mc_instability_low_when_paths_mostly_positive():
+    mc_agg = MagicMock()
+    mc_agg.prob_positive_sharpe = 0.96
+
+    result = OverfittingAnalyzer().analyze(strategy_id="s", mc_aggregation=mc_agg)
+    assert result.indicators.mc_instability == pytest.approx(0.04)
+    assert not any("resampled paths" in w for w in result.warnings)
 
 
 def test_most_suspicious_ordered():

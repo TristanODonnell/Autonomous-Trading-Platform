@@ -408,7 +408,7 @@ def _pipeline(runner: ScriptedRunner) -> PipelineRunner:
             MonteCarloStage(
                 stage_config=MonteCarloStageConfig(
                     name="mc",
-                    n_runs=3,
+                    n_runs=200,
                     min_pass_rate=0.5,
                     filter_config=PERMISSIVE,
                     scoring_weights=ScoringWeights(),
@@ -453,10 +453,11 @@ class TestPipelineEvidenceFlow:
             noise = float(np.random.default_rng(day.toordinal() + 17).normal(0, 0.003))
             if role.endswith("_test"):
                 return -0.004 + noise  # falls apart out of sample
-            if role.startswith("mc_run_"):
-                # Outcome depends on the execution seed, not the market.
-                seeded = np.random.default_rng(req.random_seed * 100_000 + day.toordinal())
-                return float(0.0005 + seeded.normal(0, 0.01))
+            if role == "mc_base":
+                # Over the full window it loses money, so most resampled
+                # histories have a negative Sharpe (mc_instability near 1).
+                seeded = np.random.default_rng(day.toordinal() + 99)
+                return float(-0.002 + seeded.normal(0, 0.01))
             return 0.004 + noise  # great in-sample
 
         runner = ScriptedRunner(script)
@@ -480,7 +481,7 @@ class TestPipelineEvidenceFlow:
         assert analysis.indicators.mc_instability is not None
         assert analysis.indicators.regime_concentration is not None
 
-        # Regime + stress reused Monte Carlo's representative run (same window).
+        # Regime + stress reused Monte Carlo's base run (same window).
         roles = [r.window_role for r in runner.requests]
         assert "regime_reference" not in roles
         assert "stress_baseline" not in roles

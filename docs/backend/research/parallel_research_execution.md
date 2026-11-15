@@ -11,7 +11,7 @@ Safe local work units are:
 - independent `SimulationStage` strategy simulations;
 - independent train simulations within one walk-forward fold;
 - independent test simulations within one walk-forward fold after train filtering;
-- independent Monte Carlo trials for a single strategy;
+- independent Monte Carlo base simulations, one per strategy;
 - validation, regime, and intelligence jobs only when they have isolated inputs and
   writers.
 
@@ -46,9 +46,11 @@ Simulation and walk-forward seeds are derived from stable identity inputs:
 base seed, experiment id, strategy id, strategy config hash, stage name, window
 role, and fold id when present.
 
-Monte Carlo retains the existing `base_seed + trial_index` seed contract for
-compatibility, while trial identities remain isolated through `mc_run_N` window
-roles.
+Monte Carlo runs one base simulation per strategy (window role `mc_base`) and
+resamples its equity curve in-process. Both the base run's seed and the
+resampling seed (role `mc_bootstrap`) are derived from the same identity inputs,
+and every session index is drawn before any path is computed, so neither the
+worker count nor the memory chunk size can change a verdict.
 
 ## Cache, Checkpoint, And Artifact Safety
 

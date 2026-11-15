@@ -13,7 +13,8 @@
 #     (entered/passed per stage) and `research_profile: smoke`.
 #   cost_notes: >
 #     research profile "smoke": 2 candidates per strategy family (10 total vs 36),
-#     Monte Carlo n_runs 3 (vs 5), one cost-stress multiplier (2x) instead of two.
+#     Monte Carlo n_runs 200 (vs 2000 resampled paths; one simulation per survivor
+#     either way), one cost-stress multiplier (2x) instead of two.
 #     Regime and overfitting stages add no simulations.
 #   recommended_use: research stage verification, pre-full-run check
 

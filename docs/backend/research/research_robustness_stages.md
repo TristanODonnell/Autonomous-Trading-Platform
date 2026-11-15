@@ -13,7 +13,7 @@ initial_quality_filter → walk_forward → monte_carlo → regime → stress �
 
 | Stage | YAML `type` | Question | Extra simulations per survivor |
 |---|---|---|---|
-| `RegimeStage` | `regime` | Does it only work in one kind of market? | 0 when Monte Carlo ran on the same window (reuses its representative run), else 1 |
+| `RegimeStage` | `regime` | Does it only work in one kind of market? | 0 when Monte Carlo ran on the same window (reuses its base run), else 1 |
 | `StressStage` | `stress` | Does it break under shocks or higher execution costs? | 1 per cost multiplier (+1 baseline if none reusable) |
 | `OverfittingStage` | `overfitting` | Do the combined fold / MC / regime signals say "curve-fit"? | 0 |
 
@@ -112,8 +112,9 @@ runs on the stage-1 curve alone.
 ### Cheap verification runs
 
 `research.options.profile: smoke` in a replay fixture shrinks the research budget:
-2 candidates per strategy family (10 vs 36), Monte Carlo `n_runs` 3 (vs 5), one
-cost multiplier (2x). Stage logic and thresholds are unchanged.
+2 candidates per strategy family (10 vs 36), Monte Carlo `n_runs` 200 (vs 2000
+resampled paths; one simulation per survivor either way), one cost multiplier
+(2x). Stage logic and thresholds are unchanged.
 
 ```bash
 atp platform backtest run \

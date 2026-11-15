@@ -8,7 +8,7 @@ above max_overfitting_probability.
 
 Evidence used (whatever earlier stages produced):
   fold_inputs      -> train/test degradation, fold instability
-  mc_aggregation   -> Monte Carlo Sharpe dispersion
+  mc_aggregation   -> Monte Carlo P(Sharpe > 0) across resampled paths
   regime_profile   -> regime concentration
   reference_result -> trade count, narrow-period alpha (equity curve)
 
