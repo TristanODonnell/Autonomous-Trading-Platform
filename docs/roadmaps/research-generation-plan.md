@@ -722,11 +722,22 @@ engine before the fix.**
   `:1038` cannot be reached), and with delayed fills an order for a thin symbol can
   vanish where a broker would leave it open. How many orders that is on real bars was
   not counted; see the unchecked box below.
-- Also seen, not investigated: in the simulator a strategy is never given its position.
+- Strategies and their positions (checked 2026-11-15, no defect). In the simulator
   `StrategyContextBuilder.build_from_window` takes `positions` and does not use it, so
-  `context.position` is always the empty default. No strategy can react to what it holds
-  in a re-sim; whether the live cycle passes positions was not checked (a parity
-  question for R4).
+  `context.position` is always the empty default. The same is true everywhere: nothing
+  in `src/` reads `context.position`, and `StrategyPositionSnapshot` is defined and never
+  constructed, the live path included. Research and live agree (a strategy is never told
+  what it holds), so there is no parity gap and nothing to fix. It is a dead field; it
+  starts to matter only if a strategy is written to read it, and then both paths need it
+  filled the same way.
+- The platform backtest's broker keeps an order open when the symbol has no bar
+  (`simulated_broker_client.py:209`, "leave as open/pending"); the research fill service
+  drops it. The fill settings the research runs really use (recorded from the runs, box
+  below): fill at the current bar's close, no fill delay (`latency_bars=0`), at most 5%
+  of the bar's volume (`max_volume_participation_rate=0.05`), no execution policy, no
+  settlement delay. So an order is created only on a bar the symbol has and fills on
+  that bar; the only orders that wait for a later bar are the remainders the 5% cap
+  leaves over.
 - Fix options:
   - (a) The engine keeps the latest close per symbol, updated from each bar, and uses it
     as the fallback in `_calculate_positions_value` and `_build_position_rows`. Fixes
@@ -781,9 +792,18 @@ engine before the fix.**
 - [ ] After merge and deploy to A and B (same SHA): re-run the bench re-sim on B and
       compare with `bench_resims_2026-11-14` (macd 0.87, mean reversion -0.16, momentum
       -1.21) before `portfolio_review_mode` goes to `advisory`.
-- [ ] Count dropped orders on real bars (orders scheduled for a bar the symbol does not
-      have), per strategy, and decide whether a dropped order should wait for the
-      symbol's next bar. Its own R-number if the count is material.
+- [x] Dropped orders counted on real bars (2026-11-15, the 30-strategy run on the fixed
+      engine with a counter around `SimulatedExecutionService.fill` and
+      `SimulationExecutionEngine.execute`): 184 simulations, 883,119 orders handed to the
+      fill service, 883,111 fills, 36 remainders carried to the next bar by the 5% volume
+      cap, 8 orders with no bar when they came due, all TLT (42% of timestamps without a
+      bar). 8 in 883,119 is not material: no code change, no R-number. It does become
+      material if a fill delay is ever switched on (`latency_bars=1`, which
+      `fill_model.py` calls the realistic setting): every order would then wait one
+      timestamp, and for DIA 83% of timestamps have no bar. Before that switch, the fill
+      service has to keep such an order open the way the platform broker does.
+      The same run repeated the first post-fix run exactly (all 30 strategies: verdict,
+      Sharpe, trades, pass rate, spread, return, drawdown; same funnel).
 - [ ] R7: more sparse-bars fixtures (the new test file is the first). The synthetic bars
       of the R1 harness have a bar for every symbol at every timestamp, so they could not
       show this; whether any other simulator test has a gap was not checked.
