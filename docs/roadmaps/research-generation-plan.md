@@ -84,18 +84,26 @@ Three suspicions the user raised while studying the backtesting funnel, each con
 reading the code (three parallel audits, key claims re-verified by hand). Fix these before
 trusting any before/after number from Steps 1–2.
 
-Order from here (proposed 2026-11-14, not yet agreed by the user):
-1. One PR from `research/r1-monte-carlo-bootstrap` with three commits: R1 (pushed), the R1
-   follow-up, the small R2 set with these notes. R2 stays open; the PR is "R2, partial".
-   The real-bars check of the R2 change is done (under R2). Still before the PR: the
-   low-spread question under "R1 verification", because a cause in the resampling would
-   be an R1 defect and belongs in the same PR.
-2. The longer-history data question (read-only first). It unblocks the selection / test
-   split and holdout the user chose for R2, and Step 1 waits on R2.
+Order from here (agreed with the user 2026-11-15; the 2026-11-14 proposal had longer
+history second, the user moved it after the audits):
+1. The low-spread question under "R1 verification" (user: "we need to solve any obvious
+   unknown"). Resolved 2026-11-15: the resampling is correct; the cause is a simulator
+   defect, recorded as R10. Not an R1 defect. R10 is fixed on its own branch
+   (`fix/r10-sim-stale-marks`) and goes before R4 (user, 2026-11-15: "i imagine this
+   needs fixing now before anything else?", then chose the fix), because every gate R4
+   audits reads the curves R10 distorted.
+2. One PR from `research/r1-monte-carlo-bootstrap`: R1, the R1 follow-up (kept, user
+   2026-11-15), the small R2 set with these notes. R2 stays open; the PR is "R2,
+   partial". Merged as PR #181; deployed to A 2026-11-15 07:02 UTC (`15b4d4b9d`), B on
+   the same commit.
 3. R4, starting with the stress gate: in every real-bars run on 2026-11-14 it eliminated
    every strategy that reached it.
-4. R5 and R6.
-5. R3, before Step 5 (it changes cost, not what a score means).
+4. R5 and R6 (placed here on the same reasoning as item 5; the user did not name them).
+5. Longer history, then the R2 tasks that wait on it (selection / evaluation / holdout
+   split). User's reasoning: running on a longer window is mostly the same code over more
+   days, so audits and fixes come first and the window is extended once the gates are
+   trusted. Step 1 still waits on R2.
+6. R3, before Step 5 (it changes cost, not what a score means).
 
 **R1 — Monte Carlo is not a Monte Carlo (blocks trust in scores).**
 `pipeline/stages/monte_carlo_stage.py:371-392` builds `n_runs` identical
@@ -254,7 +262,8 @@ reasons").**
 - This is stricter than `main`, not a return to it: `main` never applied consistency,
   profit factor, win rate or turnover at this stage (see the corrected note above). The
   user approved it when the notes still said R1 had dropped those checks; told
-  2026-11-14, reverting is a small change if the old leniency is wanted.
+  2026-11-14, reverting is a small change if the old leniency is wanted. Decided
+  2026-11-15 with the corrected framing: keep it (user: "lets keep").
 - Rule: `min_sharpe`, `min_total_return` and `max_drawdown` are checked on every resampled
   path. Every other threshold in the stage's `filter_config` is checked once, on the base
   run, and any failure eliminates the strategy whatever its pass rate. It is done by
@@ -321,7 +330,11 @@ reasons").**
     four with few trades (155 to 729), 0 for two that never traded. With a spread near 2,
     "60% of paths at or above 0.3" needs a base Sharpe of about 0.85; the 0.70 strategy
     passes because its spread is 0.95.
-  - Open, not explained: the four low spreads. Independent session returns give a spread
+  - Explained 2026-11-15 (R10): the four low spreads, and the 1.54, come from one-bar
+    equity spikes the simulator creates when a held symbol has no bar. The spikes cancel
+    inside the session, so they add to bar variance and not to session returns. With the
+    marks corrected all five spreads are 1.97 to 2.40. The reasoning as written on
+    2026-11-14 follows. Independent session returns give a spread
     of about √(252/60) ≈ 2.05 whatever the trade count, so a spread under 1 means the
     bar returns of those curves are not independent within a session (or something else
     is off). It matters because a narrow spread makes the gate easier to pass at a low
@@ -487,8 +500,9 @@ reasons").**
           is flattered by the days the strategy was picked on.
           The governance source run becomes the evaluation-window run.
     - [ ] Holdout: the last N sessions, read by no gate, scored once for the final
-          survivors and stored with the candidate. Open decision for the user: report
-          only, or a final pass/fail.
+          survivors and stored with the candidate. Decided 2026-11-15: report only, it
+          eliminates nobody. Whether it becomes a final pass/fail is a question to come
+          back to (section 4, "Holdout as a gate").
     - [ ] Fold geometry in the hook: test folds that do not overlap (`step_days >=
           test_days`), no train window covering another fold's test days, and a pooled or
           median pass rule in place of "any one fold" (`min_folds_passed=1`).
@@ -636,6 +650,168 @@ check is re-run because this touches `research/simulation/`.
 mutates without fitness, so today it is a mutation search, not evolution **[7.10 #7]**.
 Step 2 is the fix; if Step 2 slips, the fallback is to rename the method honestly. No
 separate checklist.
+
+**R10 — Simulator marks a held position at its last-fill price when its bar is missing
+(found and fixed 2026-11-15 on branch `fix/r10-sim-stale-marks`, not yet merged or
+deployed; it distorted Sharpe and volatility on every run). Line numbers below are the
+engine before the fix.**
+- What happens. `Position.market_price` is written only when a fill is applied
+  (`simulation_execution_engine.py:1038-1048`) and on a split; the bar loop never
+  refreshes it. `_calculate_positions_value` (`:1160`) and `_build_position_rows`
+  (`:1200`) use it as the price of any held symbol that has no bar at the timestamp. So
+  for that bar the position is valued at the close of the bar of its last fill, and at
+  the symbol's next bar it returns to the market. Equity moves by quantity × (latest
+  close − price at last fill) and back.
+- How often. In the 60-session window (2026-08-15 to 2026-11-13, IEX five-minute bars,
+  22 symbols) 96.6% of timestamps have at least one symbol with no bar. Share of
+  timestamps with no bar: DIA 83%, COST 71%, MA 50%, TLT 42%, ADBE 39%, CRM 38%, HD 38%,
+  UNH 34%, V 21%, AMD 20%, the other twelve under 10%.
+- Proof (the 30-strategy real-bars run of "R1 verification" repeated on the laptop with
+  each base run's equity curve and fills saved; 28 strategies traded). Equity rebuilt
+  outside the simulator from its own cash column, its fills and the bars, with missing
+  bars marked at the close of the last fill's bar, matches the simulator's curve on every
+  bar of all 28 runs (largest difference 3e-11 dollars). Rebuilt with the latest close
+  instead, it differs by up to $65 to $1,446 on a $100,000 account, depending on the
+  strategy.
+- Effect on Sharpe (bar returns; "corrected" = latest-close marks, same fills and cash):
+
+  | Strategy | Trades | Sharpe, simulator | Sharpe, corrected | Spread, simulator | Spread, corrected |
+  |---|---|---|---|---|---|
+  | composite rule (passed the hook's Monte Carlo) | 4,139 | 1.61 | 2.35 | 1.56 | 2.32 |
+  | mean reversion (passed the hook's Monte Carlo) | 203 | 0.70 | 1.53 | 0.94 | 2.03 |
+  | mean reversion | 155 | -0.14 | -0.66 | 0.52 | 1.97 |
+  | moving-average crossover | 729 | -0.04 | -0.42 | 0.60 | 2.27 |
+  | moving-average crossover | 448 | -0.07 | -0.84 | 0.49 | 2.40 |
+
+  The spikes cancel within the session, so total return is unchanged and bar variance is
+  inflated: Sharpe is pulled toward zero, good and bad alike. For the other 23 strategies
+  the Sharpe moves by a median of 0.015 (largest 0.06). Max drawdown moves by under 0.4
+  percentage points everywhere (these curves draw down 0.2% to 3.5%).
+- The bootstrap is not at fault: its 2,000-path spread equals √(bars per year / bars) ×
+  √(sum of squared session sums / sum of squared bar returns) for every strategy, and a
+  plain re-computation of 200 paths per strategy (concatenate the bar returns, mean / std)
+  matches it to rounding.
+- Not measured: the corrected curve keeps the simulator's fills. Order sizes read the
+  previous bar's equity (`capital_scale`, `:303`), so a fixed simulator will size some
+  orders differently and its numbers will not equal the "corrected" column exactly. The
+  gates were not re-run on corrected curves, so no verdict change is claimed. Which
+  positions drive the five large cases (holding time, symbol) was not broken down.
+- Reach. Every user of `SimulationExecutionEngine`: all research stages, the bench hooks,
+  the rotation hooks, and the worker's bench re-sim that A's portfolio review reads
+  (`portfolio_review_mode` is `off`, so no decision has used it). Live and paper trading
+  do not use it; the broker sync takes the broker's `current_price`
+  (`broker_runtime_sync_service.py:415-426`, seen, not traced further).
+  `simulated_broker_client._marked_equity` is a separate marking path and was not read.
+- Second stale value, same cause (read 2026-11-15, not measured). `Position.unrealized_pnl`
+  and `market_value` are also computed only at a fill (`position_ledger_service.py:109-126`).
+  The engine writes `position.unrealized_pnl` into the per-symbol position rows (`:1214`)
+  and the per-bar metric rows (`:1078`) on every bar, so those columns hold the value from
+  the last fill on every bar, whether or not the symbol has a bar. Equity does not use
+  them. Files that mention these rows: `result_recorder_service.py`, `regime_join_service.py`,
+  `regime_analysis_service.py`; whether any gate reads the stale column was not traced.
+- The platform backtest already does it the other way: `simulated_broker_client._marked_equity`
+  (`:268-285`) marks each position "at the close of the last bar stamped before the tick",
+  and its docstring says research "marks every bar". So the fix moves research toward the
+  platform side (parity 5c), not away from it.
+- Orders for a symbol with no bar (read 2026-11-15, not measured). `_construct_orders`
+  creates no order for a symbol with no price on the bar (`:822`). An order already
+  scheduled for a later bar is dropped if the symbol has no bar there:
+  `simulated_execution_service.fill` skips it with no fill and no carry-forward
+  (`simulated_execution_service.py:98-100`), and the engine releases its cash
+  reservation. So a fill never happens without a bar (the `fill.price` fallback at
+  `:1038` cannot be reached), and with delayed fills an order for a thin symbol can
+  vanish where a broker would leave it open. How many orders that is on real bars was
+  not counted; see the unchecked box below.
+- Strategies and their positions (checked 2026-11-15, no defect). In the simulator
+  `StrategyContextBuilder.build_from_window` takes `positions` and does not use it, so
+  `context.position` is always the empty default. The same is true everywhere: nothing
+  in `src/` reads `context.position`, and `StrategyPositionSnapshot` is defined and never
+  constructed, the live path included. Research and live agree (a strategy is never told
+  what it holds), so there is no parity gap and nothing to fix. It is a dead field; it
+  starts to matter only if a strategy is written to read it, and then both paths need it
+  filled the same way.
+- The platform backtest's broker keeps an order open when the symbol has no bar
+  (`simulated_broker_client.py:209`, "leave as open/pending"); the research fill service
+  drops it. The fill settings the research runs really use (recorded from the runs, box
+  below): fill at the current bar's close, no fill delay (`latency_bars=0`), at most 5%
+  of the bar's volume (`max_volume_participation_rate=0.05`), no execution policy, no
+  settlement delay. So an order is created only on a bar the symbol has and fills on
+  that bar; the only orders that wait for a later bar are the remainders the 5% cap
+  leaves over.
+- Fix options:
+  - (a) The engine keeps the latest close per symbol, updated from each bar, and uses it
+    as the fallback in `_calculate_positions_value` and `_build_position_rows`. Fixes
+    equity and the recorded price. Leaves `unrealized_pnl` in the rows stale unless it is
+    also computed there from the same mark.
+  - (b) After a bar's fills, refresh each held position that has a bar: `market_price`,
+    `market_value`, `unrealized_pnl` from that close. The existing fallback then already
+    reads the latest close, and every reader of the position sees current values.
+    Recommended 2026-11-15 after the reading above (the first recommendation was (a),
+    before the stale `unrealized_pnl` was seen). Cost: one position object rebuilt per
+    held symbol per bar, negligible beside the strategy evaluation. A name-based search
+    found no strategy or sizer reading these three fields in the research path (not
+    exhaustive), so the trades change only through sizing, the same as (a).
+  - (c) Forward-fill the bars when the window is loaded. Rejected: strategies would see
+    bars that never printed.
+- [x] Decided (b) (user, 2026-11-15: "B seems to make the most sense"). Fix:
+      `SimulationExecutionEngine._mark_positions`, called once per live bar right after
+      the bar's prices are extracted. That is after the strategy was evaluated, so this
+      bar's close reaches nothing a strategy could see, and before fills, sizing, the
+      position rows and the equity row. Each held position with a bar is rebuilt with
+      that close (price, value, unrealized P&L), the way the split path in the same file
+      builds a position; a symbol with no bar is skipped and keeps its latest close. The
+      shared `PositionLedgerService` was left alone (it is under `execution/`).
+- [x] Tests: `tests/research/simulation/test_missing_bar_marking.py`, six tests on a
+      two-symbol window where the held symbol has no bar at one timestamp. Before the fix
+      five failed: equity fell $394.40 on the gap bar (493 shares × (101.40 − 102.20)) and
+      unrealized P&L was 0.0 on every bar after the fill. All six pass after it. The
+      other simulator tests (477 passed, 3 skipped) and the full suite without
+      integration / external / alpaca pass; ruff clean.
+- [x] Neighbours read: `_apply_fills` and orders with no bar (bullets above);
+      `simulated_broker_client._marked_equity` already marks at the latest close.
+- [x] The 30-strategy run repeated on the fixed engine (same bars, same harness):
+  - The simulator's curve now equals the latest-close rebuild on every bar of all 28
+    runs (largest difference 3e-11 dollars).
+  - Sum of squared session sums / sum of squared bar returns is 0.87 to 1.33 for all 28
+    (before: 0.05, 0.06, 0.07, 0.20 and 0.57 for the five in the table). Sharpe spread
+    is 1.97 to 2.44 for all 28.
+  - Sharpe, simulator after the fix, for the five: 2.34, 1.53, -0.66, -0.42, -0.83. The
+    largest difference from the "corrected" estimate over all 28 is 0.017.
+  - Trade counts changed for 19 of 28 strategies, by 1 to 16 trades (sizing reads the
+    previous bar's equity). Max drawdown moves by under 0.4 percentage points (largest:
+    2.3% → 1.9%, the 448-trade crossover).
+  - Monte Carlo gate: 3 pass before, 4 after. The one change is the 2026-11-14 near miss
+    (composite rule, 1,196 of 2,000 paths): base Sharpe 0.76 → 0.82, pass rate 0.598 →
+    0.601. The other three pass on both. After the gate: regime 2 of 3 → 2 of 4, stress
+    0 of 2 on both. No survivors on either.
+- [ ] Parity 5c. Done: `tests/platform/test_research_trading_parity.py` (same signals,
+      same trades) passes. Not done: the re-sim vs platform daily-return correlation
+      (0.993 to 0.998 on 2026-10-02). It is a measurement on the recorded six-month
+      platform backtest, not a test, and was not re-run. Expected direction only: the
+      platform side already marks at the latest close.
+- [ ] After merge and deploy to A and B (same SHA): re-run the bench re-sim on B and
+      compare with `bench_resims_2026-11-14` (macd 0.87, mean reversion -0.16, momentum
+      -1.21) before `portfolio_review_mode` goes to `advisory`.
+- [x] Dropped orders counted on real bars (2026-11-15, the 30-strategy run on the fixed
+      engine with a counter around `SimulatedExecutionService.fill` and
+      `SimulationExecutionEngine.execute`): 184 simulations, 883,119 orders handed to the
+      fill service, 883,111 fills, 36 remainders carried to the next bar by the 5% volume
+      cap, 8 orders with no bar when they came due, all TLT (42% of timestamps without a
+      bar). 8 in 883,119 is not material: no code change, no R-number. It does become
+      material if a fill delay is ever switched on (`latency_bars=1`, which
+      `fill_model.py` calls the realistic setting): every order would then wait one
+      timestamp, and for DIA 83% of timestamps have no bar. Before that switch, the fill
+      service has to keep such an order open the way the platform broker does.
+      The same run repeated the first post-fix run exactly (all 30 strategies: verdict,
+      Sharpe, trades, pass rate, spread, return, drawdown; same funnel).
+- [ ] R7: more sparse-bars fixtures (the new test file is the first). The synthetic bars
+      of the R1 harness have a bar for every symbol at every timestamp, so they could not
+      show this; whether any other simulator test has a gap was not checked.
+
+**Verify (met 2026-11-15 on the laptop run above):** on the 30-strategy run, sum of
+squared session sums / sum of squared bar returns is between 0.85 and 1.35 for every
+strategy that traded, and the rebuild with latest-close marks matches the simulator's
+curve to the cent.
 
 **Definition of done for any change under `research/simulation/`:** the research ↔
 trading-cycle parity check from `portfolio-rotation-plan.md` 5c (re-sim vs platform
@@ -973,6 +1149,14 @@ every candidate with a recorded reason.
   stages. Only after Step 2 shows the search finds things the pool cannot.
 - Suite `v1` historical windows (`pre-launch-deployment-plan.md` section 5) once D1 has
   answered the SIP question and R6's holdout declaration exists.
+- Holdout as a gate (to reassess; user, 2026-11-15: report only for now). The holdout
+  score is stored with each candidate and eliminates nobody (R2, "Tasks for the six-stage
+  hook"). Reasons it is not a gate today: on about 15 sessions a Sharpe has a standard
+  error near 4, so a pass/fail would mostly be chance; and research reruns monthly on
+  overlapping days, so a holdout that eliminates is slowly selected on. Look again once
+  longer history is loaded and the holdout is its own period: how long it is, how many
+  candidates have been scored on it, and whether the reported holdout scores separated
+  the strategies that later held up on the bench from the ones that did not.
 
 ## 5. Results log
 
