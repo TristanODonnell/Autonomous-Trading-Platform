@@ -254,6 +254,10 @@ class SimulationExecutionEngine:
 
             prices = self._extract_prices(bars_at_timestamp)
 
+            # Mark held positions at this bar's close. After the strategy was evaluated
+            # (it must not see this bar), before anything below values a position.
+            self._mark_positions(positions=positions, prices=prices)
+
             # Apply deferred fills so positions are current before mark-to-market.
             if deferred_fills:
                 settled_cash, unsettled_cash, reserved_cash = self._apply_fills(
@@ -1098,6 +1102,38 @@ class SimulationExecutionEngine:
 
     def _extract_prices(self, bars_at_timestamp: dict[str, Any]) -> dict[str, float]:
         return {symbol: float(bar.close) for symbol, bar in bars_at_timestamp.items()}
+
+    def _mark_positions(
+        self,
+        *,
+        positions: dict[str, Position],
+        prices: dict[str, float],
+    ) -> None:
+        """Re-mark every held position that has a bar at this timestamp, in place.
+
+        A position's price, value and unrealized P&L are otherwise written only when
+        a fill is applied. A symbol with no bar here keeps its previous mark, so
+        `position.market_price` is always the latest close seen: the price the
+        valuation code falls back to when a bar is missing. Without this the fallback
+        was the price at the last fill, and equity jumped for one bar every time a
+        held symbol had no bar (research plan R10). The platform backtest's broker
+        marks at the last close before the tick in the same way.
+        """
+        for symbol, position in list(positions.items()):
+            price = prices.get(symbol)
+            if price is None:
+                continue
+            mark = Decimal(str(price))
+            quantity = Decimal(str(position.quantity))
+            avg_cost = Decimal(str(position.avg_cost)) if position.avg_cost is not None else None
+            positions[symbol] = Position(
+                symbol=symbol,
+                quantity=quantity,
+                avg_cost=avg_cost,
+                market_price=mark,
+                market_value=quantity * mark,
+                unrealized_pnl=(mark - avg_cost) * quantity if avg_cost is not None else None,
+            )
 
     def _calculate_equity(
         self,
