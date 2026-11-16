@@ -11,23 +11,14 @@ This service is PURE — it receives already-computed fold data and performs
 no simulation.  The ValidationOrchestrator is responsible for supplying
 fold inputs from WalkForwardStage results or independent simulation runs.
 
-Window types supported via configuration:
-  - rolling   (default): fixed-width train window slides forward by step_days
-  - expanding : train window grows from a fixed anchor start
-  - anchored  : test window advances; train always anchors from experiment start
+The folds it receives are rolling: a fixed-width train window that slides
+forward by step_days (WalkForwardStage builds no other kind).
 """
 
 from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass, field
-from enum import StrEnum
-
-
-class WindowType(StrEnum):
-    ROLLING = "rolling"
-    EXPANDING = "expanding"
-    ANCHORED = "anchored"
 
 
 @dataclass(frozen=True)
@@ -44,6 +35,8 @@ class FoldValidationInput:
     train_passed: bool
     test_passed: bool
     fold_passed: bool  # True iff both train and test passed filters
+    # A fold with train_passed=False is still evidence: its test numbers are real,
+    # it just cannot count as a passed fold.
 
 
 @dataclass(frozen=True)

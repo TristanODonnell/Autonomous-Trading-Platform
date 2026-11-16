@@ -11,6 +11,15 @@ existing validation and regime signals.  All ranking is:
 
 This service does NOT promote strategies or enable trading.
 It is a prioritisation tool for research review.
+
+Which signals count is set by an EvidencePolicy
+(research/validation/evidence_policy.py). By default only walk-forward and
+Monte Carlo decide: the composite uses the overall robustness score (built
+from those two) and walk-forward consistency, and deployability is the plain
+average of walk-forward consistency and Monte Carlo stability. Every other
+component is listed with weight 0. A candidate missing a required signal is
+not scored: composite and deployability are 0.0, evidence_complete is False,
+it ranks last and is never deployable.
 """
 
 from __future__ import annotations
@@ -23,6 +32,18 @@ from autonomous_trading_platform.research.intelligence.research_feature_vector_b
     ResearchFeatureVector,
     _clamp,
 )
+from autonomous_trading_platform.research.validation.evidence_policy import (
+    COMPONENTS,
+    DEFAULT_EVIDENCE_POLICY,
+    OVERFITTING,
+    EvidencePolicy,
+)
+
+# Ranking signals that are not robustness components, and the component each
+# follows: the overall score is built from deciding components only, so it
+# always counts; the trade-count flag is an output of the overfitting analysis.
+_ALWAYS_DECIDES = "robustness_overall"
+_FOLLOWS_COMPONENT = {"trade_reliability": OVERFITTING}
 
 
 @dataclass(frozen=True)
@@ -79,6 +100,8 @@ class CandidateScore:
     is_deployable: bool  # deployability_score >= threshold
     explanation: str
     data_completeness: float
+    evidence_complete: bool = True  # False: a required signal was missing, not scored
+    missing_evidence: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -88,6 +111,8 @@ class CandidateScore:
             "composite_score": round(self.composite_score, 4),
             "deployability_score": round(self.deployability_score, 4),
             "is_deployable": self.is_deployable,
+            "evidence_complete": self.evidence_complete,
+            "missing_evidence": list(self.missing_evidence),
             "data_completeness": round(self.data_completeness, 4),
             "explanation": self.explanation,
             "weakness_flags": list(self.weakness_flags),
@@ -111,15 +136,19 @@ class CandidateRankingService:
     Parameters
     ----------
     deployability_threshold
-        Minimum composite_score for a candidate to be flagged as deployable.
+        Minimum deployability_score for a candidate to be flagged as deployable.
+    evidence_policy
+        Which robustness components decide and which must be present.
     """
 
     def __init__(
         self,
         *,
         deployability_threshold: float = 0.55,
+        evidence_policy: EvidencePolicy | None = None,
     ) -> None:
         self._deploy_threshold = deployability_threshold
+        self._policy = evidence_policy or DEFAULT_EVIDENCE_POLICY
 
     def rank(
         self,
@@ -134,7 +163,7 @@ class CandidateRankingService:
         raw_scores.sort(key=lambda s: -s[0])  # descending by composite_score
 
         results: list[CandidateScore] = []
-        for rank, (composite, components, weaknesses, deploy, vec) in enumerate(
+        for rank, (composite, components, weaknesses, deploy, vec, missing) in enumerate(
             raw_scores, start=1
         ):
             results.append(
@@ -146,9 +175,11 @@ class CandidateRankingService:
                     components=components,
                     weakness_flags=weaknesses,
                     deployability_score=deploy,
-                    is_deployable=deploy >= self._deploy_threshold,
-                    explanation=self._explain(composite, components, weaknesses, deploy),
+                    is_deployable=not missing and deploy >= self._deploy_threshold,
+                    explanation=self._explain(composite, components, weaknesses, deploy, missing),
                     data_completeness=vec.data_completeness,
+                    evidence_complete=not missing,
+                    missing_evidence=missing,
                 )
             )
         return results
@@ -161,7 +192,7 @@ class CandidateRankingService:
     ) -> CandidateScore:
         """Score a single candidate (rank defaults to 1)."""
         w = weights or RankingWeights()
-        composite, components, weaknesses, deploy = self._score_vector(vector, w)[:4]
+        composite, components, weaknesses, deploy, _, missing = self._score_vector(vector, w)
         return CandidateScore(
             strategy_id=vector.strategy_id,
             experiment_id=vector.experiment_id,
@@ -170,9 +201,11 @@ class CandidateRankingService:
             components=components,
             weakness_flags=weaknesses,
             deployability_score=deploy,
-            is_deployable=deploy >= self._deploy_threshold,
-            explanation=self._explain(composite, components, weaknesses, deploy),
+            is_deployable=not missing and deploy >= self._deploy_threshold,
+            explanation=self._explain(composite, components, weaknesses, deploy, missing),
             data_completeness=vector.data_completeness,
+            evidence_complete=not missing,
+            missing_evidence=missing,
         )
 
     # ------------------------------------------------------------------
@@ -183,8 +216,18 @@ class CandidateRankingService:
         self,
         vec: ResearchFeatureVector,
         w: RankingWeights,
-    ) -> tuple[float, tuple[RankingComponent, ...], tuple[str, ...], float, ResearchFeatureVector]:
+    ) -> tuple[
+        float,
+        tuple[RankingComponent, ...],
+        tuple[str, ...],
+        float,
+        ResearchFeatureVector,
+        tuple[str, ...],
+    ]:
         fv = vec.as_dict()
+        policy = self._policy
+        present = [c for c in COMPONENTS if vec.has_data(f"val_{c}")]
+        missing = policy.missing(present)
 
         component_specs: list[tuple[str, str, float, str]] = [
             # (field_name, label, weight, interpretation)
@@ -232,16 +275,23 @@ class CandidateRankingService:
             ),
         ]
 
-        active_weight_sum = sum(wt for _, _, wt, _ in component_specs)
-        if active_weight_sum == 0.0:
-            return 0.0, (), (), 0.0, vec
+        def counts(label: str) -> bool:
+            if missing:
+                return False  # not scored: every signal is listed with weight 0
+            if label == _ALWAYS_DECIDES:
+                return True
+            return policy.decides(_FOLLOWS_COMPONENT.get(label, label))
+
+        active_weight_sum = sum(wt for _, label, wt, _ in component_specs if counts(label))
+        if active_weight_sum == 0.0 and not missing:
+            return 0.0, (), (), 0.0, vec, missing
 
         components: list[RankingComponent] = []
         composite = 0.0
 
         for field_name, label, weight, interp in component_specs:
             raw = fv.get(field_name, _NEUTRAL)
-            eff_w = weight / active_weight_sum
+            eff_w = weight / active_weight_sum if counts(label) else 0.0
             contrib = eff_w * raw
             composite += contrib
             components.append(
@@ -257,18 +307,19 @@ class CandidateRankingService:
 
         composite = _clamp(composite)
 
-        # Deployability: stricter subset of walk-forward + overfit + regime
-        deploy_signals = [
-            fv.get("val_walk_forward_consistency", _NEUTRAL),
-            fv.get("val_overfitting_resistance", _NEUTRAL),
-            fv.get("regime_is_robust", _NEUTRAL),
-            fv.get("stress_survival_rate", _NEUTRAL),
-        ]
-        deployability = sum(deploy_signals) / len(deploy_signals)
+        # Deployability: plain average of the deciding components (by default
+        # walk-forward consistency and Monte Carlo stability). Not scored when
+        # required evidence is missing.
+        deploy_signals = [fv.get(f"val_{c}", _NEUTRAL) for c in COMPONENTS if policy.decides(c)]
+        deployability = (
+            sum(deploy_signals) / len(deploy_signals) if deploy_signals and not missing else 0.0
+        )
 
         weaknesses = self._detect_weaknesses(fv)
+        if missing:
+            weaknesses = (f"not scored: missing {', '.join(missing)}", *weaknesses)
 
-        return composite, tuple(components), weaknesses, deployability, vec
+        return composite, tuple(components), weaknesses, deployability, vec, missing
 
     def _detect_weaknesses(self, fv: dict[str, float]) -> tuple[str, ...]:
         flags: list[str] = []
@@ -293,7 +344,13 @@ class CandidateRankingService:
         components: tuple[RankingComponent, ...],
         weaknesses: tuple[str, ...],
         deployability: float,
+        missing: tuple[str, ...] = (),
     ) -> str:
+        if missing:
+            return (
+                f"Not scored: required evidence missing ({', '.join(missing)}). "
+                "Composite and deployability are 0 and do not rank the strategy."
+            )
         grade = (
             "excellent"
             if composite >= 0.75

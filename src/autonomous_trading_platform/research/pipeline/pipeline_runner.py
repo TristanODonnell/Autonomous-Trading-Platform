@@ -28,6 +28,7 @@ from autonomous_trading_platform.research.simulation.simulation_runner import Si
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
 from ...contracts.common.enums import PriceBasis
+from .pipeline_validation import validate_pipeline
 from .stages.base_stage import BaseStage, StageResult
 
 logger = logging.getLogger(__name__)
@@ -38,11 +39,21 @@ _STAGE_METRICS = StepMetricSet(runs=research_stage_runs, duration=research_stage
 
 @dataclass
 class StagedPipelineConfig:
+    """The stages of one pipeline, validated as a set.
+
+    Every way of building a pipeline constructs this (experiment YAML through
+    the CLI or the scheduler cycle, the replay hook in Python), so the
+    cross-stage rules in pipeline_validation.py are checked here. smoke=True
+    waives them for plumbing checks; YAML key ``staged_pipeline_config.smoke``.
+    """
+
     stages: Sequence[BaseStage] = field(default_factory=list)
+    smoke: bool = False
 
     def __post_init__(self) -> None:
         if not self.stages:
             raise ValueError("StagedPipelineConfig requires at least one stage.")
+        validate_pipeline(self.stages, smoke=self.smoke)
 
 
 @dataclass

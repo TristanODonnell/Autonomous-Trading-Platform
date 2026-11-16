@@ -234,6 +234,10 @@ class WalkForwardStageConfigModel(ParallelStageConfigMixin):
     test_scoring_weights: ScoringWeightsModel = ScoringWeightsModel()
     require_all_folds: bool = True
     min_folds_passed: int = 1
+    # Named exception to step_days >= test_days. The rule itself, and
+    # min_folds_passed <= number of folds, are enforced by WalkForwardStageConfig,
+    # so they also cover stages built in Python.
+    allow_overlapping_test_folds: bool = False
 
     @field_validator("name")
     @classmethod
@@ -462,6 +466,8 @@ class OverfittingStageConfigModel(BaseModel):
     min_trade_count: int = 30
     on_insufficient_evidence: str = "pass"
     indicator_weights: dict[str, float] | None = None
+    # False = report only: findings recorded, nobody eliminated (plan item R14).
+    enforce: bool = False
 
     @field_validator("name")
     @classmethod

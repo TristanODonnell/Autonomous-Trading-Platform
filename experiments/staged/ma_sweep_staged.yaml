@@ -15,24 +15,30 @@ parameter_space:
   short_window: [5, 10, 20]
   long_window: [50, 100, 200]
 
+# Window layout (changed 2026-11, plan items R2 / R6): the two selection stages
+# read 2022 only, and the first walk-forward test fold starts 2023-01-01, so no
+# test fold covers days the survivors were picked on. The pipeline validator
+# rejects a selection stage that reads into the test folds. Before this change
+# the selection stages ran to 2024-12-31 and 2025-03-31.
+# NOT RE-RUN: the filter thresholds below were set for the longer windows. On
+# one year min_trades in particular may be too strict; re-tune before trusting
+# a run of this file.
 staged_pipeline_config:
   stages:
 
     # -------------------------------------------------------------------------
     # Stage 1 — Cheap
-    # Short window, loose filters. Purpose: eliminate catastrophically bad
-    # strategies quickly before spending compute on longer windows.
-    # Extended to 18 months so long_window=200 has enough bars to warm up
-    # and generate meaningful trade counts.
+    # Loose filters on the selection year. Purpose: eliminate catastrophically
+    # bad strategies before the stricter pass.
     # -------------------------------------------------------------------------
     - name: cheap
       type: simulation
-      start_date: "2023-07-01"
-      end_date: "2024-12-31"
+      start_date: "2022-01-01"
+      end_date: "2022-12-31"
       symbols: [AAPL, MSFT, SPY, AMZN, NVDA]
       filter_config:
         min_sharpe: 0.0        # just exclude catastrophically negative
-        min_trades: 3          # realistic for slow MAs on 18 months
+        min_trades: 3          # set for an 18-month window; not re-tuned
         max_drawdown: -0.40    # wide gate — cheap stage casts a broad net
       scoring_weights:
         w_sharpe: 0.4
@@ -42,13 +48,13 @@ staged_pipeline_config:
 
     # -------------------------------------------------------------------------
     # Stage 2 — Intermediate
-    # Full backfill window, stricter filters. Survivors here are genuinely
+    # Same selection year, stricter filters. Survivors here are genuinely
     # performing strategies, not just ones that survived loose early gates.
     # -------------------------------------------------------------------------
     - name: intermediate
       type: simulation
       start_date: "2022-01-01"
-      end_date: "2025-03-31"
+      end_date: "2022-12-31"
       symbols: [AAPL, MSFT, SPY, AMZN, NVDA]
       filter_config:
         min_sharpe: 1.0

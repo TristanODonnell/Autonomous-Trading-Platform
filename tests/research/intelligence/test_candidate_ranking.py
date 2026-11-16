@@ -219,3 +219,72 @@ def test_explanation_is_non_empty_string():
     score = svc.score_single(vec)
     assert isinstance(score.explanation, str)
     assert len(score.explanation) > 0
+
+
+# ---------------------------------------------------------------------------
+# Evidence policy (plan R5 / R16)
+# ---------------------------------------------------------------------------
+
+
+def _score(svc: CandidateRankingService | None = None, **summary_kwargs):
+    vector = _make_vector("s", make_validation_summary(**summary_kwargs))
+    return (svc or CandidateRankingService()).score_single(vector)
+
+
+def test_deployability_is_the_average_of_walk_forward_and_monte_carlo():
+    score = _score(walk_forward_consistency=0.17, mc_stability=0.72)
+    assert score.deployability_score == pytest.approx((0.17 + 0.72) / 2)
+    assert score.evidence_complete and not score.is_deployable  # 0.445 < 0.55
+
+
+def test_report_only_signals_cannot_move_composite_or_deployability():
+    low = _score(regime_robustness=0.0, stress_resilience=0.0, overfitting_resistance=0.0)
+    high = _score(regime_robustness=1.0, stress_resilience=1.0, overfitting_resistance=1.0)
+    with_regime_profile = CandidateRankingService().score_single(
+        _make_vector("s", make_validation_summary(), make_regime_profile(is_regime_robust=False))
+    )
+    assert low.composite_score == pytest.approx(high.composite_score)
+    assert low.deployability_score == pytest.approx(high.deployability_score)
+    assert with_regime_profile.deployability_score == pytest.approx(low.deployability_score)
+    weights = {c.name: c.weight for c in low.components}
+    deciding = {"robustness_overall", "walk_forward_consistency"}
+    assert weights["robustness_overall"] == pytest.approx(0.625)
+    assert weights["walk_forward_consistency"] == pytest.approx(0.375)
+    assert all(w == 0.0 for name, w in weights.items() if name not in deciding)
+
+
+@pytest.mark.parametrize("missing", ["walk_forward_consistency", "mc_stability"])
+def test_candidate_missing_required_evidence_is_not_scored(missing):
+    score = _score(CandidateRankingService(deployability_threshold=0.0), **{missing: None})
+    assert not score.evidence_complete
+    assert score.missing_evidence == (missing,)
+    assert score.composite_score == 0.0 and score.deployability_score == 0.0
+    assert not score.is_deployable  # even with a threshold of zero
+    assert score.weakness_flags[0] == f"not scored: missing {missing}"
+    assert score.explanation.startswith("Not scored")
+    assert sum(c.weighted_contribution for c in score.components) == 0.0
+
+
+def test_candidate_with_no_validation_at_all_is_not_scored():
+    # Before the policy every missing input counted as 0.5, so this scored 0.5.
+    score = CandidateRankingService().score_single(_make_vector("bare"))
+    assert score.missing_evidence == ("walk_forward_consistency", "mc_stability")
+    assert score.composite_score == 0.0 and not score.is_deployable
+
+
+def test_unscored_candidates_rank_below_scored_ones():
+    svc = CandidateRankingService()
+    weak = _make_vector("weak_but_measured", make_poor_validation_summary())
+    bare = _make_vector("no_evidence")
+    ranked = svc.rank([bare, weak])
+    assert [s.strategy_id for s in ranked] == ["weak_but_measured", "no_evidence"]
+
+
+def test_unrestricted_policy_lets_every_signal_count():
+    from autonomous_trading_platform.research.validation.evidence_policy import EvidencePolicy
+
+    svc = CandidateRankingService(evidence_policy=EvidencePolicy.unrestricted())
+    low = _score(svc, regime_robustness=0.0)
+    high = _score(svc, regime_robustness=1.0)
+    assert high.composite_score > low.composite_score
+    assert all(c.weight > 0.0 for c in low.components)

@@ -131,6 +131,7 @@ from autonomous_trading_platform.strategy.configs.strategy_config import Strateg
 
 from ..aggregation.monte_carlo_aggregator import MonteCarloAggregator, base_run_filter_config
 from ..aggregation.session_block_bootstrap import BootstrapPaths, session_block_bootstrap
+from ..pipeline_validation import StageWindowFacts
 from ._gate_stage_support import GateWindow, find_reusable_reference, gate_filter_output
 from .base_stage import BaseStage, StageDiagnostics, StageResult
 
@@ -285,6 +286,12 @@ class MonteCarloStage(BaseStage):
     @property
     def stage_name(self) -> str:
         return self._cfg.name
+
+    def validation_facts(self) -> StageWindowFacts:
+        return StageWindowFacts(
+            stage_name=self._cfg.name,
+            filters=(("filter_config", self._cfg.filter_config),),
+        )
 
     def bind_prior_results(self, prior_results: Sequence[StageResult]) -> None:
         self._prior_results = list(prior_results)

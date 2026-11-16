@@ -102,7 +102,15 @@ Stages record per-strategy evidence in `StageResult.diagnostics`
 (`StageDiagnostics`): walk-forward `fold_inputs`, Monte Carlo `mc_aggregation` +
 `reference_result`, regime `regime_profile`. `PipelineRunner` calls
 `stage.bind_prior_results(...)` before each stage, and `OverfittingStage`
-combines the evidence through the existing `OverfittingAnalyzer`. Strategies with
+combines the evidence through the existing `OverfittingAnalyzer`.
+
+Walk-forward records every fold. A strategy that fails a fold's train filter is
+still simulated on that fold's test days and the pair is kept with
+`train_passed=False`, `fold_passed=False`. The fold cannot count as passed, but it
+stays in the evidence, so "1 of 2 folds" is not reported as "1 of 1". Cost: one
+extra test-window simulation per train-failed strategy per fold.
+
+Strategies with
 `overfitting_probability > max_overfitting_probability` (default 0.6) are
 eliminated.
 
@@ -111,7 +119,46 @@ weighted, so the evidence threshold counts only the **core** indicators
 (train/test degradation, fold instability, MC instability, regime concentration):
 below `min_core_indicators` (default 2), `on_insufficient_evidence` decides.
 
+**Report only by default (`enforce: false`).** The score is computed and what the
+rule found is on `OverfittingGateVerdict.findings` (stored in
+`StageDiagnostics.overfitting_verdict`), but nobody is eliminated. On the 2026-11
+real-bars runs the gate changed no outcome: sent all 30 strategies it passed 26,
+among them 16 of the 20 losing ones, and the four it failed had already failed
+earlier stages. The score measures whether train and test agree, not whether a
+strategy is good, and half its weight is on two ratios of fold Sharpes that are
+unstable with the two folds a 60-session window gives. Set `enforce: true` once
+the walk-forward evidence has enough folds. The platform replay hook sets
+`enforce=False`.
+
 Place `overfitting` last: it can only see stages that ran before it.
+
+## Pipeline rules (checked before anything runs)
+
+A pipeline that breaks one of these is rejected when it is built, whether it comes
+from an experiment YAML or from Python (the replay hook). `atp research
+validate-config` reports them.
+
+| Rule | Where it is checked | Exception |
+|---|---|---|
+| A walk-forward stage's first test fold starts after every earlier simulation (selection) stage has stopped reading | `StagedPipelineConfig` → `research/pipeline/pipeline_validation.py` | `smoke: true` on the pipeline |
+| No filter with `min_sharpe <= 0` and `min_trades == 0` (it asks for no evidence) | same | `smoke: true` on the pipeline |
+| `step_days >= test_days`, so no day is in two test folds | `WalkForwardStageConfig` | `allow_overlapping_test_folds: true` on the stage |
+| `min_folds_passed` no larger than the number of folds the window holds (when `require_all_folds` is false) | `WalkForwardStageConfig` | none |
+
+The two kinds of rule live in two places on purpose. A rule about one stage is
+checked by that stage's config class, which both the YAML loader and Python code
+construct. A rule about several stages is checked by `StagedPipelineConfig`, which
+every loader builds. Rules written only into the YAML models
+(`research/config/stage_configs.py`) are skipped by pipelines built in Python.
+
+`smoke: true` (YAML: `staged_pipeline_config.smoke`) marks a pipeline that checks
+plumbing only; its survivors are not evidence. The replay hook sets
+`allow_overlapping_test_folds=True`: on a 90-day window its two test folds share
+15 days, and a layout without overlap leaves one fold. That exception goes when
+the research window is long enough.
+
+The hook's window length is `research.options.lookback_days` in the replay
+fixture (default 90 calendar days).
 
 ## Platform replay integration
 
@@ -125,6 +172,23 @@ The validation/intelligence layer after the pipeline now receives the same
 evidence (`wf_fold_inputs`, `mc_aggregation`, `regime_profile`, and the MC
 reference run's equity curve), so its RobustnessScore / deployability no longer
 runs on the stage-1 curve alone.
+
+### What the scores after the pipeline rest on
+
+Three scores are computed for each final survivor: the robustness score, the
+ranking composite and the deployability score. Only `is_deployable`
+(deployability >= 0.55) has a consequence in the hook: those survivors get a
+governance record.
+
+All three use **walk-forward consistency and Monte Carlo stability only**, and
+both must be present, because those are the two gates that still eliminate. The
+regime, shock-stress and overfitting numbers are reported with weight 0 while
+their gates are report-only. A survivor missing either required number is not
+scored and is never deployable. The rule lives in one place,
+`research/validation/evidence_policy.py`; details and the weights table are in
+`advanced_validation_framework.md` (Evidence policy). When a gate's `enforce` is
+switched on, add its component to the policy in the same change; a smoke test
+fails if the two disagree.
 
 ### Cheap verification runs
 
@@ -186,6 +250,8 @@ research tick is the one that exercises all six stages.
 | Overfitting evidence + gate rules | `tests/research/pipeline/gates/test_overfitting_gate.py` |
 | Cost multiplier (cost model, execution service reset, run_id) | `tests/research/simulation/test_cost_multiplier.py` |
 | Stage orchestration with a scripted runner | `tests/research/pipeline/test_robustness_stages.py` |
+| Evidence policy: robustness score | `tests/research/validation/test_robustness_scoring.py` |
+| Evidence policy: ranking composite and deployability | `tests/research/intelligence/test_candidate_ranking.py` |
 | Real-engine smoke (all six stages, research hook, smoke profile) | `tests/research/test_research_stages_smoke.py` |
 
 ## Known gaps

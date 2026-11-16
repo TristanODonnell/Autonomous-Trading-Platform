@@ -72,6 +72,9 @@ from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunRequest,
     SimulationRunResult,
 )
+from autonomous_trading_platform.research.validation.walk_forward_validation import (
+    WalkForwardValidationService,
+)
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
 START = date(2024, 1, 2)
@@ -455,7 +458,7 @@ class TestStressStage:
 # ---------------------------------------------------------------------------
 
 
-def _pipeline(runner: ScriptedRunner) -> PipelineRunner:
+def _pipeline(runner: ScriptedRunner, *, enforce_overfitting: bool = True) -> PipelineRunner:
     """Regime/stress gates are lenient here so only the final overfitting gate eliminates."""
     return PipelineRunner(
         stages=[
@@ -507,30 +510,57 @@ def _pipeline(runner: ScriptedRunner) -> PipelineRunner:
             OverfittingStage(
                 stage_config=OverfittingStageConfig(
                     name="overfit",
-                    gate=OverfittingGateConfig(max_overfitting_probability=0.6, min_trade_count=10),
+                    gate=OverfittingGateConfig(
+                        max_overfitting_probability=0.6,
+                        min_trade_count=10,
+                        enforce=enforce_overfitting,
+                    ),
                 )
             ),
         ]
     )
 
 
-class TestPipelineEvidenceFlow:
-    def test_overfit_strategy_eliminated_by_final_gate(self) -> None:
-        def script(sid: str, req: SimulationRunRequest, day: date) -> float:
-            if sid != "curve_fit":
-                return _all_weather(sid, req, day)
-            role = req.window_role or ""
-            noise = float(np.random.default_rng(day.toordinal() + 17).normal(0, 0.003))
-            if role.endswith("_test"):
-                return -0.004 + noise  # falls apart out of sample
-            if role == "mc_base":
-                # Over the full window it loses money, so most resampled
-                # histories have a negative Sharpe (mc_instability near 1).
-                seeded = np.random.default_rng(day.toordinal() + 99)
-                return float(-0.002 + seeded.normal(0, 0.01))
-            return 0.004 + noise  # great in-sample
+def _curve_fit_or_steady(sid: str, req: SimulationRunRequest, day: date) -> float:
+    """'curve_fit' is great in-sample and falls apart out of sample; anything else is steady."""
+    if sid != "curve_fit":
+        return _all_weather(sid, req, day)
+    role = req.window_role or ""
+    noise = float(np.random.default_rng(day.toordinal() + 17).normal(0, 0.003))
+    if role.endswith("_test"):
+        return -0.004 + noise  # falls apart out of sample
+    if role == "mc_base":
+        # Over the full window it loses money, so most resampled
+        # histories have a negative Sharpe (mc_instability near 1).
+        seeded = np.random.default_rng(day.toordinal() + 99)
+        return float(-0.002 + seeded.normal(0, 0.01))
+    return 0.004 + noise  # great in-sample
 
-        runner = ScriptedRunner(script)
+
+class TestPipelineEvidenceFlow:
+    def test_report_only_overfitting_gate_records_the_finding_and_keeps_the_strategy(self) -> None:
+        """Same two strategies as the next test; without enforce nobody is eliminated."""
+        result = _pipeline(ScriptedRunner(_curve_fit_or_steady), enforce_overfitting=False).run(
+            initial_configs=[_cfg("steady"), _cfg("curve_fit")],
+            experiment_id="exp",
+            dataset_version="v1",
+            random_seed=7,
+            price_basis=PriceBasis.RAW,
+            initial_cash=100_000.0,
+        )
+
+        overfit = result.stage_results[-1]
+        assert [c.strategy_id for c in result.final_survivors] == ["steady", "curve_fit"]
+        verdict = overfit.diagnostics["curve_fit"].overfitting_verdict
+        assert verdict is not None and verdict.passed and not verdict.enforced
+        assert any("overfitting probability" in f for f in verdict.findings)
+        output = next(o for o in overfit.filter_outputs if o.strategy_id == "curve_fit")
+        assert output.filter_result.passed and output.filter_result.failures == []
+        steady = overfit.diagnostics["steady"].overfitting_verdict
+        assert steady is not None and steady.findings == ()
+
+    def test_overfit_strategy_eliminated_by_final_gate(self) -> None:
+        runner = ScriptedRunner(_curve_fit_or_steady)
         result = _pipeline(runner).run(
             initial_configs=[_cfg("steady"), _cfg("curve_fit")],
             experiment_id="exp",
@@ -570,6 +600,85 @@ class TestPipelineEvidenceFlow:
         assert wf.diagnostics["s1"].fold_inputs
         assert mc.diagnostics["s1"].mc_aggregation is not None
         assert mc.diagnostics["s1"].reference_result is not None
+
+
+# ---------------------------------------------------------------------------
+# Walk-forward: a fold that fails train is still evidence (plan R2)
+# ---------------------------------------------------------------------------
+
+NEEDS_POSITIVE_SHARPE = FilterConfig(
+    min_sharpe=0.5,
+    max_drawdown=-1.0,
+    min_trades=0,
+    min_consistency_score=0.0,
+    min_profit_factor=0.0,
+    min_win_rate=0.0,
+    min_total_return=-1.0,
+)
+
+
+def _slow_start(sid: str, req: SimulationRunRequest, day: date) -> float:
+    """'slow_start' loses money in fold 0's train window and is steady everywhere else."""
+    if sid == "slow_start" and req.window_role == "fold_0_train":
+        return float(-0.004 + np.random.default_rng(day.toordinal()).normal(0, 0.003))
+    return _all_weather(sid, req, day)
+
+
+def _two_fold_stage(runner: ScriptedRunner, *, require_all_folds: bool) -> WalkForwardStage:
+    return WalkForwardStage(
+        stage_config=WalkForwardStageConfig(
+            name="wf",
+            train_days=30,
+            test_days=20,
+            step_days=20,
+            train_filter_config=NEEDS_POSITIVE_SHARPE,
+            train_scoring_weights=ScoringWeights(),
+            test_filter_config=PERMISSIVE,
+            test_scoring_weights=ScoringWeights(),
+            require_all_folds=require_all_folds,
+            symbols=SYMBOLS,
+            start_date=START,
+            end_date=END,
+        ),
+        simulation_runner=runner,  # type: ignore[arg-type]
+    )
+
+
+class TestWalkForwardTrainFailedFolds:
+    def test_test_window_is_simulated_and_recorded_for_a_train_failed_fold(self) -> None:
+        runner = ScriptedRunner(_slow_start)
+        result = _run(_two_fold_stage(runner, require_all_folds=False), [_cfg("slow_start")])
+
+        roles = [r.window_role or "" for r in runner.requests]
+        assert sorted(roles) == ["fold_0_test", "fold_0_train", "fold_1_test", "fold_1_train"]
+        folds = result.diagnostics["slow_start"].fold_inputs
+        assert folds is not None and [f.fold_index for f in folds] == [0, 1]
+        failed, passed = folds
+        assert (failed.train_passed, failed.test_passed, failed.fold_passed) == (False, True, False)
+        assert failed.train_sharpe < 0 < failed.test_sharpe
+        assert (passed.train_passed, passed.test_passed, passed.fold_passed) == (True, True, True)
+        # One of two folds, not one of one: the failed fold stays in the denominator.
+        assert WalkForwardValidationService().analyze(folds).fold_consistency == 0.5
+        assert [c.strategy_id for c in result.survivors] == ["slow_start"]
+
+    def test_a_passing_test_run_does_not_rescue_a_train_failed_fold(self) -> None:
+        runner = ScriptedRunner(_slow_start)
+        result = _run(_two_fold_stage(runner, require_all_folds=True), [_cfg("slow_start")])
+        assert result.survivors == []
+
+    def test_other_strategies_get_the_same_verdicts_with_or_without_it(self) -> None:
+        def verdicts(ids: list[str]) -> list[tuple[bool, float | None]]:
+            stage = _two_fold_stage(ScriptedRunner(_slow_start), require_all_folds=False)
+            result = _run(stage, [_cfg(sid) for sid in ids])
+            return [
+                (o.filter_result.passed, o.score.score if o.score else None)
+                for o in result.filter_outputs
+                if o.strategy_id == "steady"
+            ]
+
+        alone = verdicts(["steady"])
+        assert len(alone) == 4  # train and test verdict for each of two folds
+        assert verdicts(["steady", "slow_start"]) == alone
 
 
 # ---------------------------------------------------------------------------
@@ -615,6 +724,14 @@ class TestRegistry:
             StageRegistry.load(
                 {"type": "stress", "name": "s", "cost_multipliers": [], **window}, runner
             )
+
+    def test_overfitting_stage_is_report_only_unless_yaml_says_enforce(self) -> None:
+        default = StageRegistry.load({"type": "overfitting", "name": "o"}, self._runner())
+        enforced = StageRegistry.load(
+            {"type": "overfitting", "name": "o", "enforce": True}, self._runner()
+        )
+        assert isinstance(default, OverfittingStage) and default._cfg.gate.enforce is False
+        assert isinstance(enforced, OverfittingStage) and enforced._cfg.gate.enforce is True
 
     def test_regime_stage_is_report_only_unless_yaml_says_enforce(self) -> None:
         window = {"start_date": "2024-01-02", "end_date": "2024-03-29", "symbols": ["aaa"]}

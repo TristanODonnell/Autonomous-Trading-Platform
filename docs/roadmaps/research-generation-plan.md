@@ -14,12 +14,34 @@ pieces on A (Step 3's endpoint) and the worker timers (Step 5), and both stay in
 switched on. Deployment findings keep going into the pre-launch plan; research findings
 (numbered R1, R2, …) go here.
 
-Last updated: 2026-11-15 evening. Status is in "Where we are" directly below; the detail
+Last updated: 2026-11-15 night. Status is in "Where we are" directly below; the detail
 and the evidence for every line are in section 3.
 
-## Where we are (2026-11-15 evening)
+## Where we are (2026-11-15 night)
 
 Every unticked box was checked against the code or the recorded evidence on 2026-11-15.
+
+> **Now.** Package A (validators and evidence) is finished and committed on
+> `research/r6-r2-validators`, waiting for its PR. Five commits, one per finding:
+> R14 overfitting gate report-only (`59d2079a5`); R6 + R2 pipeline rules checked when a
+> pipeline is built (`515db54b7`); R2 train-failed folds kept as evidence
+> (`77fbe69b6`); R5 + R16 deciding scores rest on walk-forward and Monte Carlo only
+> (`d964b96a2`); this plan. Full suite passing; R16 measured on real bars before and
+> after. Not merged, not deployed.
+>
+> **What it changed in one line each.** The overfitting gate reports and eliminates
+> nobody. A pipeline that breaks a fold or window rule is rejected when it is built,
+> from YAML or from Python. Walk-forward records every fold, including ones whose
+> train run failed. A strategy is scored only on walk-forward and Monte Carlo, and not
+> at all without both. On real bars no outcome changed: one survivor, not deployable.
+>
+> **Next (not chosen yet).** After the PR is merged: deploy to A and B, then either
+> package B (longer history on IEX, which unblocks most of what is still open) or
+> package C (checkpointing, R3). Open decisions for the user: R13, and which of B or C
+> goes first.
+
+Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
+
 Keep this board in step with the boxes: when a box changes in section 3, change its row.
 "Done / open" counts checkboxes.
 
@@ -27,50 +49,124 @@ Keep this board in step with the boxes: when a box changes in section 3, change 
 
 | Item | What it is | Status | Done / open | What is left |
 |---|---|---|---|---|
-| R1 | Monte Carlo resamples for real | **Done.** Merged PR #181, deployed to A and B | 4 / 0 | Nothing |
-| R2 | Walk-forward folds out of sample | **Partial.** The small set (stage 1 selects on days walk-forward does not test) merged in #181 | 1 / 17 | Not a step back: only the small set was scheduled (user, 2026-11-14), and R10 and R4 went first. About half is code only and goes with R6 (validators, train-failed folds into the overfitting evidence, `WindowType`, folds in sessions). The other half waits on longer history (selection / evaluation / holdout split, fold geometry). The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook |
-| R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 / 5 | All of the wiring. Scheduled before Step 5 |
-| R4 | Audit of the remaining gates | **Audit done**: notes for stress, overfitting, parameter stability, regime; problems are R11 to R15 | 1 / 1 | The 12% drawdown kill is missing from the backtest path. R4's "Verify" (a real-runner test per stage where the gate fails) is not met; that work is R7 |
-| R5 | Composite score hides missing evidence | Not started | 0 / 2 | Decide penalty or minimum evidence set, then test |
-| R6 | Experiment-config and holdout validator | Not started | 0 / 2 | Validator, repo-level holdout date |
-| R7 | Test hardening per stage | Not started as its own item. Realistic-curve tests now exist at gate level for Monte Carlo, stress and regime | 0 / 2 | A real-runner test per stage, the cross-process checksum test |
-| R8 | Simulator RNG keyed per decision | Not started | 0 / 4 | Inert until stochastic fills are switched on |
-| R9 | Generator has no selection | Folds into Step 2 | no boxes | Step 2 |
-| R10 | Stale marks when a bar is missing | **Done.** Merged PR #182, deployed to A and B | 6 / 2 | The re-sim vs platform correlation was not re-measured; more sparse-bar fixtures (R7) |
-| R11 | Stress gate: shocks report-only, costs decide | **Committed `b6860b6b7`, pushed; PR not opened.** Rerun done: funnel 30 → 30 → 4 → 2 → 2 → 2, the first run with final survivors | 5 / 0 | Nothing. "Verify" met by the all-30 audit pass: 7 pass, 23 fail, for causes that differ. Stress at the new cost is R12's box |
-| R12 | Research trading cost: 1 basis point per trade | **Committed `bb2f09329`, pushed; PR not opened** | 3 / 4 | Measured on real bars: funnel 30 → 30 → 2 → 2 → 2 → 2, same two survivors, four of eight profitable strategies stay profitable, stress passes 3 of 30. Left: the bench re-sim on B after deploy, slippage written to fill rows. Two midpoint guards wait for a `LIMIT` / `TWAP` policy |
-| R13 | No parameter-stability check | Not decided | 0 / 2 | Decide whether to build the neighbour check |
-| R14 | Overfitting gate never exercised | **Measured.** In the funnel 2 of 2 pass (0.13, 0.24 against a limit of 0.6). On all 30 it passes 26, including 16 of 20 losing strategies, and fails no profitable one: it changes no outcome. At 1 basis point it fails one profitable strategy (c27) and passes 22 of 24 losing ones | 1 / 2 | **Decision for the user:** what the gate should be. Then a realistic two-fold test |
-| R15 | Regime gate report-only on a short window | **Committed `1ca8c33e1`, pushed; PR not opened** | 1 / 4 | The four prerequisites before `enforce` is switched on; all wait on longer history |
+| 🟢 R1 | Monte Carlo resamples for real | **Done.** Merged PR #181, deployed to A and B | 4 / 0 | Nothing |
+| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes done, committed 2026-11-15, PR pending | 7 / 13 | Code only, still open: pooled or median fold gate, daily resample, the walk-forward "entered" count (found 2026-11-15). The rest waits on longer history (package B): selection / evaluation / holdout split, fold geometry, folds in sessions, minimum test span. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook |
+| 🔴 R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 / 5 | All of the wiring. Scheduled before Step 5 |
+| 🟡 R4 | Audit of the remaining gates | **Audit done**: notes for stress, overfitting, parameter stability, regime; problems are R11 to R15 | 1 / 1 | The 12% drawdown kill is missing from the backtest path. R4's "Verify" (a real-runner test per stage where the gate fails) is not met; that work is R7 |
+| 🟡 R5 | Composite score hides missing evidence | **Implemented, committed 2026-11-15, PR pending.** No score without walk-forward and Monte Carlo; report-only measures carry weight 0 | 2 / 0 | Merge and deploy |
+| 🟡 R6 | Experiment-config and holdout validator | Validator done, committed 2026-11-15, PR pending | 1 / 1 | Repo-level holdout date (package B) |
+| 🔴 R7 | Test hardening per stage | Not started as its own item. Realistic-curve tests now exist at gate level for Monte Carlo, stress and regime | 0 / 2 | A real-runner test per stage, the cross-process checksum test |
+| 🔴 R8 | Simulator RNG keyed per decision | Not started | 0 / 4 | Inert until stochastic fills are switched on |
+| ⚪ R9 | Generator has no selection | Folds into Step 2 | no boxes | Step 2 |
+| 🟢 R10 | Stale marks when a bar is missing | **Done.** Merged PR #182, deployed to A and B | 6 / 2 | The re-sim vs platform correlation was not re-measured; more sparse-bar fixtures (R7) |
+| 🟢 R11 | Stress gate: shocks report-only, costs decide | **Done.** Merged PR #183, deployed 2026-11-16. Rerun done: funnel 30 → 30 → 4 → 2 → 2 → 2, the first run with final survivors | 5 / 0 | Nothing. "Verify" met by the all-30 audit pass: 7 pass, 23 fail, for causes that differ. Stress at the new cost is R12's box |
+| 🟢 R12 | Research trading cost: 1 basis point per trade | **Done except two boxes.** Merged PR #183, deployed 2026-11-16. Measured on real bars (funnel 30 → 30 → 2 → 2 → 2 → 2, stress passes 3 of 30) and on B's bench re-sim (order unchanged; momentum -1.8% → -7.8%) | 4 / 3 | Slippage written to fill rows. Two midpoint guards wait for a `LIMIT` / `TWAP` policy |
+| 🔴 R13 | No parameter-stability check | Not decided | 0 / 2 | Decide whether to build the neighbour check |
+| 🟡 R14 | Overfitting gate never exercised | **Report-only, implemented, committed 2026-11-15, PR pending** (agreed 2026-11-15). Measured first: on all 30 strategies it passed 26, including 16 of 20 losing ones, and changed no outcome | 3 / 1 | The prerequisites before `enforce` is switched on; they wait on longer history |
+| 🟢 R15 | Regime gate report-only on a short window | **Report-only shipped.** Merged PR #183, deployed 2026-11-16 | 1 / 4 | The four prerequisites before `enforce` is switched on; all wait on longer history |
+| 🟡 R16 | The deployable decision rests on the three report-only measures | **Decided and implemented, committed 2026-11-15, PR pending** (user: "Trusted evidence only"). Deployable is now the average of walk-forward and Monte Carlo. Measured first: nothing was flagged deployable, the regime input was always 0.5, shocks near-constant | 2 / 2 | Calibrate the 0.55 threshold (needs longer history); pass the regime profile to the scoring request so the reported regime fields are real |
+
+**Parked follow-ups on green items** (shipped, but these boxes are still open; none is forgotten)
+
+- R10: re-measure the re-sim vs platform correlation; more sparse-bar test fixtures (package D).
+- R12: write the charged slippage into the fill rows (package E); the two quote-midpoint guards, before any `LIMIT` / `TWAP` policy is switched on.
+- R15: the four prerequisites before the regime gate's `enforce` is switched on (package B).
 
 **Data**
 
 | Item | What it is | Status | Done / open | What is left |
 |---|---|---|---|---|
-| D1 | One feed everywhere (IEX now, SIP at go-live) | Rule and trigger agreed. The free-tier probe has no result recorded here | 0 / 13 | The probe now; the rest at the switch weekend |
-| D2 | Parquet integrity for research reads | Not started (the four defects re-confirmed in the code 2026-11-15) | 0 / 4 | Compaction deleting unread fragments comes first |
+| ⚪ D1 | One feed everywhere (IEX now, SIP at go-live) | Rule and trigger agreed. The free-tier probe has not been run; deferred by the user 2026-11-15 until the other updates are done | 0 / 13 | Nothing now. The probe and the rest come with the switch |
+| 🔴 D2 | Parquet integrity for research reads | Not started (the four defects re-confirmed in the code 2026-11-15) | 0 / 4 | Compaction deleting unread fragments comes first |
 
-**Steps 1 to 5 (generator and plumbing): none started.** Step 1 baseline 0 / 4, Step 2
+🔴 **Steps 1 to 5 (generator and plumbing): none started.** Step 1 baseline 0 / 4, Step 1b generation system review 0 / 7 (added 2026-11-15), Step 2
 evolutionary search 0 / 3, Step 3 hand-off to A's bench 0 / 3, Step 4 no boxes, Step 5
 monthly job 0 / 13. Section 5's results log is empty. Step 1 waits on R2.
 
-**Now and next, in order**
+**Work packages (the open boxes grouped by what gets done together)**
 
-1. Done 2026-11-15: the R11 rerun and its audit pass (all 30 strategies through regime,
-   stress and overfitting), recorded under R11 and R14.
-2. Done 2026-11-15: the same run at 1 basis point with the regime gate report-only,
-   recorded under R12. The PR can merge. After merge and deploy: the bench re-sim on B,
-   which is the other half of R12's "re-baseline".
-3. Done 2026-11-15: full suite green with R15 in; four commits on
-   `research/r4-gate-audits` (R11, R12, R15, plan), pushed. Open the PR; merge it after
-   the run in item 2, because merging and deploying changes what A's shadow tier
-   charges.
-4. Decide R14 from the reading. Decide R13.
-5. R5 and R6, with R2's code-only boxes (same validator; the train-failed folds change
-   what the overfitting gate reads, so they come before R14 is settled).
-6. Longer history on B, then the rest of R2 and R15's prerequisites. Three findings
-   (R2 folds, R14, R15) come down to 60 sessions being too few.
-7. R3, before Step 5.
+The boxes sit under the finding that produced them, so one piece of work is spread over
+several R-numbers. This is the same list grouped by piece of work, in the proposed order.
+Package A is committed and waits for its PR; nothing else is running.
+
+| # | Package | Boxes it closes | Waits on | Size |
+|---|---|---|---|---|
+| 🟡 A | **Validators and evidence** (all boxes done, committed 2026-11-15, PR pending) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | The user, to open and merge the PR; then a deploy to A and B | One PR, no new data |
+| 🔴 B | **Longer history on B** (on IEX; the feed does not change) | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | How far back IEX bars go; B's 3 GB of memory; which universe applies to old dates | Investigation first, then one PR |
+| 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
+| 🔴 D | **Test hardening (R7)** | R7 both boxes, and the R7 boxes under R10, R14, R15 | Nothing | Can ride along with A and B |
+| 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R8, R12's slippage in fill rows, D2 | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
+| 🔴 F | **R13** | Decide whether to build the neighbour check | The user | A decision, then maybe one PR |
+
+After these: Step 1 (baseline, waits on R2), then Steps 2 to 5.
+
+**Open questions for the user** (package A, investigated 2026-11-15; all four decisions
+and the score-composition answer implemented and committed the same day; nothing is open)
+
+What the read-only investigation found:
+
+- Rules are checked in two places that have drifted apart: the YAML models
+  (`stage_configs.py`) and each stage's own settings class. Settings built in Python (the
+  replay hook) only meet the second. Both paths build a `StagedPipelineConfig`
+  (`research_hooks.py:726`, `cli/commands/research.py:1914`,
+  `run_experiment_pipeline_cycle.py:419`), which today checks only that the list is not
+  empty. That is the one place a rule can cover both.
+- `step_days >= test_days` rejects the hook's own layout (45 / 30 / 15 on 90 days: two
+  folds whose test windows share 15 days). A non-overlapping layout on 90 days leaves one
+  fold, or two with a 30-day train window that the 45-day selection window would overlap.
+- `ma_sweep_staged.yaml` fails the range guard: its first test fold starts 2023-01-01 and
+  the two selection stages end 2024-12-31 and 2025-03-31. It passes the other two rules
+  (9 folds, `min_folds_passed` 6, step equal to test).
+- `exp_mc_smoke_test.yaml` has thresholds that pass everything (`min_sharpe: -99`,
+  `min_trades: 0`) and needs `smoke: true` under the vacuous-threshold rule.
+- A minimum test span worth having (about 60 sessions for a Sharpe standard error near 2)
+  would also reject the hook, whose test folds hold about 22 sessions. It cannot be met
+  before longer history.
+- Train-failed folds: `FoldValidationInput` already has `train_passed`, `test_passed` and
+  `fold_passed`; what a train-failed fold lacks is test numbers, because the test window
+  is never simulated for it. How often this happens on real bars is not measured (the
+  harness runs open filters).
+- `WindowType` is used nowhere in `src/` or `tests/`. An expanding window would not add
+  test folds: the number of folds is set by the span left after the first train window
+  and the step, in both layouts.
+- R5 has two layers. The composite score spreads a missing component's weight over the
+  present ones (same metrics: 0.341 with all five, 0.394 without regime, 0.364 without
+  walk-forward, 0.550 with only the overfitting component). Then the ranking fills any
+  missing input with 0.5. See R16 for what that does to the deployable decision.
+
+Decided by the user 2026-11-15 (asked one at a time):
+
+1. Overlapping test folds: the rule is on; the replay hook carries a named exception until
+   package B extends the window, then the exception is deleted. (User: the real answer is
+   a longer window. Agreed; that is package B. Longer train or test stretches inside the
+   same 90 days would leave less room to slide, not more.)
+2. Train-failed folds: simulate the test window anyway, as evidence only; the fold still
+   fails.
+3. R5: a minimum evidence set (walk-forward and Monte Carlo) before a composite score or
+   a deployable flag. Implemented 2026-11-15 together with the answer to the user's
+   follow-up question, next item.
+4. Defaults, stated and not objected to: one validator at `StagedPipelineConfig`; fix the
+   dates in `ma_sweep_staged.yaml`; delete `WindowType`; the hook's 90-day lookback
+   becomes a setting with the same default; folds in sessions, the minimum test span and
+   the repo-level holdout date move to package B.
+
+Open, raised by the user 2026-11-15: "if we are doing combined scores and a few of these
+are report only now should we rethink this robustness score's composition overall?"
+Proposed, not decided: while regime, shock stress and overfitting are report-only, the
+scores that decide anything use walk-forward, Monte Carlo and the cost re-simulation
+only; the three report-only numbers are shown with zero weight and get weight back when
+their gate's `enforce` is switched on. With five components supplied, the three carry
+about 41% of the robustness score's weight today (0.35 of 0.85) and are three of the four
+inputs to the deployable flag. Measure first (R16's first box), then bring the numbers to
+the user as its own decision. R5's change waits for that. Measured 2026-11-15, see R16.
+
+**Answered by the user 2026-11-15: "Trusted evidence only".** The deciding scores use
+walk-forward and Monte Carlo only; regime, shocks and overfitting are computed and shown
+with zero weight and get weight back when their gate is switched on; a strategy missing
+walk-forward or Monte Carlo gets no score. One difference from the proposal above: the
+cost re-simulation is not in the scores. It is a pass / fail gate with no 0-to-1
+component of its own (the "stress" component is the shock survival rate), and a
+strategy that fails it never reaches scoring. Implemented the same day, see R5 and R16.
 
 **Companion backlog:** `interview-study-revisit-backlog.md` (2026-11-12) holds every defect
 found while reading the codebase for interviews, tagged `[domain.section #item]`. The
@@ -132,7 +228,7 @@ something worth handing over, and 3.3(a) on the deployment track gives us the ha
 pattern to copy. Step 0c (checkpointing) is a cost/convenience fix and can slide to just
 before Step 5.
 
-### Step 0 — Pipeline integrity (audited 2026-11-07; R1 and R10 merged, R11 / R12 / R15 committed on `research/r4-gate-audits` and pushed with no PR yet, the rest open: see "Where we are")
+### Step 0 — Pipeline integrity (audited 2026-11-07; R1 and R10 merged, R11 / R12 / R15 merged as PR #183 and deployed 2026-11-16, package A committed 2026-11-15 with its PR pending, the rest open: see "Where we are")
 
 Three suspicions the user raised while studying the backtesting funnel, each confirmed by
 reading the code (three parallel audits, key claims re-verified by hand). Fix these before
@@ -154,6 +250,8 @@ history second, the user moved it after the audits):
    every strategy that reached it. Audit done 2026-11-15 for all four gates; the fixes
    it produced are R11, R12 and R15 (implemented) and R13, R14 (open).
 4. R5 and R6 (placed here on the same reasoning as item 5; the user did not name them).
+   Done 2026-11-15 as package A, together with R14, R16 and the code-only half of R2;
+   committed, PR pending.
 5. Longer history, then the R2 tasks that wait on it (selection / evaluation / holdout
    split). User's reasoning: running on a longer window is mostly the same code over more
    days, so audits and fixes come first and the window is extended once the gates are
@@ -273,7 +371,7 @@ on B, so it is not the verification target.)
   (untracked).
 
 **R1 implementation (2026-11-14, branch `research/r1-monte-carlo-bootstrap`, commit
-`4dd0671ae`, pushed, no PR yet).**
+`4dd0671ae`; merged in PR #181).**
 - Decisions (user): (1) reuse `n_runs` / `min_pass_rate` / `filter_config`; (2) the three
   scorers read P(Sharpe > 0), with the Sharpe spread and P(Sharpe ≥ `min_sharpe`) reported
   but not scored; (3) `min_trades` on the base run only.
@@ -419,7 +517,7 @@ reasons").**
   sessions.
 
 **R2 — Walk-forward test folds are not out of sample (partial: the small set merged in
-PR #181; every other box open, re-checked in the code 2026-11-15).**
+PR #181; package A's code-only boxes done, committed 2026-11-15, PR pending; the rest open).**
 - Selection leakage: in `ma_sweep_staged.yaml` the `intermediate` simulation stage ranks
   configs over 2022-01-01..2025-03-31 and `heavy_walk_forward` runs over the identical
   range, so every test fold lies inside the window the survivors were picked on.
@@ -439,16 +537,40 @@ PR #181; every other box open, re-checked in the code 2026-11-15).**
   inflating it ≈ 8.8×; `consistency_score` over 4 sub-windows of a 90-day fold is 5 values.
 - What is right: each fold is a fresh simulation with its own dates, and 5-minute runs load
   a proper warm-up from before the fold start.
-- [ ] Range guard: `StagedPipelineConfig` validation rejects a walk-forward stage whose
+- [x] Range guard: `StagedPipelineConfig` validation rejects a walk-forward stage whose
       first `test_start` is not after every earlier selection stage's `end_date` (or the
       YAML declares a `holdout_from` date that earlier stages may not cross). Fix
       `ma_sweep_staged.yaml` accordingly.
-- [ ] Feed all folds into the overfitting evidence (train-failed folds with test metrics
+      Done 2026-11-15 (package A, committed, PR pending): `research/pipeline/pipeline_validation.py`, called from
+      `StagedPipelineConfig.__post_init__`. `ma_sweep_staged.yaml`'s two selection stages
+      now read 2022 only; its thresholds were not re-run on the shorter windows (said in
+      the file). The `holdout_from` date is R6's second box (package B).
+- [x] Feed all folds into the overfitting evidence (train-failed folds with test metrics
       null and `test_passed=False`), and report `folds_skipped_at_train`.
+      Done 2026-11-15 (package A, committed, PR pending), built differently from the text above (user's decision 2): the test
+      window is simulated for train-failed strategies too, so the fold carries real
+      test numbers with `train_passed=False`, `fold_passed=False`. No fold is skipped
+      any more, so there is no skipped count; the per-fold log line reports how many
+      failed train. Gate decisions are unchanged (a fold counts only if both pass).
+      What changes: `fold_consistency` and the train/test degradation now cover every
+      fold, so a strategy that failed train on one of two folds reads 0.5, not 1.0.
+      Cost: one extra test-window run per train-failed strategy per fold. Tests:
+      `TestWalkForwardTrainFailedFolds` in `tests/research/pipeline/test_robustness_stages.py`.
+- [ ] Found while doing the box above (2026-11-15), not fixed: a walk-forward stage's
+      "entered" count in the funnel is `len(filter_outputs)`, which is one verdict per
+      strategy per fold per window (now strategies x folds x 2), not the number of
+      strategies that entered. `StageResult.n_entered` and `n_failed` are wrong for
+      this stage; `n_passed` is right. Shown in the hook's `stage_funnel`, the CLI and
+      the stage metrics.
 - [ ] Gate on a pooled or median test Sharpe across folds in addition to per-fold pass
-      counts; validate `step_days >= test_days` and `min_folds_passed <= n_folds`.
-- [ ] Either implement EXPANDING/ANCHORED windows or delete `WindowType` and fix the docs
+      counts.
+- [x] Validate `step_days >= test_days` and `min_folds_passed <= n_folds` (split from the
+      box above). Done 2026-11-15 (package A, committed, PR pending): both in `WalkForwardStageConfig.__post_init__`, so YAML and
+      Python-built configs meet them. Overlap needs `allow_overlapping_test_folds: true`,
+      which the replay hook sets (user's decision 1) until package B lengthens its window.
+- [x] Either implement EXPANDING/ANCHORED windows or delete `WindowType` and fix the docs
       (`docs/backend/research/advanced_validation_framework.md`).
+      Done 2026-11-15 (package A, committed, PR pending): deleted (nothing used it); the doc says folds are rolling only.
 - [ ] Daily resample: load daily warm-up bars and pass `bars_per_year=252`.
 - [ ] Fold geometry (added 2026-11-14, user's question: "more folds, maybe longer?"). The
       items above make folds honest; none sets how many there are or how long they run.
@@ -543,9 +665,13 @@ PR #181; every other box open, re-checked in the code 2026-11-15).**
     sessions a three-way split leaves a 15-session holdout whose Sharpe has a standard
     error near 4 (√(252/15)), so these follow the longer-history item except where noted.
     With years loaded the holdout can be a separate period, not the last 15 sessions.
-    - [ ] The hook's lookback is a hard-coded 90 days (`research_hooks.py:486`). Loading
+    - [x] The hook's lookback is a hard-coded 90 days (`research_hooks.py:486`). Loading
           more history changes nothing for the hook until this is a setting, or until
           long-window research runs from an experiment file.
+          Done 2026-11-15 (package A, committed, PR pending): `research.options.lookback_days`, default 90
+          (`DEFAULT_RESEARCH_LOOKBACK_DAYS`). The fold lengths (45 / 30 / 15) are still
+          fixed numbers, so a longer lookback alone adds folds but not longer ones; that
+          is package B's fold-geometry box.
     - [x] Stage 1 selects on days walk-forward does not test (small set, above).
     - [ ] Window layout in one place in `_build_replay_experiment_definition`: selection
           days, evaluation days, holdout days, derived from the sessions available, with a
@@ -562,8 +688,10 @@ PR #181; every other box open, re-checked in the code 2026-11-15).**
     - [ ] Fold geometry in the hook: test folds that do not overlap (`step_days >=
           test_days`), no train window covering another fold's test days, and a pooled or
           median pass rule in place of "any one fold" (`min_folds_passed=1`).
-    - [ ] The R2 and R6 validators cover stage configs built in Python, not only YAML;
+    - [x] The R2 and R6 validators cover stage configs built in Python, not only YAML;
           otherwise the hook can drift from its own rules the way the four-stage file did.
+          Done 2026-11-15 (package A, committed, PR pending): single-stage rules sit in the stage's config class, cross-stage
+          rules in `StagedPipelineConfig`; the hook builds both.
     - [ ] Repeated attempts. Research in the platform backtest runs on a monthly cadence
           (`platform_backtest_service.py:1035-1051`; the cadence comes from the run's
           scheduled-jobs config, not traced through every config) with a 90-day lookback,
@@ -813,18 +941,41 @@ feed, look for fail-open branches and `None`-coercion.
 **Verify:** every stage has a note here, and each stage has at least one test on a real
 runner where the gate fails.
 
-**R5 — Composite score hides missing evidence (not started).** The validation framework
+**R5 — Composite score hides missing evidence (implemented, committed 2026-11-15, PR pending).** The validation framework
 redistributes an absent component's weight to the present ones
 (`docs/backend/research/advanced_validation_framework.md`, "When a component is absent"),
 so a strategy with no Monte Carlo or regime evidence is never penalised for the gap. After
 R1 that is exactly the hole that lets a thinly tested candidate outrank a well-tested one.
-- [ ] Decide and implement one of: a missing-evidence penalty per absent component, or a
+- [x] Decide and implement one of: a missing-evidence penalty per absent component, or a
       required minimum evidence set before a composite score is produced at all (score
       `None` + reason otherwise). Record the choice here.
-- [ ] Test: identical metrics with and without the Monte Carlo component must not produce
+      Done 2026-11-15 (package A, committed, PR pending). Choice (the user's): a required minimum
+      set, walk-forward and Monte Carlo. One object says which components count,
+      `EvidencePolicy` in `research/validation/evidence_policy.py` (`deciding` and
+      `required`), and the three scores read it: the robustness score
+      (`RobustnessScoreBuilder`), the ranking composite and the deployability score
+      (`CandidateRankingService`). Built differently from the text above in one
+      respect: a strategy missing required evidence gets 0.0 with
+      `evidence_complete=False` and `missing_evidence=(...)`, not `None`. The scores
+      are stored in Parquet columns that do not allow nulls, and a `None` would have
+      changed three schemas and every reader; the flag says the same thing. Such a
+      strategy fails `overall_passed`, is never deployable (even at a threshold of 0)
+      and ranks below every scored one. `EvidencePolicy.unrestricted()` gives the old
+      arithmetic for analysis. Docs: `advanced_validation_framework.md`, "Evidence
+      policy".
+- [x] Test: identical metrics with and without the Monte Carlo component must not produce
       the same (or a higher) composite score for the one missing it.
+      Done 2026-11-15: `tests/research/validation/test_robustness_scoring.py`
+      (`TestDefaultEvidencePolicy`: missing walk-forward, missing Monte Carlo, only the
+      overfitting component, nothing at all; "less evidence never scores higher than
+      more") and `tests/research/intelligence/test_candidate_ranking.py` (missing
+      evidence is not scored, ranks last, not deployable at threshold 0). The
+      end-to-end smoke test now also asserts that every survivor the hook scores
+      arrives with both pieces of evidence, since a hook that stopped passing one
+      would otherwise silently seed nothing.
 
-**R6 — Experiment-config and holdout validation (not started).** R2's range guard belongs
+**R6 — Experiment-config and holdout validation (validator done, committed 2026-11-15, PR pending;
+holdout date moved to package B).** R2's range guard belongs
 in a general validator so the rules are enforced, not written in docs: no stage may read
 past a declared holdout date; walk-forward `test_start` after every earlier selection
 stage's `end_date`; `step_days >= test_days`; `min_folds_passed <= n_folds`; vacuous
@@ -832,10 +983,17 @@ thresholds (e.g. `min_sharpe <= 0` with `min_trades == 0`) rejected unless the Y
 `smoke: true`. Home: `research/config/stage_configs.py` validation plus the existing
 `atp research validate-config` / `plan-experiment` commands. This is also what makes the
 suite `v1` rule "holdout never tuned on" (`pre-launch-deployment-plan.md` §5) enforceable.
-- [ ] Validator + tests; the current `experiments/staged/ma_sweep_staged.yaml` must fail
+- [x] Validator + tests; the current `experiments/staged/ma_sweep_staged.yaml` must fail
       until fixed, `exp_mc_smoke_test.yaml` must carry `smoke: true`.
+      Done 2026-11-15 (package A, committed, PR pending). Home changed from the text above: the rules live in the stage config
+      classes and in `StagedPipelineConfig`, not in `stage_configs.py`, because the
+      replay hook never goes through the YAML models. `smoke: true` waives the two
+      cross-stage rules only. Tests: `tests/research/pipeline/test_pipeline_validation.py`
+      (16, including the old `ma_sweep_staged.yaml` layout failing and both experiment
+      files loading). Rules table: `docs/backend/research/research_robustness_stages.md`.
 - [ ] A repo-level holdout declaration (one date, one place) that every experiment YAML is
-      checked against.
+      checked against. Moved to package B (2026-11-15): a holdout needs history long
+      enough to set one aside.
 
 **R7 — Test hardening per stage (not started).** Every stage audited so far is tested with
 `MagicMock` results and permissive filters, so gating logic is never exercised.
@@ -1063,7 +1221,7 @@ strategy that traded, and the rebuild with latest-close marks matches the simula
 curve to the cent.
 
 **R11 — The stress gate's shock check cannot be passed by a strategy that trades (found
-2026-11-15 under R4; option (a) chosen and implemented 2026-11-15, commit `b6860b6b7`, pushed, no PR yet).**
+2026-11-15 under R4; option (a) chosen and implemented 2026-11-15, commit `b6860b6b7`; merged as PR #183, deployed to A and B 2026-11-16 03:38 UTC (`7cf1c0ba1`)).**
 Correction to the title, found while writing the tests: a strategy that earned more than
 about 10% inside the window would have survived both one-bar shocks and reached 4 of 7.
 The best real strategy earned 2.95%. A synthetic Sharpe-3 curve with 5% earned reaches
@@ -1158,8 +1316,8 @@ stress has ever received a strategy.
 fails it, and each failure reason names a cause that differs between strategies.
 
 **R12 — Research trades almost for free (found 2026-11-15 under R4, measured; 1 basis
-point per trade agreed and implemented 2026-11-15, commit `bb2f09329`, pushed; re-baseline
-open).** Every research and bench simulation is built by
+point per trade agreed and implemented 2026-11-15, commit `bb2f09329`; merged as PR #183, deployed to A and B 2026-11-16 03:38 UTC (`7cf1c0ba1`); re-baseline
+done).** Every research and bench simulation is built by
 `build_platform_execution_service` (`execution/clients/simulated_broker_client.py:47-59`):
 zero commission, and slippage of 25 basis points × the order's share of that bar's
 volume (`volume_share_slippage_model.py:23`, `:58-62`). Orders are capped at 5% of the
@@ -1327,11 +1485,33 @@ path: the spread estimate at `:64-75` is used only when a bar has no volume.
     loses 1.28. At the old cost the stress gate could not tell these two apart.
   - Regime, report-only for the first time in a real run: nobody eliminated, findings
     recorded for 28 of 30 (none for c24 and c06). Overfitting: under R14.
-- [ ] Re-baseline: the 30-strategy run and the bench re-sim, before / after, in the
+- [x] Re-baseline: the 30-strategy run and the bench re-sim, before / after, in the
       results log. The 30-strategy half is the box above (section 5's table is laid out
-      for the generator baseline, so the numbers stay here). Open: the bench re-sim on B
-      after deploy, against `bench_resims_2026-11-14_r10` (macd 1.21, mean reversion
-      -0.19, momentum -1.23).
+      for the generator baseline, so the numbers stay here). Bench re-sim, done
+      2026-11-16 03:40 UTC on B at `7cf1c0ba1`: `worker bench-resim --as-of 2026-11-14
+      --run-id bench_resims_2026-11-14_r12 --no-pull --no-publish` (nothing posted to A;
+      payload `artifacts/worker/bench_resims/bench_resims_2026-11-14_r12.json`, log
+      `~/rehearsals/bench-resim-r12-2026-11-15.log`). Before is
+      `bench_resims_2026-11-14_r10` at `b3b82ee67`. Same window (2026-08-17 to
+      2026-11-14), same dataset (`raw_bars_20261114T041002Z_c2faf2e7`), 63 daily returns.
+
+  | Strategy | Sharpe | Return | Max drawdown | Score | Trades | Traded per day (× capital) |
+  |---|---|---|---|---|---|---|
+  | `macd_crossover_v1` | 1.21 → 0.51 | 1.70% → 0.70% | -2.24% → -2.50% | 1.863 → 1.559 | 2,704 → 2,704 | 1.64 |
+  | `mean_reversion_v1` | -0.19 → -0.66 | -0.32% → -1.01% | -2.71% → -2.87% | 1.303 → 1.096 | 2,646 → 2,648 | 1.14 |
+  | `momentum_v1` | -1.23 → -5.54 | -1.82% → -7.79% | -3.55% → -7.82% | 0.943 → 0.750 | 20,097 → 20,015 | 9.73 |
+
+  - The falls match the cost: traded per day × 63 sessions × 1 basis point is 1.03, 0.72
+    and 6.13 points; returns fell 1.00, 0.70 and 5.97.
+  - Order of the three is unchanged on Sharpe and on score. Daily returns before and
+    after correlate at 0.9992 or more: the same trades, each a little worse.
+  - `macd_crossover_v1`, on deck, is the only one still positive. `momentum_v1` and
+    `mean_reversion_v1` are the two trading on A's paper account.
+  - Not checked: how the re-sim's turnover for `momentum_v1` (9.7 times capital a day)
+    compares with what it trades on A. A's fills for both live strategies together were
+    $4.08M over four weeks.
+  - A still holds the Saturday submission (pre-R10, old cost). The timed run on Sat
+    2026-11-21 posts the first one at the new cost.
 
 **Verify:** the fill rows' slippage sums to the difference between fill prices and bar
 closes, and the cost of the best strategy in the table is within the range the chosen
@@ -1348,8 +1528,8 @@ tested for it anywhere.
 - [ ] If built: judge on the level of the neighbours' Sharpe against the strategy's own,
       not on the analyzer's current score, which ignores the level.
 
-**R14 — Overfitting gate: read, never exercised (found 2026-11-15 under R4, fix waits on
-a measurement).** Confirmed by reading: two overlapping folds at most on today's window,
+**R14 — Overfitting gate: read, never exercised (found 2026-11-15 under R4; measured,
+then made report-only, committed 2026-11-15, PR pending).** Confirmed by reading: two overlapping folds at most on today's window,
 so both walk-forward indicators are statistics of two numbers; no term for the number of
 strategies tried; the Monte Carlo evidence counted twice; a pass when evidence is thin;
 regime buckets of any size counted. Not known: whether on real folds it separates
@@ -1403,15 +1583,37 @@ anything.
     as what the gate is for. It still passes 22 of the 24 losing strategies and both
     that never traded. c24's score rose from 0.24 to 0.43. In the funnel both survivors
     pass (0.15 and 0.43).
-- [ ] From that, decide what the gate should be. Candidates to weigh then: a minimum
-      number of folds before the walk-forward indicators count (waits on longer history,
-      item 5 of the order), a bar that rises with the number of candidates tried, the
-      thin-evidence case failing.
-- [ ] R7: a test with two folds and Sharpes between -2 and 3.
+- [x] From that, decide what the gate should be. **Report only until longer history,
+      agreed 2026-11-15** (user: "lets do your rec"). Implemented the same day on
+      `research/r6-r2-validators`, not yet committed:
+  - `OverfittingGateConfig.enforce`, default `False` (`overfitting_gate.py`). The score
+    is computed as before; what the rule found is on the verdict as `findings`. With
+    `enforce` off the strategy passes and `failure_reasons` is empty; with it on,
+    behaviour is as before. Same shape as the regime gate (R15).
+  - The verdict is now stored per strategy (`StageDiagnostics.overfitting_verdict`);
+    before, only the score was kept, so a "would have failed" reason had nowhere to go.
+  - The hook sets `enforce=False` explicitly; the YAML key is `enforce`. The stage's
+    summary log line counts strategies with findings and says which mode.
+  - The funnel that eliminates is now: quality filter, walk-forward, Monte Carlo, stress
+    costs. Regime and overfitting report.
+  - Checked: `tests/research/pipeline`, `config`, `validation` and the smoke test pass,
+    ruff clean. Full suite not yet run with it.
+- [x] R7: a test with two folds and Sharpes between -2 and 3. Done with the change:
+      `tests/research/pipeline/gates/test_overfitting_gate.py`,
+      `TestTwoFoldsRealisticSharpes`. A steady strategy is not flagged (score 0.14); a
+      train-to-test collapse (2.9 → 0.1, 2.5 → -0.5) is (0.60); test better than train
+      gives a drop of zero. Two tests pin the known weaknesses: a strategy that loses
+      steadily in train and test is not flagged (0.25), and a train Sharpe near zero
+      sends the drop to its maximum.
+- [ ] Before `enforce` is switched on (package B, waits on longer history): a minimum
+      number of folds before the two walk-forward indicators count; the train-to-test
+      drop made safe for a train Sharpe near zero; a bar that rises with the number of
+      candidates tried; the thin-evidence case failing; then re-measure on all strategies
+      as on 2026-11-15.
 
 **R15 — On a 60-session window the regime gate's verdict on a profitable strategy is
 close to chance (found 2026-11-15 under R4, measured; option (a) agreed and implemented
-2026-11-15, commit `1ca8c33e1`, pushed, no PR yet).** Evidence in the
+2026-11-15, commit `1ca8c33e1`; merged as PR #183, deployed to A and B 2026-11-16 03:38 UTC (`7cf1c0ba1`)).** Evidence in the
 R4 regime note: with labels dealt to random days the gate fails a Sharpe-2.34 strategy
 48 times in 100. The cause is the window, not the rule's logic: a bucket of 18 or 19
 sessions cannot support a Sharpe floor of -1.0. In the open-upstream runs so far regime
@@ -1461,6 +1663,130 @@ trading-cycle parity check from `portfolio-rotation-plan.md` 5c (re-sim vs platf
 correlation ≥ 0.99 on the shared fixture) stays green. R1's bootstrap does not touch the
 simulator; stochastic fills or any execution-model change would, and must re-run it.
 
+**R16 — The "deployable" decision still rests on the measures the funnel now only reports
+(found 2026-11-15 while investigating R5; measured, decided and implemented the same day,
+committed, PR pending).** After the
+pipeline, the replay hook scores each survivor and seeds governance records for the ones
+marked deployable (`research_hooks.py:328-335`). Deployable means the plain average of
+four numbers is at least 0.55 (`candidate_ranking_service.py`, `_score_vector`):
+walk-forward fold consistency, overfitting resistance, "regime robust" (1 or 0) and the
+shock survival rate. The last three are the measures R14, R15 and R11 took out of the
+funnel's pass rules: the shock rate was the same 2 of 7 for every profitable strategy,
+the regime verdict on about 19 sessions per regime is close to chance, and the
+overfitting score does not track quality. A missing number counts as 0.5
+(`research_feature_vector_builder.py:29`), which is higher than the 0.29 a profitable
+strategy gets for shocks and the 0 it gets when "regime robust" is false. By the formula,
+with shocks at 0.29 and regime at 0 the other two would have to average 0.96, so the
+decision probably turns on the regime flag. That last step is an inference.
+**The inference was wrong (measured below): the regime input is never 0 or 1, it is
+always 0.5.**
+- [x] Measure: record the four inputs, the average and the deployable flag for every
+      survivor of the real-bars run (the harness does not record them today).
+      Measured 2026-11-15 on real bars (window 2026-08-15 to 2026-11-13, 30
+      strategies, 1 bp costs, tree before the train-failed-fold change). The harness
+      repeats the hook's own scoring calls. Two runs: the pipeline as it is, and
+      "open upstream" (stage 1 and walk-forward made permissive so all 30 carry full
+      evidence; in that run every fold counts as passed, so its walk-forward input is
+      inflated and its flags are not what production would give).
+
+      | Run | Survivor | Walk-forward | Overfitting | Regime | Shocks | Average | Deployable | Robustness score |
+      |---|---|---|---|---|---|---|---|---|
+      | As it is (30 → 2 → 1 → 1 → 1 → 1) | composite rule `5a748d50` | 0.17 | 0.57 | 0.50 | 0.29 | 0.38 | no | 0.34 |
+      | Open upstream (30 → 30 → 2 → 2 → 2 → 2) | mean reversion `55442143` | 1.00 | 0.85 | 0.50 | 0.29 | 0.66 | yes | 0.65 |
+      | Open upstream | composite rule `5a748d50` | 0.67 | 0.57 | 0.50 | 0.29 | 0.51 | no | 0.51 |
+
+      What the numbers show:
+      - **As the pipeline stands, research flags nothing deployable**, so it seeds no
+        governance record on this window. The one survivor scores 0.38 against 0.55.
+      - **The regime input is 0.50 in all 60 rows.** The hook gives the regime profile
+        to the validation step but not to the scoring request
+        (`research_hooks.py:269`), so the scorer reads it as missing. It tells
+        strategies apart by nothing and pulls every average toward 0.5.
+      - **The shock input takes three values**: 0.14 or 0.29 for every strategy that
+        trades, 0.57 for the two that never trade. It lowers every trading strategy by
+        about the same amount and is highest for doing nothing.
+      - So the flag is decided by the other two. With regime at 0.50 and shocks at
+        0.14 to 0.29, walk-forward consistency plus overfitting resistance must reach
+        1.41 to 1.56 out of 2.
+      - **The formula never looks at whether the strategy makes money.** In the open
+        run 15 of 30 are flagged, including strategies with a full-window Sharpe near
+        -4 and the two that never traded (0.69, the highest averages in the table).
+        Production does not reach those rows, because only funnel survivors are
+        scored; the flag relies on the funnel for that entirely.
+      - **Less evidence scores higher (R5, now measured).** In the as-it-is run the 28
+        strategies that never reached walk-forward would score 0.46 to 0.52, above
+        the real survivor's 0.38, and the two that never traded get the highest
+        robustness score (0.55 against the survivor's 0.34).
+      - Robustness score: with five components supplied the weights are walk-forward
+        0.35, Monte Carlo 0.24, regime 0.24, shocks 0.12, overfitting 0.06. The three
+        report-only ones carry 0.41 and, for the survivors, sit at 0.13 to 0.17
+        (regime) and 0.29 (shocks). On walk-forward and Monte Carlo alone (0.6 / 0.4)
+        the three rows above read 0.39, 0.90 and 0.69 in place of 0.34, 0.65 and 0.51.
+      - The train-failed-fold change does not move these numbers: no strategy that
+        reached walk-forward failed a train filter in either run (4 folds as it is,
+        60 with permissive filters, which cannot fail). How often it happens on real
+        bars with real filters is still a sample of 4.
+      - Mean reversion `55442143` has a full-window Sharpe of 1.37 and never reaches
+        walk-forward in the real pipeline: its Sharpe on stage 1's 45-day selection
+        window is 0.04. Noted, not acted on; it is one strategy on one window.
+      Outputs: session scratchpad `out_r16/r16_before_d2_real_{hook_as_is,open_upstream}.json`.
+- [x] Decide with R5 what "deployable" should rest on while those three measures are
+      report-only.
+      Decided by the user 2026-11-15: **trusted evidence only**. Implemented the same
+      day (committed, PR pending) through the same `EvidencePolicy` as R5:
+      - Deployability = plain average of walk-forward consistency and Monte Carlo
+        stability (was: walk-forward, overfitting, regime, shocks). Threshold still
+        0.55.
+      - Robustness score = 0.6 x walk-forward + 0.4 x Monte Carlo (their old weights,
+        0.30 and 0.20, rescaled). Ranking composite = 0.625 x robustness score + 0.375
+        x walk-forward.
+      - Regime, shocks, overfitting and parameter stability are still computed, stored
+        and listed, with weight 0. Tests check that moving them from worst to best
+        moves no deciding score.
+      - To give a measure weight again, add it to `DEFAULT_EVIDENCE_POLICY.deciding`
+        in the change that sets its gate's `enforce=True`. A smoke test
+        (`test_report_only_gates_do_not_feed_the_deciding_scores`) fails if the hook's
+        gates and the policy disagree.
+      - On the measured window the three table rows above become: survivor as it is
+        0.45 (was 0.38), not deployable; open-upstream mean reversion 0.88 (was 0.66),
+        deployable; open-upstream composite rule 0.70 (was 0.51), deployable. The last
+        one changes flag, in a run whose walk-forward input is inflated by permissive
+        filters. In the real pipeline no outcome changes.
+      - **Confirmed by a second real-bars run 2026-11-15** (same window and 30
+        strategies, source frozen after the change; full suite passing). As it is:
+        funnel unchanged (30 → 2 → 1 → 1 → 1 → 1); the survivor reads deployability
+        0.45 and robustness 0.39, not deployable; the other 29 are not scored (before,
+        28 of them would have read 0.46 to 0.52, above the survivor). Open upstream:
+        funnel unchanged (30 → 30 → 2 → 2 → 2 → 2); the two survivors read 0.88 and
+        0.70 (robustness 0.90 and 0.69), both deployable.
+      - In the open run 17 of 30 rows are flagged (was 15), and it is a different set.
+        No longer flagged: the two that never traded (0.50, were the highest at 0.69)
+        and every row with a full-window Sharpe below -2. Flagged now: every row with
+        Sharpe above -1.8 except three. It still includes losing strategies, because
+        permissive filters put walk-forward at 1.00 for nearly every row, and with
+        walk-forward at 1.00 a Monte Carlo share of 0.10 is enough to reach 0.55.
+        Production does not reach those rows (only funnel survivors are scored, and
+        the Monte Carlo gate has its own bar), but it is why the threshold box below
+        matters. Outputs: session scratchpad
+        `out_r16/r16_after_policy_real_{hook_as_is,open_upstream}.json`.
+- [ ] Calibrate the 0.55 threshold. It was picked for the old four-input average and
+      has never been checked against outcomes; with two inputs it means "walk-forward
+      and Monte Carlo average at least 0.55" (for example 1 of 2 folds with no drop
+      from train to test, which scores 0.50, plus a 0.60 Monte Carlo share lands
+      exactly on it). Needs more survivors than one window gives: do it after
+      package B.
+- [ ] The hook does not give the regime profile to the scoring request
+      (`research_hooks.py`, the `ResearchIntelligenceRequest` call), so the reported
+      regime fields in the ranking are always the neutral 0.5. No effect on any
+      deciding score while regime is report-only; fix before the regime gate is
+      switched on, or sooner so the reports are true.
+
+Consequence to know (follows from the rule, not a new decision): with under 75 days of
+data only stage 1 runs, so no survivor has walk-forward or Monte Carlo evidence and
+research seeds no governance record at all in that case. Before, such survivors were
+scored on defaults. `scripts/analyze_validation.py`, which works from an equity curve
+alone, likewise reports "not scored" and exits 1.
+
 **Step 0 follow-ups (trail the fixes above; do before Step 5):**
 - Cache and identity hygiene: `SimulationResultCache` keys and the checkpoint identity
   disagree about what makes a run unique (seed in one, hardcoded `universe_version="v1"` in
@@ -1499,8 +1825,9 @@ worst-coverage names).
 strategy on SIP bars and trading it on IEX bars scores signals it will never see live; a
 SIP-ranked pool promotes names the live loop cannot follow; a SIP backfill under IEX daily
 versions puts a seam in the rolling window on 10/09. So no half-measures:
-- No result is recorded for the probe below as of 2026-11-15 (the deployment plan's
-  calendar had it for the week of 11/10). If it was run, write the result here.
+- The probe below has not been run (user, 2026-11-15), and SIP work waits until the
+  other updates are done: the switch is mostly on the data provider's side, not in our
+  code. Longer history for research (package B) is loaded on IEX and does not wait on it.
 - [ ] Now, free, no data change: confirm the free tier serves SIP *historical* bars older
       than 15 minutes with a one-symbol, two-day backfill run with `ALPACA_DATA_FEED=sip`
       set on that command only (success = a validated version; a subscription error means
@@ -1630,6 +1957,44 @@ built after those sessions are back.
 
 **Verify:** the run completes end to end on B against pulled Parquet (no Alpaca call), the
 summary JSON lands under `artifacts/worker/`, and the numbers are in section 5.
+
+### Step 1b — Generation system review (not started; added 2026-11-15)
+
+User, 2026-11-15: "the strategy generation and structure of the generation system needs
+overhauling/update"; not urgent, later in this sprint. What the plan had before this
+section: a description of the generator (section 1), R9 (the evolutionary generator has no
+selection) and Step 2, which changes one thing (a real search for composites) with a
+design written on 2026-11-06 as "minimal, additive", before anything was audited. Nothing
+reviewed the generation system's structure the way Step 0 reviewed the pipeline. This
+section is that review. It comes before Step 2, because its findings may change Step 2's
+design.
+
+What is already measured (R4 / R12 runs, 2026-11-15, 30 candidates from the replay hook on
+real bars): 2 of 30 never traded; 20 of 30 lost money at the old cost and 24 of 30 at
+1 basis point; 2 survive the funnel. So most of the simulation budget goes on candidates
+that were never viable.
+
+Read-only audit first, then findings become boxes here, as in Step 0:
+
+- [ ] Map the system as built: `research/strategy_generation/` (engine, the three
+      generators, `composite_generation.py`, the cache), who calls it (replay hook,
+      `run-experiment`, the worker), and how many candidates each caller asks for and
+      from which families.
+- [ ] How the replay hook picks its candidates (30 on the full profile, 10 on smoke): which
+      families, which parameters, whether the choice is fixed or varies run to run, and
+      why two never trade.
+- [ ] Parameter ranges per family against the bar size and window actually used
+      (5-minute bars, about 60 sessions): which settings cannot produce a trade or can
+      only produce very high turnover.
+- [ ] What is known before simulating: can a cheap check (no trades possible, turnover
+      above the research cap, duplicate of another candidate) reject a candidate without
+      a simulation.
+- [ ] Feedback: what a run leaves behind that the next run could use (scores, clusters,
+      the bench's current members) and what uses it today (nothing, per section 1).
+- [ ] Structure: where a new family, a new operator or a new search method would plug in,
+      and what would have to change in three places to do it.
+- [ ] Options for the user from the above, in plain terms, before any code. Then revise
+      Step 2's design or confirm it.
 
 ### Step 2 — A real evolutionary search for composites (not started)
 

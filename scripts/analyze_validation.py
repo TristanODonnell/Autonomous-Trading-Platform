@@ -92,7 +92,12 @@ def _print_human(summary: dict, mode: str) -> None:
     print(f"Validation Run:     {summary.get('validation_run_id', 'n/a')}")
     print(f"{'=' * 60}")
     print(f"Overall Passed:     {summary.get('overall_passed', False)}")
-    print(f"Robustness Score:   {rs.get('overall', 0.0):.4f}")
+    missing = rs.get("missing_evidence") or []
+    if missing:
+        # 0.0 here would read as the worst score; it means no score was given.
+        print(f"Robustness Score:   not scored (missing {', '.join(missing)})")
+    else:
+        print(f"Robustness Score:   {rs.get('overall', 0.0):.4f}")
     print()
 
     components = rs.get("components", {})

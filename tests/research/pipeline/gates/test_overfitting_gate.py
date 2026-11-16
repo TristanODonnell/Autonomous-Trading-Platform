@@ -62,7 +62,102 @@ def _ref(trade_count: int = 100):
     return SimpleNamespace(trade_count=trade_count, equity_curve=None)
 
 
-CFG = OverfittingGateConfig()
+# The rule tests run enforced: they are about what the rule finds and decides.
+CFG = OverfittingGateConfig(enforce=True)
+REPORT = OverfittingGateConfig()
+
+
+def _two_folds(
+    folds: tuple[tuple[float, float], tuple[float, float]], mc_positive: float
+) -> OverfittingEvidence:
+    """Two (train, test) Sharpe pairs, the most a 60-session window gives."""
+    return OverfittingEvidence(
+        fold_inputs=[_fold(i, train, test) for i, (train, test) in enumerate(folds)],
+        mc_aggregation=_mc(mc_positive),
+        reference_result=_ref(),  # type: ignore[arg-type]
+    )
+
+
+# Sharpes of the size seen on the 2026-11 real-bars runs (between -2 and 3).
+STEADY_GOOD = _two_folds(((1.5, 1.0), (1.2, 0.8)), 0.80)
+COLLAPSE = _two_folds(((2.9, 0.1), (2.5, -0.5)), 0.55)
+STEADY_LOSER = _two_folds(((-1.0, -1.1), (-1.2, -1.3)), 0.20)
+NEAR_ZERO_TRAIN = _two_folds(((0.15, -0.9), (0.05, -1.05)), 0.40)
+TEST_BETTER = _two_folds(((0.5, 1.4), (0.3, 1.1)), 0.75)
+
+
+class TestReportOnly:
+    """Default mode: the score is computed and recorded, the strategy passes (plan item R14)."""
+
+    def test_default_is_report_only(self) -> None:
+        assert OverfittingGateConfig().enforce is False
+
+    def test_a_finding_is_recorded_and_does_not_fail(self) -> None:
+        verdict = evaluate_overfitting_gate(strategy_id="s1", evidence=COLLAPSE, config=REPORT)
+        assert verdict.passed
+        assert verdict.enforced is False
+        assert verdict.failure_reasons == ()
+        assert "overfitting probability" in verdict.findings[0]
+
+    def test_findings_are_the_same_in_both_modes(self) -> None:
+        reported = evaluate_overfitting_gate(strategy_id="s1", evidence=COLLAPSE, config=REPORT)
+        enforced = evaluate_overfitting_gate(strategy_id="s1", evidence=COLLAPSE, config=CFG)
+        assert reported.findings == enforced.findings == enforced.failure_reasons
+        assert reported.passed and not enforced.passed
+        assert reported.analysis.overfitting_probability == pytest.approx(
+            enforced.analysis.overfitting_probability
+        )
+
+    def test_clean_evidence_has_no_findings(self) -> None:
+        verdict = evaluate_overfitting_gate(strategy_id="s1", evidence=STEADY_GOOD, config=REPORT)
+        assert verdict.passed and verdict.findings == ()
+
+    def test_insufficient_evidence_set_to_fail_is_still_only_recorded(self) -> None:
+        evidence = OverfittingEvidence(reference_result=_ref(trade_count=2))  # type: ignore[arg-type]
+        verdict = evaluate_overfitting_gate(
+            strategy_id="s1",
+            evidence=evidence,
+            config=OverfittingGateConfig(on_insufficient_evidence="fail"),
+        )
+        assert verdict.passed
+        assert "insufficient overfitting evidence" in verdict.findings[0]
+
+
+class TestTwoFoldsRealisticSharpes:
+    """What the rule does with the evidence a 60-session window really produces.
+
+    Two of these pin known weaknesses (the reason the gate is report-only), so a
+    change to the score shows up here.
+    """
+
+    def test_steady_strategy_is_not_flagged(self) -> None:
+        verdict = evaluate_overfitting_gate(strategy_id="s1", evidence=STEADY_GOOD, config=CFG)
+        assert verdict.passed
+        assert verdict.analysis.overfitting_probability < 0.3
+
+    def test_train_to_test_collapse_is_flagged(self) -> None:
+        verdict = evaluate_overfitting_gate(strategy_id="s1", evidence=COLLAPSE, config=CFG)
+        assert not verdict.passed
+        assert verdict.analysis.overfitting_probability > 0.6
+        assert verdict.analysis.indicators.train_test_degradation == pytest.approx(0.54, abs=0.01)
+
+    def test_test_better_than_train_has_no_drop(self) -> None:
+        verdict = evaluate_overfitting_gate(strategy_id="s1", evidence=TEST_BETTER, config=CFG)
+        assert verdict.passed
+        assert verdict.analysis.indicators.train_test_degradation == 0.0
+
+    def test_known_weakness_a_steady_loser_is_not_flagged(self) -> None:
+        # The score measures whether train and test agree, not whether the
+        # strategy is good: losing equally in both reads as "not overfit".
+        verdict = evaluate_overfitting_gate(strategy_id="s1", evidence=STEADY_LOSER, config=CFG)
+        assert verdict.passed
+        assert verdict.analysis.overfitting_probability < 0.3
+
+    def test_known_weakness_train_sharpe_near_zero_saturates_the_drop(self) -> None:
+        # Drop = (train - test) / |train|. A train Sharpe of 0.1 in the
+        # denominator sends it to its maximum whatever the strategy is.
+        verdict = evaluate_overfitting_gate(strategy_id="s1", evidence=NEAR_ZERO_TRAIN, config=CFG)
+        assert verdict.analysis.indicators.train_test_degradation == 1.0
 
 
 class TestCollectEvidence:
@@ -131,7 +226,7 @@ class TestOverfittingGate:
         assert verdict.n_core_indicators == 0
         assert "insufficient overfitting evidence" in verdict.warnings[0]
 
-        strict = OverfittingGateConfig(on_insufficient_evidence="fail")
+        strict = OverfittingGateConfig(on_insufficient_evidence="fail", enforce=True)
         assert not evaluate_overfitting_gate(
             strategy_id="s1", evidence=evidence, config=strict
         ).passed
@@ -144,8 +239,12 @@ class TestOverfittingGate:
         prob = evaluate_overfitting_gate(
             strategy_id="s1", evidence=evidence, config=CFG
         ).analysis.overfitting_probability
-        tight = OverfittingGateConfig(max_overfitting_probability=max(prob - 0.01, 0.01))
-        loose = OverfittingGateConfig(max_overfitting_probability=min(prob + 0.01, 1.0))
+        tight = OverfittingGateConfig(
+            max_overfitting_probability=max(prob - 0.01, 0.01), enforce=True
+        )
+        loose = OverfittingGateConfig(
+            max_overfitting_probability=min(prob + 0.01, 1.0), enforce=True
+        )
         assert not evaluate_overfitting_gate(
             strategy_id="s1", evidence=evidence, config=tight
         ).passed

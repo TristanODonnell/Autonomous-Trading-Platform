@@ -55,8 +55,14 @@ if TYPE_CHECKING:
     from autonomous_trading_platform.research.pipeline.aggregation.monte_carlo_aggregator import (
         MonteCarloAggregation,
     )
+    from autonomous_trading_platform.research.pipeline.gates.overfitting_gate import (
+        OverfittingGateVerdict,
+    )
     from autonomous_trading_platform.research.pipeline.gates.regime_gate import RegimeGateVerdict
     from autonomous_trading_platform.research.pipeline.gates.stress_gate import StressGateVerdict
+    from autonomous_trading_platform.research.pipeline.pipeline_validation import (
+        StageWindowFacts,
+    )
     from autonomous_trading_platform.research.validation.overfitting_analysis import (
         OverfittingAnalysisResult,
     )
@@ -72,12 +78,14 @@ class StageDiagnostics:
 
     Every field is optional — each stage fills in only what it computed.
 
-    fold_inputs         Walk-forward train/test metric pairs (completed folds only).
+    fold_inputs         Walk-forward train/test metric pairs, one per fold, including
+                        folds whose train run failed (train_passed=False).
     mc_aggregation      Monte Carlo distribution across resampled paths.
     regime_profile      Regime-conditioned performance profile.
     regime_verdict      RegimeStage gate decision and reasons.
     stress_verdict      StressStage gate decision and reasons.
     overfitting_result  OverfittingStage analysis.
+    overfitting_verdict OverfittingStage gate decision, findings and whether enforced.
     reference_result    Full-window run that best represents the strategy
                         (used by later stages instead of re-simulating).
     """
@@ -88,6 +96,7 @@ class StageDiagnostics:
     regime_verdict: RegimeGateVerdict | None = None
     stress_verdict: StressGateVerdict | None = None
     overfitting_result: OverfittingAnalysisResult | None = None
+    overfitting_verdict: OverfittingGateVerdict | None = None
     reference_result: SimulationRunResult | None = None
 
 
@@ -151,6 +160,14 @@ class BaseStage(ABC):
         initial_cash: float,
         resample_to_daily: bool = False,
     ) -> StageResult: ...
+
+    def validation_facts(self) -> StageWindowFacts | None:
+        """What the pipeline validator needs to know about this stage.
+
+        None (the default) means the stage takes no part in the cross-stage
+        rules. Stages that select on a date window or test on folds override it.
+        """
+        return None
 
     @classmethod
     @abstractmethod

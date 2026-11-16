@@ -43,6 +43,7 @@ from autonomous_trading_platform.observability.metrics import (
     research_validation_stage_duration,
     research_validation_stage_runs,
 )
+from autonomous_trading_platform.research.validation.evidence_policy import EvidencePolicy
 from autonomous_trading_platform.research.validation.overfitting_analysis import (
     OverfittingAnalyzer,
 )
@@ -82,6 +83,9 @@ class ValidationConfig:
     enable_parameter_sensitivity: bool = False  # needs N sim runs — off by default
     min_robustness_score: float = 0.5
     robustness_weights: RobustnessWeights | None = None
+    # Which components may decide the overall score (None = the default policy:
+    # walk-forward and Monte Carlo, both required).
+    evidence_policy: EvidencePolicy | None = None
     min_stress_survival_rate: float = 0.5
     min_acceptable_sharpe: float = 0.0
     max_drawdown_threshold: float = -0.40
@@ -177,7 +181,9 @@ class ValidationOrchestrator:
             config = ValidationConfig()
         validation_run_id = str(uuid4())
         stage_results: dict[str, ValidationStageResult] = {}
-        score_builder = RobustnessScoreBuilder(weights=config.robustness_weights)
+        score_builder = RobustnessScoreBuilder(
+            weights=config.robustness_weights, policy=config.evidence_policy
+        )
         sensitivity_profile: SensitivityProfile | None = None
         overfit_result = None
         _t0 = time.perf_counter()

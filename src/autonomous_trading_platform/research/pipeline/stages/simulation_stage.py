@@ -43,6 +43,7 @@ from autonomous_trading_platform.research.simulation.simulation_runner import (
 )
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
+from ..pipeline_validation import StageWindowFacts
 from .base_stage import BaseStage, StageResult
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,15 @@ class SimulationStage(BaseStage):
     @property
     def stage_name(self) -> str:
         return self._stage_config.name
+
+    def validation_facts(self) -> StageWindowFacts:
+        cfg = self._stage_config
+        return StageWindowFacts(
+            stage_name=cfg.name,
+            kind="selection",
+            end_date=cfg.end_date,
+            filters=(("filter_config", cfg.filter_config),),
+        )
 
     # ------------------------------------------------------------------
     # Loader — owns its own deserialization from a YAML dict block

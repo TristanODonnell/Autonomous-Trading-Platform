@@ -3,8 +3,13 @@ OverfittingStage — final gate; runs no simulations.
 
 Combines the evidence earlier stages recorded in StageResult.diagnostics
 (walk-forward fold pairs, Monte Carlo dispersion, regime profile, reference
-run) into one overfitting probability via OverfittingAnalyzer, and eliminates
-strategies above max_overfitting_probability. See gates/overfitting_gate.py.
+run) into one overfitting probability via OverfittingAnalyzer. See
+gates/overfitting_gate.py.
+
+Report-only unless the gate is configured with ``enforce: true``: the score and
+the gate's findings are recorded for every strategy and nobody is eliminated.
+With ``enforce: true`` strategies above max_overfitting_probability are
+eliminated.
 
 Place it last: it can only use evidence from stages that ran before it.
 
@@ -16,6 +21,7 @@ YAML block example
     min_core_indicators: 2
     min_trade_count: 30
     on_insufficient_evidence: pass
+    enforce: false                 # default; true lets the findings eliminate
 """
 
 from __future__ import annotations
@@ -74,6 +80,7 @@ class OverfittingStage(BaseStage):
                     min_trade_count=v.min_trade_count,
                     on_insufficient_evidence=v.on_insufficient_evidence,  # type: ignore[arg-type]
                     indicator_weights=v.indicator_weights,
+                    enforce=v.enforce,
                 ),
             )
         )
@@ -113,10 +120,12 @@ class OverfittingStage(BaseStage):
             if verdict.passed:
                 final_survivors.append(config)
                 logger.debug(
-                    "  PASSED  %s | p(overfit)=%.2f | core indicators=%d",
+                    "  PASSED  %s | p(overfit)=%.2f | core indicators=%d | findings (%s): %s",
                     sid,
                     prob,
                     verdict.n_core_indicators,
+                    "enforced" if verdict.enforced else "report only",
+                    "; ".join(verdict.findings) or "none",
                 )
             else:
                 logger.debug("  FAILED  %s | reasons: %s", sid, "; ".join(verdict.failure_reasons))
@@ -125,14 +134,23 @@ class OverfittingStage(BaseStage):
                     sid, passed=verdict.passed, failure_reasons=verdict.failure_reasons
                 )
             )
-            diagnostics[sid] = StageDiagnostics(overfitting_result=verdict.analysis)
+            diagnostics[sid] = StageDiagnostics(
+                overfitting_result=verdict.analysis, overfitting_verdict=verdict
+            )
 
+        with_findings = sum(
+            1
+            for d in diagnostics.values()
+            if d.overfitting_verdict and d.overfitting_verdict.findings
+        )
         logger.info(
-            "Stage %-20s | entered %d | survived %d | eliminated %d",
+            "Stage %-20s | entered %d | survived %d | eliminated %d | with findings %d (%s)",
             self.stage_name,
             len(survivors),
             len(final_survivors),
             len(survivors) - len(final_survivors),
+            with_findings,
+            "enforced" if self._cfg.gate.enforce else "report only",
         )
 
         return StageResult(

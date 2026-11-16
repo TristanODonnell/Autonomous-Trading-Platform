@@ -251,6 +251,36 @@ def test_stage_one_selects_before_the_first_walk_forward_test_fold(
     assert all(s._cfg.end_date == exp.end_date for s in later if hasattr(s._cfg, "end_date"))
 
 
+def test_report_only_gates_do_not_feed_the_deciding_scores(
+    smoke_data_root, pit_universe, db_session, replay_context
+) -> None:
+    """A gate that is not trusted to eliminate must not carry weight in the scores
+    that decide (plan R5 / R16). The gates' enforce flags and the evidence policy
+    are set in different files; this fails when one changes without the other."""
+    from autonomous_trading_platform.research.pipeline.stages.overfitting_stage import (
+        OverfittingStage,
+    )
+    from autonomous_trading_platform.research.pipeline.stages.regime_stage import RegimeStage
+    from autonomous_trading_platform.research.validation.evidence_policy import (
+        DEFAULT_EVIDENCE_POLICY,
+        OVERFITTING,
+        REGIME,
+        STRESS,
+    )
+
+    ctx = _build_context(db_session)
+    exp = _replay_experiment(db_session, replay_context, ctx.simulation_runner, profile="full")
+    stages = exp.staged_pipeline_config.stages
+    regime = next(s for s in stages if isinstance(s, RegimeStage))
+    overfitting = next(s for s in stages if isinstance(s, OverfittingStage))
+
+    assert DEFAULT_EVIDENCE_POLICY.decides(REGIME) == regime._cfg.gate.enforce
+    assert DEFAULT_EVIDENCE_POLICY.decides(OVERFITTING) == overfitting._cfg.gate.enforce
+    # The stress component is the shock survival rate, which no gate enforces
+    # (the stress stage eliminates on its cost re-simulations only).
+    assert not DEFAULT_EVIDENCE_POLICY.decides(STRESS)
+
+
 def test_stage_one_alone_keeps_the_whole_window(
     smoke_data_root, pit_universe, db_session, replay_context
 ) -> None:
@@ -289,6 +319,7 @@ def _permissive_stage_dicts(exp, *, selection_end: date | None = None) -> list[d
             "train_days": 45,
             "test_days": 30,
             "step_days": 15,
+            "allow_overlapping_test_folds": True,  # the hook's layout
             "require_all_folds": False,
             "train_filter_config": _PERMISSIVE_FILTER,
             "test_filter_config": _PERMISSIVE_FILTER,
@@ -339,7 +370,8 @@ def test_every_new_stage_runs_on_real_simulations(
     exp = replace(
         exp,
         strategy_set=_MINIMAL_STRATEGY_SET,
-        staged_pipeline_config=StagedPipelineConfig(stages=stages),
+        # smoke: the filters pass everything and stage 1 reads the whole window.
+        staged_pipeline_config=StagedPipelineConfig(stages=stages, smoke=True),
     )
 
     result = ctx.experiment_orchestration_service.run_staged_experiment(exp)
@@ -440,7 +472,7 @@ def test_governance_source_run_is_the_full_window_run(
         built["exp"] = replace(
             exp,
             strategy_set=_MINIMAL_STRATEGY_SET,
-            staged_pipeline_config=StagedPipelineConfig(stages=stages),
+            staged_pipeline_config=StagedPipelineConfig(stages=stages, smoke=True),
         )
         built["selection_end"] = selection_end
         return built["exp"]
@@ -449,6 +481,21 @@ def test_governance_source_run_is_the_full_window_run(
     monkeypatch.setattr(
         rh, "_seed_research_governance_from_intelligence", lambda **kw: seeded.update(kw)
     )
+
+    # Record what the scorer says is missing for each survivor it scores.
+    from autonomous_trading_platform.research.intelligence.candidate_ranking_service import (
+        CandidateRankingService,
+    )
+
+    score_real = CandidateRankingService._score_vector
+    missing_evidence: list[tuple[str, ...]] = []
+
+    def _score_and_record(self, vec, weights):
+        out = score_real(self, vec, weights)
+        missing_evidence.append(out[5])
+        return out
+
+    monkeypatch.setattr(CandidateRankingService, "_score_vector", _score_and_record)
 
     result = rh.run_scheduled_research_at_timestamp(
         session=db_session,
@@ -462,6 +509,11 @@ def test_governance_source_run_is_the_full_window_run(
     exp = built["exp"]
     assert built["selection_end"] < exp.end_date
     assert seeded["config_by_id"], "permissive gates should leave final survivors"
+    # Every survivor reaches the scorer with walk-forward and Monte Carlo evidence.
+    # A survivor without both is not scored and can never be deployable (plan R5),
+    # so a hook that stopped passing either would silently seed nothing.
+    assert missing_evidence, "the hook should score its final survivors"
+    assert all(missing == () for missing in missing_evidence), missing_evidence
     for sid in seeded["config_by_id"]:
         source = seeded["sim_by_id"][sid]
         assert (source.start_date, source.end_date) == (exp.start_date, exp.end_date)
@@ -473,6 +525,16 @@ def test_unknown_research_profile_falls_back_to_full() -> None:
     assert rh._resolve_research_profile(None) == "full"
     assert rh._resolve_research_profile({"profile": "smoke"}) == "smoke"
     assert rh._resolve_research_profile({"profile": "turbo"}) == "full"
+
+
+def test_research_lookback_is_a_setting_with_the_old_default() -> None:
+    import autonomous_trading_platform.application.services.platform_replay.research_hooks as rh
+
+    assert rh._resolve_lookback_days(None) == rh.DEFAULT_RESEARCH_LOOKBACK_DAYS == 90
+    assert rh._resolve_lookback_days({"lookback_days": 365}) == 365
+    for bad in (0, -5, "90", 90.5, True):
+        with pytest.raises(ValueError, match="lookback_days"):
+            rh._resolve_lookback_days({"lookback_days": bad})
 
 
 def test_research_universe_is_anchored_at_window_start(
