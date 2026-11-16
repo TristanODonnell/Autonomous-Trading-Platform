@@ -19,19 +19,33 @@ _HALF = Decimal("2")
 
 @dataclass(slots=True)
 class VolumeShareSlippageConfig:
-    # Market impact: slippage_bps = impact_coefficient_bps * volume_share
+    # Market impact: impact_coefficient_bps * volume_share
     impact_coefficient_bps: Decimal = Decimal("25")
     max_volume_share: Decimal = Decimal("0.10")
     # Used when bar volume is unavailable (spread-aware fallback floor)
     fallback_min_bps: Decimal = Decimal("5")
+    # Cost every fill pays whatever its size: half the bid-ask spread. The impact
+    # term alone goes to zero for small orders (research orders are 0.01% to 0.12%
+    # of a bar, so it charged 0.01 to 0.06 bps). 1 bp is the mean cost of 1,513
+    # paper fills on Box A whose quote was tight, 2026-10-19 to 2026-11-13
+    # (docs/roadmaps/research-generation-plan.md, R12). Set here, not at the
+    # call sites, so every model built with defaults charges it.
+    half_spread_bps: Decimal = Decimal("1")
+
+    def __post_init__(self) -> None:
+        if self.half_spread_bps < 0:
+            raise ValueError(f"half_spread_bps must be >= 0, got {self.half_spread_bps}")
 
 
 class VolumeShareSlippageModel:
-    """Volume-participation slippage model.
+    """Half-spread plus volume-participation slippage model.
 
-    Primary path: slippage_bps = impact_coefficient_bps * min(qty/bar_volume, max_volume_share).
+    Primary path:
+        slippage_bps = half_spread_bps
+                       + impact_coefficient_bps * min(qty/bar_volume, max_volume_share)
     Fallback when bar volume is absent: half-spread proxy from OHLC range, clamped to
-    fallback_min_bps.
+    fallback_min_bps. The fallback is already a spread estimate, so half_spread_bps is
+    not added to it.
     """
 
     model_type = CostModelType.VOLUME_SHARE
@@ -59,7 +73,7 @@ class VolumeShareSlippageModel:
         if context is not None and context.bar_volume is not None and context.bar_volume > 0:
             raw_share = context.quantity / context.bar_volume
             capped_share = min(raw_share, self.config.max_volume_share)
-            return self.config.impact_coefficient_bps * capped_share
+            return self.config.half_spread_bps + self.config.impact_coefficient_bps * capped_share
 
         # Spread-aware fallback: use OHLC range as half-spread proxy
         if (
@@ -82,6 +96,9 @@ class VolumeShareSlippageModel:
             "impact_coefficient_bps": str(self.config.impact_coefficient_bps),
             "max_volume_share": str(self.config.max_volume_share),
             "fallback_min_bps": str(self.config.fallback_min_bps),
+            # Part of the summary so cache identities change with it: results
+            # simulated under a different spread must not be reused.
+            "half_spread_bps": str(self.config.half_spread_bps),
         }
 
     @classmethod
@@ -93,7 +110,8 @@ class VolumeShareSlippageModel:
         Uses calibrated_impact_coefficient_bps and calibrated_fallback_min_bps from
         the snapshot.  Falls back gracefully if the snapshot is not globally calibrated
         (is_globally_calibrated=False) — in that case the snapshot already contains safe
-        default values.
+        default values. The snapshot carries no spread term, so half_spread_bps keeps
+        its default.
         """
         config = VolumeShareSlippageConfig(
             impact_coefficient_bps=snapshot.calibrated_impact_coefficient_bps,

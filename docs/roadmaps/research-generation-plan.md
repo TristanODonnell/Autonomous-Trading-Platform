@@ -14,9 +14,63 @@ pieces on A (Step 3's endpoint) and the worker timers (Step 5), and both stay in
 switched on. Deployment findings keep going into the pre-launch plan; research findings
 (numbered R1, R2, …) go here.
 
-Last updated: 2026-11-14 (R1 built, verified on real bars and pushed, no PR yet; R1
-follow-up and the small R2 set built, checked on real bars and committed on the same
-branch, not pushed; the rest of R2 and R3–R9 not started).
+Last updated: 2026-11-15 evening. Status is in "Where we are" directly below; the detail
+and the evidence for every line are in section 3.
+
+## Where we are (2026-11-15 evening)
+
+Every unticked box was checked against the code or the recorded evidence on 2026-11-15.
+Keep this board in step with the boxes: when a box changes in section 3, change its row.
+"Done / open" counts checkboxes.
+
+**Step 0, pipeline integrity (the current work)**
+
+| Item | What it is | Status | Done / open | What is left |
+|---|---|---|---|---|
+| R1 | Monte Carlo resamples for real | **Done.** Merged PR #181, deployed to A and B | 4 / 0 | Nothing |
+| R2 | Walk-forward folds out of sample | **Partial.** The small set (stage 1 selects on days walk-forward does not test) merged in #181 | 1 / 17 | Not a step back: only the small set was scheduled (user, 2026-11-14), and R10 and R4 went first. About half is code only and goes with R6 (validators, train-failed folds into the overfitting evidence, `WindowType`, folds in sessions). The other half waits on longer history (selection / evaluation / holdout split, fold geometry). The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook |
+| R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 / 5 | All of the wiring. Scheduled before Step 5 |
+| R4 | Audit of the remaining gates | **Audit done**: notes for stress, overfitting, parameter stability, regime; problems are R11 to R15 | 1 / 1 | The 12% drawdown kill is missing from the backtest path. R4's "Verify" (a real-runner test per stage where the gate fails) is not met; that work is R7 |
+| R5 | Composite score hides missing evidence | Not started | 0 / 2 | Decide penalty or minimum evidence set, then test |
+| R6 | Experiment-config and holdout validator | Not started | 0 / 2 | Validator, repo-level holdout date |
+| R7 | Test hardening per stage | Not started as its own item. Realistic-curve tests now exist at gate level for Monte Carlo, stress and regime | 0 / 2 | A real-runner test per stage, the cross-process checksum test |
+| R8 | Simulator RNG keyed per decision | Not started | 0 / 4 | Inert until stochastic fills are switched on |
+| R9 | Generator has no selection | Folds into Step 2 | no boxes | Step 2 |
+| R10 | Stale marks when a bar is missing | **Done.** Merged PR #182, deployed to A and B | 6 / 2 | The re-sim vs platform correlation was not re-measured; more sparse-bar fixtures (R7) |
+| R11 | Stress gate: shocks report-only, costs decide | **Committed `b6860b6b7`, pushed; PR not opened.** Rerun done: funnel 30 → 30 → 4 → 2 → 2 → 2, the first run with final survivors | 5 / 0 | Nothing. "Verify" met by the all-30 audit pass: 7 pass, 23 fail, for causes that differ. Stress at the new cost is R12's box |
+| R12 | Research trading cost: 1 basis point per trade | **Committed `bb2f09329`, pushed; PR not opened** | 3 / 4 | Measured on real bars: funnel 30 → 30 → 2 → 2 → 2 → 2, same two survivors, four of eight profitable strategies stay profitable, stress passes 3 of 30. Left: the bench re-sim on B after deploy, slippage written to fill rows. Two midpoint guards wait for a `LIMIT` / `TWAP` policy |
+| R13 | No parameter-stability check | Not decided | 0 / 2 | Decide whether to build the neighbour check |
+| R14 | Overfitting gate never exercised | **Measured.** In the funnel 2 of 2 pass (0.13, 0.24 against a limit of 0.6). On all 30 it passes 26, including 16 of 20 losing strategies, and fails no profitable one: it changes no outcome. At 1 basis point it fails one profitable strategy (c27) and passes 22 of 24 losing ones | 1 / 2 | **Decision for the user:** what the gate should be. Then a realistic two-fold test |
+| R15 | Regime gate report-only on a short window | **Committed `1ca8c33e1`, pushed; PR not opened** | 1 / 4 | The four prerequisites before `enforce` is switched on; all wait on longer history |
+
+**Data**
+
+| Item | What it is | Status | Done / open | What is left |
+|---|---|---|---|---|
+| D1 | One feed everywhere (IEX now, SIP at go-live) | Rule and trigger agreed. The free-tier probe has no result recorded here | 0 / 13 | The probe now; the rest at the switch weekend |
+| D2 | Parquet integrity for research reads | Not started (the four defects re-confirmed in the code 2026-11-15) | 0 / 4 | Compaction deleting unread fragments comes first |
+
+**Steps 1 to 5 (generator and plumbing): none started.** Step 1 baseline 0 / 4, Step 2
+evolutionary search 0 / 3, Step 3 hand-off to A's bench 0 / 3, Step 4 no boxes, Step 5
+monthly job 0 / 13. Section 5's results log is empty. Step 1 waits on R2.
+
+**Now and next, in order**
+
+1. Done 2026-11-15: the R11 rerun and its audit pass (all 30 strategies through regime,
+   stress and overfitting), recorded under R11 and R14.
+2. Done 2026-11-15: the same run at 1 basis point with the regime gate report-only,
+   recorded under R12. The PR can merge. After merge and deploy: the bench re-sim on B,
+   which is the other half of R12's "re-baseline".
+3. Done 2026-11-15: full suite green with R15 in; four commits on
+   `research/r4-gate-audits` (R11, R12, R15, plan), pushed. Open the PR; merge it after
+   the run in item 2, because merging and deploying changes what A's shadow tier
+   charges.
+4. Decide R14 from the reading. Decide R13.
+5. R5 and R6, with R2's code-only boxes (same validator; the train-failed folds change
+   what the overfitting gate reads, so they come before R14 is settled).
+6. Longer history on B, then the rest of R2 and R15's prerequisites. Three findings
+   (R2 folds, R14, R15) come down to 60 sessions being too few.
+7. R3, before Step 5.
 
 **Companion backlog:** `interview-study-revisit-backlog.md` (2026-11-12) holds every defect
 found while reading the codebase for interviews, tagged `[domain.section #item]`. The
@@ -78,7 +132,7 @@ something worth handing over, and 3.3(a) on the deployment track gives us the ha
 pattern to copy. Step 0c (checkpointing) is a cost/convenience fix and can slide to just
 before Step 5.
 
-### Step 0 — Pipeline integrity (audited 2026-11-07, fixes not started)
+### Step 0 — Pipeline integrity (audited 2026-11-07; R1 and R10 merged, R11 / R12 / R15 committed on `research/r4-gate-audits` and pushed with no PR yet, the rest open: see "Where we are")
 
 Three suspicions the user raised while studying the backtesting funnel, each confirmed by
 reading the code (three parallel audits, key claims re-verified by hand). Fix these before
@@ -97,7 +151,8 @@ history second, the user moved it after the audits):
    partial". Merged as PR #181; deployed to A 2026-11-15 07:02 UTC (`15b4d4b9d`), B on
    the same commit.
 3. R4, starting with the stress gate: in every real-bars run on 2026-11-14 it eliminated
-   every strategy that reached it.
+   every strategy that reached it. Audit done 2026-11-15 for all four gates; the fixes
+   it produced are R11, R12 and R15 (implemented) and R13, R14 (open).
 4. R5 and R6 (placed here on the same reasoning as item 5; the user did not name them).
 5. Longer history, then the R2 tasks that wait on it (selection / evaluation / holdout
    split). User's reasoning: running on a longer window is mostly the same code over more
@@ -105,7 +160,7 @@ history second, the user moved it after the audits):
    trusted. Step 1 still waits on R2.
 6. R3, before Step 5 (it changes cost, not what a score means).
 
-**R1 — Monte Carlo is not a Monte Carlo (blocks trust in scores).**
+**R1 — Monte Carlo is not a Monte Carlo (done: merged as PR #181, deployed 2026-11-15).**
 `pipeline/stages/monte_carlo_stage.py:371-392` builds `n_runs` identical
 `SimulationRunRequest`s whose only difference is `random_seed = base_seed + i`. The seeded
 RNG is consumed only by the fill model's `partial_fill_probability`,
@@ -363,7 +418,8 @@ reasons").**
 - Not verified: anything on B itself; the same comparison on a window longer than 60
   sessions.
 
-**R2 — Walk-forward test folds are not out of sample (blocks trust in scores).**
+**R2 — Walk-forward test folds are not out of sample (partial: the small set merged in
+PR #181; every other box open, re-checked in the code 2026-11-15).**
 - Selection leakage: in `ma_sweep_staged.yaml` the `intermediate` simulation stage ranks
   configs over 2022-01-01..2025-03-31 and `heavy_walk_forward` runs over the identical
   range, so every test fold lies inside the window the survivors were picked on.
@@ -520,7 +576,8 @@ reasons").**
 one train-failed fold shows it in the overfitting evidence; a daily-resampled fold's Sharpe
 matches a hand computation within rounding.
 
-**R3 — Research checkpointing is built but never instantiated (cost/convenience).**
+**R3 — Research checkpointing is built but never instantiated (cost/convenience; not
+started).**
 `ResearchCheckpointService` is complete and `SimulationStage`, `WalkForwardStage` and
 `MonteCarloStage` accept `checkpoint_service` and route through `run_simulation_unit` when
 set. No production path passes it: the three stage constructors in
@@ -557,13 +614,16 @@ restarts.
       the missing units execute and the final survivors match an uninterrupted run; plus
       the two directional cases from [7.10 #3] (failed-before-crash still fails, partial
       resume keeps earlier passes).
-- [ ] Housekeeping while in the file: the replay hook's "42-day lookback" comment is
-      stale, the lookback is 90 days **[7.10 #10]**.
+- [x] Housekeeping while in the file: the replay hook's "42-day lookback" comment is
+      stale, the lookback is 90 days **[7.10 #10]**. Already fixed in `e5bbab498` (the R2
+      small set); ticked 2026-11-15: the comment at `research_hooks.py:487` now says 90
+      days.
 
 **Verify:** the e2e test above; `research inspect-checkpoints` lists a real run's store.
 
-**R4 — Audit the remaining gates the same way (not started).** Regime, stress, overfitting
-and parameter-stability stages (`pipeline/stages/regime_stage.py`, `stress_stage.py`,
+**R4 — Audit the remaining gates the same way (started 2026-11-15: notes below for
+stress, overfitting, parameter stability and regime, problems recorded as R11 to R15).**
+Regime, stress, overfitting and parameter-stability stages (`pipeline/stages/regime_stage.py`, `stress_stage.py`,
 `overfitting_stage.py`, `pipeline/gates/*`, the `ParameterSensitivityAnalyzer`) were not
 read on 2026-11-07 and sit in the same funnel. Stress re-runs the simulation under cost
 multipliers (`_gate_stage_support.py` jobs carry `cost_multiplier`), regime slices by the
@@ -578,9 +638,170 @@ feed, look for fail-open branches and `None`-coercion.
   So on this window stress decides the outcome. Whether its thresholds are right or the
   gate is too strict for a 60-session window is not known; it has not been read. Audit it
   first.
-- [ ] One audit note per stage under this heading (what it measures, where its inputs
+- **Stress gate, audit note (2026-11-15, code at `b3b82ee67`).**
+  - What it measures. Two checks, both must pass (`gates/stress_gate.py:98-146`).
+    Shock: seven fixed changes applied to the bar returns of a run already made
+    (`validation/stress_test_service.py:83-126`, `:241-280`), no re-simulation, the
+    trades stay as they were. A scenario is survived when the changed curve has Sharpe
+    ≥ 0 and drawdown no worse than -40%. At least half must be survived, so 4 of 7.
+    Cost: the strategy is re-simulated with slippage and commission at 2× and 3×; a run
+    is survived on the same two thresholds; at least half, so 1 of 2.
+  - Real inputs. The hook's thresholds (`research_hooks.py:675-683`) are the defaults.
+    The baseline is the Monte Carlo base run, reused when window and symbols match
+    (`_gate_stage_support.py:60-83`), so the curve is five-minute bars over the whole
+    window: 4,438 bars in the run below.
+  - Result on real bars: the production `StressTestService` with the hook's thresholds,
+    run on the 28 traded base curves saved from the post-R10 run. Survivors per scenario:
+
+    | Scenario | What it does to the curve | Sharpe > 0 (8 strategies) | Sharpe ≤ 0 (20) |
+    |---|---|---|---|
+    | `volatility_spike_2x`, `_3x` | every bar return × 2, × 3 | 8, 8 | 0, 0 |
+    | `return_shock_neg5pct`, `neg10pct` | one bar at the midpoint loses 5%, 10% | 0, 0 | 0, 0 |
+    | `drawdown_amplification` | every losing bar loses twice as much | 0 | 0 |
+    | `trend_reversal` | every bar return changes sign | 0 | 20 |
+    | `liquidity_collapse` | every bar pays 0.50% | 0 | 0 |
+
+    Every strategy with a positive Sharpe survives the same 2 of 7, every other one the
+    same 1 of 7. The best is 2 of 7 and the gate needs 4. The shock check alone fails
+    every strategy, so the cost check never decides anything. Recorded as R11.
+  - Why, on the best curve (composite rule, Sharpe 2.34, return 2.95%, drawdown 1.75%):
+    - × 2 and × 3: Sharpe stays 2.34 (mean and volatility scale together), drawdown
+      becomes 3.5% and 5.2%. Passes for any positive Sharpe unless three times the
+      drawdown exceeds 40%.
+    - One bar of -5% / -10%: return becomes -2.19% / -7.34%, Sharpe -0.77 / -1.44. The
+      sign of Sharpe is the sign of the average bar return, so surviving needs more than
+      about 5% / 10% earned inside the window. Over 57 sessions no curve here has that.
+      The same strategy over a year would pass, so this scenario measures the length of
+      the window.
+    - Losing bars doubled: return becomes -28.97%, Sharpe -18. Surviving needs gains per
+      bar of twice the losses per bar. A five-minute curve is close to half up bars and
+      half down bars of similar size, whatever the strategy.
+    - Sign change: Sharpe becomes -2.34. A profitable strategy always fails; a losing
+      one always passes.
+    - 0.50% per bar: 4,437 bars of it, return -100%. The penalty is per bar and there are
+      78 bars a day.
+  - Cost check, measured on the same run (R12): research charged 0.011 to 0.062 basis
+    points per dollar traded. Estimated with the trades held fixed (the cost
+    re-simulations were not re-run): 7 of the 8 positive strategies keep a positive
+    return at 2× and at 3×; the one that does not traded 684 times its capital.
+  - A strategy that never trades passes. A flat curve has Sharpe 0.0
+    (`risk_metrics.py:91-92`) and the test is `>=` 0.0: it survives 4 of 7 (measured on a
+    flat 2,000-bar curve). A cost re-simulation with no trades also reports Sharpe 0.0
+    (read, not run). What stops such a strategy today is the earlier stages' trade
+    minimums, not this gate.
+  - Passes with no evidence. No usable baseline curve (`stress_stage.py:262-263`) or no
+    cost results (a runner returning `None`, `_gate_stage_support.py:117-118`) each add
+    a warning and no failure (`stress_gate.py:117-118`, `:134-135`); with both missing
+    the verdict is a pass. `test_missing_evidence_is_warned_not_failed`
+    (`tests/research/pipeline/gates/test_stress_gate.py:140-145`) asserts that pass.
+  - What the tests prove. The gate test's "steady" strategy
+    (`test_stress_gate.py:33-35`) earns 0.04% per five-minute bar: measured Sharpe 109.5,
+    +119.5% in 2,000 bars (about 26 sessions), survives 5 of 7. Its "fragile" one
+    (`:38-40`) measured Sharpe -6.5, -17.3%. No test puts a curve of realistic size
+    through the gate. The stage tests use a scripted fake runner
+    (`tests/research/pipeline/test_robustness_stages.py`), and the full-pipeline test
+    sets `min_shock_survival_rate=0.0`.
+  - Not done: the per-strategy failure reasons of the 2026-11-14 runs were not saved, so
+    the table is a re-computation on the saved curves, not a read-back of those runs.
+    The cost re-simulations were not re-run.
+- **Overfitting gate, audit note (2026-11-15; first read by a Sonnet agent, every line
+  below re-read by hand unless it says otherwise).**
+  - It has never run on real data: stress has eliminated every strategy before it.
+  - What it measures. A weighted average of up to seven indicators, each between 0 and
+    1 (`validation/overfitting_analysis.py:168-176`, `:304-317`). The code calls the
+    result a probability; it is a score. A strategy fails above 0.6
+    (`gates/overfitting_gate.py:177-178`; hook `research_hooks.py:694-699`). Weights:
+    drop from train Sharpe to test Sharpe 0.30, spread of test Sharpe across folds 0.20,
+    share of Monte Carlo paths with Sharpe not above zero 0.20, share of regime buckets
+    without a positive Sharpe 0.15, fewer than 10 trades 0.05, share of absolute return
+    in the top 10% of bars 0.05, parameter fragility 0.05. A missing indicator drops out
+    and the others are re-weighted.
+  - Nothing in it depends on how many strategies were tried. The usual defence against
+    overfitting, a stricter bar the more candidates are tested, is absent.
+  - Folds. Train 45, test 30, step 15 calendar days (`research_hooks.py:560`,
+    `:605-607`). `_generate_folds` (`walk_forward_stage.py:388-411`) gives two folds on a
+    90-day window, whose test periods share 15 days, and one fold on 75 to 89 days. A
+    fold reaches the gate only if its train run passed the train filter
+    (`walk_forward_stage.py:156-164`), so the train Sharpe is already a selected one.
+    - Drop = (mean train Sharpe − mean test Sharpe) / |mean train Sharpe|
+      (`walk_forward_validation.py:114`), halved and clipped to 0..1. With two folds it
+      is a ratio of two averages of two numbers, each a Sharpe over 30 or 45 days.
+    - Spread = standard deviation of the test Sharpes / |their mean| (`:117-120`), with
+      two folds the spread of two numbers. It grows without limit as the mean nears
+      zero, and two equally negative test Sharpes read as perfectly stable.
+    - With one fold the spread is left out (`overfitting_analysis.py:211-214`, the R2
+      change).
+  - Monte Carlo share. The same resampled paths of the same base run that already passed
+    the Monte Carlo gate, so the same evidence is counted a second time (agent's reading
+    of `monte_carlo_aggregator.py:238`; not re-read).
+  - Regime share. Every bucket that has any Sharpe counts, with no minimum number of
+    bars (`overfitting_analysis.py:249-255`), across five regime dimensions. The regime
+    gate uses two dimensions and needs 390 bars per bucket. A bucket of one day weighs
+    the same here as one of thirty.
+  - Passes with thin evidence. Fewer than two of the four main indicators gives a pass
+    with a warning (`overfitting_gate.py:162-175`, hook `on_insufficient_evidence="pass"`).
+  - Parameter fragility is never supplied: the stage passes no sensitivity score
+    (`overfitting_gate.py:152-159`), so that indicator is always missing.
+  - Tests (agent's reading, not re-read): hand-set Sharpes of 1 to 3 with three folds,
+    and a scripted runner with one strongly overfit strategy. Nothing with two folds or
+    with Sharpes the size of real ones.
+  - Not measured: what the gate does on real folds. The agent's rough simulation
+    suggested most strategies with no edge would pass; it fixed two of the indicators by
+    hand and is not a result. The first real reading needs R11 done. Recorded as R14.
+- **Parameter stability, audit note (2026-11-15; same method).** It is not in the funnel.
+  `ParameterSensitivityAnalyzer` has one caller, `ValidationOrchestrator`
+  (`validation/validation_orchestrator.py:426-438`), behind
+  `enable_parameter_sensitivity`, default off (`:82`), and three request fields that no
+  code in `src/` sets (searched for `sensitivity_run_fn`: no assignment outside the
+  orchestrator). The validation layer runs on final survivors only. So no stage checks
+  whether a strategy still works with its parameters moved slightly, which is the plain
+  meaning of parameter stability. If it were switched on: the score is the standard
+  deviation of Sharpe over its range across the sweep (agent's reading of
+  `parameter_sensitivity_analysis.py:192`, not re-read), which does not depend on whether
+  the Sharpes are good or bad. Recorded as R13.
+- **Regime gate, audit note (2026-11-15; first read by a Sonnet agent, the pass rule and
+  the hook's settings re-read by hand, then measured).**
+  - What it does: each session gets a trend label and a volatility label from the bars
+    (`regime_labels.py`, 10/20-day trend windows, volatility percentiles 80/20). The
+    strategy's five-minute returns are grouped by label. A label is judged only with at
+    least 390 bars, about 5 sessions (`research_hooks.py:649-658`), and a dimension only
+    with two such labels. The strategy fails if, in either dimension, the worst label's
+    Sharpe is under -1.0, its drawdown is past -20%, or fewer than half the labels made
+    money (`regime_gate.py`). With too little coverage it passes (`on_insufficient_
+    coverage="pass"`).
+  - Measured on the 28 traded strategies of the post-R10 run, with the production
+    classifier, analysis service and gate (`regime_on_real_curves.py` in the session
+    scratchpad). The 60 sessions label as: trend bear 30, bull 19, sideways 2, no label
+    9; volatility normal 42, high 18, low 0. So each dimension is judged on two labels,
+    and the smaller one is 18 or 19 sessions. The 9 unlabelled sessions (the classifier's
+    warm-up, with the history loaded on B) drop out of the trend dimension.
+  - Result with the real labels: 4 of 28 pass. All 20 with Sharpe at or below zero fail;
+    4 of the 8 above zero pass.
+  - Control: the same labels dealt to random days, 100 times per strategy, so that a
+    label says nothing about the market that day. The gate still fails the best strategy
+    (Sharpe 2.34) in 48 of 100, the second (1.53) in 55, and the eight profitable ones in
+    73 of 100 on average (48 to 91). Losing strategies fail 92 to 100.
+  - Why: an annualised Sharpe measured over 19 sessions has a standard error of about
+    3.6 (√(252 ÷ 19)). A floor of -1.0 is under one standard error below a true Sharpe
+    of 2, and there are four such buckets. The per-label numbers show the scale: the best
+    strategy's labels range 1.07 to 2.67, the fourth's 3.87 in bear and -5.37 in bull.
+  - So on this window the gate fails every losing strategy, which the earlier stages
+    already do, and among profitable ones its verdict is not distinguishable from chance:
+    4 of 8 passed with the real labels where random labels pass 2.2 of 8 on average, one
+    draw. Three strategies of one family (c25, c27, c20) earn in bear and lose in bull
+    sessions; whether that is a real dependence cannot be told from 19 sessions.
+  - The -20% drawdown rule never fired: no failure reason of the 28 names it, and the
+    worst per-label drawdown among the top eight is -3.2%. Inside one label over 60
+    sessions it is out of reach.
+  - Not confirmed, from the agent's read only: several branches pass on thin coverage
+    (no label provider, fewer than two judged labels); none was hit on this run, all 28
+    were judged in both dimensions. The tests were not re-read by hand.
+  - Recorded as R15.
+- [x] One audit note per stage under this heading (what it measures, where its inputs
       really come from, what the tests prove, fail-open paths); each confirmed problem
-      becomes its own R-number with a fix list.
+      becomes its own R-number with a fix list. Done 2026-11-15: stress (R11, R12),
+      overfitting (R14), parameter stability (R13), regime (R15). The "Verify" line
+      below is not met: no stage has a test on a real runner where the gate fails (R7).
 - [ ] First confirmed gap to carry in: nothing on the backtest trading path reads the 12%
       `max_drawdown_limit`, so a research run never experiences the kill that the live
       path would apply at the same drawdown **[9.8 #5]**. Research scores therefore
@@ -652,9 +873,9 @@ Step 2 is the fix; if Step 2 slips, the fallback is to rename the method honestl
 separate checklist.
 
 **R10 — Simulator marks a held position at its last-fill price when its bar is missing
-(found and fixed 2026-11-15 on branch `fix/r10-sim-stale-marks`, not yet merged or
-deployed; it distorted Sharpe and volatility on every run). Line numbers below are the
-engine before the fix.**
+(found and fixed 2026-11-15; merged as PR #182, deployed to A 2026-11-15 20:31 UTC
+(`b3b82ee67`), B on the same commit; it distorted Sharpe and volatility on every run).
+Line numbers below are the engine before the fix.**
 - What happens. `Position.market_price` is written only when a fill is applied
   (`simulation_execution_engine.py:1038-1048`) and on a split; the bar loop never
   refreshes it. `_calculate_positions_value` (`:1160`) and `_build_position_rows`
@@ -785,13 +1006,41 @@ engine before the fix.**
     0.601. The other three pass on both. After the gate: regime 2 of 3 → 2 of 4, stress
     0 of 2 on both. No survivors on either.
 - [ ] Parity 5c. Done: `tests/platform/test_research_trading_parity.py` (same signals,
-      same trades) passes. Not done: the re-sim vs platform daily-return correlation
+      same trades) passes, and passed again 2026-11-15 with the 1 basis point cost and
+      the regime change in. Not done: the re-sim vs platform daily-return correlation
       (0.993 to 0.998 on 2026-10-02). It is a measurement on the recorded six-month
       platform backtest, not a test, and was not re-run. Expected direction only: the
       platform side already marks at the latest close.
-- [ ] After merge and deploy to A and B (same SHA): re-run the bench re-sim on B and
+- [x] After merge and deploy to A and B (same SHA): re-run the bench re-sim on B and
       compare with `bench_resims_2026-11-14` (macd 0.87, mean reversion -0.16, momentum
-      -1.21) before `portfolio_review_mode` goes to `advisory`.
+      -1.21) before `portfolio_review_mode` goes to `advisory`. Done 2026-11-15 20:37 UTC
+      on B at `b3b82ee67`: `worker bench-resim --as-of 2026-11-14 --run-id
+      bench_resims_2026-11-14_r10 --no-pull --no-publish` (nothing posted to A; payload
+      `artifacts/worker/bench_resims/bench_resims_2026-11-14_r10.json`, log
+      `~/rehearsals/bench-resim-r10-2026-11-15.log`). Same window (2026-08-17 to
+      2026-11-14), same dataset (`raw_bars_20261114T041002Z_c2faf2e7`), same 63 daily
+      returns, market series identical.
+
+  | Strategy | Sharpe, Saturday | Sharpe, rerun | Score, Saturday | Score, rerun | Trades | Daily returns, Saturday vs rerun |
+  |---|---|---|---|---|---|---|
+  | `macd_crossover_v1` | 0.87 | 1.21 | 1.727 | 1.863 | 2,704 → 2,704 | correlation 0.99997, largest daily difference 0.016% |
+  | `mean_reversion_v1` | -0.16 | -0.19 | 1.313 | 1.303 | 2,643 → 2,646 | correlation 0.9998, largest 0.038% |
+  | `momentum_v1` | -1.21 | -1.23 | 0.943 | 0.943 | 20,088 → 20,097 | correlation 0.999998, largest 0.003% |
+
+  - Order of the three is unchanged on Sharpe and on score. Total return moves by at most
+    0.008 percentage points, max drawdown by at most 0.07 points.
+  - The Sharpe in the payload is computed on five-minute bar returns, which is where the
+    spikes were. Computed from the 63 daily returns instead it barely moves (macd 1.144 →
+    1.141, mean reversion -0.19 → -0.19, momentum -1.04 → -1.04), because the spikes
+    cancelled inside the session. macd's bar Sharpe now sits next to its daily Sharpe
+    (1.21 vs 1.14); on Saturday it was 0.87 vs 1.14.
+  - Pairwise correlations of the daily series, which the redundancy check reads, move by
+    0.001 or less (macd ~ mean reversion 0.54, macd ~ momentum 0.78, mean reversion ~
+    momentum 0.62).
+  - A still holds the Saturday submission (`bench_resims_2026-11-14`, pre-fix numbers,
+    not applied because review mode is `off`). The rerun was not posted. The timed run on
+    Sat 2026-11-21 posts the first post-fix submission. Whether a review started before
+    then would read the Saturday one was not checked.
 - [x] Dropped orders counted on real bars (2026-11-15, the 30-strategy run on the fixed
       engine with a counter around `SimulatedExecutionService.fill` and
       `SimulationExecutionEngine.execute`): 184 simulations, 883,119 orders handed to the
@@ -812,6 +1061,400 @@ engine before the fix.**
 squared session sums / sum of squared bar returns is between 0.85 and 1.35 for every
 strategy that traded, and the rebuild with latest-close marks matches the simulator's
 curve to the cent.
+
+**R11 — The stress gate's shock check cannot be passed by a strategy that trades (found
+2026-11-15 under R4; option (a) chosen and implemented 2026-11-15, commit `b6860b6b7`, pushed, no PR yet).**
+Correction to the title, found while writing the tests: a strategy that earned more than
+about 10% inside the window would have survived both one-bar shocks and reached 4 of 7.
+The best real strategy earned 2.95%. A synthetic Sharpe-3 curve with 5% earned reaches
+3 of 7. Evidence and per-scenario reasons are in the R4 stress note. In short: the pass rule counts seven scenarios and needs four; two of them
+(× 2, × 3) cannot change Sharpe, one (sign change) fails every profitable strategy, two
+(per-bar penalty, doubled losing bars) are written per bar and applied to five-minute
+bars, and two (one-bar -5% / -10%) pass or fail on how long the window is. On real bars
+the result is fixed by the sign of Sharpe: 2 of 7 or 1 of 7. Nothing downstream of
+stress has ever received a strategy.
+- None of the seven uses anything the earlier stages do not already have: each is a
+  fixed function of the same bar returns (drawdown, return over the window, gains
+  against losses, the sign of the mean). The trades do not change, so no scenario shows
+  how the strategy would have acted in the shock.
+- Fix options ((a) chosen 2026-11-15, see the first box below):
+  - (a) Take the shock check out of the pass rule and keep its numbers in the report.
+    The gate is then the cost re-simulations alone, which only means something after
+    R12. Smallest change.
+  - (b) Keep a shock check but rewrite it in units that do not depend on bar size or
+    window length: a one-day crash judged against a loss or drawdown limit and not the
+    sign of Sharpe; drop the sign change and the × 2 / × 3 from the count; leave the
+    liquidity case to the cost re-simulations.
+  - (c) Lower the bar to 2 of 7. Not recommended: every positive Sharpe then passes and
+    every negative one fails, which the earlier stages already decided.
+  - Later, either way: the stress test the gate's own docstring describes and defers
+    (`stress_gate.py:24-26`), which changes the bars and re-simulates, so the strategy
+    trades through the shock.
+  - Recommended, and agreed 2026-11-15: (a) now, with the zero-trade and no-evidence
+    cases below closed, then R12, then the bar-changing re-simulation as its own item
+    (not scheduled).
+- [x] Decide (a) / (b). **(a), agreed 2026-11-15.** What changed:
+  - The pass rule is the cost re-simulations alone (`stress_gate.py`,
+    `evaluate_stress_gate`). The shock scenarios still run on every strategy and their
+    results stay on the verdict (`shock_summary`, `shock_survival_rate`) and in the
+    stage's debug log, marked report only.
+  - `min_shock_survival_rate` is removed from `StressGateConfig`, the YAML model and
+    the hook. A YAML file that still sets it is rejected with a message; without that
+    the key would have been ignored silently.
+  - `cost_multipliers` may no longer be empty. With the shocks out of the rule, an empty
+    list would be a gate that passes everything.
+- [x] A strategy with no trades in a stress run fails the gate (or is reported as not
+      evaluated), not passed on Sharpe 0.0. A cost run with zero trades does not count
+      as survived; the reason reads "2x costs: no trades". A zero Sharpe with trades
+      still meets a threshold of 0.0.
+- [x] Missing evidence fails, or the stage raises, when the config asked for that
+      evidence; the test that asserts the pass changes with it. Any requested multiplier
+      without a result fails the strategy, even when the others survive. A missing shock
+      curve stays a warning, because the shocks no longer decide anything.
+- [x] Tests on curves of realistic size (five-minute bars, a 60-session window, Sharpe
+      between -2 and 3): the gate passes some and fails some, and the survivors change
+      when the inputs change (R7). `tests/research/pipeline/gates/test_stress_gate.py`:
+      curves at Sharpe 0.5 / 1.5 / 2.3 all survive the same two scenarios, -0.5 / -2.0
+      only the sign change, 3.0 adds the -5% bar; same curve with different cost results
+      gives different verdicts. Stage-level cases (zero trades, a cost run that returns
+      nothing, the removed key) are in `test_robustness_stages.py`. The old "steady"
+      (Sharpe 110) and "fragile" fixtures are gone.
+  - Checked: the two stress test files pass (43 tests), `tests/research/pipeline`,
+    `validation` and `config` pass (337), ruff clean, mypy error count on the touched
+    files unchanged (all in untouched lines of `research_hooks.py`). The full suite
+    passed later the same day on R11 + R12 together (5,396 passed, 5 skipped).
+- [x] Rerun the 30-strategy real-bars run and record what reaches overfitting. That stage
+      has never run on real data. Done 2026-11-15 on the R11 code (before the 1 basis
+      point cost and before the regime gate went report-only; same bars and harness as
+      the post-R10 run; 2,505 s, slower because tests ran beside it).
+  - Funnel: 30 → 30 → 4 → 2 → 2 → 2 (quality, walk-forward, Monte Carlo, regime, stress,
+    overfitting). Post-R10 it was 30 → 30 → 4 → 2 → 0. First run with final survivors:
+    c24 composite rule (Sharpe 2.34, 4,139 trades) and c06 mean reversion (1.53, 203
+    trades).
+  - Stress: both pass both cost re-simulations. Shocks: 2 of 7 each, reported only.
+
+    | Strategy | Sharpe at 1× / 2× / 3× cost | Return at 1× / 2× / 3× |
+    |---|---|---|
+    | c24 composite rule | 2.34 / 2.28 / 2.23 | 2.95% / 2.88% / 2.82% |
+    | c06 mean reversion | 1.527 / 1.525 / 1.522 | 0.23% / 0.23% / 0.23% |
+
+    At the old cost, tripling it takes 0.11 off the best Sharpe. The cost test cannot
+    fail anything until the base cost is real, which is R12 (in the next run).
+  - Regime, still enforcing in this run, removed the same two as before (c25, c27).
+  - Overfitting: both pass, numbers under R14.
+  - Audit pass, same run: all 30 strategies sent through regime, stress and overfitting
+    whatever the funnel decided (901 s). Stress passes 7 and fails 23.
+    - Pass: seven of the eight profitable strategies. c26, which trades 820 times its
+      capital, only just: Sharpe 0.71 → 0.44 → 0.12 at 1× / 2× / 3×.
+    - Fail, cost: c22 (684 times its capital), 0.10 → -0.16 → -0.43. The one strategy
+      the gate removes that the sign of its Sharpe had not.
+    - Fail, no trades: the two factor strategies that never traded, reason "2x costs: no
+      trades". Before R11 these passed on a Sharpe of 0.0.
+    - Fail, already losing: the other 20, Sharpe at or below zero before any multiplier.
+  - "Verify" below is met by the audit pass: strategies pass and fail, and the reasons
+    differ by cause.
+
+**Verify:** on the 30-strategy run at least one strategy passes stress and at least one
+fails it, and each failure reason names a cause that differs between strategies.
+
+**R12 — Research trades almost for free (found 2026-11-15 under R4, measured; 1 basis
+point per trade agreed and implemented 2026-11-15, commit `bb2f09329`, pushed; re-baseline
+open).** Every research and bench simulation is built by
+`build_platform_execution_service` (`execution/clients/simulated_broker_client.py:47-59`):
+zero commission, and slippage of 25 basis points × the order's share of that bar's
+volume (`volume_share_slippage_model.py:23`, `:58-62`). Orders are capped at 5% of the
+bar, so the most any fill pays is 1.25 basis points. There is no bid-ask spread on this
+path: the spread estimate at `:64-75` is used only when a bar has no volume.
+- Measured on the 28 traded strategies of the post-R10 run (each fill's price against its
+  bar's close; every fill matched a bar): average cost per dollar traded 0.011 to 0.062
+  basis points, largest single fill 1.24. The median order is 0.01% to 0.12% of the
+  bar's volume. Total paid over the window: 0.000% to 0.505% of capital.
+
+  | Strategy | Sharpe | Return | Traded (× capital) | Cost paid | Cost at 1 basis point per dollar traded |
+  |---|---|---|---|---|---|
+  | composite rule (best) | 2.34 | 2.95% | 126.9 | 0.075% | 1.27% |
+  | composite rule | 0.71 | 1.15% | 820.2 | 0.505% | 8.20% |
+  | momentum | 0.29 | 0.30% | 133.6 | 0.061% | 1.34% |
+  | mean reversion | 1.53 | 0.23% | 2.4 | 0.000% | 0.02% |
+
+  The last column is arithmetic for scale. What a realistic cost per trade is for these
+  22 symbols was not established.
+- What follows from it:
+  - The stress gate's 2× and 3× multiply close to nothing (R4 stress note), so the cost
+    check passes almost everything.
+  - Sharpe, return and the bench score are all before any spread. Strategies that trade
+    most are flattered most: `momentum_v1` on the bench made 20,097 trades in 63 sessions
+    (`daily_turnover` 9.73 in the payload; its unit was not checked).
+  - The share of volume is taken against IEX bars, which count IEX trades only, so it is
+    larger than the share of the whole market. That pushes the other way; its size was
+    not measured.
+- The recorded slippage is always zero. `simulation_execution_engine.py:1219` writes
+  `"slippage": 0.0` into every fill row; the cost is inside the fill price and nowhere
+  else. All 4,139 fills of the best strategy show 0.0. Who reads that column was not
+  traced.
+- Calibration path, read 2026-11-15. `SlippageCalibrationService`
+  (`research/calibration/services/slippage_calibration_service.py`) reads A's
+  `fill_quality_metrics` rows and returns a snapshot that
+  `VolumeShareSlippageModel.from_calibration_snapshot` (`:87-103`) turns into a model.
+  Nothing outside `research/calibration/` calls either (searched `src/`), so research
+  has never used a measured cost. As written it would not fix this: it divides the mean
+  cost by an assumed order size of 2% of the bar (`calibration_snapshot.py:21`) to get
+  the volume coefficient, and research orders are 0.01% to 0.12% of the bar, so the
+  result still charges well under 1 basis point (arithmetic from its formula; the service
+  was not run). The model has no cost that a small order pays, which is what a spread is.
+- What A's paper fills say (read-only queries on A, 2026-11-15). Each row compares the
+  fill price with the quote midpoint taken at submission (`execution_policy_engine.py:212`,
+  `:247`), positive = cost. Two live strategies, 2026-10-19 to 2026-11-13, 2,628 fills,
+  $4.08M traded, 2,628 of 2,634 submitted orders filled.
+  - All fills: mean 5.65 basis points (standard error 1.57), median 0.62. The mean is
+    not usable: 346 fills are more than 100 basis points from their reference and carry
+    $2,790 of the $3,033 net.
+  - Those 346 are a wrong reference price, not expensive fills. Eight symbols (UNH, HD,
+    MA, V, ADBE, CRM, BKNG, COST) hold 311 of them, and the quote at submission was very
+    wide on these fills (median half-spread 254 basis points against 4 for the rest). Example,
+    HD on 2026-11-04: fills at 350.88 to 351.68 all afternoon, our own five-minute bars
+    close at 350.5 to 351.9, and the reference alternates between about 340 and about
+    351.5 from one order to the next. They split evenly four ways (buys above 109, buys
+    below 78, sells above 73, sells below 86), so they add noise, not cost.
+  - Fills whose quote was tight (half-spread under 10 basis points, where the midpoint
+    can be trusted): 1,513 fills, $2.36M, all 22 symbols.
+
+    | | Fills | Mean (bps) | Standard error | Median | Dollar-weighted |
+    |---|---|---|---|---|---|
+    | Half-spread under 2 bps | 845 | 0.47 | 0.05 | 0.49 | 0.87 |
+    | 2 to 10 bps | 668 | 1.56 | 0.29 | 1.25 | 1.01 |
+    | Both | 1,513 | 0.95 | 0.13 | 0.59 | 0.93 |
+
+    Buys 0.97, sells 0.92. **About 1 basis point per trade**, against the 0.011 to 0.062
+    research charges.
+  - Limits of that number: paper fills (whether the broker's paper engine models impact
+    was not checked; orders average $883 and $4,486); a median 99 seconds between
+    submission and recorded fill, so each number includes price drift (which timestamp
+    that is was not checked); four weeks, mostly the last two; picking tight-quote fills
+    leans toward the liquid moments. Left out: `macd_crossover_v1` (29,717 replay rows
+    from 2023 to 2024 with no fill, and 63 filled rows in October 2026 of untraced origin).
+  - Side observation, traced 2026-11-15, not urgent: for those symbols the live quote
+    midpoint on A is at times about 3% from the traded price. `get_latest_quotes` has one
+    live caller, `ExecutionPolicyEngine._fetch_quote` (`execution_policy_engine.py:228`).
+    The policy defaults to `passthrough` unless an intent carries its own
+    (`run_order_submission_job.py:75-79`), and all 32,357 recorded rows are passthrough,
+    where the midpoint only feeds recorded numbers (reference price, expected fill,
+    adverse-fill flag: 37% of fills flagged). Order sizing reads last trade prices
+    (`run_trading_evaluation_job.py:79-93`), a different source; our bars come from the
+    same trades and matched the fills. So no order has been sized or priced from it.
+    - [ ] Before any `LIMIT` or `TWAP` policy is switched on: the limit price is the
+          midpoint ± an offset (`order_type_resolver.py:105-107`), so a midpoint 3% off
+          would price the order 3% off. Guard it (for example fall back to the last
+          trade when the quote is wider than a set number of basis points).
+    - [ ] The fill-quality statistics for these symbols are not usable as recorded
+          (adverse-fill rate, anything the simulation-vs-paper comparison or a future
+          calibration reads). Fix the reference or filter on quote width where read.
+- Break-even cost of the eight profitable strategies of the post-R10 run (return ÷
+  dollars traded, trades held fixed; a re-simulation would differ):
+
+  | Strategy | Sharpe | Return | Traded (× capital) | Break-even (bps per dollar traded) |
+  |---|---|---|---|---|
+  | c24 composite rule | 2.34 | 2.95% | 126.9 | 2.32 |
+  | c06 mean reversion | 1.53 | 0.23% | 2.4 | 9.58 |
+  | c25 composite rule | 0.99 | 1.02% | 50.8 | 2.01 |
+  | c27 composite rule | 0.82 | 0.68% | 34.5 | 1.97 |
+  | c26 composite rule | 0.71 | 1.15% | 820.2 | 0.14 |
+  | c01 momentum | 0.29 | 0.30% | 133.6 | 0.22 |
+  | c20 composite rule | 0.12 | 0.10% | 59.0 | 0.17 |
+  | c22 composite rule | 0.10 | 0.10% | 684.3 | 0.01 |
+
+  At 1 basis point four of the eight keep a profit. At 2, c24 keeps 0.4%, c25 is at
+  zero, c27 is just under and c06 is untouched. At 3 only c06 is left. With a base of 1,
+  the stress gate's 2× and 3× would separate these strategies, which they do not today.
+- Reach: the same factory fills the platform backtest ("so both sides always fill
+  identically"), so a change here goes through parity 5c and moves every score, the bench
+  re-sims included. Real paper orders go to the broker. The on-deck shadow tier uses it
+  too (traced, see "Reach" in the decision box below).
+- [x] Read the calibration path and report what cost it would set from A's fills. Done
+      2026-11-15, above.
+- [x] Decide the cost assumption: a spread per trade (flat, or per symbol) on top of the
+      volume term, and where the number comes from. **1 basis point per trade, flat,
+      agreed 2026-11-15**, from the tight-quote fills above. Implemented (commit
+      `bb2f09329`):
+  - `VolumeShareSlippageConfig.half_spread_bps`, default 1
+    (`research/simulation/models/volume_share_slippage_model.py`). A fill now costs
+    1 basis point plus the volume term. The no-volume fallback (floor 5) is unchanged.
+  - The number is the config's default, not an argument at the factory, so the three
+    places that build the model (the factory, `cache_key_builder.py:38`, the calibration
+    path) agree, and a new one cannot go back to free trading by omission.
+  - It is in `config_summary()`, which the result cache hashes, so results simulated at
+    the old cost are not reused.
+  - The stress gate needs no change: its multipliers scale the whole distance from the
+    bar close, so 2× and 3× now test 2 and 3 basis points plus the volume term (tested).
+  - Reach, confirmed by reading: `build_platform_execution_service` is called by
+    research (`build_simulation_context.py:124`), platform replay
+    (`runtime_hooks.py:141`) and the on-deck shadow tier (`shadow_fill_service.py:73`,
+    `:74`, `:94`). **On deploy, `macd_crossover_v1`'s shadow fills on A cost 1 basis
+    point more per trade from that day**, so its on-deck record has a step there. The
+    bench re-sims on B change with it. Real paper orders are untouched.
+- [ ] Write the slippage actually charged into the fill rows. Not done with the 1 bp
+      change. `Fill` has no slippage field; its `metadata` is copied onward at
+      `broker_order_mapper.py:97` (`meta=fill.metadata`), so carrying it there may also
+      change what A stores for fills; that path was not traced. Decide where it should
+      live first.
+- [x] Re-run the stress cost re-simulations on the 30-strategy run with the new costs and
+      record how many survive 2× and 3×. Done 2026-11-15 (code as committed in `1ca8c33e1`: 1 basis
+      point, regime report-only; same bars and harness as the R11 rerun; funnel 1,289 s,
+      audit pass 752 s). Of all 30: 3 survive 2× (c24, c06, c27), 1 survives 3× (c06).
+      The gate passes 3 of 30 (old cost: 7 of 30).
+  - Funnel: 30 → 30 → 2 → 2 → 2 → 2 (old cost: 30 → 30 → 4 → 2 → 2 → 2). Same two final
+    survivors. c25 and c27 no longer pass Monte Carlo (pass rates 0.61 → 0.51 and
+    0.60 → 0.54 against 0.60).
+  - The eight strategies that were profitable at the old cost; four still are:
+
+    | Strategy | Sharpe, old → 1 bp | Return, old → 1 bp | Sharpe at 2× / 3× | Stress |
+    |---|---|---|---|---|
+    | c24 composite rule | 2.34 → 1.34 | 2.95% → 1.67% | 0.28 / -0.82 | pass (1 of 2) |
+    | c06 mean reversion | 1.53 → 1.37 | 0.23% → 0.21% | 1.21 / 1.05 | pass (2 of 2) |
+    | c25 composite rule | 0.99 → 0.45 | 1.02% → 0.45% | -0.06 / -0.53 | fail |
+    | c27 composite rule | 0.82 → 0.40 | 0.68% → 0.32% | 0.01 / -0.39 | pass (1 of 2, by 0.01) |
+    | c26 composite rule | 0.71 → -4.12 | 1.15% → -6.83% | -9.26 / -14.32 | fail |
+    | c01 momentum | 0.29 → -0.85 | 0.30% → -0.98% | -2.10 / -3.31 | fail |
+    | c20 composite rule | 0.12 → -0.50 | 0.10% → -0.53% | -1.10 / -1.69 | fail |
+    | c22 composite rule | 0.10 → -3.98 | 0.10% → -6.58% | -8.24 / -12.56 | fail |
+
+  - The break-even table above predicted this from the old run's trades: c24 at 2.32
+    basis points (re-simulated: still positive at 2, negative at 3), c25 at 2.01 and c27
+    at 1.97 (re-simulated at 2: -0.06 and 0.01), c26 / c01 / c20 / c22 under 0.25 (all
+    negative at 1). c24's return fell by 1.28 points against 1.27 predicted (126.9 times
+    capital at 1 basis point), which is the "Verify" line's second half.
+  - c06 trades 203 times and loses 0.02 points of return; c24 trades 4,139 times and
+    loses 1.28. At the old cost the stress gate could not tell these two apart.
+  - Regime, report-only for the first time in a real run: nobody eliminated, findings
+    recorded for 28 of 30 (none for c24 and c06). Overfitting: under R14.
+- [ ] Re-baseline: the 30-strategy run and the bench re-sim, before / after, in the
+      results log. The 30-strategy half is the box above (section 5's table is laid out
+      for the generator baseline, so the numbers stay here). Open: the bench re-sim on B
+      after deploy, against `bench_resims_2026-11-14_r10` (macd 1.21, mean reversion
+      -0.19, momentum -1.23).
+
+**Verify:** the fill rows' slippage sums to the difference between fill prices and bar
+closes, and the cost of the best strategy in the table is within the range the chosen
+assumption implies.
+
+**R13 — No stage checks parameter stability (found 2026-11-15 under R4, not decided).**
+The analyzer exists and is unreachable from the funnel (R4 note). A strategy tuned to
+one exact setting, the commonest form of overfitting in a parameter sweep, is not
+tested for it anywhere.
+- [ ] Decide: a neighbour check in the funnel (re-simulate each survivor with each
+      parameter moved one step down and one step up, and require the result to hold),
+      or leave it out and say so in the funnel's description. Cost of the first: two
+      simulations per parameter per survivor, on survivors only.
+- [ ] If built: judge on the level of the neighbours' Sharpe against the strategy's own,
+      not on the analyzer's current score, which ignores the level.
+
+**R14 — Overfitting gate: read, never exercised (found 2026-11-15 under R4, fix waits on
+a measurement).** Confirmed by reading: two overlapping folds at most on today's window,
+so both walk-forward indicators are statistics of two numbers; no term for the number of
+strategies tried; the Monte Carlo evidence counted twice; a pass when evidence is thin;
+regime buckets of any size counted. Not known: whether on real folds it separates
+anything.
+- [x] After R11, on the 30-strategy run: record each indicator and the score for every
+      strategy that reaches the gate. First reading, 2026-11-15 (R11 rerun, two
+      strategies reached it, both pass; a strategy fails above 0.6):
+
+  | Indicator (weight) | c06 mean reversion | c24 composite rule |
+  |---|---|---|
+  | Score | 0.13 | 0.24 |
+  | Drop from train to test Sharpe (0.30) | 0.00 | 0.23 |
+  | Spread of test Sharpe across folds (0.20) | 0.09 | 0.39 |
+  | Monte Carlo paths with Sharpe not above zero (0.20) | 0.22 | 0.15 |
+  | Regime buckets without a positive Sharpe (0.15) | 0.27 | 0.20 |
+  | Fewer than 10 trades (0.05) | no | no |
+  | Return concentrated in the top 10% of bars (0.05) | 0.50 | 0.46 |
+  | Parameter fragility (0.05) | missing | missing |
+
+  - The scores reproduce by hand from the weights (the stored `regime_concentration`
+    is the share of buckets *with* a positive Sharpe, 0.73 and 0.80; the score uses one
+    minus it, `overfitting_analysis.py:71-74`).
+  - What those two rows do not show: whether the gate can fail a bad strategy. Both had
+    already passed five gates.
+  - Audit pass, all 30 strategies (same run; walk-forward thresholds opened, so every
+    strategy has fold evidence): 26 pass, 4 fail.
+
+    | Group | Strategies | Pass | Scores |
+    |---|---|---|---|
+    | Sharpe above zero | 8 | 8 | 0.13 to 0.57 |
+    | Never traded | 2 | 2 | 0.42 |
+    | Sharpe below zero | 20 | 16 | 0.29 to 0.59 passing, 0.61 to 0.79 failing |
+
+    - It passes 16 of 20 losing strategies, the worst of the run included (Sharpe -1.79,
+      score 0.54), and both that never traded.
+    - It fails no profitable strategy. c27 comes closest at 0.57: train Sharpe 2.69, test
+      -0.22, the one case that looks like what the gate is for.
+    - The four it fails are all losing strategies with the train-to-test drop at its
+      maximum, and the drop is large because the train Sharpe in the denominator is near
+      zero or negative: train 0.10 and test -0.98 reads as a drop of 11.18, train -0.24
+      and test -1.78 as 6.36.
+    - The drop is 0.00 for 22 of 30 and the fold spread is at its cap of 1.0 for 13 of
+      30. Both are ratios over a mean of two fold Sharpes.
+    - Reading: on this run the gate changes no outcome. Everything it fails had already
+      failed earlier stages, and everything profitable passes. The score measures whether
+      train and test agree, not whether the strategy is good, so one that loses steadily
+      in both scores as not overfit. The two walk-forward indicators carry half the
+      weight and are unstable near zero.
+  - Same audit at 1 basis point (R12 run, 2026-11-15): 27 pass, 3 fail. It now fails
+    one profitable strategy, c27 (Sharpe 0.40, score 0.57 → 0.61), the case named above
+    as what the gate is for. It still passes 22 of the 24 losing strategies and both
+    that never traded. c24's score rose from 0.24 to 0.43. In the funnel both survivors
+    pass (0.15 and 0.43).
+- [ ] From that, decide what the gate should be. Candidates to weigh then: a minimum
+      number of folds before the walk-forward indicators count (waits on longer history,
+      item 5 of the order), a bar that rises with the number of candidates tried, the
+      thin-evidence case failing.
+- [ ] R7: a test with two folds and Sharpes between -2 and 3.
+
+**R15 — On a 60-session window the regime gate's verdict on a profitable strategy is
+close to chance (found 2026-11-15 under R4, measured; option (a) agreed and implemented
+2026-11-15, commit `1ca8c33e1`, pushed, no PR yet).** Evidence in the
+R4 regime note: with labels dealt to random days the gate fails a Sharpe-2.34 strategy
+48 times in 100. The cause is the window, not the rule's logic: a bucket of 18 or 19
+sessions cannot support a Sharpe floor of -1.0. In the open-upstream runs so far regime
+removed 2 of the 4 Monte Carlo survivors (post-R10 run) and 1 of 3 and 2 of 5 before
+that.
+- Fix options ((a) chosen 2026-11-15, see the first box below):
+  - (a) Report only until the history is long enough: keep the per-label numbers on the
+    verdict, take them out of the pass rule, as done for the stress shocks. Smallest
+    change. The funnel is then quality, walk-forward, Monte Carlo, stress costs,
+    overfitting.
+  - (b) Keep it as a gate but judge against noise: fail only when the worst label is
+    worse than the random-label control would give (for example worse than 95 of 100
+    shuffles), or when the Sharpe is under the floor by more than its standard error.
+    Answers the question the gate is for. Needs a fast version of the per-label
+    analysis; the current service took hours for 2,800 evaluations.
+  - (c) Longer history (item 5 of the order). With two years a label holds 100 or more
+    sessions and the standard error falls to about 1.5. This is the root cause; (a) or
+    (b) is what to do until then.
+  - Recommended, and agreed 2026-11-15: (a) now, (b) when the history is there.
+- [x] Decide (a) / (b). **(a), agreed 2026-11-15.** What changed:
+  - `RegimeGateConfig.enforce`, default `False` (`regime_gate.py`). The rules run as
+    before; what they found is on the verdict as `findings`. With `enforce` off the
+    strategy passes and `failure_reasons` is empty; with it on, behaviour is as before.
+  - A switch here, where R11 removed its setting: the rule is sound and lacks data, so
+    turning it on again is the planned path. The default is off so a stage built without
+    the flag does not gate on a short window by omission. The hook sets it off
+    explicitly; the YAML key is `enforce`.
+  - The stage's summary log line counts strategies with findings and says which mode.
+  - Checked: `tests/research/pipeline`, `config` and the cost-model tests pass (323),
+    ruff clean. The full suite passed on R11 + R12 before this change (5,396 passed) and
+    has not been re-run with it.
+- Before `enforce` is switched on (all open):
+- [ ] A label needs a minimum number of sessions stated in sessions (about 100), and the
+      verdict says how many sessions each judged label had.
+- [ ] The -20% drawdown rule: drop it or restate it against the window's size.
+- [ ] R7: tests on five-minute curves over 60 sessions with Sharpe between -2 and 3,
+      including one where random labels are the input.
+- [ ] Option (b), judging against shuffled labels, once the per-label analysis is fast
+      enough.
+
+**Verify:** on the 30-strategy run, a strategy's verdict under the real labels differs
+from its verdict under shuffled labels more often than chance, or the gate does not
+decide.
 
 **Definition of done for any change under `research/simulation/`:** the research ↔
 trading-cycle parity check from `portfolio-rotation-plan.md` 5c (re-sim vs platform
@@ -856,6 +1499,8 @@ worst-coverage names).
 strategy on SIP bars and trading it on IEX bars scores signals it will never see live; a
 SIP-ranked pool promotes names the live loop cannot follow; a SIP backfill under IEX daily
 versions puts a seam in the rolling window on 10/09. So no half-measures:
+- No result is recorded for the probe below as of 2026-11-15 (the deployment plan's
+  calendar had it for the week of 11/10). If it was run, write the result here.
 - [ ] Now, free, no data change: confirm the free tier serves SIP *historical* bars older
       than 15 minutes with a one-symbol, two-day backfill run with `ALPACA_DATA_FEED=sip`
       set on that command only (success = a validated version; a subscription error means

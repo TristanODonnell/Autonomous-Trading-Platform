@@ -403,6 +403,8 @@ class RegimeStageConfigModel(_GateWindowConfigMixin):
     max_regime_drawdown: float = -0.25
     min_positive_regime_fraction: float = 0.5
     on_insufficient_coverage: str = "pass"
+    # False = report only: findings recorded, nobody eliminated (plan item R15).
+    enforce: bool = False
     classifier_windows: RegimeClassifierWindowsModel = RegimeClassifierWindowsModel()
     label_warmup_calendar_days: int = 45
 
@@ -426,14 +428,27 @@ class StressStageConfigModel(_GateWindowConfigMixin):
 
     model_config = ConfigDict(frozen=True)
 
-    shock_scenarios: list[str] | None = None  # None = every built-in scenario
+    # Shock scenarios are reported, not judged (plan item R11); these three only
+    # shape the report. None = every built-in scenario.
+    shock_scenarios: list[str] | None = None
     min_shock_sharpe: float = 0.0
     max_shock_drawdown: float = -0.40
-    min_shock_survival_rate: float = 0.5
     cost_multipliers: list[float] = [2.0, 3.0]
     min_cost_sharpe: float = 0.0
     max_cost_drawdown: float = -0.40
     min_cost_survival_rate: float = 0.5
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_removed_shock_threshold(cls, data: object) -> object:
+        # Unknown keys are otherwise ignored, which would leave a config that
+        # still sets this believing the shock scenarios gate.
+        if isinstance(data, dict) and "min_shock_survival_rate" in data:
+            raise ValueError(
+                "min_shock_survival_rate was removed: shock scenarios are reported, "
+                "not judged. Delete the key; the cost re-simulations decide the gate."
+            )
+        return data
 
 
 class OverfittingStageConfigModel(BaseModel):

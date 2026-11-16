@@ -639,6 +639,9 @@ def _build_replay_experiment_definition(
         # Stage 4 — regime robustness on auto-classified daily regimes. Reuses
         # the Monte Carlo base run (same window), so it adds no
         # simulations: one bar read + classification per research tick.
+        # Report only (enforce=False): on this ~60-session window a regime
+        # holds 18-19 sessions, too few for the thresholds below to tell a
+        # strategy from chance. The findings are recorded; nobody is eliminated.
         stages.append(
             RegimeStage(
                 stage_config=RegimeStageConfig(
@@ -655,6 +658,7 @@ def _build_replay_experiment_definition(
                         max_regime_drawdown=-0.20,
                         min_positive_regime_fraction=0.5,
                         on_insufficient_coverage="pass",
+                        enforce=False,
                     ),
                 ),
                 simulation_runner=simulation_runner,
@@ -664,7 +668,8 @@ def _build_replay_experiment_definition(
             )
         )
 
-        # Stage 5 — stress: equity-curve shocks (free) + execution-cost re-runs.
+        # Stage 5 — stress: execution-cost re-runs decide; equity-curve shocks
+        # (free) are reported on the verdict only.
         stages.append(
             StressStage(
                 stage_config=StressStageConfig(
@@ -675,7 +680,6 @@ def _build_replay_experiment_definition(
                     gate=StressGateConfig(
                         min_shock_sharpe=0.0,
                         max_shock_drawdown=-0.40,
-                        min_shock_survival_rate=0.5,
                         cost_multipliers=(2.0,) if smoke else (2.0, 3.0),
                         min_cost_sharpe=0.0,
                         max_cost_drawdown=-0.40,

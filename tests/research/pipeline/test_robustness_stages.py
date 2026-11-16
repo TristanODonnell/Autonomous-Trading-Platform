@@ -208,7 +208,8 @@ def _regime_stage(
             symbols=SYMBOLS,
             start_date=START,
             end_date=END,
-            gate=gate or RegimeGateConfig(dimensions=("trend",), min_bars_per_regime=20),
+            gate=gate
+            or RegimeGateConfig(dimensions=("trend",), min_bars_per_regime=20, enforce=True),
         ),
         simulation_runner=runner,  # type: ignore[arg-type]
         label_provider=labels,  # type: ignore[arg-type]
@@ -241,6 +242,27 @@ class TestRegimeStage:
         profile = result.diagnostics["all_weather"].regime_profile
         assert profile is not None
         assert profile.by_trend.metrics_by_label["bull"].bar_count > 0
+
+    def test_report_only_records_findings_and_eliminates_nobody(self) -> None:
+        """Same two strategies as above; without enforce the bull-only one survives."""
+
+        def script(sid: str, req: SimulationRunRequest, day: date) -> float:
+            return _bull_only(sid, req, day) if sid == "bull_only" else _all_weather(sid, req, day)
+
+        report_only = RegimeGateConfig(dimensions=("trend",), min_bars_per_regime=20)
+        result = _run(
+            _regime_stage(ScriptedRunner(script), FixedLabels(), report_only),
+            [_cfg("all_weather"), _cfg("bull_only")],
+        )
+
+        assert [c.strategy_id for c in result.survivors] == ["all_weather", "bull_only"]
+        output = next(o for o in result.filter_outputs if o.strategy_id == "bull_only")
+        assert output.filter_result.passed and output.filter_result.failures == []
+        verdict = result.diagnostics["bull_only"].regime_verdict
+        assert verdict is not None and not verdict.enforced
+        assert any("trend:bear" in f for f in verdict.findings)
+        clean = result.diagnostics["all_weather"].regime_verdict
+        assert clean is not None and clean.findings == ()
 
     def test_reuses_matching_reference_run(self) -> None:
         runner = ScriptedRunner(_all_weather)
@@ -373,10 +395,59 @@ class TestStressStage:
         verdict = result.diagnostics["s1"].stress_verdict
         assert verdict is not None and verdict.shock_summary is not None
 
-    def test_shock_only_mode_runs_single_baseline(self) -> None:
+    def test_without_shock_scenarios_no_baseline_is_simulated(self) -> None:
         runner = ScriptedRunner(_all_weather)
-        _run(_stress_stage(runner, cost_multipliers=()), [_cfg("s1")])
-        assert [r.window_role for r in runner.requests] == ["stress_baseline"]
+        result = _run(
+            _stress_stage(runner, cost_multipliers=(2.0,), shock_scenarios=()), [_cfg("s1")]
+        )
+        assert [r.window_role for r in runner.requests] == ["stress_cost_2x"]
+        verdict = result.diagnostics["s1"].stress_verdict
+        assert verdict is not None and verdict.passed and verdict.shock_summary is None
+
+    def test_a_stage_with_no_cost_multipliers_cannot_be_built(self) -> None:
+        with pytest.raises(ValueError, match="must not be empty"):
+            _stress_stage(ScriptedRunner(_all_weather), cost_multipliers=())
+
+    def test_shocks_are_reported_and_do_not_eliminate(self) -> None:
+        """A profitable strategy survives under half the shock scenarios and still passes."""
+        runner = ScriptedRunner(_all_weather)
+        result = _run(_stress_stage(runner, cost_multipliers=(2.0, 3.0)), [_cfg("s1")])
+        assert [c.strategy_id for c in result.survivors] == ["s1"]
+        verdict = result.diagnostics["s1"].stress_verdict
+        assert verdict is not None and verdict.shock_summary is not None
+        assert verdict.shock_summary.n_scenarios == 7
+        assert verdict.shock_survival_rate is not None
+
+    def test_strategy_that_stops_trading_under_costs_is_eliminated(self) -> None:
+        class NoTradesFor(ScriptedRunner):
+            def run(self, request: SimulationRunRequest) -> SimulationRunResult:
+                result = super().run(request)
+                if request.strategy_id == "idle":
+                    result.trade_count = 0
+                return result
+
+        runner = NoTradesFor(_all_weather)
+        result = _run(
+            _stress_stage(runner, cost_multipliers=(2.0, 3.0)), [_cfg("active"), _cfg("idle")]
+        )
+        assert [c.strategy_id for c in result.survivors] == ["active"]
+        verdict = result.diagnostics["idle"].stress_verdict
+        assert verdict is not None
+        assert "no trades" in verdict.failure_reasons[0]
+
+    def test_cost_run_that_returns_nothing_eliminates_the_strategy(self) -> None:
+        class DropsThreeX(ScriptedRunner):
+            def run(self, request: SimulationRunRequest) -> SimulationRunResult | None:  # type: ignore[override]
+                if request.window_role == "stress_cost_3x":
+                    return None
+                return super().run(request)
+
+        runner = DropsThreeX(_all_weather)
+        result = _run(_stress_stage(runner, cost_multipliers=(2.0, 3.0)), [_cfg("s1")])
+        assert result.survivors == []
+        verdict = result.diagnostics["s1"].stress_verdict
+        assert verdict is not None
+        assert "no result for the 3x cost re-simulation(s)" in verdict.failure_reasons[0]
 
 
 # ---------------------------------------------------------------------------
@@ -431,7 +502,6 @@ def _pipeline(runner: ScriptedRunner) -> PipelineRunner:
             _stress_stage(
                 runner,
                 cost_multipliers=(2.0,),
-                min_shock_survival_rate=0.0,
                 min_cost_survival_rate=0.0,
             ),
             OverfittingStage(
@@ -540,4 +610,25 @@ class TestRegistry:
         with pytest.raises(ValueError, match="cost_multipliers"):
             StageRegistry.load(
                 {"type": "stress", "name": "s", "cost_multipliers": [0.5], **window}, runner
+            )
+        with pytest.raises(ValueError, match="cost_multipliers must not be empty"):
+            StageRegistry.load(
+                {"type": "stress", "name": "s", "cost_multipliers": [], **window}, runner
+            )
+
+    def test_regime_stage_is_report_only_unless_yaml_says_enforce(self) -> None:
+        window = {"start_date": "2024-01-02", "end_date": "2024-03-29", "symbols": ["aaa"]}
+        default = StageRegistry.load({"type": "regime", "name": "r", **window}, self._runner())
+        enforced = StageRegistry.load(
+            {"type": "regime", "name": "r", "enforce": True, **window}, self._runner()
+        )
+        assert isinstance(default, RegimeStage) and default._cfg.gate.enforce is False
+        assert isinstance(enforced, RegimeStage) and enforced._cfg.gate.enforce is True
+
+    def test_removed_shock_threshold_is_rejected_not_ignored(self) -> None:
+        window = {"start_date": "2024-01-02", "end_date": "2024-03-29", "symbols": ["aaa"]}
+        with pytest.raises(ValueError, match="min_shock_survival_rate was removed"):
+            StageRegistry.load(
+                {"type": "stress", "name": "s", "min_shock_survival_rate": 0.5, **window},
+                self._runner(),
             )

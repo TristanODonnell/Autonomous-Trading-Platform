@@ -78,6 +78,7 @@ class TestSimulationCostModelServicePluggable:
         config = VolumeShareSlippageConfig(
             impact_coefficient_bps=Decimal("100"),
             max_volume_share=Decimal("1.0"),
+            half_spread_bps=Decimal("0"),
         )
         svc = _service(VolumeShareSlippageModel(config=config))
 
@@ -120,6 +121,7 @@ class TestSimulationCostModelServicePluggable:
         config = VolumeShareSlippageConfig(
             impact_coefficient_bps=Decimal("50"),
             max_volume_share=Decimal("1.0"),
+            half_spread_bps=Decimal("0"),
         )
         svc = _service(VolumeShareSlippageModel(config=config))
         ctx = _ctx(qty="10", volume="100")  # share=0.1 → bps=5 → rate=0.0005
@@ -128,6 +130,39 @@ class TestSimulationCostModelServicePluggable:
         )
         expected_rate = Decimal("0.0005")
         assert abs(costs.slippage_rate - expected_rate) < Decimal("0.000001")
+
+    def test_cost_multiplier_scales_the_half_spread(self):
+        """The stress gate's 2x and 3x runs test 2 and 3 bps on a small order."""
+        config = VolumeShareSlippageConfig(impact_coefficient_bps=Decimal("0"))
+        svc = _service(VolumeShareSlippageModel(config=config))
+        ctx = _ctx(qty="10", volume="100000")
+        rates = [
+            svc.apply_costs(
+                side=Side.BUY,
+                reference_price=Decimal("100"),
+                quantity=Decimal("10"),
+                context=ctx,
+                cost_multiplier=Decimal(m),
+            ).slippage_rate
+            for m in ("1", "2", "3")
+        ]
+        assert rates == [Decimal("0.0001"), Decimal("0.0002"), Decimal("0.0003")]
+
+    def test_platform_factory_charges_the_half_spread(self):
+        """Research, platform replay and shadow fills all come from this factory."""
+        from autonomous_trading_platform.execution.clients.simulated_broker_client import (
+            build_platform_execution_service,
+        )
+
+        cost_model = build_platform_execution_service().simulation_cost_model_service
+        costs = cost_model.apply_costs(
+            side=Side.SELL,
+            reference_price=Decimal("100"),
+            quantity=Decimal("1"),
+            context=_ctx(qty="1", volume="10000"),
+        )
+        assert costs.commission == Decimal("0")
+        assert costs.slippage_rate == Decimal("0.00010025")  # 1 bp spread + 0.0025 bps impact
 
     def test_cost_model_context_not_required(self):
         """apply_costs without context still works (uses model fallback)."""

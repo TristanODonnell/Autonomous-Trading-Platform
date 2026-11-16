@@ -315,7 +315,6 @@ def _permissive_stage_dicts(exp, *, selection_end: date | None = None) -> list[d
             "type": "stress",
             "name": "stress",
             "cost_multipliers": [3.0],
-            "min_shock_survival_rate": 0.0,
             "min_cost_survival_rate": 0.0,
             **window,
         },

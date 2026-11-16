@@ -62,12 +62,27 @@ cannot be judged; if no dimension can be judged, `on_insufficient_coverage`
 (`pass` | `fail`, default `pass`) decides. A 90-day window that was bull
 throughout is common, which is why the default is `pass` (recorded as a warning).
 
-### Stress = equity-curve shocks + execution-cost re-simulations
+**Report only by default (`enforce: false`).** The rules run and what they found is
+on `RegimeGateVerdict.findings`, but nobody is eliminated; `failure_reasons` is
+empty and `passed` is true. On a ~60-session window a regime holds 18 to 19
+sessions, and an annualised Sharpe over 19 sessions has a standard error of about
+3.6: with the labels dealt to random days the rules still failed a Sharpe-2.3
+strategy 48 times in 100 (2026-11 real-bars run). Set `enforce: true` only when
+each judged regime holds enough sessions (about 100). The platform replay hook
+sets `enforce=False`.
+
+### Stress = execution-cost re-simulations (judged) + equity-curve shocks (reported)
 
 - **Shocks** (existing `StressTestService`, no re-simulation): vol spike 2x/3x,
   −5 % / −10 % one-time shock, downside amplification, trend reversal, 50 bps
-  per-bar drag. Held-fixed trades; cheap.
-- **Costs** (new): the strategy is re-simulated with slippage + commission scaled
+  per-bar drag. Held-fixed trades; cheap. **Report only**: the per-scenario
+  results and the survival rate are on `StressGateVerdict` (`shock_summary`,
+  `shock_survival_rate`) and never affect `passed`. On intraday bars the
+  scenarios do not separate strategies: on the 2026-11 real-bars run every
+  profitable strategy survived the same 2 of 7 and every losing one the same 1
+  of 7. Reaching the old 4-of-7 threshold needed more than about 10 % earned
+  inside the window. `min_shock_survival_rate` was removed and is rejected if set.
+- **Costs**: the strategy is re-simulated with slippage + commission scaled
   by each `cost_multipliers` entry (default `[2.0, 3.0]`) via
   `SimulationRunRequest.cost_multiplier` →
   `SimulatedExecutionService.reset_for_run(cost_multiplier=…)` →
@@ -75,9 +90,11 @@ throughout is common, which is why the default is `pass` (recorded as a warning)
   reset every run, so a stress run never leaks into the next one. Non-default
   multipliers extend the deterministic `run_id` key; default runs keep their IDs.
 
-Gate: shock survival rate `>= min_shock_survival_rate` **and** cost survival rate
-`>= min_cost_survival_rate` (a cost run survives when Sharpe `>= min_cost_sharpe`
-and drawdown `>= max_cost_drawdown`).
+Gate: every `cost_multipliers` entry produced a result **and** cost survival rate
+`>= min_cost_survival_rate`. A cost run survives when it has at least one trade,
+Sharpe `>= min_cost_sharpe` and drawdown `>= max_cost_drawdown`. A run with no
+trades does not survive (a flat curve has Sharpe 0.0), and a requested multiplier
+with no result fails the strategy. `cost_multipliers` must not be empty.
 
 ### Overfitting = formal gate over earlier-stage evidence
 
@@ -146,8 +163,8 @@ research tick is the one that exercises all six stages.
   start_date: "2024-01-02"
   end_date: "2024-04-01"
   symbols: [SPY, QQQ, AAPL]
-  cost_multipliers: [2.0, 3.0]      # [] = shock scenarios only
-  min_shock_survival_rate: 0.5
+  cost_multipliers: [2.0, 3.0]      # the pass rule; must not be empty
+  # shock_scenarios: []             # uncomment to skip the shock report
   min_cost_sharpe: 0.0
   min_cost_survival_rate: 0.5
 

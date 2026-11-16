@@ -1,5 +1,11 @@
 """
-RegimeStage — eliminates strategies whose performance depends on one market regime.
+RegimeStage — measures whether a strategy's performance depends on one market regime.
+
+Report-only unless the gate is configured with ``enforce: true``: the regime
+profile and the gate's findings are recorded for every strategy and nobody is
+eliminated. On a ~60-session window a regime holds too few sessions for a
+per-regime Sharpe threshold to separate strategies from chance (see
+gates/regime_gate.py).
 
 Regimes are auto-classified, not hand-picked date windows: the window's own
 bars are classified day by day (trend / volatility / liquidity / mean
@@ -31,6 +37,7 @@ YAML block example
     max_regime_drawdown: -0.25
     min_positive_regime_fraction: 0.5
     on_insufficient_coverage: pass
+    enforce: false                 # default; true lets the findings eliminate
 """
 
 from __future__ import annotations
@@ -159,6 +166,7 @@ class RegimeStage(BaseStage):
                 max_regime_drawdown=v.max_regime_drawdown,
                 min_positive_regime_fraction=v.min_positive_regime_fraction,
                 on_insufficient_coverage=v.on_insufficient_coverage,  # type: ignore[arg-type]
+                enforce=v.enforce,
             ),
             execution_mode=ExecutionMode(v.execution_mode),
             max_workers=v.max_workers,
@@ -261,12 +269,17 @@ class RegimeStage(BaseStage):
             if verdict.passed:
                 final_survivors.append(config)
 
+        with_findings = sum(
+            1 for d in diagnostics.values() if d.regime_verdict and d.regime_verdict.findings
+        )
         logger.info(
-            "Stage %-20s | entered %d | survived %d | eliminated %d",
+            "Stage %-20s | entered %d | survived %d | eliminated %d | with findings %d (%s)",
             self.stage_name,
             len(survivors),
             len(final_survivors),
             len(survivors) - len(final_survivors),
+            with_findings,
+            "enforced" if self._cfg.gate.enforce else "report only",
         )
 
         return StageResult(
@@ -343,10 +356,12 @@ class RegimeStage(BaseStage):
     def _log_verdict(self, verdict: RegimeGateVerdict) -> None:
         if verdict.passed:
             logger.debug(
-                "  PASSED  %s | evaluated=%s | warnings: %s",
+                "  PASSED  %s | evaluated=%s | warnings: %s | findings (%s): %s",
                 verdict.strategy_id,
                 ",".join(verdict.evaluated_dimensions) or "none",
                 "; ".join(verdict.warnings) or "none",
+                "enforced" if verdict.enforced else "report only",
+                "; ".join(verdict.findings) or "none",
             )
         else:
             logger.debug(

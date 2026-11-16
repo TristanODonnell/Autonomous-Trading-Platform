@@ -29,8 +29,8 @@ def build_platform_execution_service(
     """The fill model for platform replay: real (simulated) orders and on-deck shadow orders.
 
     One factory so both sides always fill identically: current-bar close, 5% volume
-    participation cap, volume-share slippage, zero commission, and no stochastic
-    partial fills or rejections. The participation cap is only lifted for shadow
+    participation cap, half-spread (1 bp by default) plus volume-share slippage, zero
+    commission, and no stochastic partial fills or rejections. The participation cap is only lifted for shadow
     fills priced without a bar (no volume to cap against).
     """
     from autonomous_trading_platform.research.simulation.models.fill_model import (
