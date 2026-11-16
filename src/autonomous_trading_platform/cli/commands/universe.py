@@ -49,6 +49,10 @@ from autonomous_trading_platform.universe.jobs.run_universe_rotation import run_
 from autonomous_trading_platform.universe.jobs.run_universe_selection_cycle import (
     run_universe_selection_cycle,
 )
+from autonomous_trading_platform.universe.providers.point_in_time_index_provider import (
+    ALPACA_ACTIVE,
+    SCREENER_SOURCES,
+)
 from autonomous_trading_platform.universe.services.raw_market_pool_refresh_service import (
     RawMarketPoolRefreshPreview,
 )
@@ -301,6 +305,16 @@ def register(subparsers) -> None:
         choices=sorted(CANDIDATE_MARKET_DATA_SOURCES),
         default=CANDIDATE_MARKET_DATA_ALPACA_DAILY,
         help="Where the scorer reads bars (default: alpaca_daily, as the scheduler does)",
+    )
+    monthly_rotation_parser.add_argument(
+        "--screener-source",
+        choices=sorted(SCREENER_SOURCES),
+        default=ALPACA_ACTIVE,
+        help=(
+            "Candidate pool (default: alpaca_active, today's active names, as the "
+            "scheduler does). With an old --timestamp use sp500_point_in_time: the "
+            "index members on that date, so the pool carries no hindsight"
+        ),
     )
     monthly_rotation_parser.add_argument(
         "--dataset-version-id",
@@ -1617,6 +1631,7 @@ def handle_monthly_rotation(args: argparse.Namespace) -> int:
 
     timestamp = _resolve_timestamp(args.timestamp)
     dry_run = bool(getattr(args, "dry_run", False))
+    screener_source = getattr(args, "screener_source", ALPACA_ACTIVE)
     context = PlatformReplayContext.create(
         symbols=[], timestamp=timestamp, actor=getattr(args, "approved_by", None) or "operator"
     )
@@ -1630,6 +1645,7 @@ def handle_monthly_rotation(args: argparse.Namespace) -> int:
             replay_context=context,
             force_rotation=bool(getattr(args, "force", False)),
             rotation_reason="operator_monthly",
+            screener_source=screener_source,
             candidate_market_data=getattr(args, "market_data", CANDIDATE_MARKET_DATA_ALPACA_DAILY),
         )
         kept = result.status == "ok" and not dry_run
@@ -1647,6 +1663,7 @@ def handle_monthly_rotation(args: argparse.Namespace) -> int:
             "status": result.status,
             "rotation_kept": kept,
             "timestamp": timestamp.isoformat(),
+            "screener_source": screener_source,
             "errors": list(result.errors),
             "warnings": list(result.warnings),
             **dict(result.summary),
