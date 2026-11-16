@@ -378,6 +378,11 @@ def test_every_new_stage_runs_on_real_simulations(
     by_name = {sr.stage_name: sr for sr in result.stage_results}
 
     assert list(by_name) == ["sim", "wf", "mc", "regime", "stress", "overfit"]
+    # One pipeline run shares the bars its simulations load and lets go of them at
+    # the end (SimulationWindowLoader.reuse_bars).
+    loader = ctx.simulation_runner.window_loader
+    assert loader.bar_reuses > 0
+    assert loader._loaded is None
     survivors = [c.strategy_id for c in by_name["mc"].survivors]
     assert survivors, "permissive filters should let strategies reach the robustness stages"
     assert [c.strategy_id for c in result.final_survivors] == survivors

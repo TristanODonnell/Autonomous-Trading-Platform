@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import copy
 import random
-from collections.abc import Iterable
-from dataclasses import dataclass
+import threading
+from bisect import bisect_left
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
@@ -114,6 +117,22 @@ class SimulationWindowData:
         return timestamp in self.warmup_timestamps
 
 
+@dataclass(slots=True)
+class _SymbolBars:
+    read_start: date
+    # Sorted by timestamp. Shared between runs, so never modified: every caller
+    # gets its own list, and the bars in it are treated as read-only.
+    bars: list[MarketBar]
+
+
+@dataclass(slots=True)
+class _LoadedBars:
+    """The parsed bars of one (dataset, version, end date): what ``reuse_bars`` keeps."""
+
+    window: tuple[str, str, date, str]
+    by_symbol: dict[str, _SymbolBars] = field(default_factory=dict)
+
+
 class SimulationWindowLoader:
     """
     Loads simulation data using bounded partition reads only.
@@ -128,6 +147,38 @@ class SimulationWindowLoader:
     ) -> None:
         self.bar_reader = bar_reader
         self.feature_reader = feature_reader
+        self._reuse_depth = 0
+        self._loaded: _LoadedBars | None = None
+        self._reuse_lock = threading.Lock()
+        # Per-symbol counts while reuse_bars() is active: read from Parquet and
+        # parsed, against served from the bars already in memory.
+        self.bar_reads = 0
+        self.bar_reuses = 0
+
+    @contextmanager
+    def reuse_bars(self) -> Iterator[None]:
+        """For one pipeline run: parse each symbol's bars once, not once per run.
+
+        Every simulation of a stage asks for the same symbols and dates and differs
+        only in its warmup, and building the bar objects is about a third of a
+        run's time. Inside this block the loader keeps the parsed bars of the
+        window it read last and cuts each run's bars from them.
+
+        It keeps one (dataset, version, end date) at a time and drops it before
+        reading another, so two windows are never held together and the peak of
+        a run does not grow. Everything is released when the block ends. Same
+        rule as ``MemoizingBarDatasetReader``: only around work during which the
+        dataset does not change, never across cycles.
+        """
+        with self._reuse_lock:
+            self._reuse_depth += 1
+        try:
+            yield
+        finally:
+            with self._reuse_lock:
+                self._reuse_depth -= 1
+                if self._reuse_depth == 0:
+                    self._loaded = None
 
     # 5-min bars per trading day (9:30→16:00 = 6.5h = 78 bars)
     _BARS_PER_TRADING_DAY: int = 78
@@ -195,35 +246,22 @@ class SimulationWindowLoader:
         feature_tables_by_symbol: dict[str, dict[str, pa.Table]] = {}
 
         for symbol in normalized_symbols:
-            try:
-                bar_table = self.bar_reader.read(
-                    dataset=bars_dataset,
-                    dataset_version=dataset_version,
-                    symbol=symbol,
-                    start_date=read_start,
-                    end_date=end_date,
-                    engine=engine,
-                )
-            except Exception as exc:
-                raise RuntimeError(
-                    f"Failed to load bar data for symbol={symbol}, "
-                    f"dataset_version={dataset_version}, "
-                    f"window={start_date}..{end_date}"
-                ) from exc
+            all_bars = self._symbol_bars(
+                bars_dataset=bars_dataset,
+                dataset_version=dataset_version,
+                symbol=symbol,
+                read_start=read_start,
+                start_date=start_date,
+                end_date=end_date,
+                engine=engine,
+            )
 
-            if strict and bar_table.num_rows == 0:
+            if strict and not all_bars:
                 raise ValueError(
                     f"No bar data found for symbol={symbol}, "
                     f"dataset_version={dataset_version}, "
                     f"window={start_date}..{end_date}"
                 )
-
-            all_bars = [self._row_to_market_bar(row) for row in bar_table.to_pylist()]
-
-            # Ensure bars are always sorted by timestamp so bisect lookups in
-            # build_from_window are correct. Sort once here rather than O(N) scan
-            # per timestamp in the simulation loop.
-            all_bars.sort(key=lambda b: b.timestamp)
 
             if warmup_bars > 0:
                 pre_bars = [b for b in all_bars if b.timestamp.date() < start_date]
@@ -305,6 +343,105 @@ class SimulationWindowLoader:
             warmup_bars_by_symbol=warmup_bars_by_symbol,
             warmup_timestamps=warmup_timestamps,
         )
+
+    def _symbol_bars(
+        self,
+        *,
+        bars_dataset: ParquetDataset,
+        dataset_version: str,
+        symbol: str,
+        read_start: date,
+        start_date: date,
+        end_date: date,
+        engine: str,
+    ) -> list[MarketBar]:
+        """One symbol's bars from ``read_start`` to ``end_date``, sorted, in a list the
+        caller owns. Inside ``reuse_bars`` they come from memory when a read that
+        started no later is already held."""
+        if self._reuse_depth == 0:
+            return self._read_bars(
+                bars_dataset=bars_dataset,
+                dataset_version=dataset_version,
+                symbol=symbol,
+                read_start=read_start,
+                start_date=start_date,
+                end_date=end_date,
+                engine=engine,
+            )
+
+        window = (bars_dataset.dataset_key, dataset_version, end_date, engine)
+        # One lock for the lookup and the read: stages may run simulations on
+        # threads (max_workers), and two of them must not swap windows mid-read.
+        with self._reuse_lock:
+            loaded = self._loaded
+            if loaded is None or loaded.window != window:
+                # Let go of the previous window before reading this one: holding
+                # both would double the memory this is meant to leave alone.
+                self._loaded = loaded = _LoadedBars(window=window)
+
+            held = loaded.by_symbol.get(symbol)
+            if held is None or held.read_start > read_start:
+                # Nothing held, or this run's warmup reaches further back.
+                # Release the shorter read first, for the same reason as above.
+                loaded.by_symbol.pop(symbol, None)
+                held = None
+                held = _SymbolBars(
+                    read_start=read_start,
+                    bars=self._read_bars(
+                        bars_dataset=bars_dataset,
+                        dataset_version=dataset_version,
+                        symbol=symbol,
+                        read_start=read_start,
+                        start_date=start_date,
+                        end_date=end_date,
+                        engine=engine,
+                    ),
+                )
+                loaded.by_symbol[symbol] = held
+                self.bar_reads += 1
+            else:
+                self.bar_reuses += 1
+
+            # The reader's own lower bound (timestamp >= start of read_start, UTC),
+            # so a slice of an earlier read equals a fresh read from read_start.
+            start_ts, _ = HistoricalBarDatasetReader._date_range_to_timestamps(read_start, end_date)
+            first = bisect_left(held.bars, start_ts, key=lambda b: b.timestamp)
+            return held.bars[first:]
+
+    def _read_bars(
+        self,
+        *,
+        bars_dataset: ParquetDataset,
+        dataset_version: str,
+        symbol: str,
+        read_start: date,
+        start_date: date,
+        end_date: date,
+        engine: str,
+    ) -> list[MarketBar]:
+        try:
+            bar_table = self.bar_reader.read(
+                dataset=bars_dataset,
+                dataset_version=dataset_version,
+                symbol=symbol,
+                start_date=read_start,
+                end_date=end_date,
+                engine=engine,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to load bar data for symbol={symbol}, "
+                f"dataset_version={dataset_version}, "
+                f"window={start_date}..{end_date}"
+            ) from exc
+
+        bars = [self._row_to_market_bar(row) for row in bar_table.to_pylist()]
+
+        # Ensure bars are always sorted by timestamp so bisect lookups in
+        # build_from_window are correct. Sort once here rather than O(N) scan
+        # per timestamp in the simulation loop.
+        bars.sort(key=lambda b: b.timestamp)
+        return bars
 
     @staticmethod
     def _resample_bars_to_daily(

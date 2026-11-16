@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import platform
 import random
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -221,6 +222,11 @@ class SimulationRunner:
         self.experiment_repository = experiment_repository
         self.metrics_summary_repository = metrics_summary_repository
         self.feature_dependency_resolver = feature_dependency_resolver
+
+    def reuse_loaded_bars(self) -> AbstractContextManager[None]:
+        """Around one pipeline run: its simulations share the bars they load
+        (see ``SimulationWindowLoader.reuse_bars``)."""
+        return self.window_loader.reuse_bars()
 
     def run(self, request: SimulationRunRequest) -> SimulationRunResult:
         if not isinstance(request.random_seed, int):

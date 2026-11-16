@@ -292,15 +292,18 @@ class ExperimentOrchestrationService:
                 raise ValueError("run_staged_experiment requires staged_pipeline_config.")
             initial_configs = self._expand_strategy_configs(plan)
             pipeline = PipelineRunner(stages=plan.staged_pipeline_config.stages)
-            result = pipeline.run(
-                initial_configs=initial_configs,
-                experiment_id=plan.experiment_id,
-                dataset_version=plan.dataset_version,
-                random_seed=plan.random_seed,
-                price_basis=plan.price_basis,
-                initial_cash=plan.initial_cash,
-                resample_to_daily=plan.resample_to_daily,
-            )
+            # The dataset version is fixed for the whole pipeline, so its
+            # simulations can share the bars they load.
+            with self.simulation_runner.reuse_loaded_bars():
+                result = pipeline.run(
+                    initial_configs=initial_configs,
+                    experiment_id=plan.experiment_id,
+                    dataset_version=plan.dataset_version,
+                    random_seed=plan.random_seed,
+                    price_basis=plan.price_basis,
+                    initial_cash=plan.initial_cash,
+                    resample_to_daily=plan.resample_to_daily,
+                )
             self._mark_experiment_completed(plan.experiment_id)
             return result
         except Exception:

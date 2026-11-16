@@ -190,6 +190,25 @@ scored and is never deployable. The rule lives in one place,
 switched on, add its component to the policy in the same change; a smoke test
 fails if the two disagree.
 
+### Bars are loaded once per pipeline run
+
+`ExperimentOrchestrationService.run_staged_experiment` wraps the pipeline in
+`SimulationRunner.reuse_loaded_bars()`. Inside it `SimulationWindowLoader` keeps the
+parsed bars of the window it read last, one (dataset, version, end date) at a time,
+and cuts each simulation's bars from them. A simulation whose warmup reaches further
+back than what is held causes one re-read. Outside it (a single
+`SimulationRunner.run`, the bench re-sims) every run reads Parquet as before.
+
+- A simulation receives what a fresh read would give it: tested for every order of
+  warmup lengths, and on real bars (five runs, identical equity curves and trade logs).
+- It saves time, not memory. On 90 days of real bars, five runs: bar loading 19.1 s to
+  7.7 s, the stage 65 s to 52 s. A run's peak memory is unchanged, because the previous
+  window is dropped before the next is read.
+- The bars are shared between runs, so code that receives a window must not change a
+  bar in place (`shuffle_window_bar_timestamps` copies first).
+- Same rule as `MemoizingBarDatasetReader`: only around work during which the dataset
+  does not change.
+
 ### Cheap verification runs
 
 `research.options.profile: smoke` in a replay fixture shrinks the research budget:
@@ -252,6 +271,7 @@ research tick is the one that exercises all six stages.
 | Stage orchestration with a scripted runner | `tests/research/pipeline/test_robustness_stages.py` |
 | Evidence policy: robustness score | `tests/research/validation/test_robustness_scoring.py` |
 | Evidence policy: ranking composite and deployability | `tests/research/intelligence/test_candidate_ranking.py` |
+| Bars loaded once per pipeline run | `tests/research/simulation/test_simulation_window_loader_reuse.py` |
 | Real-engine smoke (all six stages, research hook, smoke profile) | `tests/research/test_research_stages_smoke.py` |
 
 ## Known gaps
