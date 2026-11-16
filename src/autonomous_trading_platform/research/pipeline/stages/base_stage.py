@@ -78,7 +78,8 @@ class StageDiagnostics:
 
     Every field is optional — each stage fills in only what it computed.
 
-    fold_inputs         Walk-forward train/test metric pairs (completed folds only).
+    fold_inputs         Walk-forward train/test metric pairs, one per fold, including
+                        folds whose train run failed (train_passed=False).
     mc_aggregation      Monte Carlo distribution across resampled paths.
     regime_profile      Regime-conditioned performance profile.
     regime_verdict      RegimeStage gate decision and reasons.

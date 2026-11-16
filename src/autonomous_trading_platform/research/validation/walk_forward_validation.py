@@ -35,6 +35,8 @@ class FoldValidationInput:
     train_passed: bool
     test_passed: bool
     fold_passed: bool  # True iff both train and test passed filters
+    # A fold with train_passed=False is still evidence: its test numbers are real,
+    # it just cannot count as a passed fold.
 
 
 @dataclass(frozen=True)

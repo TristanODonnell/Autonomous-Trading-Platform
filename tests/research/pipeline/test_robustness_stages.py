@@ -72,6 +72,9 @@ from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunRequest,
     SimulationRunResult,
 )
+from autonomous_trading_platform.research.validation.walk_forward_validation import (
+    WalkForwardValidationService,
+)
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
 START = date(2024, 1, 2)
@@ -597,6 +600,85 @@ class TestPipelineEvidenceFlow:
         assert wf.diagnostics["s1"].fold_inputs
         assert mc.diagnostics["s1"].mc_aggregation is not None
         assert mc.diagnostics["s1"].reference_result is not None
+
+
+# ---------------------------------------------------------------------------
+# Walk-forward: a fold that fails train is still evidence (plan R2)
+# ---------------------------------------------------------------------------
+
+NEEDS_POSITIVE_SHARPE = FilterConfig(
+    min_sharpe=0.5,
+    max_drawdown=-1.0,
+    min_trades=0,
+    min_consistency_score=0.0,
+    min_profit_factor=0.0,
+    min_win_rate=0.0,
+    min_total_return=-1.0,
+)
+
+
+def _slow_start(sid: str, req: SimulationRunRequest, day: date) -> float:
+    """'slow_start' loses money in fold 0's train window and is steady everywhere else."""
+    if sid == "slow_start" and req.window_role == "fold_0_train":
+        return float(-0.004 + np.random.default_rng(day.toordinal()).normal(0, 0.003))
+    return _all_weather(sid, req, day)
+
+
+def _two_fold_stage(runner: ScriptedRunner, *, require_all_folds: bool) -> WalkForwardStage:
+    return WalkForwardStage(
+        stage_config=WalkForwardStageConfig(
+            name="wf",
+            train_days=30,
+            test_days=20,
+            step_days=20,
+            train_filter_config=NEEDS_POSITIVE_SHARPE,
+            train_scoring_weights=ScoringWeights(),
+            test_filter_config=PERMISSIVE,
+            test_scoring_weights=ScoringWeights(),
+            require_all_folds=require_all_folds,
+            symbols=SYMBOLS,
+            start_date=START,
+            end_date=END,
+        ),
+        simulation_runner=runner,  # type: ignore[arg-type]
+    )
+
+
+class TestWalkForwardTrainFailedFolds:
+    def test_test_window_is_simulated_and_recorded_for_a_train_failed_fold(self) -> None:
+        runner = ScriptedRunner(_slow_start)
+        result = _run(_two_fold_stage(runner, require_all_folds=False), [_cfg("slow_start")])
+
+        roles = [r.window_role or "" for r in runner.requests]
+        assert sorted(roles) == ["fold_0_test", "fold_0_train", "fold_1_test", "fold_1_train"]
+        folds = result.diagnostics["slow_start"].fold_inputs
+        assert folds is not None and [f.fold_index for f in folds] == [0, 1]
+        failed, passed = folds
+        assert (failed.train_passed, failed.test_passed, failed.fold_passed) == (False, True, False)
+        assert failed.train_sharpe < 0 < failed.test_sharpe
+        assert (passed.train_passed, passed.test_passed, passed.fold_passed) == (True, True, True)
+        # One of two folds, not one of one: the failed fold stays in the denominator.
+        assert WalkForwardValidationService().analyze(folds).fold_consistency == 0.5
+        assert [c.strategy_id for c in result.survivors] == ["slow_start"]
+
+    def test_a_passing_test_run_does_not_rescue_a_train_failed_fold(self) -> None:
+        runner = ScriptedRunner(_slow_start)
+        result = _run(_two_fold_stage(runner, require_all_folds=True), [_cfg("slow_start")])
+        assert result.survivors == []
+
+    def test_other_strategies_get_the_same_verdicts_with_or_without_it(self) -> None:
+        def verdicts(ids: list[str]) -> list[tuple[bool, float | None]]:
+            stage = _two_fold_stage(ScriptedRunner(_slow_start), require_all_folds=False)
+            result = _run(stage, [_cfg(sid) for sid in ids])
+            return [
+                (o.filter_result.passed, o.score.score if o.score else None)
+                for o in result.filter_outputs
+                if o.strategy_id == "steady"
+            ]
+
+        alone = verdicts(["steady"])
+        assert len(alone) == 4  # train and test verdict for each of two folds
+        assert verdicts(["steady", "slow_start"]) == alone
 
 
 # ---------------------------------------------------------------------------

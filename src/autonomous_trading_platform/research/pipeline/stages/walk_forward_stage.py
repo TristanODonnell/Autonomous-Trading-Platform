@@ -196,10 +196,11 @@ class _FoldResult:
 
 
 def _to_fold_input(fr: _FoldResult) -> FoldValidationInput | None:
-    """Convert a fold with both train and test runs into validation input.
+    """Convert a fold into validation input.
 
-    Folds that stopped at the train filter have no test metrics, so they
-    carry no train/test degradation evidence and are skipped.
+    Every fold with a test run is evidence, including one whose train run
+    failed the filter (train_passed=False, fold_passed=False). Only a fold
+    with no test run at all (a dry run) is skipped.
     """
     test = fr.test_sim_result
     if test is None or fr.test_filter_output is None:
@@ -349,8 +350,8 @@ class WalkForwardStage(BaseStage):
         )
 
         fold_pass_counts: dict[str, int] = {c.strategy_id: 0 for c in survivors}
-        # Completed folds (train + test both simulated) per strategy — evidence
-        # for OverfittingStage (train/test degradation, fold instability).
+        # Every fold per strategy (train and test both simulated, whether or not
+        # train passed) — evidence for OverfittingStage and the validation layer.
         fold_inputs: dict[str, list[FoldValidationInput]] = {c.strategy_id: [] for c in survivors}
         all_sim_results: list[SimulationRunResult] = []
         all_filter_outputs: list[FilterScoreOutput] = []
@@ -368,7 +369,10 @@ class WalkForwardStage(BaseStage):
             )
 
             passed_fold = 0
+            failed_train = 0
             for fr in fold_results:
+                if not fr.train_filter_output.filter_result.passed:
+                    failed_train += 1
                 all_sim_results.append(fr.train_sim_result)
                 all_filter_outputs.append(fr.train_filter_output)
                 if fr.test_sim_result is not None:
@@ -383,7 +387,8 @@ class WalkForwardStage(BaseStage):
                     passed_fold += 1
 
             logger.info(
-                "  Fold %d | train %s->%s | test %s->%s | %d/%d passed both",
+                "  Fold %d | train %s->%s | test %s->%s | %d/%d passed both"
+                " | %d failed train (test run kept as evidence only)",
                 fold.index,
                 fold.train_start,
                 fold.train_end,
@@ -391,6 +396,7 @@ class WalkForwardStage(BaseStage):
                 fold.test_end,
                 passed_fold,
                 len(fold_results),
+                failed_train,
             )
 
         if not all_sim_results:
@@ -536,8 +542,15 @@ class WalkForwardStage(BaseStage):
         train_filter_by_id = {o.strategy_id: o for o in train_filter_outputs}
         train_sim_by_id = {r.strategy_id: r for r in train_sim_results}
 
-        # ---- test simulations (only train-passers) -----------------------
-        test_configs = [c for c in configs if c.strategy_id in train_passed_ids]
+        # ---- test simulations (every strategy with a train run) ----------
+        # A fold counts for a strategy only if train AND test pass. Strategies
+        # that failed train are still simulated on the test window so the fold
+        # is recorded as evidence; dropping it would leave only the folds the
+        # strategy did well on (plan R2). Train-passers keep their order.
+        train_failed_ids = set(train_sim_by_id) - train_passed_ids
+        test_configs = [c for c in configs if c.strategy_id in train_passed_ids] + [
+            c for c in configs if c.strategy_id in train_failed_ids
+        ]
         test_units: list[ExecutionUnit[SimulationRunResult | None]] = []
         for index, config in enumerate(test_configs):
             seed = self._seed_service.derive_seed(
@@ -584,6 +597,8 @@ class WalkForwardStage(BaseStage):
         test_sim_results = [result for result in maybe_test_sim_results if result is not None]
 
         # ---- test filter -------------------------------------------------
+        # Pass and score are computed per strategy, so the evidence-only runs
+        # sharing this call cannot change a train-passer's verdict.
         test_filter_inputs = [
             FilterScoreInput(
                 strategy_id=r.strategy_id,
@@ -607,30 +622,16 @@ class WalkForwardStage(BaseStage):
             train_sim = train_sim_by_id[sid]
             train_fo = train_filter_by_id[sid]
 
-            if sid not in train_passed_ids:
-                fold_results.append(
-                    _FoldResult(
-                        fold_index=fold.index,
-                        train_sim_result=train_sim,
-                        test_sim_result=None,
-                        train_filter_output=train_fo,
-                        test_filter_output=None,
-                        passed=False,
-                    )
+            fold_results.append(
+                _FoldResult(
+                    fold_index=fold.index,
+                    train_sim_result=train_sim,
+                    test_sim_result=test_sim_by_id.get(sid),
+                    train_filter_output=train_fo,
+                    test_filter_output=test_filter_by_id.get(sid),
+                    passed=sid in train_passed_ids and sid in test_passed_ids,
                 )
-            else:
-                test_sim = test_sim_by_id[sid]
-                test_fo = test_filter_by_id[sid]
-                fold_results.append(
-                    _FoldResult(
-                        fold_index=fold.index,
-                        train_sim_result=train_sim,
-                        test_sim_result=test_sim,
-                        train_filter_output=train_fo,
-                        test_filter_output=test_fo,
-                        passed=sid in test_passed_ids,
-                    )
-                )
+            )
 
         return fold_results
 

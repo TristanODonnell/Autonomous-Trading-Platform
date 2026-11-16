@@ -102,7 +102,15 @@ Stages record per-strategy evidence in `StageResult.diagnostics`
 (`StageDiagnostics`): walk-forward `fold_inputs`, Monte Carlo `mc_aggregation` +
 `reference_result`, regime `regime_profile`. `PipelineRunner` calls
 `stage.bind_prior_results(...)` before each stage, and `OverfittingStage`
-combines the evidence through the existing `OverfittingAnalyzer`. Strategies with
+combines the evidence through the existing `OverfittingAnalyzer`.
+
+Walk-forward records every fold. A strategy that fails a fold's train filter is
+still simulated on that fold's test days and the pair is kept with
+`train_passed=False`, `fold_passed=False`. The fold cannot count as passed, but it
+stays in the evidence, so "1 of 2 folds" is not reported as "1 of 1". Cost: one
+extra test-window simulation per train-failed strategy per fold.
+
+Strategies with
 `overfitting_probability > max_overfitting_probability` (default 0.6) are
 eliminated.
 
