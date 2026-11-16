@@ -38,9 +38,9 @@ Keep this board in step with the boxes: when a box changes in section 3, change 
 | R9 | Generator has no selection | Folds into Step 2 | no boxes | Step 2 |
 | R10 | Stale marks when a bar is missing | **Done.** Merged PR #182, deployed to A and B | 6 / 2 | The re-sim vs platform correlation was not re-measured; more sparse-bar fixtures (R7) |
 | R11 | Stress gate: shocks report-only, costs decide | **Committed `b6860b6b7`, pushed; PR not opened.** Rerun done: funnel 30 → 30 → 4 → 2 → 2 → 2, the first run with final survivors | 5 / 0 | Nothing. "Verify" met by the all-30 audit pass: 7 pass, 23 fail, for causes that differ. Stress at the new cost is R12's box |
-| R12 | Research trading cost: 1 basis point per trade | **Committed `bb2f09329`, pushed; PR not opened** | 2 / 5 | Stress re-simulations at the new cost, re-baseline, slippage written to fill rows. Two midpoint guards wait for a `LIMIT` / `TWAP` policy |
+| R12 | Research trading cost: 1 basis point per trade | **Committed `bb2f09329`, pushed; PR not opened** | 3 / 4 | Measured on real bars: funnel 30 → 30 → 2 → 2 → 2 → 2, same two survivors, four of eight profitable strategies stay profitable, stress passes 3 of 30. Left: the bench re-sim on B after deploy, slippage written to fill rows. Two midpoint guards wait for a `LIMIT` / `TWAP` policy |
 | R13 | No parameter-stability check | Not decided | 0 / 2 | Decide whether to build the neighbour check |
-| R14 | Overfitting gate never exercised | **Measured.** In the funnel 2 of 2 pass (0.13, 0.24 against a limit of 0.6). On all 30 it passes 26, including 16 of 20 losing strategies, and fails no profitable one: it changes no outcome | 1 / 2 | **Decision for the user:** what the gate should be. Then a realistic two-fold test |
+| R14 | Overfitting gate never exercised | **Measured.** In the funnel 2 of 2 pass (0.13, 0.24 against a limit of 0.6). On all 30 it passes 26, including 16 of 20 losing strategies, and fails no profitable one: it changes no outcome. At 1 basis point it fails one profitable strategy (c27) and passes 22 of 24 losing ones | 1 / 2 | **Decision for the user:** what the gate should be. Then a realistic two-fold test |
 | R15 | Regime gate report-only on a short window | **Committed `1ca8c33e1`, pushed; PR not opened** | 1 / 4 | The four prerequisites before `enforce` is switched on; all wait on longer history |
 
 **Data**
@@ -58,9 +58,9 @@ monthly job 0 / 13. Section 5's results log is empty. Step 1 waits on R2.
 
 1. Done 2026-11-15: the R11 rerun and its audit pass (all 30 strategies through regime,
    stress and overfitting), recorded under R11 and R14.
-2. Running since 2026-11-15 evening: the same run on the current tree (1 basis point, regime report-only). It closes R12's
-   "stress at the new cost" and half of "re-baseline"; the bench re-sim on B is the
-   other half.
+2. Done 2026-11-15: the same run at 1 basis point with the regime gate report-only,
+   recorded under R12. The PR can merge. After merge and deploy: the bench re-sim on B,
+   which is the other half of R12's "re-baseline".
 3. Done 2026-11-15: full suite green with R15 in; four commits on
    `research/r4-gate-audits` (R11, R12, R15, plan), pushed. Open the PR; merge it after
    the run in item 2, because merging and deploying changes what A's shadow tier
@@ -1297,10 +1297,41 @@ path: the spread estimate at `:64-75` is used only when a bar has no volume.
       `broker_order_mapper.py:97` (`meta=fill.metadata`), so carrying it there may also
       change what A stores for fills; that path was not traced. Decide where it should
       live first.
-- [ ] Re-run the stress cost re-simulations on the 30-strategy run with the new costs and
-      record how many survive 2× and 3×.
+- [x] Re-run the stress cost re-simulations on the 30-strategy run with the new costs and
+      record how many survive 2× and 3×. Done 2026-11-15 (code as committed in `1ca8c33e1`: 1 basis
+      point, regime report-only; same bars and harness as the R11 rerun; funnel 1,289 s,
+      audit pass 752 s). Of all 30: 3 survive 2× (c24, c06, c27), 1 survives 3× (c06).
+      The gate passes 3 of 30 (old cost: 7 of 30).
+  - Funnel: 30 → 30 → 2 → 2 → 2 → 2 (old cost: 30 → 30 → 4 → 2 → 2 → 2). Same two final
+    survivors. c25 and c27 no longer pass Monte Carlo (pass rates 0.61 → 0.51 and
+    0.60 → 0.54 against 0.60).
+  - The eight strategies that were profitable at the old cost; four still are:
+
+    | Strategy | Sharpe, old → 1 bp | Return, old → 1 bp | Sharpe at 2× / 3× | Stress |
+    |---|---|---|---|---|
+    | c24 composite rule | 2.34 → 1.34 | 2.95% → 1.67% | 0.28 / -0.82 | pass (1 of 2) |
+    | c06 mean reversion | 1.53 → 1.37 | 0.23% → 0.21% | 1.21 / 1.05 | pass (2 of 2) |
+    | c25 composite rule | 0.99 → 0.45 | 1.02% → 0.45% | -0.06 / -0.53 | fail |
+    | c27 composite rule | 0.82 → 0.40 | 0.68% → 0.32% | 0.01 / -0.39 | pass (1 of 2, by 0.01) |
+    | c26 composite rule | 0.71 → -4.12 | 1.15% → -6.83% | -9.26 / -14.32 | fail |
+    | c01 momentum | 0.29 → -0.85 | 0.30% → -0.98% | -2.10 / -3.31 | fail |
+    | c20 composite rule | 0.12 → -0.50 | 0.10% → -0.53% | -1.10 / -1.69 | fail |
+    | c22 composite rule | 0.10 → -3.98 | 0.10% → -6.58% | -8.24 / -12.56 | fail |
+
+  - The break-even table above predicted this from the old run's trades: c24 at 2.32
+    basis points (re-simulated: still positive at 2, negative at 3), c25 at 2.01 and c27
+    at 1.97 (re-simulated at 2: -0.06 and 0.01), c26 / c01 / c20 / c22 under 0.25 (all
+    negative at 1). c24's return fell by 1.28 points against 1.27 predicted (126.9 times
+    capital at 1 basis point), which is the "Verify" line's second half.
+  - c06 trades 203 times and loses 0.02 points of return; c24 trades 4,139 times and
+    loses 1.28. At the old cost the stress gate could not tell these two apart.
+  - Regime, report-only for the first time in a real run: nobody eliminated, findings
+    recorded for 28 of 30 (none for c24 and c06). Overfitting: under R14.
 - [ ] Re-baseline: the 30-strategy run and the bench re-sim, before / after, in the
-      results log.
+      results log. The 30-strategy half is the box above (section 5's table is laid out
+      for the generator baseline, so the numbers stay here). Open: the bench re-sim on B
+      after deploy, against `bench_resims_2026-11-14_r10` (macd 1.21, mean reversion
+      -0.19, momentum -1.23).
 
 **Verify:** the fill rows' slippage sums to the difference between fill prices and bar
 closes, and the cost of the best strategy in the table is within the range the chosen
@@ -1367,6 +1398,11 @@ anything.
       train and test agree, not whether the strategy is good, so one that loses steadily
       in both scores as not overfit. The two walk-forward indicators carry half the
       weight and are unstable near zero.
+  - Same audit at 1 basis point (R12 run, 2026-11-15): 27 pass, 3 fail. It now fails
+    one profitable strategy, c27 (Sharpe 0.40, score 0.57 → 0.61), the case named above
+    as what the gate is for. It still passes 22 of the 24 losing strategies and both
+    that never traded. c24's score rose from 0.24 to 0.43. In the funnel both survivors
+    pass (0.15 and 0.43).
 - [ ] From that, decide what the gate should be. Candidates to weigh then: a minimum
       number of folds before the walk-forward indicators count (waits on longer history,
       item 5 of the order), a bar that rises with the number of candidates tried, the
