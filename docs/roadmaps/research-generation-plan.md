@@ -37,11 +37,11 @@ Keep this board in step with the boxes: when a box changes in section 3, change 
 | R8 | Simulator RNG keyed per decision | Not started | 0 / 4 | Inert until stochastic fills are switched on |
 | R9 | Generator has no selection | Folds into Step 2 | no boxes | Step 2 |
 | R10 | Stale marks when a bar is missing | **Done.** Merged PR #182, deployed to A and B | 6 / 2 | The re-sim vs platform correlation was not re-measured; more sparse-bar fixtures (R7) |
-| R11 | Stress gate: shocks report-only, costs decide | **Implemented, not committed.** Rerun done: funnel 30 → 30 → 4 → 2 → 2 → 2, the first run with final survivors | 5 / 0 | "Verify" (a strategy that fails stress) waits on the all-30 audit pass, still running |
-| R12 | Research trading cost: 1 basis point per trade | **Implemented, not committed** | 2 / 5 | Stress re-simulations at the new cost, re-baseline, slippage written to fill rows. Two midpoint guards wait for a `LIMIT` / `TWAP` policy |
+| R11 | Stress gate: shocks report-only, costs decide | **Committed `b6860b6b7`, pushed; PR not opened.** Rerun done: funnel 30 → 30 → 4 → 2 → 2 → 2, the first run with final survivors | 5 / 0 | Nothing. "Verify" met by the all-30 audit pass: 7 pass, 23 fail, for causes that differ. Stress at the new cost is R12's box |
+| R12 | Research trading cost: 1 basis point per trade | **Committed `bb2f09329`, pushed; PR not opened** | 2 / 5 | Stress re-simulations at the new cost, re-baseline, slippage written to fill rows. Two midpoint guards wait for a `LIMIT` / `TWAP` policy |
 | R13 | No parameter-stability check | Not decided | 0 / 2 | Decide whether to build the neighbour check |
-| R14 | Overfitting gate never exercised | First reading in: two strategies reached it, scores 0.13 and 0.24 against a limit of 0.6 | 1 / 2 | The all-30 audit reading, then decide what the gate should be |
-| R15 | Regime gate report-only on a short window | **Implemented, not committed** | 1 / 4 | The four prerequisites before `enforce` is switched on; all wait on longer history |
+| R14 | Overfitting gate never exercised | **Measured.** In the funnel 2 of 2 pass (0.13, 0.24 against a limit of 0.6). On all 30 it passes 26, including 16 of 20 losing strategies, and fails no profitable one: it changes no outcome | 1 / 2 | **Decision for the user:** what the gate should be. Then a realistic two-fold test |
+| R15 | Regime gate report-only on a short window | **Committed `1ca8c33e1`, pushed; PR not opened** | 1 / 4 | The four prerequisites before `enforce` is switched on; all wait on longer history |
 
 **Data**
 
@@ -56,14 +56,15 @@ monthly job 0 / 13. Section 5's results log is empty. Step 1 waits on R2.
 
 **Now and next, in order**
 
-1. Running: the audit pass of the R11 rerun (all 30 strategies through regime, stress
-   and overfitting). The funnel part is done and recorded under R11 and R14.
-2. The same run on the current tree (1 basis point, regime report-only). It closes R12's
+1. Done 2026-11-15: the R11 rerun and its audit pass (all 30 strategies through regime,
+   stress and overfitting), recorded under R11 and R14.
+2. Running since 2026-11-15 evening: the same run on the current tree (1 basis point, regime report-only). It closes R12's
    "stress at the new cost" and half of "re-baseline"; the bench re-sim on B is the
    other half.
-3. Full test suite once more with R15 in (it passed on R11 + R12: 5,396 passed), then
-   commit per finding and one PR for R11, R12, R15 and this plan. Nothing on
-   `research/r4-gate-audits` is committed.
+3. Done 2026-11-15: full suite green with R15 in; four commits on
+   `research/r4-gate-audits` (R11, R12, R15, plan), pushed. Open the PR; merge it after
+   the run in item 2, because merging and deploying changes what A's shadow tier
+   charges.
 4. Decide R14 from the reading. Decide R13.
 5. R5 and R6, with R2's code-only boxes (same validator; the train-failed folds change
    what the overfitting gate reads, so they come before R14 is settled).
@@ -131,7 +132,7 @@ something worth handing over, and 3.3(a) on the deployment track gives us the ha
 pattern to copy. Step 0c (checkpointing) is a cost/convenience fix and can slide to just
 before Step 5.
 
-### Step 0 — Pipeline integrity (audited 2026-11-07; R1 and R10 merged, R11 / R12 / R15 implemented and not committed, the rest open: see "Where we are")
+### Step 0 — Pipeline integrity (audited 2026-11-07; R1 and R10 merged, R11 / R12 / R15 committed on `research/r4-gate-audits` and pushed with no PR yet, the rest open: see "Where we are")
 
 Three suspicions the user raised while studying the backtesting funnel, each confirmed by
 reading the code (three parallel audits, key claims re-verified by hand). Fix these before
@@ -1062,7 +1063,7 @@ strategy that traded, and the rebuild with latest-close marks matches the simula
 curve to the cent.
 
 **R11 — The stress gate's shock check cannot be passed by a strategy that trades (found
-2026-11-15 under R4; option (a) chosen and implemented 2026-11-15, not yet committed).**
+2026-11-15 under R4; option (a) chosen and implemented 2026-11-15, commit `b6860b6b7`, pushed, no PR yet).**
 Correction to the title, found while writing the tests: a strategy that earned more than
 about 10% inside the window would have survived both one-bar shocks and reached 4 of 7.
 The best real strategy earned 2.95%. A synthetic Sharpe-3 curve with 5% earned reaches
@@ -1141,15 +1142,23 @@ stress has ever received a strategy.
     fail anything until the base cost is real, which is R12 (in the next run).
   - Regime, still enforcing in this run, removed the same two as before (c25, c27).
   - Overfitting: both pass, numbers under R14.
-  - "Verify" below is not met by the funnel: nobody failed stress, because only two
-    entered. The harness's audit pass (all 30 strategies through regime, stress and
-    overfitting) was still running when this was written; its result goes here.
+  - Audit pass, same run: all 30 strategies sent through regime, stress and overfitting
+    whatever the funnel decided (901 s). Stress passes 7 and fails 23.
+    - Pass: seven of the eight profitable strategies. c26, which trades 820 times its
+      capital, only just: Sharpe 0.71 → 0.44 → 0.12 at 1× / 2× / 3×.
+    - Fail, cost: c22 (684 times its capital), 0.10 → -0.16 → -0.43. The one strategy
+      the gate removes that the sign of its Sharpe had not.
+    - Fail, no trades: the two factor strategies that never traded, reason "2x costs: no
+      trades". Before R11 these passed on a Sharpe of 0.0.
+    - Fail, already losing: the other 20, Sharpe at or below zero before any multiplier.
+  - "Verify" below is met by the audit pass: strategies pass and fail, and the reasons
+    differ by cause.
 
 **Verify:** on the 30-strategy run at least one strategy passes stress and at least one
 fails it, and each failure reason names a cause that differs between strategies.
 
 **R12 — Research trades almost for free (found 2026-11-15 under R4, measured; 1 basis
-point per trade agreed and implemented 2026-11-15, not yet committed; re-baseline
+point per trade agreed and implemented 2026-11-15, commit `bb2f09329`, pushed; re-baseline
 open).** Every research and bench simulation is built by
 `build_platform_execution_service` (`execution/clients/simulated_broker_client.py:47-59`):
 zero commission, and slippage of 25 basis points × the order's share of that bar's
@@ -1265,8 +1274,8 @@ path: the spread estimate at `:64-75` is used only when a bar has no volume.
       2026-11-15, above.
 - [x] Decide the cost assumption: a spread per trade (flat, or per symbol) on top of the
       volume term, and where the number comes from. **1 basis point per trade, flat,
-      agreed 2026-11-15**, from the tight-quote fills above. Implemented, not yet
-      committed:
+      agreed 2026-11-15**, from the tight-quote fills above. Implemented (commit
+      `bb2f09329`):
   - `VolumeShareSlippageConfig.half_spread_bps`, default 1
     (`research/simulation/models/volume_share_slippage_model.py`). A fill now costs
     1 basis point plus the volume term. The no-volume fallback (floor 5) is unchanged.
@@ -1332,9 +1341,32 @@ anything.
   - The scores reproduce by hand from the weights (the stored `regime_concentration`
     is the share of buckets *with* a positive Sharpe, 0.73 and 0.80; the score uses one
     minus it, `overfitting_analysis.py:71-74`).
-  - What this does not show: whether the gate can fail a bad strategy. Both rows are
-    strategies that had already passed five gates. The audit pass over all 30 is the
-    reading for that; add it here when it finishes.
+  - What those two rows do not show: whether the gate can fail a bad strategy. Both had
+    already passed five gates.
+  - Audit pass, all 30 strategies (same run; walk-forward thresholds opened, so every
+    strategy has fold evidence): 26 pass, 4 fail.
+
+    | Group | Strategies | Pass | Scores |
+    |---|---|---|---|
+    | Sharpe above zero | 8 | 8 | 0.13 to 0.57 |
+    | Never traded | 2 | 2 | 0.42 |
+    | Sharpe below zero | 20 | 16 | 0.29 to 0.59 passing, 0.61 to 0.79 failing |
+
+    - It passes 16 of 20 losing strategies, the worst of the run included (Sharpe -1.79,
+      score 0.54), and both that never traded.
+    - It fails no profitable strategy. c27 comes closest at 0.57: train Sharpe 2.69, test
+      -0.22, the one case that looks like what the gate is for.
+    - The four it fails are all losing strategies with the train-to-test drop at its
+      maximum, and the drop is large because the train Sharpe in the denominator is near
+      zero or negative: train 0.10 and test -0.98 reads as a drop of 11.18, train -0.24
+      and test -1.78 as 6.36.
+    - The drop is 0.00 for 22 of 30 and the fold spread is at its cap of 1.0 for 13 of
+      30. Both are ratios over a mean of two fold Sharpes.
+    - Reading: on this run the gate changes no outcome. Everything it fails had already
+      failed earlier stages, and everything profitable passes. The score measures whether
+      train and test agree, not whether the strategy is good, so one that loses steadily
+      in both scores as not overfit. The two walk-forward indicators carry half the
+      weight and are unstable near zero.
 - [ ] From that, decide what the gate should be. Candidates to weigh then: a minimum
       number of folds before the walk-forward indicators count (waits on longer history,
       item 5 of the order), a bar that rises with the number of candidates tried, the
@@ -1343,7 +1375,7 @@ anything.
 
 **R15 — On a 60-session window the regime gate's verdict on a profitable strategy is
 close to chance (found 2026-11-15 under R4, measured; option (a) agreed and implemented
-2026-11-15, not yet committed).** Evidence in the
+2026-11-15, commit `1ca8c33e1`, pushed, no PR yet).** Evidence in the
 R4 regime note: with labels dealt to random days the gate fails a Sharpe-2.34 strategy
 48 times in 100. The cause is the window, not the rule's logic: a bucket of 18 or 19
 sessions cannot support a Sharpe floor of -1.0. In the open-upstream runs so far regime
