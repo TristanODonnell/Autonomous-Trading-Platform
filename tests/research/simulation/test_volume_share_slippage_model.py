@@ -105,10 +105,11 @@ class TestVolumeShareSlippageModel:
         assert capped_fill == exact_fill
 
     def test_volume_share_formula(self):
-        """slippage_bps = impact_coefficient_bps * volume_share."""
+        """With no spread, slippage_bps = impact_coefficient_bps * volume_share."""
         config = VolumeShareSlippageConfig(
             impact_coefficient_bps=Decimal("50"),
             max_volume_share=Decimal("1.0"),
+            half_spread_bps=Decimal("0"),
         )
         model = VolumeShareSlippageModel(config=config)
         # qty=100, volume=1000 → volume_share=0.1 → slippage_bps=5 → rate=0.0005
@@ -116,6 +117,53 @@ class TestVolumeShareSlippageModel:
         fill = model.calculate_fill_price(side=Side.BUY, market_price=Decimal("100"), context=ctx)
         expected = Decimal("100") * (Decimal("1") + Decimal("5") / Decimal("10000"))
         assert fill == expected
+
+    def test_default_half_spread_is_one_basis_point(self):
+        assert VolumeShareSlippageConfig().half_spread_bps == Decimal("1")
+
+    def test_half_spread_is_added_to_the_impact_term(self):
+        """slippage_bps = half_spread_bps + impact_coefficient_bps * volume_share."""
+        config = VolumeShareSlippageConfig(
+            impact_coefficient_bps=Decimal("50"),
+            max_volume_share=Decimal("1.0"),
+            half_spread_bps=Decimal("1"),
+        )
+        model = VolumeShareSlippageModel(config=config)
+        ctx = _ctx(qty="100", volume="1000")  # impact 5 bps + spread 1 bp
+        buy = model.calculate_fill_price(side=Side.BUY, market_price=Decimal("100"), context=ctx)
+        sell = model.calculate_fill_price(side=Side.SELL, market_price=Decimal("100"), context=ctx)
+        assert buy == Decimal("100") * (Decimal("1") + Decimal("6") / Decimal("10000"))
+        assert sell == Decimal("100") * (Decimal("1") - Decimal("6") / Decimal("10000"))
+
+    def test_small_order_still_pays_the_half_spread(self):
+        """Research-sized orders (0.01% of the bar) used to trade for about 0.0025 bps."""
+        model = VolumeShareSlippageModel()
+        ctx = _ctx(qty="1", volume="10000")  # 0.01% of the bar → impact 0.0025 bps
+        fill = model.calculate_fill_price(side=Side.BUY, market_price=Decimal("100"), context=ctx)
+        cost_bps = (fill / Decimal("100") - Decimal("1")) * Decimal("10000")
+        assert cost_bps == Decimal("1.0025")
+
+    def test_half_spread_does_not_depend_on_order_size(self):
+        """The spread is per dollar traded: a 10x larger order pays the same spread in bps."""
+        config = VolumeShareSlippageConfig(impact_coefficient_bps=Decimal("0"))
+        model = VolumeShareSlippageModel(config=config)
+        small = model.calculate_fill_price(
+            side=Side.BUY, market_price=Decimal("100"), context=_ctx(qty="1", volume="10000")
+        )
+        large = model.calculate_fill_price(
+            side=Side.BUY, market_price=Decimal("100"), context=_ctx(qty="10", volume="10000")
+        )
+        assert small == large == Decimal("100") * (Decimal("1") + Decimal("1") / Decimal("10000"))
+
+    def test_half_spread_is_not_added_to_the_no_volume_fallback(self):
+        """The fallback is already a spread estimate (floor 5 bps)."""
+        model = VolumeShareSlippageModel()
+        fill = model.calculate_fill_price(side=Side.BUY, market_price=Decimal("100"), context=None)
+        assert fill == Decimal("100") * (Decimal("1") + Decimal("5") / Decimal("10000"))
+
+    def test_negative_half_spread_is_rejected(self):
+        with pytest.raises(ValueError, match="half_spread_bps"):
+            VolumeShareSlippageConfig(half_spread_bps=Decimal("-1"))
 
     def test_fallback_to_spread_when_no_volume(self):
         """When bar_volume is absent, uses OHLC spread as proxy."""
@@ -170,6 +218,7 @@ class TestVolumeShareSlippageModel:
         assert "impact_coefficient_bps" in summary
         assert "max_volume_share" in summary
         assert "fallback_min_bps" in summary
+        assert summary["half_spread_bps"] == "1"
 
     def test_config_summary_values_are_strings(self):
         model = VolumeShareSlippageModel()
