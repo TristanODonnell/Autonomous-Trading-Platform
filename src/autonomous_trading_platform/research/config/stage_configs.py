@@ -403,6 +403,8 @@ class RegimeStageConfigModel(_GateWindowConfigMixin):
     max_regime_drawdown: float = -0.25
     min_positive_regime_fraction: float = 0.5
     on_insufficient_coverage: str = "pass"
+    # False = report only: findings recorded, nobody eliminated (plan item R15).
+    enforce: bool = False
     classifier_windows: RegimeClassifierWindowsModel = RegimeClassifierWindowsModel()
     label_warmup_calendar_days: int = 45
 

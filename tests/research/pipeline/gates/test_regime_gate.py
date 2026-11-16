@@ -65,7 +65,46 @@ def _trend(**sharpes: float) -> dict[str, RegimeConditionedMetrics]:
     return {label: _m("trend", label, sharpe=s) for label, s in sharpes.items()}
 
 
-CFG = RegimeGateConfig(dimensions=("trend",), min_bars_per_regime=20)
+# The rule tests run enforced: they are about what the rules find and decide.
+CFG = RegimeGateConfig(dimensions=("trend",), min_bars_per_regime=20, enforce=True)
+REPORT = RegimeGateConfig(dimensions=("trend",), min_bars_per_regime=20)
+
+
+class TestRegimeGateReportOnly:
+    """Default mode: the rules run and are recorded, the strategy passes (plan item R15)."""
+
+    def test_default_is_report_only(self) -> None:
+        assert RegimeGateConfig().enforce is False
+
+    def test_catastrophic_regime_is_recorded_and_does_not_fail(self) -> None:
+        profile = _profile(trend=_trend(bull=3.0, bear=-2.0, sideways=0.5))
+        verdict = evaluate_regime_gate(strategy_id="s1", profile=profile, config=REPORT)
+        assert verdict.passed
+        assert verdict.enforced is False
+        assert verdict.failure_reasons == ()
+        assert any("trend:bear Sharpe -2.00" in f for f in verdict.findings)
+
+    def test_findings_are_the_same_in_both_modes(self) -> None:
+        profile = _profile(trend=_trend(bull=2.0, bear=-0.3, sideways=-0.2))
+        reported = evaluate_regime_gate(strategy_id="s1", profile=profile, config=REPORT)
+        enforced = evaluate_regime_gate(strategy_id="s1", profile=profile, config=CFG)
+        assert reported.findings == enforced.findings == enforced.failure_reasons
+        assert reported.findings
+        assert reported.passed and not enforced.passed
+
+    def test_clean_profile_has_no_findings(self) -> None:
+        verdict = evaluate_regime_gate(
+            strategy_id="s1", profile=_profile(trend=_trend(bull=1.5, bear=0.4)), config=REPORT
+        )
+        assert verdict.passed and verdict.findings == ()
+
+    def test_insufficient_coverage_set_to_fail_is_still_only_recorded(self) -> None:
+        cfg = RegimeGateConfig(dimensions=("trend",), on_insufficient_coverage="fail")
+        verdict = evaluate_regime_gate(
+            strategy_id="s1", profile=_profile(trend=_trend(bull=1.0)), config=cfg
+        )
+        assert verdict.passed
+        assert "insufficient regime coverage" in verdict.findings[0]
 
 
 class TestRegimeGate:
@@ -117,7 +156,7 @@ class TestRegimeGate:
         assert any("insufficient regime coverage" in w for w in verdict.warnings)
 
     def test_insufficient_coverage_can_fail(self) -> None:
-        cfg = RegimeGateConfig(dimensions=("trend",), on_insufficient_coverage="fail")
+        cfg = RegimeGateConfig(dimensions=("trend",), on_insufficient_coverage="fail", enforce=True)
         verdict = evaluate_regime_gate(
             strategy_id="s1", profile=_profile(trend=_trend(bull=1.0)), config=cfg
         )
@@ -132,7 +171,9 @@ class TestRegimeGate:
         assert "no bars" in verdict.warnings[0]
 
     def test_unevaluated_dimension_does_not_block_evaluated_one(self) -> None:
-        cfg = RegimeGateConfig(dimensions=("trend", "volatility"), min_bars_per_regime=20)
+        cfg = RegimeGateConfig(
+            dimensions=("trend", "volatility"), min_bars_per_regime=20, enforce=True
+        )
         verdict = evaluate_regime_gate(
             strategy_id="s1",
             profile=_profile(trend=_trend(bull=1.0, bear=-3.0)),  # volatility empty

@@ -62,6 +62,15 @@ cannot be judged; if no dimension can be judged, `on_insufficient_coverage`
 (`pass` | `fail`, default `pass`) decides. A 90-day window that was bull
 throughout is common, which is why the default is `pass` (recorded as a warning).
 
+**Report only by default (`enforce: false`).** The rules run and what they found is
+on `RegimeGateVerdict.findings`, but nobody is eliminated; `failure_reasons` is
+empty and `passed` is true. On a ~60-session window a regime holds 18 to 19
+sessions, and an annualised Sharpe over 19 sessions has a standard error of about
+3.6: with the labels dealt to random days the rules still failed a Sharpe-2.3
+strategy 48 times in 100 (2026-11 real-bars run). Set `enforce: true` only when
+each judged regime holds enough sessions (about 100). The platform replay hook
+sets `enforce=False`.
+
 ### Stress = execution-cost re-simulations (judged) + equity-curve shocks (reported)
 
 - **Shocks** (existing `StressTestService`, no re-simulation): vol spike 2x/3x,

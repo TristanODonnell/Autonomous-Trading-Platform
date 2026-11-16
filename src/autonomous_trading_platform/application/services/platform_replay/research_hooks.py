@@ -639,6 +639,9 @@ def _build_replay_experiment_definition(
         # Stage 4 — regime robustness on auto-classified daily regimes. Reuses
         # the Monte Carlo base run (same window), so it adds no
         # simulations: one bar read + classification per research tick.
+        # Report only (enforce=False): on this ~60-session window a regime
+        # holds 18-19 sessions, too few for the thresholds below to tell a
+        # strategy from chance. The findings are recorded; nobody is eliminated.
         stages.append(
             RegimeStage(
                 stage_config=RegimeStageConfig(
@@ -655,6 +658,7 @@ def _build_replay_experiment_definition(
                         max_regime_drawdown=-0.20,
                         min_positive_regime_fraction=0.5,
                         on_insufficient_coverage="pass",
+                        enforce=False,
                     ),
                 ),
                 simulation_runner=simulation_runner,

@@ -16,6 +16,14 @@ A dimension with fewer than min_evaluable_regimes evaluable buckets (e.g. a
 90-day window that was bull the whole time) cannot be judged, and is skipped.
 If no dimension can be judged, on_insufficient_coverage decides the outcome
 ("pass" keeps the strategy with a warning; "fail" eliminates it).
+
+Report-only by default (enforce=False). The rules above are evaluated and what
+they found is recorded on the verdict as ``findings``, but the strategy passes.
+Reason (plan item R15): on a 60-session window a regime bucket holds 18 to 19
+sessions, and an annualised Sharpe over 19 sessions has a standard error of
+about 3.6. With the labels dealt to random days the rules still failed a
+Sharpe-2.3 strategy 48 times in 100. Set enforce=True only when each judged
+regime holds enough sessions for its Sharpe to mean something (about 100).
 """
 
 from __future__ import annotations
@@ -43,6 +51,8 @@ class RegimeGateConfig:
     max_regime_drawdown: float = -0.25
     min_positive_regime_fraction: float = 0.5
     on_insufficient_coverage: InsufficientPolicy = "pass"
+    # False = report only: findings are recorded, the strategy passes (see module docstring).
+    enforce: bool = False
 
     def __post_init__(self) -> None:
         if not self.dimensions:
@@ -80,11 +90,20 @@ class RegimeDimensionCheck:
 
 @dataclass(frozen=True)
 class RegimeGateVerdict:
+    """Gate decision.
+
+    ``findings`` is what the rules found, enforced or not. ``failure_reasons``
+    is the subset that eliminated the strategy: equal to ``findings`` when
+    ``enforced``, empty otherwise (``passed`` is then always True).
+    """
+
     strategy_id: str
     passed: bool
     dimension_checks: tuple[RegimeDimensionCheck, ...]
     failure_reasons: tuple[str, ...] = ()
     warnings: tuple[str, ...] = field(default_factory=tuple)
+    findings: tuple[str, ...] = ()
+    enforced: bool = False
 
     @property
     def evaluated_dimensions(self) -> list[str]:
@@ -188,19 +207,13 @@ def evaluate_regime_gate(
             f">= {config.min_bars_per_regime} bars",
         )
 
-    failures = tuple(f for c in evaluated for f in c.failures)
+    findings = tuple(f for c in evaluated for f in c.failures)
     warnings = tuple(
         f"{c.dimension}: not evaluated (only {len(c.evaluable_labels)} evaluable regime(s))"
         for c in checks
         if not c.evaluated
     )
-    return RegimeGateVerdict(
-        strategy_id=strategy_id,
-        passed=not failures,
-        dimension_checks=checks,
-        failure_reasons=failures,
-        warnings=warnings,
-    )
+    return _verdict(strategy_id, checks, config, findings=findings, warnings=warnings)
 
 
 def _insufficient(
@@ -209,12 +222,27 @@ def _insufficient(
     config: RegimeGateConfig,
     reason: str,
 ) -> RegimeGateVerdict:
-    passed = config.on_insufficient_coverage == "pass"
     message = f"insufficient regime coverage: {reason}"
+    if config.on_insufficient_coverage == "pass":
+        return _verdict(strategy_id, checks, config, findings=(), warnings=(message,))
+    return _verdict(strategy_id, checks, config, findings=(message,), warnings=())
+
+
+def _verdict(
+    strategy_id: str,
+    checks: tuple[RegimeDimensionCheck, ...],
+    config: RegimeGateConfig,
+    *,
+    findings: tuple[str, ...],
+    warnings: tuple[str, ...],
+) -> RegimeGateVerdict:
+    """Findings eliminate the strategy only when the gate is enforced."""
     return RegimeGateVerdict(
         strategy_id=strategy_id,
-        passed=passed,
+        passed=not findings if config.enforce else True,
         dimension_checks=checks,
-        failure_reasons=() if passed else (message,),
-        warnings=(message,) if passed else (),
+        failure_reasons=findings if config.enforce else (),
+        warnings=warnings,
+        findings=findings,
+        enforced=config.enforce,
     )
