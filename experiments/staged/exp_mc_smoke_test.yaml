@@ -13,6 +13,9 @@ parameter_space:
   long_window: [50, 100]
 
 staged_pipeline_config:
+  # Plumbing check only: the filters below pass everything, which the pipeline
+  # validator rejects unless the pipeline says so. Survivors are not evidence.
+  smoke: true
   stages:
 
     # Passthrough — let everything survive into MC

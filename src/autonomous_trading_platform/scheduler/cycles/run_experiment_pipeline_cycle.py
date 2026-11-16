@@ -416,7 +416,9 @@ def _load_experiment_definition_from_yaml(
         stages = [
             StageRegistry.load(stage_raw, simulation_runner) for stage_raw in pipeline_raw["stages"]
         ]
-        staged_pipeline_config = StagedPipelineConfig(stages=stages)
+        staged_pipeline_config = StagedPipelineConfig(
+            stages=stages, smoke=bool(pipeline_raw.get("smoke", False))
+        )
 
     return ExperimentDefinition(
         experiment_id=raw["experiment_id"],

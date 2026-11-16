@@ -142,14 +142,11 @@ Computed metrics:
 
 ### Window types
 
-The `WalkForwardStage` (Stage 3 pipeline) already implements rolling windows.
-The validation service additionally documents three patterns:
-
-| Type | Description |
-|------|-------------|
-| Rolling | Fixed-width train window slides forward by step_days |
-| Expanding | Train window grows from a fixed anchor |
-| Anchored | Test window advances; train always starts from experiment start |
+`WalkForwardStage` builds rolling windows only: a fixed-width train window that
+slides forward by `step_days`, each followed by its test window. Expanding and
+anchored windows are not implemented (an unused `WindowType` enum that named
+them was removed in 2026-11). Neither would add test folds: the number of folds
+is set by the span left after the first train window and by `step_days`.
 
 ### Fold identity
 

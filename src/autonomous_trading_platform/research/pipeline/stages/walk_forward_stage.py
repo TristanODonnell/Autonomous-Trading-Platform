@@ -20,6 +20,15 @@ before the first test fold starts).
 Fold boundaries are calendar days, and train_end and test_start are the same
 date.
 
+Rules the config enforces (plan items R2 and R6)
+------------------------------------------------
+- step_days >= test_days, so no day is in two test folds. A config that
+  cannot meet this yet says so with allow_overlapping_test_folds=True.
+- min_folds_passed <= the number of folds the window produces (when
+  require_all_folds is False), or no strategy could ever pass.
+The rule that test folds start after earlier selection stages end involves
+other stages and lives in pipeline_validation.py.
+
 Place in the pipeline
 ---------------------
 Second of the six stages in the current pipeline (research_hooks.py):
@@ -71,6 +80,7 @@ from autonomous_trading_platform.research.validation.walk_forward_validation imp
 )
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
+from ..pipeline_validation import StageWindowFacts
 from .base_stage import BaseStage, StageDiagnostics, StageResult
 
 logger = logging.getLogger(__name__)
@@ -115,6 +125,10 @@ class WalkForwardStageConfig:
     execution_mode: ExecutionMode = ExecutionMode.SERIAL
     max_workers: int = 1
     fail_fast: bool = False
+    # A named exception to the step_days >= test_days rule, for a window too
+    # short to hold two separate test folds. Overlapping folds share days, so
+    # two passes are less than two independent pieces of evidence.
+    allow_overlapping_test_folds: bool = False
 
     def __post_init__(self) -> None:
         if self.train_days <= 0:
@@ -132,6 +146,34 @@ class WalkForwardStageConfig:
                 f"Date range ({total_days} days) is shorter than "
                 f"train_days + test_days ({min_span} days). No folds can be generated."
             )
+        if self.step_days < self.test_days and not self.allow_overlapping_test_folds:
+            raise ValueError(
+                f"step_days ({self.step_days}) < test_days ({self.test_days}): consecutive test "
+                f"folds would share {self.test_days - self.step_days} days. Use step_days >= "
+                "test_days, or set allow_overlapping_test_folds=True to accept it knowingly."
+            )
+        n_folds = len(self.fold_windows())
+        if not self.require_all_folds and self.min_folds_passed > n_folds:
+            raise ValueError(
+                f"min_folds_passed ({self.min_folds_passed}) > the {n_folds} fold(s) this window "
+                "produces: no strategy could pass."
+            )
+
+    @property
+    def first_test_start(self) -> date:
+        return self.start_date + timedelta(days=self.train_days)
+
+    def fold_windows(self) -> list[tuple[date, date, date, date]]:
+        """(train_start, train_end, test_start, test_end) for every fold that fits."""
+        windows: list[tuple[date, date, date, date]] = []
+        train_start = self.start_date
+        while True:
+            train_end = train_start + timedelta(days=self.train_days)
+            test_end = train_end + timedelta(days=self.test_days)
+            if test_end > self.end_date:
+                return windows
+            windows.append((train_start, train_end, train_end, test_end))
+            train_start += timedelta(days=self.step_days)
 
 
 @dataclass
@@ -251,6 +293,7 @@ class WalkForwardStage(BaseStage):
             step_days=validated.step_days,
             require_all_folds=validated.require_all_folds,
             min_folds_passed=validated.min_folds_passed,
+            allow_overlapping_test_folds=validated.allow_overlapping_test_folds,
             execution_mode=ExecutionMode(validated.execution_mode),
             max_workers=validated.max_workers,
             fail_fast=validated.fail_fast,
@@ -264,6 +307,18 @@ class WalkForwardStage(BaseStage):
     @property
     def stage_name(self) -> str:
         return self._cfg.name
+
+    def validation_facts(self) -> StageWindowFacts:
+        cfg = self._cfg
+        return StageWindowFacts(
+            stage_name=cfg.name,
+            kind="walk_forward",
+            first_test_start=cfg.first_test_start,
+            filters=(
+                ("train_filter_config", cfg.train_filter_config),
+                ("test_filter_config", cfg.test_filter_config),
+            ),
+        )
 
     def run(
         self,
@@ -386,29 +441,18 @@ class WalkForwardStage(BaseStage):
         )
 
     def _generate_folds(self) -> list[_Fold]:
-        folds: list[_Fold] = []
-        fold_index = 0
-        train_start = self._cfg.start_date
-
-        while True:
-            train_end = train_start + timedelta(days=self._cfg.train_days)
-            test_start = train_end
-            test_end = test_start + timedelta(days=self._cfg.test_days)
-            if test_end > self._cfg.end_date:
-                break
-            folds.append(
-                _Fold(
-                    index=fold_index,
-                    train_start=train_start,
-                    train_end=train_end,
-                    test_start=test_start,
-                    test_end=test_end,
-                )
+        return [
+            _Fold(
+                index=index,
+                train_start=train_start,
+                train_end=train_end,
+                test_start=test_start,
+                test_end=test_end,
             )
-            train_start += timedelta(days=self._cfg.step_days)
-            fold_index += 1
-
-        return folds
+            for index, (train_start, train_end, test_start, test_end) in enumerate(
+                self._cfg.fold_windows()
+            )
+        ]
 
     def _run_fold(
         self,

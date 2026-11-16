@@ -60,6 +60,9 @@ if TYPE_CHECKING:
     )
     from autonomous_trading_platform.research.pipeline.gates.regime_gate import RegimeGateVerdict
     from autonomous_trading_platform.research.pipeline.gates.stress_gate import StressGateVerdict
+    from autonomous_trading_platform.research.pipeline.pipeline_validation import (
+        StageWindowFacts,
+    )
     from autonomous_trading_platform.research.validation.overfitting_analysis import (
         OverfittingAnalysisResult,
     )
@@ -156,6 +159,14 @@ class BaseStage(ABC):
         initial_cash: float,
         resample_to_daily: bool = False,
     ) -> StageResult: ...
+
+    def validation_facts(self) -> StageWindowFacts | None:
+        """What the pipeline validator needs to know about this stage.
+
+        None (the default) means the stage takes no part in the cross-stage
+        rules. Stages that select on a date window or test on folds override it.
+        """
+        return None
 
     @classmethod
     @abstractmethod

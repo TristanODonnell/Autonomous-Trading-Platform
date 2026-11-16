@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 # backstop for edges too thin to survive live costs.
 RESEARCH_MAX_DAILY_TURNOVER = 10.0
 
+# Calendar days of history a research tick reads (about 64 sessions). Override
+# per replay with research.options.lookback_days. Walk-forward needs 75.
+DEFAULT_RESEARCH_LOOKBACK_DAYS = 90
+
 
 def run_research_at_timestamp(
     *,
@@ -107,8 +111,11 @@ def run_scheduled_research_at_timestamp(
     Supported keys:
       profile: "full" (default) | "smoke" — smoke shrinks candidate counts,
                Monte Carlo runs and cost scenarios for cheap verification runs.
+      lookback_days: calendar days of history the research window covers
+               (default 90). The window is still clamped to the dataset's start.
     """
     profile = _resolve_research_profile(research_options)
+    lookback_days = _resolve_lookback_days(research_options)
     base = dict(
         domain="research",
         timestamp=timestamp,
@@ -149,6 +156,7 @@ def run_scheduled_research_at_timestamp(
             simulation_runner=simulation_context.simulation_runner,
             dataset_version_id_override=dataset_version_id,
             profile=profile,
+            lookback_days=lookback_days,
         )
     except SurvivorshipBiasError as exc:
         return ResearchReplayResult(**base, status="failed", errors=[f"survivorship_guard: {exc}"])
@@ -404,6 +412,7 @@ def _build_replay_experiment_definition(
     simulation_runner,  # SimulationRunner — avoid hard import cycle
     dataset_version_id_override: str | None = None,
     profile: str = "full",
+    lookback_days: int = DEFAULT_RESEARCH_LOOKBACK_DAYS,
 ):
     """Build an ExperimentDefinition with the staged pipeline for the monthly research tick.
 
@@ -483,9 +492,6 @@ def _build_replay_experiment_definition(
         dataset_version = dataset_row.dataset_version_id
         price_basis = PriceBasis.RAW
 
-    lookback_days = (
-        90  # ~64 trading days; covers 3 months so walk-forward (needs 75 days) always fires
-    )
     lookback_start = tick_date - timedelta(days=lookback_days)
     # Clamp to the dataset's coverage start so walk-forward folds don't request
     # data before the replay began (cumulative dataset has no pre-replay bars).
@@ -605,6 +611,11 @@ def _build_replay_experiment_definition(
                 train_days=_wf_train_days,
                 test_days=_wf_test_days,
                 step_days=15,
+                # Known exception (plan R2 / R6): on a 90-day window the two test
+                # folds share 15 days, and a layout without overlap leaves one
+                # fold. Remove this when the lookback is long enough for
+                # step_days >= test_days (plan package B).
+                allow_overlapping_test_folds=True,
                 train_filter_config=wf_mc_filter,
                 train_scoring_weights=default_weights,
                 test_filter_config=wf_mc_filter,
@@ -761,6 +772,13 @@ def _resolve_research_universe_scope(*, session: Session, start_date: date, end_
 
 
 _RESEARCH_PROFILES = frozenset({"full", "smoke"})
+
+
+def _resolve_lookback_days(research_options: dict | None) -> int:
+    raw: object = (research_options or {}).get("lookback_days", DEFAULT_RESEARCH_LOOKBACK_DAYS)
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+        raise ValueError(f"research.options.lookback_days must be a positive integer, got {raw!r}")
+    return raw
 
 
 def _resolve_research_profile(research_options: dict | None) -> str:

@@ -124,6 +124,34 @@ the walk-forward evidence has enough folds. The platform replay hook sets
 
 Place `overfitting` last: it can only see stages that ran before it.
 
+## Pipeline rules (checked before anything runs)
+
+A pipeline that breaks one of these is rejected when it is built, whether it comes
+from an experiment YAML or from Python (the replay hook). `atp research
+validate-config` reports them.
+
+| Rule | Where it is checked | Exception |
+|---|---|---|
+| A walk-forward stage's first test fold starts after every earlier simulation (selection) stage has stopped reading | `StagedPipelineConfig` → `research/pipeline/pipeline_validation.py` | `smoke: true` on the pipeline |
+| No filter with `min_sharpe <= 0` and `min_trades == 0` (it asks for no evidence) | same | `smoke: true` on the pipeline |
+| `step_days >= test_days`, so no day is in two test folds | `WalkForwardStageConfig` | `allow_overlapping_test_folds: true` on the stage |
+| `min_folds_passed` no larger than the number of folds the window holds (when `require_all_folds` is false) | `WalkForwardStageConfig` | none |
+
+The two kinds of rule live in two places on purpose. A rule about one stage is
+checked by that stage's config class, which both the YAML loader and Python code
+construct. A rule about several stages is checked by `StagedPipelineConfig`, which
+every loader builds. Rules written only into the YAML models
+(`research/config/stage_configs.py`) are skipped by pipelines built in Python.
+
+`smoke: true` (YAML: `staged_pipeline_config.smoke`) marks a pipeline that checks
+plumbing only; its survivors are not evidence. The replay hook sets
+`allow_overlapping_test_folds=True`: on a 90-day window its two test folds share
+15 days, and a layout without overlap leaves one fold. That exception goes when
+the research window is long enough.
+
+The hook's window length is `research.options.lookback_days` in the replay
+fixture (default 90 calendar days).
+
 ## Platform replay integration
 
 `run_scheduled_research_at_timestamp` builds all six stages whenever walk-forward
