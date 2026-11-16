@@ -64,11 +64,17 @@ def run_universe_at_timestamp(
 
     min_intraday_bar_coverage, when set, adds an eligibility check: a name needs at
     least that share of its five-minute bars over the last 20 sessions (minute bars
-    fetched from Alpaca for the pool). Off by default. With it on, a run whose
-    candidate scoring fails does not rotate at all.
+    fetched from Alpaca for the pool). Off by default.
 
-    Nothing here commits the caller's ``session`` for step 3: the scheduler's chain
-    and the operator CLI decide whether the rotation is kept or rolled back.
+    If the pool refresh (step 1) or candidate scoring (step 2) fails, the result is
+    ``failed`` and nothing is rotated: the universe stays as it was. Scoring reads the
+    newest stored pool at or before T and the rotation would take a stored candidate,
+    so carrying on would look like a normal rotation while using another date's pool
+    or stale scores.
+
+    Nothing here commits the caller's ``session`` for step 3, and nothing here rolls
+    it back on failure: the scheduler's chain and the operator CLI decide whether the
+    rotation is kept or rolled back.
     """
     base = dict(
         domain="universe",
@@ -88,7 +94,6 @@ def run_universe_at_timestamp(
             summary={"dry_run": True, "timestamp": timestamp.isoformat()},
         )
 
-    warnings: list[str] = []
     candidate_summary: dict[str, Any] = {}
     candidate_version_id: str | None = None
 
@@ -112,7 +117,21 @@ def run_universe_at_timestamp(
         refresh_svc.refresh(cadence="monthly", captured_at=timestamp)
         session.commit()
     except Exception as exc:
-        warnings.append(f"screener_refresh_failed: {exc}")
+        # No scoring on an older stored pool: the universe stays as it was.
+        _logger.error(
+            "universe pool refresh failed; rotation not attempted",
+            extra={
+                "timestamp": timestamp.isoformat(),
+                "screener_source": screener_source,
+                "error": str(exc),
+                "traceback": traceback.format_exc(),
+            },
+        )
+        return UniverseReplayResult(
+            **base,
+            status="failed",
+            errors=[f"screener_refresh_failed: {exc}"],
+        )
 
     # ── Step 2: generate scored candidate universe from pool ─────────────────
     try:
@@ -146,16 +165,20 @@ def run_universe_at_timestamp(
         if min_intraday_bar_coverage is not None:
             candidate_summary["min_intraday_bar_coverage"] = min_intraday_bar_coverage
     except Exception as exc:
-        warnings.append(f"candidate_generation_failed: {exc}")
-        if min_intraday_bar_coverage is not None:
-            # Step 3 would fall back to the latest stored candidate, which was not
-            # checked for coverage.
-            return UniverseReplayResult(
-                **base,
-                status="failed",
-                errors=[f"candidate_generation_failed: {exc}"],
-                warnings=warnings,
-            )
+        # No rotation without this run's scores: the universe stays as it was.
+        _logger.error(
+            "universe candidate generation failed; rotation not attempted",
+            extra={
+                "timestamp": timestamp.isoformat(),
+                "error": str(exc),
+                "traceback": traceback.format_exc(),
+            },
+        )
+        return UniverseReplayResult(
+            **base,
+            status="failed",
+            errors=[f"candidate_generation_failed: {exc}"],
+        )
 
     # ── Step 3: rotate — select best 20 from scored candidates ──────────────
     try:
@@ -163,8 +186,7 @@ def run_universe_at_timestamp(
         # live trading where real capital is at risk. In a historical backtest the
         # universe should rotate freely so the simulation reflects real month-over-month
         # composition changes. config_hash_unchanged still gates no-op skips.
-        # The candidate step 2 just built. Only when step 2 failed (None) does the
-        # rotation fall back to the latest stored candidate.
+        # The candidate step 2 just built, not "the latest stored candidate".
         result = run_universe_rotation(
             candidate_version_id=candidate_version_id,
             config=UniverseRebalanceConfig(),
@@ -189,7 +211,6 @@ def run_universe_at_timestamp(
             **base,
             status="failed",
             errors=[str(exc)],
-            warnings=warnings,
         )
 
     if result is None:
@@ -216,7 +237,6 @@ def run_universe_at_timestamp(
     return UniverseReplayResult(
         **base,
         status="ok",
-        warnings=warnings,
         universe_version_id=new_version.universe_version_id,
         symbol_count=len(members2),
         rotation_applied=not result.skipped,

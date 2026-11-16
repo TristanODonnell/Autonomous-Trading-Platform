@@ -232,10 +232,12 @@ def _failing_candidate_generation(**kwargs: Any) -> Any:
     raise RuntimeError("alpaca 5xx")
 
 
-def test_with_a_coverage_minimum_a_failed_scoring_run_does_not_rotate(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("options", [{}, {"min_intraday_bar_coverage": 0.70}])
+def test_a_failed_scoring_run_does_not_rotate(
+    monkeypatch: pytest.MonkeyPatch, options: dict[str, Any]
 ) -> None:
-    # The fallback candidate would be an older one that was never checked for coverage.
+    # Rotating on an older stored candidate would look like a normal rotation while
+    # using stale scores (and, with a coverage minimum, unchecked names).
     rotated: list[Any] = []
     _patch_pool_refresh(monkeypatch)
     monkeypatch.setattr(cand_mod, "run_candidate_generation", _failing_candidate_generation)
@@ -246,26 +248,49 @@ def test_with_a_coverage_minimum_a_failed_scoring_run_does_not_rotate(
 
     monkeypatch.setattr(universe_hooks, "run_universe_rotation", _rotate)
 
-    result = _run_hook(min_intraday_bar_coverage=0.70)
+    result = _run_hook(**options)
 
     assert result.status == "failed"
     assert result.errors == ["candidate_generation_failed: alpaca 5xx"]
     assert rotated == []
 
 
-def test_without_a_coverage_minimum_a_failed_scoring_run_still_falls_back(
-    monkeypatch: pytest.MonkeyPatch,
+def _raise_membership_unavailable(*args: Any, **kwargs: Any) -> Any:
+    raise RuntimeError("membership unavailable")
+
+
+@pytest.mark.parametrize("failing_part", ["building the screener", "fetching the pool"])
+def test_a_failed_pool_refresh_does_not_score_or_rotate(
+    monkeypatch: pytest.MonkeyPatch, failing_part: str
 ) -> None:
-    # Unchanged behaviour for the scheduler's month-end step.
-    rotation: dict[str, Any] = {}
+    # Scoring reads the newest stored pool at or before the timestamp, so carrying on
+    # would score another date's pool and report a normal rotation.
+    later_steps: list[str] = []
     _patch_pool_refresh(monkeypatch)
-    monkeypatch.setattr(cand_mod, "run_candidate_generation", _failing_candidate_generation)
-    monkeypatch.setattr(
-        universe_hooks, "run_universe_rotation", lambda **k: rotation.update(k) or _rotation()
-    )
+    if failing_part == "building the screener":
+        monkeypatch.setattr(
+            "autonomous_trading_platform.universe.providers.point_in_time_index_provider.build_universe_screener",
+            _raise_membership_unavailable,
+        )
+    else:
+        monkeypatch.setattr(
+            "autonomous_trading_platform.universe.services.raw_market_pool_refresh_service.RawMarketPoolRefreshService",
+            lambda *a, **k: SimpleNamespace(refresh=_raise_membership_unavailable),
+        )
+
+    def _score(**kwargs: Any) -> Any:
+        later_steps.append("score")
+        return _candidate({})
+
+    def _rotate(**kwargs: Any) -> Any:
+        later_steps.append("rotate")
+        return _rotation()
+
+    monkeypatch.setattr(cand_mod, "run_candidate_generation", _score)
+    monkeypatch.setattr(universe_hooks, "run_universe_rotation", _rotate)
 
     result = _run_hook()
 
-    assert result.status == "ok"
-    assert result.warnings == ["candidate_generation_failed: alpaca 5xx"]
-    assert rotation["candidate_version_id"] is None
+    assert result.status == "failed"
+    assert result.errors == ["screener_refresh_failed: membership unavailable"]
+    assert later_steps == []

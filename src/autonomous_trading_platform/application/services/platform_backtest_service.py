@@ -910,6 +910,10 @@ class PlatformBacktestRunner:
                         screener_source=inputs.universe_screener_source,
                     )
                     tick.universe = uni_result.summary
+                    if uni_result.errors:
+                        # The run goes on with the universe it had; the tick says why.
+                        tick.errors.extend(uni_result.errors)
+                    all_warnings.extend(uni_result.warnings)
                     cadence.record("universe", tick_date)
 
                 # ── Trading cycle ────────────────────────────────────────────

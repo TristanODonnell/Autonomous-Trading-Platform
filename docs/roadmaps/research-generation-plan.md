@@ -111,7 +111,7 @@ Package A is merged and deployed. Nothing is running.
 | # | Package | Boxes it closes | Waits on | Size |
 |---|---|---|---|---|
 | 🟢 A | **Validators and evidence** (done: merged PR #184, deployed 2026-11-16) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | Nothing | One PR, no new data (#184) |
-| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) built, committed, PR pending (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; decisions being taken | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
+| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; decisions being taken | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
 | 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
 | 🔴 D | **Test hardening (R7)** | R7 both boxes, and the R7 boxes under R10, R14, R15 | Nothing | Can ride along with A and B |
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R8, R12's slippage in fill rows, D2 | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
@@ -2350,8 +2350,8 @@ behind a fixture flag; default stays `alpaca`.
     - *Decision, 2026-11-16 (user): 70%.* 80% leaves 17 names at the window's start,
       fewer than the universe holds; 60% admits names missing about 31 of 78 bars a
       day.
-    - [x] Coverage check built (2026-11-16, committed, PR pending, branch
-          `research/package-b-long-dataset`): `CandidateGenerationConfig.
+    - [x] Coverage check built (2026-11-16, merged as PR #186, deployed to A and B as
+          `32ad47995` the same day): `CandidateGenerationConfig.
           min_intraday_bar_coverage` (None = off, the default) and
           `atp universe monthly-rotation --min-bar-coverage 0.70`. A name that passed
           the other checks is rejected as `insufficient_intraday_coverage` when its
@@ -2380,14 +2380,53 @@ behind a fixture flag; default stays `alpaca`.
           the same date (B has one from the dry run) or a later-dated one would have
           been picked up instead. Live behaviour is the same whenever the scoring
           step succeeds.
-    - [ ] Found, not changed: when candidate scoring fails, the rotation goes ahead on
-          the latest stored candidate with only a warning. That is A's month-end path.
-          With the coverage option on, the run now fails instead; without it the old
-          behaviour stands. Decide whether a failed scoring step should always stop
-          the rotation.
-    - [ ] Dry run on B with `--min-bar-coverage 0.70` after merge and deploy (the
-          morning's candidate row for the same date is still there, which is the case
-          the candidate fix covers).
+    - [x] A failed scoring step stops the rotation, for every caller (user's decision
+          2026-11-16: "Stop the rotation"; built the same day, committed, PR pending, branch
+          `research/package-b-window-split`). Before, the rotation went ahead on the
+          latest stored candidate with only a warning, which on A's month-end path
+          meant a rotation on last month's scores that looked like a normal one. Now
+          the result is `failed`, the universe stays as it was, and A's end-of-day
+          chain records the step as failed with the error. A normal month-end is
+          unchanged. Not yet deployed; A's next month-end rotation is the first place
+          it matters.
+    - [x] A failed pool refresh stops the rotation too, for every caller (user's
+          decision 2026-11-16, later the same day: "Stop the rotation"; built the same
+          day on `research/package-b-window-split`, not yet deployed). Before, the
+          step only warned and scoring ran on "the newest stored pool at or before the
+          rotation date". On A's month-end that is last month's 500 names, a small
+          effect. On B's historical runs it is whatever pool is stored for an earlier
+          date, labelled as point-in-time for the date asked for, which is the case
+          the point-in-time pool exists to prevent. Now the result is `failed`, the
+          universe stays as it was, scoring is not run. Known cost, accepted: on A,
+          stopping leaves last month's 20 names in place where the old fallback would
+          have re-scored last month's 500. The hook does not roll the session back
+          itself; the end-of-day chain and the operator command already do when the
+          result is `failed`.
+    - [x] A backtest reports a failed universe step as an error on its tick (user's
+          decision 2026-11-16: "Record it as an error"; built the same day, same
+          branch, not yet deployed). The universe step was the only backtest step
+          whose errors were dropped (the run read its summary only), so a run whose
+          monthly rotation failed kept its universe and finished `ok` with no message.
+          With the box above, a failed pool refresh inside a backtest no longer
+          rotates on a stored pool, so the report matters more. Now the tick counts as
+          failed, the run still finishes, its status is `completed_with_errors`, the
+          command exits 1 and the error text is in the result. The worker's backtests
+          run through this path; its run service already keeps and uploads the result
+          of a run that exits 1. Checked by a one-tick backtest test that fails
+          without the change. Side effect to know: a failed tick writes no checkpoint,
+          so a resumed run restarts from the last clean tick.
+    - [x] Checked, no change: the backtest's own first-day pool refresh
+          (`platform_backtest_service.py`, the bootstrap block) is separate code from
+          the hook and is not a silent fallback. When its screener fails it starts the
+          run on the fixture's own symbols, stores that universe with source
+          `yaml_bootstrap_fallback` and reason `screener_unavailable`, and adds a
+          warning that the run reports.
+    - [x] Dry run on B with `--min-bar-coverage 0.70` (2026-11-16 09:35 UTC, through
+          `worker_job.sh`, 102 s, exit 0): 37 of 465 eligible, 427 rejected for
+          coverage, and the same 20 names as the laptop run. The morning's candidate
+          for the same date was in the database and was not the one used, which is
+          the case the candidate fix covers. Nothing kept; B now holds two candidate
+          rows as audit records.
     - [ ] Box A's rotation turns the check on separately, at a monthly rotation, as
           its own decision (at 70% today it would drop COST, CRM, ADBE, HD, MA).
     - [ ] `--enforce` on B once the start date and the coverage question are settled.
