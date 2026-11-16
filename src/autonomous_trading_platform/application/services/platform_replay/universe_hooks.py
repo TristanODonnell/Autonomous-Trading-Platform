@@ -66,12 +66,15 @@ def run_universe_at_timestamp(
     least that share of its five-minute bars over the last 20 sessions (minute bars
     fetched from Alpaca for the pool). Off by default.
 
-    If candidate scoring (step 2) fails, the result is ``failed`` and nothing is
-    rotated: the universe stays as it was. Rotating on an older stored candidate
-    would look like a normal rotation while using stale scores.
+    If the pool refresh (step 1) or candidate scoring (step 2) fails, the result is
+    ``failed`` and nothing is rotated: the universe stays as it was. Scoring reads the
+    newest stored pool at or before T and the rotation would take a stored candidate,
+    so carrying on would look like a normal rotation while using another date's pool
+    or stale scores.
 
-    Nothing here commits the caller's ``session`` for step 3: the scheduler's chain
-    and the operator CLI decide whether the rotation is kept or rolled back.
+    Nothing here commits the caller's ``session`` for step 3, and nothing here rolls
+    it back on failure: the scheduler's chain and the operator CLI decide whether the
+    rotation is kept or rolled back.
     """
     base = dict(
         domain="universe",
@@ -91,7 +94,6 @@ def run_universe_at_timestamp(
             summary={"dry_run": True, "timestamp": timestamp.isoformat()},
         )
 
-    warnings: list[str] = []
     candidate_summary: dict[str, Any] = {}
     candidate_version_id: str | None = None
 
@@ -115,7 +117,21 @@ def run_universe_at_timestamp(
         refresh_svc.refresh(cadence="monthly", captured_at=timestamp)
         session.commit()
     except Exception as exc:
-        warnings.append(f"screener_refresh_failed: {exc}")
+        # No scoring on an older stored pool: the universe stays as it was.
+        _logger.error(
+            "universe pool refresh failed; rotation not attempted",
+            extra={
+                "timestamp": timestamp.isoformat(),
+                "screener_source": screener_source,
+                "error": str(exc),
+                "traceback": traceback.format_exc(),
+            },
+        )
+        return UniverseReplayResult(
+            **base,
+            status="failed",
+            errors=[f"screener_refresh_failed: {exc}"],
+        )
 
     # ── Step 2: generate scored candidate universe from pool ─────────────────
     try:
@@ -162,7 +178,6 @@ def run_universe_at_timestamp(
             **base,
             status="failed",
             errors=[f"candidate_generation_failed: {exc}"],
-            warnings=warnings,
         )
 
     # ── Step 3: rotate — select best 20 from scored candidates ──────────────
@@ -196,7 +211,6 @@ def run_universe_at_timestamp(
             **base,
             status="failed",
             errors=[str(exc)],
-            warnings=warnings,
         )
 
     if result is None:
@@ -223,7 +237,6 @@ def run_universe_at_timestamp(
     return UniverseReplayResult(
         **base,
         status="ok",
-        warnings=warnings,
         universe_version_id=new_version.universe_version_id,
         symbol_count=len(members2),
         rotation_applied=not result.skipped,
