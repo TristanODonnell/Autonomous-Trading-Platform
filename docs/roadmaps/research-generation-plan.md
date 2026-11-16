@@ -14,20 +14,20 @@ pieces on A (Step 3's endpoint) and the worker timers (Step 5), and both stay in
 switched on. Deployment findings keep going into the pre-launch plan; research findings
 (numbered R1, R2, …) go here.
 
-Last updated: 2026-11-15 night. Status is in "Where we are" directly below; the detail
+Last updated: 2026-11-16 (08:30 UTC). Status is in "Where we are" directly below; the detail
 and the evidence for every line are in section 3.
 
-## Where we are (2026-11-15 night)
+## Where we are (2026-11-16)
 
 Every unticked box was checked against the code or the recorded evidence on 2026-11-15.
 
-> **Now.** Package A (validators and evidence) is finished and committed on
-> `research/r6-r2-validators`, waiting for its PR. Five commits, one per finding:
-> R14 overfitting gate report-only (`59d2079a5`); R6 + R2 pipeline rules checked when a
-> pipeline is built (`515db54b7`); R2 train-failed folds kept as evidence
-> (`77fbe69b6`); R5 + R16 deciding scores rest on walk-forward and Monte Carlo only
-> (`d964b96a2`); this plan. Full suite passing; R16 measured on real bars before and
-> after. Not merged, not deployed.
+> **Now.** Package A (validators and evidence) is **merged as PR #184** (`5202ddd61`)
+> and **deployed to A and B on 2026-11-16 at 06:23 UTC**. Checked on the boxes: both on
+> the merge commit; A's app and scheduler restarted and import the evidence policy; B's
+> image rebuilt. Five commits, one per finding: R14 overfitting gate report-only
+> (`59d2079a5`); R6 + R2 pipeline rules checked when a pipeline is built
+> (`515db54b7`); R2 train-failed folds kept as evidence (`77fbe69b6`); R5 + R16
+> deciding scores rest on walk-forward and Monte Carlo only (`d964b96a2`); the plan.
 >
 > **What it changed in one line each.** The overfitting gate reports and eliminates
 > nobody. A pipeline that breaks a fold or window rule is rejected when it is built,
@@ -35,10 +35,23 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > train run failed. A strategy is scored only on walk-forward and Monte Carlo, and not
 > at all without both. On real bars no outcome changed: one survivor, not deployable.
 >
-> **Next (not chosen yet).** After the PR is merged: deploy to A and B, then either
-> package B (longer history on IEX, which unblocks most of what is still open) or
-> package C (checkpointing, R3). Open decisions for the user: R13, and which of B or C
-> goes first.
+> **Next (not chosen yet).** Either package B (longer history on IEX, which unblocks
+> most of what is still open) or package C (checkpointing, R3). Open decisions for the
+> user: which of B or C goes first, and R13. Nothing is running.
+>
+> **Update, same day.** The user chose package B (longer history). Its read-only
+> investigation is done and recorded under Step 5, "Package B investigation". R7's
+> tests ride along with B; R13's decision waits until B gives more survivors; R8 stays
+> parked (all of it is dormant, the settlement box included).
+>
+> **Agreed with the user the same day** ("yes lets do it your way"): rehearse on the
+> current box before choosing between a larger box and a smaller way of holding
+> bars; safety nets and a bar cache first. Committed, PR pending: a memory ceiling per
+> worker job, a swap installer for B (written, not run on B), bars parsed once per
+> pipeline run. New finding R17 (short warmups on Monday starts). The next decision
+> was the stock list (answered: the universe generator as of the window's first day,
+> then a backfill of the names it picks), then where it is built (answered: on Box B,
+> with a market-data key). Next: how the two years are split.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
 
@@ -50,11 +63,11 @@ Keep this board in step with the boxes: when a box changes in section 3, change 
 | Item | What it is | Status | Done / open | What is left |
 |---|---|---|---|---|
 | 🟢 R1 | Monte Carlo resamples for real | **Done.** Merged PR #181, deployed to A and B | 4 / 0 | Nothing |
-| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes done, committed 2026-11-15, PR pending | 7 / 13 | Code only, still open: pooled or median fold gate, daily resample, the walk-forward "entered" count (found 2026-11-15). The rest waits on longer history (package B): selection / evaluation / holdout split, fold geometry, folds in sessions, minimum test span. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook |
+| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 7 / 13 | Code only, still open: pooled or median fold gate, daily resample, the walk-forward "entered" count (found 2026-11-15). The rest waits on longer history (package B): selection / evaluation / holdout split, fold geometry, folds in sessions, minimum test span. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook |
 | 🔴 R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 / 5 | All of the wiring. Scheduled before Step 5 |
 | 🟡 R4 | Audit of the remaining gates | **Audit done**: notes for stress, overfitting, parameter stability, regime; problems are R11 to R15 | 1 / 1 | The 12% drawdown kill is missing from the backtest path. R4's "Verify" (a real-runner test per stage where the gate fails) is not met; that work is R7 |
-| 🟡 R5 | Composite score hides missing evidence | **Implemented, committed 2026-11-15, PR pending.** No score without walk-forward and Monte Carlo; report-only measures carry weight 0 | 2 / 0 | Merge and deploy |
-| 🟡 R6 | Experiment-config and holdout validator | Validator done, committed 2026-11-15, PR pending | 1 / 1 | Repo-level holdout date (package B) |
+| 🟢 R5 | Composite score hides missing evidence | **Done.** Merged PR #184, deployed 2026-11-16. No score without walk-forward and Monte Carlo; report-only measures carry weight 0 | 2 / 0 | Nothing |
+| 🟢 R6 | Experiment-config and holdout validator | **Validator shipped.** Merged PR #184, deployed 2026-11-16 | 1 / 1 | Repo-level holdout date (package B) |
 | 🔴 R7 | Test hardening per stage | Not started as its own item. Realistic-curve tests now exist at gate level for Monte Carlo, stress and regime | 0 / 2 | A real-runner test per stage, the cross-process checksum test |
 | 🔴 R8 | Simulator RNG keyed per decision | Not started | 0 / 4 | Inert until stochastic fills are switched on |
 | ⚪ R9 | Generator has no selection | Folds into Step 2 | no boxes | Step 2 |
@@ -62,15 +75,21 @@ Keep this board in step with the boxes: when a box changes in section 3, change 
 | 🟢 R11 | Stress gate: shocks report-only, costs decide | **Done.** Merged PR #183, deployed 2026-11-16. Rerun done: funnel 30 → 30 → 4 → 2 → 2 → 2, the first run with final survivors | 5 / 0 | Nothing. "Verify" met by the all-30 audit pass: 7 pass, 23 fail, for causes that differ. Stress at the new cost is R12's box |
 | 🟢 R12 | Research trading cost: 1 basis point per trade | **Done except two boxes.** Merged PR #183, deployed 2026-11-16. Measured on real bars (funnel 30 → 30 → 2 → 2 → 2 → 2, stress passes 3 of 30) and on B's bench re-sim (order unchanged; momentum -1.8% → -7.8%) | 4 / 3 | Slippage written to fill rows. Two midpoint guards wait for a `LIMIT` / `TWAP` policy |
 | 🔴 R13 | No parameter-stability check | Not decided | 0 / 2 | Decide whether to build the neighbour check |
-| 🟡 R14 | Overfitting gate never exercised | **Report-only, implemented, committed 2026-11-15, PR pending** (agreed 2026-11-15). Measured first: on all 30 strategies it passed 26, including 16 of 20 losing ones, and changed no outcome | 3 / 1 | The prerequisites before `enforce` is switched on; they wait on longer history |
+| 🟢 R14 | Overfitting gate never exercised | **Report-only shipped.** Merged PR #184, deployed 2026-11-16 (agreed 2026-11-15). Measured first: on all 30 strategies it passed 26, including 16 of 20 losing ones, and changed no outcome | 3 / 1 | The prerequisites before `enforce` is switched on; they wait on longer history |
 | 🟢 R15 | Regime gate report-only on a short window | **Report-only shipped.** Merged PR #183, deployed 2026-11-16 | 1 / 4 | The four prerequisites before `enforce` is switched on; all wait on longer history |
-| 🟡 R16 | The deployable decision rests on the three report-only measures | **Decided and implemented, committed 2026-11-15, PR pending** (user: "Trusted evidence only"). Deployable is now the average of walk-forward and Monte Carlo. Measured first: nothing was flagged deployable, the regime input was always 0.5, shocks near-constant | 2 / 2 | Calibrate the 0.55 threshold (needs longer history); pass the regime profile to the scoring request so the reported regime fields are real |
+| 🔴 R17 | Short warmups get no bars when a window starts on a Monday | Found 2026-11-16, checked on the real loader; not fixed | 0 / 2 | Measure the effect, then fix with a before / after |
+| 🟢 R16 | The deployable decision rests on the three report-only measures | **Decided and shipped.** Merged PR #184, deployed 2026-11-16 (user: "Trusted evidence only"). Deployable is now the average of walk-forward and Monte Carlo. Measured first: nothing was flagged deployable, the regime input was always 0.5, shocks near-constant | 2 / 2 | Calibrate the 0.55 threshold (needs longer history); pass the regime profile to the scoring request so the reported regime fields are real |
 
 **Parked follow-ups on green items** (shipped, but these boxes are still open; none is forgotten)
 
+- R6: the repo-level holdout date (package B).
 - R10: re-measure the re-sim vs platform correlation; more sparse-bar test fixtures (package D).
 - R12: write the charged slippage into the fill rows (package E); the two quote-midpoint guards, before any `LIMIT` / `TWAP` policy is switched on.
+- R14: the prerequisites before the overfitting gate's `enforce` is switched on (package B).
 - R15: the four prerequisites before the regime gate's `enforce` is switched on (package B).
+- R16: calibrate the 0.55 deployable threshold (after package B gives more survivors); pass
+  the regime profile to the scoring request so the reported regime fields are real (small,
+  any time, must be done before the regime gate is switched on).
 
 **Data**
 
@@ -87,12 +106,12 @@ monthly job 0 / 13. Section 5's results log is empty. Step 1 waits on R2.
 
 The boxes sit under the finding that produced them, so one piece of work is spread over
 several R-numbers. This is the same list grouped by piece of work, in the proposed order.
-Package A is committed and waits for its PR; nothing else is running.
+Package A is merged and deployed. Nothing is running.
 
 | # | Package | Boxes it closes | Waits on | Size |
 |---|---|---|---|---|
-| 🟡 A | **Validators and evidence** (all boxes done, committed 2026-11-15, PR pending) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | The user, to open and merge the PR; then a deploy to A and B | One PR, no new data |
-| 🔴 B | **Longer history on B** (on IEX; the feed does not change) | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | How far back IEX bars go; B's 3 GB of memory; which universe applies to old dates | Investigation first, then one PR |
+| 🟢 A | **Validators and evidence** (done: merged PR #184, deployed 2026-11-16) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | Nothing | One PR, no new data (#184) |
+| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code committed the same day, PR pending (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; decisions being taken | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
 | 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
 | 🔴 D | **Test hardening (R7)** | R7 both boxes, and the R7 boxes under R10, R14, R15 | Nothing | Can ride along with A and B |
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R8, R12's slippage in fill rows, D2 | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
@@ -101,7 +120,8 @@ Package A is committed and waits for its PR; nothing else is running.
 After these: Step 1 (baseline, waits on R2), then Steps 2 to 5.
 
 **Open questions for the user** (package A, investigated 2026-11-15; all four decisions
-and the score-composition answer implemented and committed the same day; nothing is open)
+and the score-composition answer implemented the same day, merged as PR #184; nothing is
+open)
 
 What the read-only investigation found:
 
@@ -228,7 +248,7 @@ something worth handing over, and 3.3(a) on the deployment track gives us the ha
 pattern to copy. Step 0c (checkpointing) is a cost/convenience fix and can slide to just
 before Step 5.
 
-### Step 0 — Pipeline integrity (audited 2026-11-07; R1 and R10 merged, R11 / R12 / R15 merged as PR #183 and deployed 2026-11-16, package A committed 2026-11-15 with its PR pending, the rest open: see "Where we are")
+### Step 0 — Pipeline integrity (audited 2026-11-07; R1 and R10 merged, R11 / R12 / R15 merged as PR #183 and deployed 2026-11-16, package A merged as PR #184 and deployed 2026-11-16, the rest open: see "Where we are")
 
 Three suspicions the user raised while studying the backtesting funnel, each confirmed by
 reading the code (three parallel audits, key claims re-verified by hand). Fix these before
@@ -251,7 +271,7 @@ history second, the user moved it after the audits):
    it produced are R11, R12 and R15 (implemented) and R13, R14 (open).
 4. R5 and R6 (placed here on the same reasoning as item 5; the user did not name them).
    Done 2026-11-15 as package A, together with R14, R16 and the code-only half of R2;
-   committed, PR pending.
+   merged PR #184.
 5. Longer history, then the R2 tasks that wait on it (selection / evaluation / holdout
    split). User's reasoning: running on a longer window is mostly the same code over more
    days, so audits and fixes come first and the window is extended once the gates are
@@ -517,7 +537,7 @@ reasons").**
   sessions.
 
 **R2 — Walk-forward test folds are not out of sample (partial: the small set merged in
-PR #181; package A's code-only boxes done, committed 2026-11-15, PR pending; the rest open).**
+PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; the rest open).**
 - Selection leakage: in `ma_sweep_staged.yaml` the `intermediate` simulation stage ranks
   configs over 2022-01-01..2025-03-31 and `heavy_walk_forward` runs over the identical
   range, so every test fold lies inside the window the survivors were picked on.
@@ -541,13 +561,13 @@ PR #181; package A's code-only boxes done, committed 2026-11-15, PR pending; the
       first `test_start` is not after every earlier selection stage's `end_date` (or the
       YAML declares a `holdout_from` date that earlier stages may not cross). Fix
       `ma_sweep_staged.yaml` accordingly.
-      Done 2026-11-15 (package A, committed, PR pending): `research/pipeline/pipeline_validation.py`, called from
+      Done 2026-11-15 (package A, merged PR #184): `research/pipeline/pipeline_validation.py`, called from
       `StagedPipelineConfig.__post_init__`. `ma_sweep_staged.yaml`'s two selection stages
       now read 2022 only; its thresholds were not re-run on the shorter windows (said in
       the file). The `holdout_from` date is R6's second box (package B).
 - [x] Feed all folds into the overfitting evidence (train-failed folds with test metrics
       null and `test_passed=False`), and report `folds_skipped_at_train`.
-      Done 2026-11-15 (package A, committed, PR pending), built differently from the text above (user's decision 2): the test
+      Done 2026-11-15 (package A, merged PR #184), built differently from the text above (user's decision 2): the test
       window is simulated for train-failed strategies too, so the fold carries real
       test numbers with `train_passed=False`, `fold_passed=False`. No fold is skipped
       any more, so there is no skipped count; the per-fold log line reports how many
@@ -565,12 +585,12 @@ PR #181; package A's code-only boxes done, committed 2026-11-15, PR pending; the
 - [ ] Gate on a pooled or median test Sharpe across folds in addition to per-fold pass
       counts.
 - [x] Validate `step_days >= test_days` and `min_folds_passed <= n_folds` (split from the
-      box above). Done 2026-11-15 (package A, committed, PR pending): both in `WalkForwardStageConfig.__post_init__`, so YAML and
+      box above). Done 2026-11-15 (package A, merged PR #184): both in `WalkForwardStageConfig.__post_init__`, so YAML and
       Python-built configs meet them. Overlap needs `allow_overlapping_test_folds: true`,
       which the replay hook sets (user's decision 1) until package B lengthens its window.
 - [x] Either implement EXPANDING/ANCHORED windows or delete `WindowType` and fix the docs
       (`docs/backend/research/advanced_validation_framework.md`).
-      Done 2026-11-15 (package A, committed, PR pending): deleted (nothing used it); the doc says folds are rolling only.
+      Done 2026-11-15 (package A, merged PR #184): deleted (nothing used it); the doc says folds are rolling only.
 - [ ] Daily resample: load daily warm-up bars and pass `bars_per_year=252`.
 - [ ] Fold geometry (added 2026-11-14, user's question: "more folds, maybe longer?"). The
       items above make folds honest; none sets how many there are or how long they run.
@@ -650,7 +670,9 @@ PR #181; package A's code-only boxes done, committed 2026-11-15, PR pending; the
     operator setting `bench_resim_window_days` (default 63,
     `paper_trading_golden_path_orchestrator.py:778`) and is shared with the bench re-sims,
     so research history wants its own dataset; `atp ingestion run-backfill` takes 31 days
-    per run by default (`--max-days`) and follows `ALPACA_DATA_FEED`. Unchecked: how far
+    per run by default (`--max-days`) and follows `ALPACA_DATA_FEED`. (All three open points
+    in the next sentences were investigated 2026-11-16: see "Package B investigation"
+    under Step 5.) Unchecked: how far
     back Alpaca serves IEX five-minute bars, and whether a year fits in B's 3 GB (a
     70-session run used about 1 GB on the laptop). Undecided: which universe applies to
     old dates. The hook resolves the universe active at the window's start and the
@@ -668,7 +690,7 @@ PR #181; package A's code-only boxes done, committed 2026-11-15, PR pending; the
     - [x] The hook's lookback is a hard-coded 90 days (`research_hooks.py:486`). Loading
           more history changes nothing for the hook until this is a setting, or until
           long-window research runs from an experiment file.
-          Done 2026-11-15 (package A, committed, PR pending): `research.options.lookback_days`, default 90
+          Done 2026-11-15 (package A, merged PR #184): `research.options.lookback_days`, default 90
           (`DEFAULT_RESEARCH_LOOKBACK_DAYS`). The fold lengths (45 / 30 / 15) are still
           fixed numbers, so a longer lookback alone adds folds but not longer ones; that
           is package B's fold-geometry box.
@@ -690,7 +712,7 @@ PR #181; package A's code-only boxes done, committed 2026-11-15, PR pending; the
           median pass rule in place of "any one fold" (`min_folds_passed=1`).
     - [x] The R2 and R6 validators cover stage configs built in Python, not only YAML;
           otherwise the hook can drift from its own rules the way the four-stage file did.
-          Done 2026-11-15 (package A, committed, PR pending): single-stage rules sit in the stage's config class, cross-stage
+          Done 2026-11-15 (package A, merged PR #184): single-stage rules sit in the stage's config class, cross-stage
           rules in `StagedPipelineConfig`; the hook builds both.
     - [ ] Repeated attempts. Research in the platform backtest runs on a monthly cadence
           (`platform_backtest_service.py:1035-1051`; the cadence comes from the run's
@@ -941,7 +963,7 @@ feed, look for fail-open branches and `None`-coercion.
 **Verify:** every stage has a note here, and each stage has at least one test on a real
 runner where the gate fails.
 
-**R5 — Composite score hides missing evidence (implemented, committed 2026-11-15, PR pending).** The validation framework
+**R5 — Composite score hides missing evidence (implemented, merged PR #184, deployed 2026-11-16).** The validation framework
 redistributes an absent component's weight to the present ones
 (`docs/backend/research/advanced_validation_framework.md`, "When a component is absent"),
 so a strategy with no Monte Carlo or regime evidence is never penalised for the gap. After
@@ -949,7 +971,7 @@ R1 that is exactly the hole that lets a thinly tested candidate outrank a well-t
 - [x] Decide and implement one of: a missing-evidence penalty per absent component, or a
       required minimum evidence set before a composite score is produced at all (score
       `None` + reason otherwise). Record the choice here.
-      Done 2026-11-15 (package A, committed, PR pending). Choice (the user's): a required minimum
+      Done 2026-11-15 (package A, merged PR #184). Choice (the user's): a required minimum
       set, walk-forward and Monte Carlo. One object says which components count,
       `EvidencePolicy` in `research/validation/evidence_policy.py` (`deciding` and
       `required`), and the three scores read it: the robustness score
@@ -974,7 +996,7 @@ R1 that is exactly the hole that lets a thinly tested candidate outrank a well-t
       arrives with both pieces of evidence, since a hook that stopped passing one
       would otherwise silently seed nothing.
 
-**R6 — Experiment-config and holdout validation (validator done, committed 2026-11-15, PR pending;
+**R6 — Experiment-config and holdout validation (validator done, merged PR #184, deployed 2026-11-16;
 holdout date moved to package B).** R2's range guard belongs
 in a general validator so the rules are enforced, not written in docs: no stage may read
 past a declared holdout date; walk-forward `test_start` after every earlier selection
@@ -985,7 +1007,7 @@ thresholds (e.g. `min_sharpe <= 0` with `min_trades == 0`) rejected unless the Y
 suite `v1` rule "holdout never tuned on" (`pre-launch-deployment-plan.md` §5) enforceable.
 - [x] Validator + tests; the current `experiments/staged/ma_sweep_staged.yaml` must fail
       until fixed, `exp_mc_smoke_test.yaml` must carry `smoke: true`.
-      Done 2026-11-15 (package A, committed, PR pending). Home changed from the text above: the rules live in the stage config
+      Done 2026-11-15 (package A, merged PR #184). Home changed from the text above: the rules live in the stage config
       classes and in `StagedPipelineConfig`, not in `stage_configs.py`, because the
       replay hook never goes through the YAML models. `smoke: true` waives the two
       cross-stage rules only. Tests: `tests/research/pipeline/test_pipeline_validation.py`
@@ -1529,7 +1551,7 @@ tested for it anywhere.
       not on the analyzer's current score, which ignores the level.
 
 **R14 — Overfitting gate: read, never exercised (found 2026-11-15 under R4; measured,
-then made report-only, committed 2026-11-15, PR pending).** Confirmed by reading: two overlapping folds at most on today's window,
+then made report-only, merged PR #184, deployed 2026-11-16).** Confirmed by reading: two overlapping folds at most on today's window,
 so both walk-forward indicators are statistics of two numbers; no term for the number of
 strategies tried; the Monte Carlo evidence counted twice; a pass when evidence is thin;
 regime buckets of any size counted. Not known: whether on real folds it separates
@@ -1665,7 +1687,7 @@ simulator; stochastic fills or any execution-model change would, and must re-run
 
 **R16 — The "deployable" decision still rests on the measures the funnel now only reports
 (found 2026-11-15 while investigating R5; measured, decided and implemented the same day,
-committed, PR pending).** After the
+merged PR #184).** After the
 pipeline, the replay hook scores each survivor and seeds governance records for the ones
 marked deployable (`research_hooks.py:328-335`). Deployable means the plain average of
 four numbers is at least 0.55 (`candidate_ranking_service.py`, `_score_vector`):
@@ -1733,7 +1755,7 @@ always 0.5.**
 - [x] Decide with R5 what "deployable" should rest on while those three measures are
       report-only.
       Decided by the user 2026-11-15: **trusted evidence only**. Implemented the same
-      day (committed, PR pending) through the same `EvidencePolicy` as R5:
+      day (merged PR #184) through the same `EvidencePolicy` as R5:
       - Deployability = plain average of walk-forward consistency and Monte Carlo
         stability (was: walk-forward, overfitting, regime, shocks). Threshold still
         0.55.
@@ -1787,6 +1809,32 @@ research seeds no governance record at all in that case. Before, such survivors 
 scored on defaults. `scripts/analyze_validation.py`, which works from an equity curve
 alone, likewise reports "not scored" and exits 1.
 
+**R17 — Short warmups get no bars when a window starts on a Monday (found 2026-11-16
+while testing the bar cache; not fixed, no decision yet).**
+
+`SimulationWindowLoader` reaches back for warmup bars by calendar days: trading days
+needed × 7/5, rounded up. The comment calls that conservative; it is not across a
+weekend. A warmup of up to one session (78 bars) reaches back two calendar days, which
+from a Monday is Saturday. Checked on generated sessions with the real loader:
+
+| Window starts | Warmup 20 | 61 | 100 | 201 |
+|---|---|---|---|---|
+| Monday | 0 | 0 | 78 | 201 |
+| Tuesday | 20 | 61 | 78 | 201 |
+| Wednesday | 20 | 61 | 100 | 201 |
+
+Effect: such a run starts with indicators not warmed up, so its first signals differ
+from what the trading cycle would produce on the same bars (the runner's comment asks
+for "same bars in, same signals out"). Walk-forward folds start every 15 days, so the
+weekday varies from fold to fold. A day after a market holiday behaves the same way.
+Size not measured on real runs. A fix changes results, so it gets a before / after on
+identical bars like R10.
+
+- [ ] Measure: how many of the hook's runs start short, and how far their results move
+      when the warmup is complete.
+- [ ] Fix: reach back by sessions found, not by a calendar multiplier (read further
+      until enough earlier bars exist or the dataset starts).
+
 **Step 0 follow-ups (trail the fixes above; do before Step 5):**
 - Cache and identity hygiene: `SimulationResultCache` keys and the checkpoint identity
   disagree about what makes a run unique (seed in one, hardcoded `universe_version="v1"` in
@@ -1804,7 +1852,9 @@ alone, likewise reports "not scored" and exits 1.
   ~4.75 s regardless **[1.8 #7]**.
 - Worker resource budget: one measured full pipeline run on B with peak memory and
   wall-clock recorded in section 5, and a memory cap in `infra/ops/worker_job.sh` before
-  Step 5's timer (the runbook already warns research jobs are memory-hungry).
+  Step 5's timer (the runbook already warns research jobs are memory-hungry). The cap
+  was built 2026-11-16 (committed, PR pending; see "Package B investigation"); the measured run
+  on B is still open.
 
 **D1 — SIP bars: one feed everywhere, switched together (check now, switch later).**
 The window B holds is IEX: the backfill cycle takes its feed from the same
@@ -2127,6 +2177,193 @@ behind a fixture flag; default stays `alpaca`.
         is not checked here).
   - [ ] Splits: none in the 60 sessions used so far; a multi-year window will cross
         some, and the hook reads raw prices (`PriceBasis.RAW`).
+  - **Package B investigation (2026-11-16, read-only; measured where it says so).**
+    - *How far back the data goes.* The provider's documentation gives historical stock
+      bars "since 2016" on the free plan, 200 requests a minute, and restricts only the
+      latest 15 minutes. Documented, not yet probed with a request for our symbols.
+      - Probed 2026-11-16 (read-only request from A's app, the laptop's key is
+        rejected): one-minute IEX bars for one mid-November session in each of six
+        years, seven names. Each cell is minutes present of 390 / five-minute buckets
+        with all five minutes, of 78 (the rule ingestion uses to keep a bar):
+
+        | Session | AAPL | NVDA | SPY | XOM | COST | CRM | DIA |
+        |---|---|---|---|---|---|---|---|
+        | 2026-11-12 | 390 / 78 | 390 / 78 | 390 / 78 | 351 / 46 | 283 / 23 | 236 / 11 | 181 / 4 |
+        | 2025-11-12 | 390 / 78 | 390 / 78 | 389 / 77 | 380 / 70 | 188 / 6 | 296 / 24 | 333 / 39 |
+        | 2024-11-18 | 386 / 74 | 390 / 78 | 380 / 69 | 372 / 64 | 107 / 1 | 340 / 43 | 80 / 2 |
+        | 2023-11-15 | 387 / 75 | 353 / 54 | 390 / 78 | 359 / 52 | 160 / 6 | 278 / 22 | 115 / 1 |
+        | 2020-11-16 | 390 / 78 | 374 / 66 | 385 / 73 | 380 / 68 | 208 / 13 | 293 / 24 | 74 / 1 |
+        | 2017-11-15 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+      - A two-year window is served. "Since 2016" does not hold for this feed's
+        minute bars: nothing came back for 2017 (where between 2017 and 2020 it starts
+        is not checked). Daily IEX bars for the 20 sessions before 2024-11-18 are
+        complete for all seven, so the universe generator's ranking has its input.
+      - Thinly traded names keep few five-minute bars, in every year, not only old
+        ones. The bars stored on B agree with the probe to within one bar: on
+        2026-11-12 COST has 22 of 78, CRM 10, DIA 3; over the last six stored sessions
+        COST 5 to 52, CRM 10 to 57, DIA 3 to 25. All three are in today's universe.
+        One session per year is a small sample.
+    - [ ] Decide what the long window does about names with few five-minute bars: the
+          generator ranks on daily dollar volume and cannot see minute coverage. Open
+          choices: a minimum-coverage rule when picking, leave as is and report
+          coverage per name, or the fuller feed (D1, deferred by the user).
+    - *Size on disk is not a constraint.* The newest rolling version holds 22 symbols,
+      mid-August to mid-November, in 13 MB (99,118 five-minute bars). Two years is on
+      the order of 100 MB; B has 25 GB free, A 18 GB.
+    - *Memory is the constraint (measured).* One simulation over the last 30 / 60 / 90
+      days of the real bars, 22 symbols, each in its own process, on the laptop: peak
+      above the pre-run level 175 / 288 / 409 MB for 1,688 / 3,034 / 4,438 bar
+      timestamps. That is a straight line, 0.085 MB per bar timestamp (about 4 KB per
+      symbol-bar), on a 222 MB baseline. Extrapolated peak for one run: 6 months about
+      1.0 GB, 12 months about 1.7 GB, 24 months about 3.2 GB, 36 months about 4.7 GB.
+      B has 3.8 GB, about 3.0 GB usable, no swap; A has about 1.9 GB usable.
+      - Cause, read from the code: every run loads the whole window for every symbol
+        as one Python object per bar with `Decimal` prices, builds one row dictionary
+        per symbol per bar for the metrics, and reloads for the next run (no shared
+        cache). As plain numeric arrays the same bars would be around 0.1 KB each.
+      - Where it goes (profiled 2026-11-16, one 60-day run, 53,244 bars): at the
+        point where the bars and the result tables are both alive, 128 of 135 MB
+        traced is the bar objects (about 2.4 KB per bar: the pydantic model, its
+        `Decimal` fields and timestamps); the result tables are small. The traced
+        peak is 210 MB, so about 75 MB more is short-lived bookkeeping inside the run
+        (row dictionaries, table copies). Roughly two thirds bars, one third
+        bookkeeping. The same bars as numeric columns would be about 4 MB.
+      - What a cache would and would not do: the bars are re-read and rebuilt for
+        every run, so reusing one loaded window across runs on the same dates saves
+        time and costs no extra memory if it holds one window at a time. It does not
+        lower the peak of a run, and a cache holding every window at once would
+        raise it (24 months of bar objects for 22 symbols is about 1.8 GB by itself).
+        Lowering the peak needs a smaller way of holding bars.
+      - Kept results add to it: three runs in one process at 90 days peaked 89 MB
+        higher than one (about 45 MB per further run), and memory is not handed back to
+        the system after results are released. The 30-strategy pipeline run of
+        2026-11-15 was seen at about 1.07 GB, which puts the long-run figure nearer 15
+        MB per kept 90-day run. Not measured at longer windows.
+      - Consequence: no single run can span two years on B, and the proposed layout
+        (12 months selection, 6 evaluation, 6 holdout) never needs one. Its longest
+        run is 12 months, about 1.7 GB, which fits with a thin margin. Stage 1 with 30
+        strategies each kept for 12 months is the part most likely to run out.
+      - Nothing runs in parallel (every stage is serial, one worker). The hook
+        computes `_sim_workers` and never uses it; wiring it in would double the peak.
+      - Time: 13.5 s for one 90-day run on the laptop, so about a minute per 12-month
+        run. Monte Carlo's resampling time grows with the square of the window; its
+        memory is capped at about 64 MB by chunking.
+    - *Universe for old dates.* The hook takes the universe version in effect on the
+      window's first day and fails the tick when there is none (no fallback to today's
+      list). The point-in-time S&P 500 file in the repo covers 1996-01 to 2026-08, so
+      membership on any date in 2024 or 2025 is answerable (503 names on each date
+      checked). Missing: only a platform replay that itself starts on that date writes
+      universe versions; a standalone research run has none. The universe is frozen at
+      the window's start for the whole window.
+      - User's question, 2026-11-16: "cant we technically run the universe generator on
+        the backfill BEFORE starting a sim?" Yes, read from the code the same day. The
+        generator a replay runs (`run_universe_at_timestamp`) takes any date: with
+        `screener_source="sp500_point_in_time"` its pool is the index members on that
+        date ranked on the 20 days before it, it scores the pool, picks 20 and writes a
+        universe version effective on that date. Scoring reads either a stored dataset
+        (bars for the whole pool, up to 500 names, must already be backfilled) or daily
+        bars fetched for the pool (`alpaca_daily`, what the live monthly rotation
+        uses). With the second there is no chicken-and-egg: generate first, then
+        backfill five-minute bars only for the names picked.
+      - Two gaps for doing that outside a replay: the `atp universe monthly-rotation`
+        command has no option for the point-in-time pool (it ranks today's active
+        names), and B has no market-data key, so the generator runs where a key is and
+        the version moves to B with `atp universe export-version` / `import-version`.
+    - *Getting a long window to the hook.* A read uses exactly one dataset version.
+      Each backfill run writes its own version, fetches its whole window into memory
+      in one call, and cannot resume (a failure discards the run and leaves a failed
+      directory that the publish step would still upload). The only merge of several
+      versions is the 63-session rolling one. So a long history is monthly or
+      quarterly chunks plus a merge step that does not exist yet.
+    - *Traps found.* (1) Without an explicit version id the hook takes the newest
+      validated `raw_bars` version of any kind, which would be a one-day live version,
+      not the long one. (2) Inside a replay a longer `lookback_days` is silently cut
+      back to the replay's start; a window under 15 days is reported as
+      `no_validated_dataset`. (3) The backfill's holiday list covers 2022 to 2025 only,
+      so holidays in 2026 show as missing days in the coverage table (noise, not a
+      failure). (4) A five-minute bar needs all five one-minute prints, so thinly
+      traded names lose more bars than their coverage percentage suggests; validation
+      never fails on thin coverage.
+    - *Splits.* Bars are stored unadjusted (no adjustment is requested from the
+      provider) and adjusted when read, from the corporate-actions table, which a
+      backfill does not fill. Not verified: that every research read path applies the
+      adjustment. A two-year window across 22 or more names will cross splits.
+    - [x] Decide the universe for the long window. User, 2026-11-16 ("okay that makes
+          sense"): the existing generator, run as of the window's first day, before
+          any simulation. Candidates are the index members on that date; it scores
+          them on daily bars and picks 20; five-minute bars are then backfilled for
+          those 20 only. Not today's 22 symbols.
+    - [x] `atp universe monthly-rotation --screener-source sp500_point_in_time`
+          (2026-11-16, committed, PR pending): the generator can run for an old `--timestamp`
+          outside a replay. The default stays `alpaca_active`, so the scheduler's
+          month-end step is unchanged. Tested at the command level; not yet run
+          against the provider for an old date.
+    - B's database holds no universe versions today (checked 2026-11-16), so a
+      back-dated run there writes the first record. A rotation retires the version
+      active on its date and activates the new one, so if several dates are ever
+      generated they must be run oldest first.
+    - [ ] Run it on B with `--dry-run` first, then `--enforce`, once B has a key.
+    - [x] Decide where the long dataset is built. User, 2026-11-16: on Box B, with a
+          market-data key added to `.env.worker` (read-only use; B never submits
+          orders). The generator, the fetch and the research then all run on B: no
+          copy between machines and no load on the trading box. Not A (least free
+          memory, and it trades), not the laptop (no storage credentials or database
+          set up). This ends the rule that B never calls the data provider.
+    - [x] Market-data key on B (2026-11-16, on the user's word: "sure thats fine you
+          go"). The same paper key pair as Box A, not a separate account: the user's
+          point, a paid data plan belongs to the account, so every box using that
+          account's key gets it and research reads the feed trading reads. Copied box
+          to box through a pipe, never displayed; verified by fingerprint and by one
+          price request from a throwaway container on B. `.env.worker` is now
+          owner-only (was world-readable); backup `.env.worker.bak-20261116` beside it.
+          The laptop's `.env` had two wrong characters in the key ID (the cause of its
+          401); corrected the same way. A's `.env` has Windows line endings, which
+          Docker tolerates; left as is. If A moves to a live key, B keeps the paper
+          key. Unconfirmed: whether a paper key receives a paid feed.
+    - [ ] Build the long-history dataset on B: chunked backfill, corporate actions for
+          the same symbols and span, a merge into one validated version, the checks in
+          the box above.
+    - [ ] Seed a universe version for the window's start outside a replay.
+    - [ ] Prove split adjustment on the research read path with a test that crosses a
+          known split, before any multi-year score is read.
+    - [ ] Hook: take the dataset version explicitly; fail loudly when the window is
+          shorter than asked; delete the unused `_sim_workers`.
+    - *Decision, 2026-11-16 (user: "yes lets do it your way", after asking whether to
+      cache bar reads or enlarge B).* Rehearse on the current box first. Before it:
+      a memory ceiling per job and swap on B as safety nets, and a bar cache for
+      speed. Choose between a larger instance and a smaller way of holding bars on
+      the rehearsal's numbers; if it is tight, resize (t4g.medium to t4g.large,
+      roughly twice the instance cost) before re-engineering bars mid-sprint. The
+      smaller bar format stays a separate, later item: strategies and the trading
+      cycle consume the same bar objects, so it touches research-to-live parity.
+    - [x] Memory ceiling per job (2026-11-16, committed, PR pending): `worker_job.sh` sets
+          `RATP_JOB_MEMORY` to the box's memory minus a 768 MB reserve (about 3055 MB
+          on B today; follows a resize) and `docker-compose.worker.yml` applies it to
+          the job container. Exit 137 is reported as a memory kill. Checked: the
+          script's branches with stand-in commands on the laptop; B's Docker parses
+          the file and resolves the limit. Not yet exercised by a real job on B.
+    - [x] Swap installer `infra/ops/install_worker_swap.sh` (2026-11-16,
+          committed, PR pending; 4 GB, swappiness 10, safe to re-run). Written and
+          syntax-checked only.
+    - [ ] Run the swap installer on B after the deploy (one sudo command; B has no
+          swap today).
+    - [x] Bars parsed once per pipeline run (2026-11-16, committed, PR pending):
+          `SimulationWindowLoader.reuse_bars`, entered by `run_staged_experiment`.
+          Keeps one (dataset, version, end date) at a time and drops it before
+          reading the next. Keyed below the warmup, because warmups differ per
+          strategy (20, 61 and 201 bars in the measured runs) and a whole-window key
+          would mostly miss. On the real bars, five 90-day runs, off against on:
+          equity curves and trade logs identical; 65.2 s to 52.3 s; bar loading
+          19.1 s to 7.7 s (two reads where there were five); peak 720 MB to 698 MB.
+          Loading was about 30% of a run. It does not lower a run's peak.
+    - [ ] Rehearse on B with memory recorded before trusting a run (needs the
+          long dataset; sample the job container's memory during the run).
+    - [ ] If 12-month runs do not fit: stop keeping trade logs for eliminated
+          strategies, or hold bars as numeric arrays, or a larger instance. Decide on
+          the rehearsal's numbers, not before.
+    - [ ] The weekly bench re-sims also repeat one window per strategy and do not
+          use the bar cache yet (they call the runner directly). Small; any time.
 - Verifying runs as they get longer (noted 2026-11-14, user's question). Rule: a long
   run is never where a code defect is first found. Keep "is the code right" apart from
   "is the conclusion right" and answer each with the cheapest check that can.
