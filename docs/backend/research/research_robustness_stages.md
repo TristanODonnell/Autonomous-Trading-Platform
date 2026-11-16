@@ -173,6 +173,23 @@ evidence (`wf_fold_inputs`, `mc_aggregation`, `regime_profile`, and the MC
 reference run's equity curve), so its RobustnessScore / deployability no longer
 runs on the stage-1 curve alone.
 
+### What the scores after the pipeline rest on
+
+Three scores are computed for each final survivor: the robustness score, the
+ranking composite and the deployability score. Only `is_deployable`
+(deployability >= 0.55) has a consequence in the hook: those survivors get a
+governance record.
+
+All three use **walk-forward consistency and Monte Carlo stability only**, and
+both must be present, because those are the two gates that still eliminate. The
+regime, shock-stress and overfitting numbers are reported with weight 0 while
+their gates are report-only. A survivor missing either required number is not
+scored and is never deployable. The rule lives in one place,
+`research/validation/evidence_policy.py`; details and the weights table are in
+`advanced_validation_framework.md` (Evidence policy). When a gate's `enforce` is
+switched on, add its component to the policy in the same change; a smoke test
+fails if the two disagree.
+
 ### Cheap verification runs
 
 `research.options.profile: smoke` in a replay fixture shrinks the research budget:
@@ -233,6 +250,8 @@ research tick is the one that exercises all six stages.
 | Overfitting evidence + gate rules | `tests/research/pipeline/gates/test_overfitting_gate.py` |
 | Cost multiplier (cost model, execution service reset, run_id) | `tests/research/simulation/test_cost_multiplier.py` |
 | Stage orchestration with a scripted runner | `tests/research/pipeline/test_robustness_stages.py` |
+| Evidence policy: robustness score | `tests/research/validation/test_robustness_scoring.py` |
+| Evidence policy: ranking composite and deployability | `tests/research/intelligence/test_candidate_ranking.py` |
 | Real-engine smoke (all six stages, research hook, smoke profile) | `tests/research/test_research_stages_smoke.py` |
 
 ## Known gaps

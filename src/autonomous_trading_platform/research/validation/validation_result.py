@@ -56,7 +56,12 @@ class ValidationSummary:
         all_warnings: list[str] = []
         for sr in stage_results.values():
             all_warnings.extend(sr.warnings)
-        overall_passed = robustness_score.overall >= min_robustness_score
+        missing = tuple(getattr(robustness_score, "missing_evidence", ()))
+        if missing:
+            all_warnings.append(
+                f"No overall robustness score: required evidence missing ({', '.join(missing)})."
+            )
+        overall_passed = not missing and robustness_score.overall >= min_robustness_score
         return cls(
             validation_run_id=validation_run_id,
             experiment_id=experiment_id,

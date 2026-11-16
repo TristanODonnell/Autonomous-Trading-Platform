@@ -145,6 +145,10 @@ class ResearchFeatureVector:
                 return f.value
         return default
 
+    def has_data(self, name: str) -> bool:
+        """True when the field holds a measured value, not the neutral default."""
+        return any(f.name == name and f.has_data for f in self.fields)
+
 
 # ---------------------------------------------------------------------------
 # Builder
@@ -223,7 +227,12 @@ class ResearchFeatureVectorBuilder:
             v = getattr(rs, attr, None)
             return (v, True) if v is not None else (_NEUTRAL, False)
 
-        raw["val_robustness_overall"] = (rs.overall, True) if rs is not None else (_NEUTRAL, False)
+        # An overall of 0.0 with evidence_complete=False means "not scored", so it
+        # is recorded as missing, not as the worst possible score.
+        if rs is not None and getattr(rs, "evidence_complete", True):
+            raw["val_robustness_overall"] = (rs.overall, True)
+        else:
+            raw["val_robustness_overall"] = (_NEUTRAL, False)
         raw["val_walk_forward_consistency"] = _rs("walk_forward_consistency")
         raw["val_mc_stability"] = _rs("mc_stability")
         raw["val_regime_robustness"] = _rs("regime_robustness")

@@ -12,15 +12,23 @@ weights reflect the platform's research philosophy:
   stress_resilience         0.10  — survives adverse scenarios
   overfitting_resistance    0.05  — heuristic overfit indicators
 
-Scores of 0.0 on a disabled component (no data supplied) are handled by
-adjusting the effective weight so the overall score remains comparable
-across runs where only a subset of validation stages was executed.
+Which components count is set by an EvidencePolicy (evidence_policy.py). By
+default only walk-forward and Monte Carlo carry weight (0.30 and 0.20, so
+0.6 and 0.4 after renormalising) and both must be present; the other four
+are reported with weight 0. A strategy missing a required component gets no
+overall score (0.0 with evidence_complete=False), so less evidence can
+never score higher than more.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+
+from autonomous_trading_platform.research.validation.evidence_policy import (
+    DEFAULT_EVIDENCE_POLICY,
+    EvidencePolicy,
+)
 
 
 @dataclass(frozen=True)
@@ -52,8 +60,13 @@ class RobustnessScore:
     Composite robustness score for a single validated strategy.
 
     All component scores are in [0, 1].  The overall score is a weighted
-    sum renormalised so that disabled components (None → excluded from
-    computation) do not dilute the overall figure.
+    sum over the components the evidence policy lets decide.
+
+    evidence_complete   False when a required component was not supplied.
+                        overall is then 0.0 and means "not scored".
+    missing_evidence    The required components that were absent.
+    weights_used        Effective weight per supplied component; 0.0 for
+                        one that is reported but does not decide.
     """
 
     overall: float
@@ -65,10 +78,14 @@ class RobustnessScore:
     overfitting_resistance: float | None
     explanation: list[str] = field(default_factory=list)
     weights_used: dict[str, float] = field(default_factory=dict)
+    evidence_complete: bool = True
+    missing_evidence: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "overall": round(self.overall, 4),
+            "evidence_complete": self.evidence_complete,
+            "missing_evidence": list(self.missing_evidence),
             "components": {
                 "walk_forward_consistency": _fmt(self.walk_forward_consistency),
                 "mc_stability": _fmt(self.mc_stability),
@@ -95,8 +112,8 @@ class RobustnessScoreBuilder:
     Fluent builder for constructing a RobustnessScore from validation
     stage outputs.
 
-    Only supply the components you have data for; others are treated as
-    absent and their weights are redistributed.
+    Only supply the components you have data for. The evidence policy says
+    which supplied components carry weight and which must be present.
 
     Usage
     -----
@@ -111,8 +128,13 @@ class RobustnessScoreBuilder:
     )
     """
 
-    def __init__(self, weights: RobustnessWeights | None = None) -> None:
+    def __init__(
+        self,
+        weights: RobustnessWeights | None = None,
+        policy: EvidencePolicy | None = None,
+    ) -> None:
         self._weights = weights or RobustnessWeights()
+        self._policy = policy or DEFAULT_EVIDENCE_POLICY
         self._components: dict[str, float] = {}
         self._explanation: list[str] = []
 
@@ -207,23 +229,34 @@ class RobustnessScoreBuilder:
             "overfitting_resistance": w.overfitting_resistance,
         }
 
-        active_weight_sum = sum(
-            weight for key, weight in component_map.items() if key in self._components
-        )
+        policy = self._policy
+        explanation = list(self._explanation)
+        missing = policy.missing(self._components)
+        deciding = {
+            key: weight
+            for key, weight in component_map.items()
+            if key in self._components and policy.decides(key)
+        }
+        active_weight_sum = sum(deciding.values())
 
-        if active_weight_sum == 0.0:
+        effective_weights: dict[str, float] = {}
+        if missing:
             overall = 0.0
-            effective_weights: dict[str, float] = {}
+            explanation.append(f"not scored: required evidence missing ({', '.join(missing)})")
+        elif active_weight_sum == 0.0:
+            overall = 0.0
         else:
             effective_weights = {
-                key: weight / active_weight_sum
-                for key, weight in component_map.items()
+                key: (deciding[key] / active_weight_sum if key in deciding else 0.0)
+                for key in component_map
                 if key in self._components
             }
-            overall = sum(
-                effective_weights[key] * self._components[key] for key in effective_weights
+            overall = _clamp(
+                sum(effective_weights[key] * self._components[key] for key in deciding)
             )
-            overall = _clamp(overall)
+        reported_only = policy.reported_only(self._components)
+        if reported_only:
+            explanation.append(f"reported with weight 0: {', '.join(reported_only)}")
 
         return RobustnessScore(
             overall=overall,
@@ -233,6 +266,8 @@ class RobustnessScoreBuilder:
             parameter_stability=self._components.get("parameter_stability"),
             stress_resilience=self._components.get("stress_resilience"),
             overfitting_resistance=self._components.get("overfitting_resistance"),
-            explanation=list(self._explanation),
+            explanation=explanation,
             weights_used=effective_weights,
+            evidence_complete=not missing,
+            missing_evidence=missing,
         )

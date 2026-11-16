@@ -20,8 +20,8 @@ The framework provides six orthogonal validation dimensions:
 | Parameter sensitivity | Is performance stable across parameter values? |
 | Survivorship safety | Was the universe free of look-ahead bias? |
 
-A unified **RobustnessScore** aggregates all dimensions into a single
-deployability signal.
+A unified **RobustnessScore** records every dimension and combines the ones
+the evidence policy trusts into one overall figure (see Robustness Scoring).
 
 ---
 
@@ -48,8 +48,8 @@ is required unless parameter sensitivity analysis is enabled.
 
 ## Robustness Scoring
 
-The overall robustness score is a weighted composite of six components, each
-normalised to [0, 1]:
+Six components are computed, each normalised to [0, 1]. The overall score is a
+weighted sum of the ones the evidence policy lets decide:
 
 ```
 robustness = Σ (effective_weight_i × component_score_i)
@@ -57,18 +57,52 @@ robustness = Σ (effective_weight_i × component_score_i)
 
 Default weights:
 
-| Component | Default weight | Rationale |
-|-----------|---------------|-----------|
-| walk_forward_consistency | 0.30 | Most important: temporal generalisation |
-| mc_stability | 0.20 | Share of resampled histories with a positive Sharpe |
-| regime_robustness | 0.20 | Conditions-agnostic performance |
-| parameter_stability | 0.15 | Not a knife-edge fit |
-| stress_resilience | 0.10 | Survives adverse market conditions |
-| overfitting_resistance | 0.05 | Heuristic overfit indicators |
+| Component | Base weight | Decides today | Weight in use | Rationale |
+|-----------|-------------|---------------|---------------|-----------|
+| walk_forward_consistency | 0.30 | yes, required | 0.60 | Most important: temporal generalisation |
+| mc_stability | 0.20 | yes, required | 0.40 | Share of resampled histories with a positive Sharpe |
+| regime_robustness | 0.20 | no | 0 | Conditions-agnostic performance |
+| parameter_stability | 0.15 | no | 0 | Not a knife-edge fit (never supplied today) |
+| stress_resilience | 0.10 | no | 0 | Survives adverse market conditions |
+| overfitting_resistance | 0.05 | no | 0 | Heuristic overfit indicators |
 
-When a component is absent (no data supplied), its weight is redistributed to
-active components so the overall score remains comparable across different run
-configurations.
+### Evidence policy (which components count)
+
+`validation/evidence_policy.py` holds one `EvidencePolicy`: the set of components
+that carry weight (`deciding`) and the set that must be present (`required`). The
+same policy drives the three scores that decide something after a research run:
+
+| Score | Where | What it decides | Built from (default policy) |
+|---|---|---|---|
+| Robustness `overall` | `RobustnessScoreBuilder` | `ValidationSummary.overall_passed` (>= 0.5) | 0.6 x walk-forward + 0.4 x Monte Carlo |
+| Candidate composite | `CandidateRankingService` | Ranking order | 0.625 x robustness overall + 0.375 x walk-forward |
+| Deployability | `CandidateRankingService` | `is_deployable` (>= 0.55), which seeds governance records | Plain average of walk-forward and Monte Carlo |
+
+Rules:
+
+- **Only trusted evidence decides.** The regime, shock-stress and overfitting
+  gates are report-only (`enforce=False`), so their components carry weight 0.
+  They are still computed, stored and shown (`weights_used` lists them at 0.0 and
+  the explanation says `reported with weight 0: ...`). A measure not trusted to
+  eliminate a strategy is not trusted to promote one.
+- **Missing required evidence means no score.** Without walk-forward or Monte
+  Carlo the overall, composite and deployability are 0.0, `evidence_complete` is
+  False, `missing_evidence` names the gap, `overall_passed` and `is_deployable`
+  are False, and the candidate ranks below every scored one. Read 0.0 together
+  with `evidence_complete`: it means not scored, not the worst score. Before
+  2026-11 an absent component's weight was spread over the present ones and the
+  ranking filled gaps with 0.5, so a strategy with less evidence could outscore
+  one with more (plan R5, measured under R16).
+- **Switching a gate back on.** Add its component to `deciding` in
+  `DEFAULT_EVIDENCE_POLICY` in the same change that sets `enforce=True`. A test
+  (`test_report_only_gates_do_not_feed_the_deciding_scores`) fails when the replay
+  hook's gates and the default policy disagree.
+- `EvidencePolicy.unrestricted()` gives the old behaviour (every component
+  decides, none required) for analysis; pass it as `ValidationConfig.evidence_policy`
+  or `CandidateRankingService(evidence_policy=...)`.
+
+Not settled: the 0.55 deployability threshold was chosen for the old four-input
+average and has not been calibrated for the two-input one.
 
 ### Walk-forward consistency
 
@@ -272,6 +306,12 @@ ignored so that validation results are always returned.
 ---
 
 ## CLI
+
+`scripts/analyze_validation.py` works from a stored equity curve only. It has no
+walk-forward folds and no Monte Carlo runs, so under the default evidence policy
+it prints the components it can compute, reports the overall score as not scored,
+and exits 1. Use it to read the individual stage results; the deciding scores
+come from the research pipeline, which has the fold and Monte Carlo evidence.
 
 ```bash
 # Full validation from persisted equity curve
