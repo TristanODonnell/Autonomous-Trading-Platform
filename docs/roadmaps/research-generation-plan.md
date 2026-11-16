@@ -2389,13 +2389,38 @@ behind a fixture flag; default stays `alpaca`.
           chain records the step as failed with the error. A normal month-end is
           unchanged. Not yet deployed; A's next month-end rotation is the first place
           it matters.
-    - [ ] Found, not changed: the step before scoring (refreshing the candidate pool)
-          also only warns when it fails, and scoring then runs on the previous pool.
-          Same kind of fallback, smaller effect (the pool changes little month to
-          month). Ask the user.
-    - [ ] Found, not changed: the backtest replay does not report a failed universe
-          step (it reads the summary and drops the errors), so a replay whose scoring
-          fails keeps its universe silently.
+    - [x] A failed pool refresh stops the rotation too, for every caller (user's
+          decision 2026-11-16, later the same day: "Stop the rotation"; built the same
+          day on `research/package-b-window-split`, not yet deployed). Before, the
+          step only warned and scoring ran on "the newest stored pool at or before the
+          rotation date". On A's month-end that is last month's 500 names, a small
+          effect. On B's historical runs it is whatever pool is stored for an earlier
+          date, labelled as point-in-time for the date asked for, which is the case
+          the point-in-time pool exists to prevent. Now the result is `failed`, the
+          universe stays as it was, scoring is not run. Known cost, accepted: on A,
+          stopping leaves last month's 20 names in place where the old fallback would
+          have re-scored last month's 500. The hook does not roll the session back
+          itself; the end-of-day chain and the operator command already do when the
+          result is `failed`.
+    - [x] A backtest reports a failed universe step as an error on its tick (user's
+          decision 2026-11-16: "Record it as an error"; built the same day, same
+          branch, not yet deployed). The universe step was the only backtest step
+          whose errors were dropped (the run read its summary only), so a run whose
+          monthly rotation failed kept its universe and finished `ok` with no message.
+          With the box above, a failed pool refresh inside a backtest no longer
+          rotates on a stored pool, so the report matters more. Now the tick counts as
+          failed, the run still finishes, its status is `completed_with_errors`, the
+          command exits 1 and the error text is in the result. The worker's backtests
+          run through this path; its run service already keeps and uploads the result
+          of a run that exits 1. Checked by a one-tick backtest test that fails
+          without the change. Side effect to know: a failed tick writes no checkpoint,
+          so a resumed run restarts from the last clean tick.
+    - [x] Checked, no change: the backtest's own first-day pool refresh
+          (`platform_backtest_service.py`, the bootstrap block) is separate code from
+          the hook and is not a silent fallback. When its screener fails it starts the
+          run on the fixture's own symbols, stores that universe with source
+          `yaml_bootstrap_fallback` and reason `screener_unavailable`, and adds a
+          warning that the run reports.
     - [x] Dry run on B with `--min-bar-coverage 0.70` (2026-11-16 09:35 UTC, through
           `worker_job.sh`, 102 s, exit 0): 37 of 465 eligible, 427 rejected for
           coverage, and the same 20 names as the laptop run. The morning's candidate
