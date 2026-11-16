@@ -232,10 +232,12 @@ def _failing_candidate_generation(**kwargs: Any) -> Any:
     raise RuntimeError("alpaca 5xx")
 
 
-def test_with_a_coverage_minimum_a_failed_scoring_run_does_not_rotate(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("options", [{}, {"min_intraday_bar_coverage": 0.70}])
+def test_a_failed_scoring_run_does_not_rotate(
+    monkeypatch: pytest.MonkeyPatch, options: dict[str, Any]
 ) -> None:
-    # The fallback candidate would be an older one that was never checked for coverage.
+    # Rotating on an older stored candidate would look like a normal rotation while
+    # using stale scores (and, with a coverage minimum, unchecked names).
     rotated: list[Any] = []
     _patch_pool_refresh(monkeypatch)
     monkeypatch.setattr(cand_mod, "run_candidate_generation", _failing_candidate_generation)
@@ -246,26 +248,8 @@ def test_with_a_coverage_minimum_a_failed_scoring_run_does_not_rotate(
 
     monkeypatch.setattr(universe_hooks, "run_universe_rotation", _rotate)
 
-    result = _run_hook(min_intraday_bar_coverage=0.70)
+    result = _run_hook(**options)
 
     assert result.status == "failed"
     assert result.errors == ["candidate_generation_failed: alpaca 5xx"]
     assert rotated == []
-
-
-def test_without_a_coverage_minimum_a_failed_scoring_run_still_falls_back(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Unchanged behaviour for the scheduler's month-end step.
-    rotation: dict[str, Any] = {}
-    _patch_pool_refresh(monkeypatch)
-    monkeypatch.setattr(cand_mod, "run_candidate_generation", _failing_candidate_generation)
-    monkeypatch.setattr(
-        universe_hooks, "run_universe_rotation", lambda **k: rotation.update(k) or _rotation()
-    )
-
-    result = _run_hook()
-
-    assert result.status == "ok"
-    assert result.warnings == ["candidate_generation_failed: alpaca 5xx"]
-    assert rotation["candidate_version_id"] is None
