@@ -130,7 +130,15 @@ class TestMonthlyRotationCli:
         args = parser.parse_args(["universe", "monthly-rotation", "--dry-run"])
         assert args.func is universe_cmd.handle_monthly_rotation
         assert args.market_data == "alpaca_daily"
+        assert args.screener_source == "alpaca_active"
         assert args.dry_run and not args.enforce and not args.force
+
+    def test_candidate_pool_can_be_the_index_as_of_the_timestamp(self) -> None:
+        base = ["universe", "monthly-rotation", "--dry-run", "--screener-source"]
+        args = build_parser().parse_args([*base, "sp500_point_in_time"])
+        assert args.screener_source == "sp500_point_in_time"
+        with pytest.raises(SystemExit):
+            build_parser().parse_args([*base, "todays_favourites"])
 
     def test_requires_dry_run_or_enforce(self) -> None:
         with pytest.raises(SystemExit):
@@ -200,6 +208,8 @@ class TestMonthlyRotationCli:
         assert hook["force_rotation"] is False
         assert hook["rotation_reason"] == "operator_monthly"
         assert hook["candidate_market_data"] == "alpaca_daily"
+        # No option given: today's active names, what the scheduler's step uses.
+        assert hook["screener_source"] == "alpaca_active"
         assert hook["replay_context"].actor == "tristan"
         assert calls.get("commit", False) is expect_commit
         assert calls.get("rollback", False) is (not expect_commit)
@@ -214,3 +224,34 @@ class TestMonthlyRotationCli:
             assert payload["added"] == ["NVDA"]
         else:
             assert payload["errors"] == ["boom"]
+
+    def test_handler_passes_the_point_in_time_pool_for_an_old_date(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        calls: dict[str, Any] = {}
+        session = SimpleNamespace(commit=lambda: None, rollback=lambda: None, close=lambda: None)
+        monkeypatch.setattr(universe_cmd, "get_session", lambda: session)
+
+        def fake_hook(**kwargs: Any) -> Any:
+            calls["hook"] = kwargs
+            return SimpleNamespace(status="ok", errors=[], warnings=[], summary={})
+
+        monkeypatch.setattr(universe_cmd, "run_universe_at_timestamp", fake_hook)
+
+        args = build_parser().parse_args(
+            [
+                "universe",
+                "monthly-rotation",
+                "--dry-run",
+                "--timestamp",
+                "2024-11-18T14:30:00Z",
+                "--screener-source",
+                "sp500_point_in_time",
+            ]
+        )
+        assert universe_cmd.handle_monthly_rotation(args) == 0
+
+        assert calls["hook"]["screener_source"] == "sp500_point_in_time"
+        assert calls["hook"]["timestamp"] == datetime(2024, 11, 18, 14, 30, tzinfo=UTC)
+        out = capsys.readouterr().out
+        assert json.loads(out[out.index("{") :])["screener_source"] == "sp500_point_in_time"
