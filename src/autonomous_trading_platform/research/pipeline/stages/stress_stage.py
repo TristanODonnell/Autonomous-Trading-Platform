@@ -1,5 +1,5 @@
 """
-StressStage — eliminates strategies that break under adverse conditions.
+StressStage — eliminates strategies whose edge does not survive higher costs.
 
 Per surviving strategy:
   1. Take a full-window baseline run — reused from an earlier stage when the
@@ -7,12 +7,14 @@ Per surviving strategy:
   2. Shock scenarios: transform the baseline equity curve with the built-in
      StressTestService scenarios (vol spike, −5/−10% crash, downside
      amplification, trend reversal, per-bar cost drag). No re-simulation.
+     Reported on the verdict; not part of the pass rule (see stress_gate.py).
   3. Cost scenarios: re-simulate with slippage + commission scaled by each
-     cost multiplier (default 2x and 3x).
+     cost multiplier (default 2x and 3x). These decide the verdict.
   4. Apply the stress gate (gates/stress_gate.py).
 
 Cost: len(cost_multipliers) simulations per survivor (+1 if no reusable
-baseline). Set cost_multipliers: [] to run shock scenarios only.
+baseline). cost_multipliers must not be empty. Set shock_scenarios: [] to skip
+the shock report.
 
 YAML block example
 ------------------
@@ -21,7 +23,6 @@ YAML block example
     start_date: "2024-01-02"
     end_date: "2024-04-01"
     symbols: [SPY, QQQ, AAPL]
-    min_shock_survival_rate: 0.5
     cost_multipliers: [2.0, 3.0]
     min_cost_sharpe: 0.0
     min_cost_survival_rate: 0.5
@@ -136,7 +137,6 @@ class StressStage(BaseStage):
                 ),
                 min_shock_sharpe=v.min_shock_sharpe,
                 max_shock_drawdown=v.max_shock_drawdown,
-                min_shock_survival_rate=v.min_shock_survival_rate,
                 cost_multipliers=tuple(v.cost_multipliers),
                 min_cost_sharpe=v.min_cost_sharpe,
                 max_cost_drawdown=v.max_cost_drawdown,
@@ -226,13 +226,18 @@ class StressStage(BaseStage):
             if verdict.passed:
                 final_survivors.append(config)
                 logger.debug(
-                    "  PASSED  %s | shock=%s | cost=%s",
+                    "  PASSED  %s | cost=%s | shock (report only)=%s",
                     sid,
-                    _rate(verdict.shock_survival_rate),
                     _rate(verdict.cost_survival_rate),
+                    _rate(verdict.shock_survival_rate),
                 )
             else:
-                logger.debug("  FAILED  %s | reasons: %s", sid, "; ".join(verdict.failure_reasons))
+                logger.debug(
+                    "  FAILED  %s | reasons: %s | shock (report only)=%s",
+                    sid,
+                    "; ".join(verdict.failure_reasons),
+                    _rate(verdict.shock_survival_rate),
+                )
             filter_outputs.append(
                 gate_filter_output(
                     sid, passed=verdict.passed, failure_reasons=verdict.failure_reasons
