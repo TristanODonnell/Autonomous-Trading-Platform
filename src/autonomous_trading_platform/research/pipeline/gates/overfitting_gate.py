@@ -16,6 +16,16 @@ low_trade_count and narrow_period_alpha are always available and weakly
 weighted; on their own they would decide the probability. So the evidence
 threshold counts only the core cross-stage indicators (CORE_INDICATORS): below
 min_core_indicators the on_insufficient_evidence policy decides.
+
+Report-only by default (enforce=False). The score is computed and what the rule
+found is recorded on the verdict as ``findings``, but the strategy passes.
+Reason (plan item R14): on the 2026-11 real-bars runs the gate changed no
+outcome. Sent all 30 strategies, it passed 26, among them 16 of the 20 losing
+ones, and the four it failed had already failed earlier stages. The score
+measures whether train and test agree, not whether a strategy is good, and half
+its weight sits on two ratios of fold Sharpes (the train-to-test drop and the
+spread across folds) that are unstable with the two folds a 60-session window
+gives. Set enforce=True only once the walk-forward evidence has enough folds.
 """
 
 from __future__ import annotations
@@ -57,6 +67,8 @@ class OverfittingGateConfig:
     min_trade_count: int = 30
     on_insufficient_evidence: Literal["pass", "fail"] = "pass"
     indicator_weights: dict[str, float] | None = None
+    # False = report only: findings are recorded, the strategy passes (see module docstring).
+    enforce: bool = False
 
     def __post_init__(self) -> None:
         if not (0.0 < self.max_overfitting_probability <= 1.0):
@@ -79,12 +91,21 @@ class OverfittingEvidence:
 
 @dataclass(frozen=True)
 class OverfittingGateVerdict:
+    """Gate decision.
+
+    ``findings`` is what the rule found, enforced or not. ``failure_reasons``
+    is the subset that eliminated the strategy: equal to ``findings`` when
+    ``enforced``, empty otherwise (``passed`` is then always True).
+    """
+
     strategy_id: str
     passed: bool
     analysis: OverfittingAnalysisResult
     n_core_indicators: int
     failure_reasons: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
+    findings: tuple[str, ...] = ()
+    enforced: bool = False
 
 
 def collect_overfitting_evidence(
@@ -164,32 +185,42 @@ def evaluate_overfitting_gate(
             f"insufficient overfitting evidence: {n_core} core indicator(s) "
             f"< {config.min_core_indicators}"
         )
-        passed = config.on_insufficient_evidence == "pass"
-        return OverfittingGateVerdict(
-            strategy_id=strategy_id,
-            passed=passed,
-            analysis=analysis,
-            n_core_indicators=n_core,
-            failure_reasons=() if passed else (message,),
-            warnings=(message,) if passed else (),
-        )
+        if config.on_insufficient_evidence == "pass":
+            return _verdict(strategy_id, analysis, n_core, config, warnings=(message,))
+        return _verdict(strategy_id, analysis, n_core, config, findings=(message,))
 
     prob = analysis.overfitting_probability
     if prob > config.max_overfitting_probability:
-        return OverfittingGateVerdict(
-            strategy_id=strategy_id,
-            passed=False,
-            analysis=analysis,
-            n_core_indicators=n_core,
-            failure_reasons=(
+        return _verdict(
+            strategy_id,
+            analysis,
+            n_core,
+            config,
+            findings=(
                 f"overfitting probability {prob:.2f} > {config.max_overfitting_probability:.2f} "
                 f"(top signals: {', '.join(analysis.most_suspicious)})",
             ),
         )
+    return _verdict(strategy_id, analysis, n_core, config, warnings=tuple(analysis.warnings))
+
+
+def _verdict(
+    strategy_id: str,
+    analysis: OverfittingAnalysisResult,
+    n_core: int,
+    config: OverfittingGateConfig,
+    *,
+    findings: tuple[str, ...] = (),
+    warnings: tuple[str, ...] = (),
+) -> OverfittingGateVerdict:
+    """Findings eliminate the strategy only when the gate is enforced."""
     return OverfittingGateVerdict(
         strategy_id=strategy_id,
-        passed=True,
+        passed=not findings if config.enforce else True,
         analysis=analysis,
         n_core_indicators=n_core,
-        warnings=tuple(analysis.warnings),
+        failure_reasons=findings if config.enforce else (),
+        warnings=warnings,
+        findings=findings,
+        enforced=config.enforce,
     )

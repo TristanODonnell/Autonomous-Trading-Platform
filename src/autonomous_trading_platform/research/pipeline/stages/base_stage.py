@@ -55,6 +55,9 @@ if TYPE_CHECKING:
     from autonomous_trading_platform.research.pipeline.aggregation.monte_carlo_aggregator import (
         MonteCarloAggregation,
     )
+    from autonomous_trading_platform.research.pipeline.gates.overfitting_gate import (
+        OverfittingGateVerdict,
+    )
     from autonomous_trading_platform.research.pipeline.gates.regime_gate import RegimeGateVerdict
     from autonomous_trading_platform.research.pipeline.gates.stress_gate import StressGateVerdict
     from autonomous_trading_platform.research.validation.overfitting_analysis import (
@@ -78,6 +81,7 @@ class StageDiagnostics:
     regime_verdict      RegimeStage gate decision and reasons.
     stress_verdict      StressStage gate decision and reasons.
     overfitting_result  OverfittingStage analysis.
+    overfitting_verdict OverfittingStage gate decision, findings and whether enforced.
     reference_result    Full-window run that best represents the strategy
                         (used by later stages instead of re-simulating).
     """
@@ -88,6 +92,7 @@ class StageDiagnostics:
     regime_verdict: RegimeGateVerdict | None = None
     stress_verdict: StressGateVerdict | None = None
     overfitting_result: OverfittingAnalysisResult | None = None
+    overfitting_verdict: OverfittingGateVerdict | None = None
     reference_result: SimulationRunResult | None = None
 
 

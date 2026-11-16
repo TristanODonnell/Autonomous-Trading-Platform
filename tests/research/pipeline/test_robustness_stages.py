@@ -455,7 +455,7 @@ class TestStressStage:
 # ---------------------------------------------------------------------------
 
 
-def _pipeline(runner: ScriptedRunner) -> PipelineRunner:
+def _pipeline(runner: ScriptedRunner, *, enforce_overfitting: bool = True) -> PipelineRunner:
     """Regime/stress gates are lenient here so only the final overfitting gate eliminates."""
     return PipelineRunner(
         stages=[
@@ -507,30 +507,57 @@ def _pipeline(runner: ScriptedRunner) -> PipelineRunner:
             OverfittingStage(
                 stage_config=OverfittingStageConfig(
                     name="overfit",
-                    gate=OverfittingGateConfig(max_overfitting_probability=0.6, min_trade_count=10),
+                    gate=OverfittingGateConfig(
+                        max_overfitting_probability=0.6,
+                        min_trade_count=10,
+                        enforce=enforce_overfitting,
+                    ),
                 )
             ),
         ]
     )
 
 
-class TestPipelineEvidenceFlow:
-    def test_overfit_strategy_eliminated_by_final_gate(self) -> None:
-        def script(sid: str, req: SimulationRunRequest, day: date) -> float:
-            if sid != "curve_fit":
-                return _all_weather(sid, req, day)
-            role = req.window_role or ""
-            noise = float(np.random.default_rng(day.toordinal() + 17).normal(0, 0.003))
-            if role.endswith("_test"):
-                return -0.004 + noise  # falls apart out of sample
-            if role == "mc_base":
-                # Over the full window it loses money, so most resampled
-                # histories have a negative Sharpe (mc_instability near 1).
-                seeded = np.random.default_rng(day.toordinal() + 99)
-                return float(-0.002 + seeded.normal(0, 0.01))
-            return 0.004 + noise  # great in-sample
+def _curve_fit_or_steady(sid: str, req: SimulationRunRequest, day: date) -> float:
+    """'curve_fit' is great in-sample and falls apart out of sample; anything else is steady."""
+    if sid != "curve_fit":
+        return _all_weather(sid, req, day)
+    role = req.window_role or ""
+    noise = float(np.random.default_rng(day.toordinal() + 17).normal(0, 0.003))
+    if role.endswith("_test"):
+        return -0.004 + noise  # falls apart out of sample
+    if role == "mc_base":
+        # Over the full window it loses money, so most resampled
+        # histories have a negative Sharpe (mc_instability near 1).
+        seeded = np.random.default_rng(day.toordinal() + 99)
+        return float(-0.002 + seeded.normal(0, 0.01))
+    return 0.004 + noise  # great in-sample
 
-        runner = ScriptedRunner(script)
+
+class TestPipelineEvidenceFlow:
+    def test_report_only_overfitting_gate_records_the_finding_and_keeps_the_strategy(self) -> None:
+        """Same two strategies as the next test; without enforce nobody is eliminated."""
+        result = _pipeline(ScriptedRunner(_curve_fit_or_steady), enforce_overfitting=False).run(
+            initial_configs=[_cfg("steady"), _cfg("curve_fit")],
+            experiment_id="exp",
+            dataset_version="v1",
+            random_seed=7,
+            price_basis=PriceBasis.RAW,
+            initial_cash=100_000.0,
+        )
+
+        overfit = result.stage_results[-1]
+        assert [c.strategy_id for c in result.final_survivors] == ["steady", "curve_fit"]
+        verdict = overfit.diagnostics["curve_fit"].overfitting_verdict
+        assert verdict is not None and verdict.passed and not verdict.enforced
+        assert any("overfitting probability" in f for f in verdict.findings)
+        output = next(o for o in overfit.filter_outputs if o.strategy_id == "curve_fit")
+        assert output.filter_result.passed and output.filter_result.failures == []
+        steady = overfit.diagnostics["steady"].overfitting_verdict
+        assert steady is not None and steady.findings == ()
+
+    def test_overfit_strategy_eliminated_by_final_gate(self) -> None:
+        runner = ScriptedRunner(_curve_fit_or_steady)
         result = _pipeline(runner).run(
             initial_configs=[_cfg("steady"), _cfg("curve_fit")],
             experiment_id="exp",
@@ -615,6 +642,14 @@ class TestRegistry:
             StageRegistry.load(
                 {"type": "stress", "name": "s", "cost_multipliers": [], **window}, runner
             )
+
+    def test_overfitting_stage_is_report_only_unless_yaml_says_enforce(self) -> None:
+        default = StageRegistry.load({"type": "overfitting", "name": "o"}, self._runner())
+        enforced = StageRegistry.load(
+            {"type": "overfitting", "name": "o", "enforce": True}, self._runner()
+        )
+        assert isinstance(default, OverfittingStage) and default._cfg.gate.enforce is False
+        assert isinstance(enforced, OverfittingStage) and enforced._cfg.gate.enforce is True
 
     def test_regime_stage_is_report_only_unless_yaml_says_enforce(self) -> None:
         window = {"start_date": "2024-01-02", "end_date": "2024-03-29", "symbols": ["aaa"]}

@@ -462,6 +462,8 @@ class OverfittingStageConfigModel(BaseModel):
     min_trade_count: int = 30
     on_insufficient_evidence: str = "pass"
     indicator_weights: dict[str, float] | None = None
+    # False = report only: findings recorded, nobody eliminated (plan item R14).
+    enforce: bool = False
 
     @field_validator("name")
     @classmethod

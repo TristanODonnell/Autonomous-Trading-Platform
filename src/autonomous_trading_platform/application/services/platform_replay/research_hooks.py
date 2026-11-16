@@ -691,6 +691,9 @@ def _build_replay_experiment_definition(
         )
 
         # Stage 6 — overfitting: no simulations; combines WF/MC/regime evidence.
+        # Report only (enforce=False): on this window the walk-forward evidence
+        # is two folds at most, and on real bars the gate changed no outcome.
+        # The score and findings are recorded; nobody is eliminated.
         stages.append(
             OverfittingStage(
                 stage_config=OverfittingStageConfig(
@@ -700,6 +703,7 @@ def _build_replay_experiment_definition(
                         min_core_indicators=2,
                         min_trade_count=10,
                         on_insufficient_evidence="pass",
+                        enforce=False,
                     ),
                 )
             )

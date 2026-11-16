@@ -111,6 +111,17 @@ weighted, so the evidence threshold counts only the **core** indicators
 (train/test degradation, fold instability, MC instability, regime concentration):
 below `min_core_indicators` (default 2), `on_insufficient_evidence` decides.
 
+**Report only by default (`enforce: false`).** The score is computed and what the
+rule found is on `OverfittingGateVerdict.findings` (stored in
+`StageDiagnostics.overfitting_verdict`), but nobody is eliminated. On the 2026-11
+real-bars runs the gate changed no outcome: sent all 30 strategies it passed 26,
+among them 16 of the 20 losing ones, and the four it failed had already failed
+earlier stages. The score measures whether train and test agree, not whether a
+strategy is good, and half its weight is on two ratios of fold Sharpes that are
+unstable with the two folds a 60-session window gives. Set `enforce: true` once
+the walk-forward evidence has enough folds. The platform replay hook sets
+`enforce=False`.
+
 Place `overfitting` last: it can only see stages that ran before it.
 
 ## Platform replay integration
