@@ -141,12 +141,39 @@ infra/ops/worker_job.sh worker publish-result --run-id six_month_2026w42 --type 
 - On A: `atp controls automation` shows the switches; `GET /api/v1/worker/results` and the
   governance dashboard's "Worker results (7d)" panel show what arrived.
 
+## Memory: the job ceiling and swap
+
+Research jobs are the only thing on the box that can use most of its memory. Two things
+keep a job that grows too large from taking the box down with it:
+
+- **A ceiling per job.** `worker_job.sh` runs every job under a memory limit: the box's
+  memory minus a reserve for Postgres, the collector and the OS
+  (`RATP_JOB_MEMORY_RESERVE_MB`, default 768), about 3055 MB on a t4g.medium. It is
+  worked out at each run, so a larger instance raises it with no change here. A job that
+  reaches it is killed by itself: `worker_job.sh` exits 137 and says so, and nothing else
+  on the box is touched. For one run: `RATP_JOB_MEMORY=2g infra/ops/worker_job.sh ...`
+  (`0` removes the ceiling). A job started with `docker compose run` directly has none.
+- **Swap** (once per box: `sudo infra/ops/install_worker_swap.sh`, 4 GB at `/swapfile`).
+  A job at its ceiling moves into swap, up to as much again as the ceiling, and slows
+  down before it is killed. That slowdown is the warning. Swap on a network disk is far
+  slower than memory: it is a safety net, not capacity to plan a job around.
+
+What a job needs: one simulation over 90 days of five-minute bars for 22 symbols peaks
+near 0.6 GB and grows in a straight line with the window (measured on a dev machine,
+2026-11-16; about 1.7 GB at 12 months by extrapolation, not yet run on the box). The
+measurements are in `docs/roadmaps/research-generation-plan.md`, "Package B
+investigation".
+
+After an exit 137: `free -h` and `swapon --show` show what the box had. Shorten the
+window, or move to a larger instance (the ceiling follows).
+
 ## Checking it
 
 ```bash
 systemctl list-timers 'ratp-worker-*'                 # next / last pull
 journalctl -u ratp-worker-pull.service -n 30          # last pull's output
 docker compose -f docker-compose.worker.yml ps
+free -h; swapon --show                                # memory and swap
 docker compose -f docker-compose.worker.yml logs otel-collector --tail 20   # export errors to A
 psql "$DATABASE_URL" -c "select dataset_version_id, dataset_name, validation_status from dataset_versions order by created_at desc limit 10"
 ```
@@ -162,9 +189,11 @@ Grafana on Box A: host and container panels filter by `host_name`; the worker's 
 - **Fixture replays need a market-data key pair.** By design (Step 5c parity) the platform
   backtester runs the real ingestion and trading-cycle code, so a replay fetches its bars
   through the Alpaca data API exactly as Box A does; that is what makes a backtest result
-  carry over to paper and live. Put a key pair from a separate paper account in
-  `.env.worker` (`PAPER_BROKER_API_KEY/SECRET`, data access only; the box never submits
-  orders). The pulled Parquet feeds the research jobs (bench re-sims, strategy generation,
+  carry over to paper and live. Since 2026-11-16 `.env.worker` holds the same paper key
+  pair as Box A (`PAPER_BROKER_API_KEY/SECRET`; the worker reads prices with it and never
+  submits orders: `TRADING_ENVIRONMENT=paper`, `NO_LIVE_TRADING=true`). The same account
+  on purpose: a data plan belongs to the account, so both boxes read the same feed. If
+  Box A moves to a live key, the worker keeps the paper key. The pulled Parquet feeds the research jobs (bench re-sims, strategy generation,
   regime suites), which are the worker's main work. A recorded-dataset replay mode is
   planned before scheduled replays (deployment plan, 3.4).
 - No monthly research timer yet (Phase 3.3b/4); add it to `install_worker_timers.sh` via `worker_job.sh` like the weekly bench re-sim

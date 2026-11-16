@@ -78,6 +78,9 @@ services:
     <<: *app-base
     profiles: ["job"]
     restart: "no"
+    # One job's memory ceiling, set by infra/ops/worker_job.sh (the box's memory minus a
+    # reserve for the services below). 0 = no ceiling, for a job started by hand.
+    mem_limit: ${RATP_JOB_MEMORY:-0}
     environment:
       <<: *app-env
       OTEL_SERVICE_NAME: ratp-worker
