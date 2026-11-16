@@ -255,3 +255,39 @@ class TestMonthlyRotationCli:
         assert calls["hook"]["timestamp"] == datetime(2024, 11, 18, 14, 30, tzinfo=UTC)
         out = capsys.readouterr().out
         assert json.loads(out[out.index("{") :])["screener_source"] == "sp500_point_in_time"
+
+    def test_bar_coverage_minimum_is_off_unless_given(self) -> None:
+        base = ["universe", "monthly-rotation", "--dry-run"]
+        assert build_parser().parse_args(base).min_bar_coverage is None
+        args = build_parser().parse_args([*base, "--min-bar-coverage", "0.70"])
+        assert args.min_bar_coverage == 0.70
+        for not_a_fraction in ("70", "0", "-0.1"):
+            with pytest.raises(SystemExit):
+                build_parser().parse_args([*base, "--min-bar-coverage", not_a_fraction])
+
+    @pytest.mark.parametrize(
+        ("option", "expected"), [([], None), (["--min-bar-coverage", "0.7"], 0.7)]
+    )
+    def test_handler_passes_the_bar_coverage_minimum(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        option: list[str],
+        expected: float | None,
+    ) -> None:
+        calls: dict[str, Any] = {}
+        session = SimpleNamespace(commit=lambda: None, rollback=lambda: None, close=lambda: None)
+        monkeypatch.setattr(universe_cmd, "get_session", lambda: session)
+
+        def fake_hook(**kwargs: Any) -> Any:
+            calls["hook"] = kwargs
+            return SimpleNamespace(status="ok", errors=[], warnings=[], summary={})
+
+        monkeypatch.setattr(universe_cmd, "run_universe_at_timestamp", fake_hook)
+
+        args = build_parser().parse_args(["universe", "monthly-rotation", "--dry-run", *option])
+        assert universe_cmd.handle_monthly_rotation(args) == 0
+
+        assert calls["hook"]["min_intraday_bar_coverage"] == expected
+        out = capsys.readouterr().out
+        assert json.loads(out[out.index("{") :])["min_bar_coverage"] == expected

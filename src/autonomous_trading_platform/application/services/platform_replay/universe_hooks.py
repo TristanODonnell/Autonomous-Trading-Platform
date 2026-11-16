@@ -45,6 +45,7 @@ def run_universe_at_timestamp(
     screener_source: str = "alpaca_active",
     rotation_reason: str = "platform_replay",
     candidate_market_data: str = CANDIDATE_MARKET_DATA_DATASET,
+    min_intraday_bar_coverage: float | None = None,
 ) -> UniverseReplayResult:
     """Run universe selection/rotation at timestamp T.
 
@@ -60,6 +61,11 @@ def run_universe_at_timestamp(
     reads ``replay_context.dataset_version_id`` (replays, reproducible);
     "alpaca_daily" fetches daily bars from Alpaca for the whole pool (the live
     monthly rotation on a box that only ingests bars for the names it trades).
+
+    min_intraday_bar_coverage, when set, adds an eligibility check: a name needs at
+    least that share of its five-minute bars over the last 20 sessions (minute bars
+    fetched from Alpaca for the pool). Off by default. With it on, a run whose
+    candidate scoring fails does not rotate at all.
 
     Nothing here commits the caller's ``session`` for step 3: the scheduler's chain
     and the operator CLI decide whether the rotation is kept or rolled back.
@@ -84,6 +90,7 @@ def run_universe_at_timestamp(
 
     warnings: list[str] = []
     candidate_summary: dict[str, Any] = {}
+    candidate_version_id: str | None = None
 
     # ── Step 1: refresh raw market pool via screener ─────────────────────────
     # Ranking is by dollar volume as of this rotation date; membership is
@@ -116,11 +123,18 @@ def run_universe_at_timestamp(
 
         candidate = run_candidate_generation(
             as_of=timestamp,
-            config=CandidateGenerationConfig(as_of=timestamp, lookback_days=20, max_symbols=500),
+            config=CandidateGenerationConfig(
+                as_of=timestamp,
+                lookback_days=20,
+                max_symbols=500,
+                min_intraday_bar_coverage=min_intraday_bar_coverage,
+            ),
             rebalance_reason=f"{rotation_reason}_monthly",
             dataset_version_id=replay_context.dataset_version_id,
             bar_source=build_candidate_bar_source(candidate_market_data),
+            coverage_source=build_candidate_coverage_source(min_intraday_bar_coverage),
         )
+        candidate_version_id = candidate.version.universe_version_id
         candidate_summary = {
             "candidate_version_id": candidate.version.universe_version_id,
             "candidate_pool_size": candidate.generation_metadata.get("candidate_pool_size"),
@@ -129,8 +143,19 @@ def run_universe_at_timestamp(
             "market_data_source": candidate.generation_metadata.get("market_data_source"),
             "rejections_by_reason": _rejections_by_reason(candidate),
         }
+        if min_intraday_bar_coverage is not None:
+            candidate_summary["min_intraday_bar_coverage"] = min_intraday_bar_coverage
     except Exception as exc:
         warnings.append(f"candidate_generation_failed: {exc}")
+        if min_intraday_bar_coverage is not None:
+            # Step 3 would fall back to the latest stored candidate, which was not
+            # checked for coverage.
+            return UniverseReplayResult(
+                **base,
+                status="failed",
+                errors=[f"candidate_generation_failed: {exc}"],
+                warnings=warnings,
+            )
 
     # ── Step 3: rotate — select best 20 from scored candidates ──────────────
     try:
@@ -138,8 +163,10 @@ def run_universe_at_timestamp(
         # live trading where real capital is at risk. In a historical backtest the
         # universe should rotate freely so the simulation reflects real month-over-month
         # composition changes. config_hash_unchanged still gates no-op skips.
+        # The candidate step 2 just built. Only when step 2 failed (None) does the
+        # rotation fall back to the latest stored candidate.
         result = run_universe_rotation(
-            candidate_version_id=None,
+            candidate_version_id=candidate_version_id,
             config=UniverseRebalanceConfig(),
             rotation_reason=rotation_reason,
             force_rotation=force_rotation,
@@ -226,6 +253,17 @@ def build_candidate_bar_source(candidate_market_data: str) -> Any:
         f"Unknown candidate_market_data {candidate_market_data!r}; "
         f"valid: {sorted(CANDIDATE_MARKET_DATA_SOURCES)}"
     )
+
+
+def build_candidate_coverage_source(min_intraday_bar_coverage: float | None) -> Any:
+    """The ``CandidateCoverageSource`` for the coverage check, or None when it is off."""
+    if min_intraday_bar_coverage is None:
+        return None
+    from autonomous_trading_platform.universe.providers.alpaca_intraday_coverage_source import (
+        AlpacaIntradayCoverageSource,
+    )
+
+    return AlpacaIntradayCoverageSource()
 
 
 def _rejections_by_reason(candidate: Any) -> dict[str, int]:
