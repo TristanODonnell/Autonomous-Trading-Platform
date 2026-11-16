@@ -14,6 +14,9 @@ from autonomous_trading_platform.universe.jobs import run_candidate_generation a
 from autonomous_trading_platform.universe.providers.alpaca_daily_bar_source import (
     AlpacaDailyBarSource,
 )
+from autonomous_trading_platform.universe.providers.alpaca_intraday_coverage_source import (
+    AlpacaIntradayCoverageSource,
+)
 
 _TS = datetime(2026, 10, 30, 22, 0, tzinfo=UTC)
 
@@ -148,3 +151,121 @@ def test_replays_keep_the_stored_dataset_path(monkeypatch: pytest.MonkeyPatch) -
 
     assert captured["bar_source"] is None
     assert captured["dataset_version_id"] == "raw_bars_cumulative"
+
+
+def _patch_pool_refresh(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "autonomous_trading_platform.universe.services.raw_market_pool_refresh_service.RawMarketPoolRefreshService",
+        lambda *a, **k: SimpleNamespace(refresh=lambda **kw: None),
+    )
+    monkeypatch.setattr(
+        "autonomous_trading_platform.universe.providers.point_in_time_index_provider.build_universe_screener",
+        lambda *a, **k: object(),
+    )
+    monkeypatch.setattr(
+        universe_hooks,
+        "UniverseVersionRepository",
+        lambda s: SimpleNamespace(get_included_members=lambda v: []),
+    )
+
+
+def _run_hook(**kwargs: Any) -> Any:
+    return universe_hooks.run_universe_at_timestamp(
+        session=SimpleNamespace(commit=lambda: None),  # type: ignore[arg-type]
+        timestamp=_TS,
+        replay_context=PlatformReplayContext.create(symbols=[], timestamp=_TS),
+        **kwargs,
+    )
+
+
+def test_the_rotation_uses_the_candidate_it_just_scored(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Not "the latest stored candidate": another one may carry the same or a later date.
+    rotation: dict[str, Any] = {}
+    _patch_pool_refresh(monkeypatch)
+    monkeypatch.setattr(cand_mod, "run_candidate_generation", lambda **k: _candidate({}))
+    monkeypatch.setattr(
+        universe_hooks, "run_universe_rotation", lambda **k: rotation.update(k) or _rotation()
+    )
+
+    result = _run_hook()
+
+    assert result.status == "ok"
+    assert rotation["candidate_version_id"] == "cand-1"
+
+
+def test_no_coverage_check_unless_asked_for(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+    _patch_pool_refresh(monkeypatch)
+    monkeypatch.setattr(
+        cand_mod, "run_candidate_generation", lambda **k: captured.update(k) or _candidate({})
+    )
+    monkeypatch.setattr(universe_hooks, "run_universe_rotation", lambda **k: _rotation())
+
+    result = _run_hook()
+
+    assert captured["coverage_source"] is None
+    assert captured["config"].min_intraday_bar_coverage is None
+    assert "min_intraday_bar_coverage" not in result.summary
+
+
+def test_a_coverage_minimum_reaches_the_scorer_with_a_minute_bar_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+    _patch_pool_refresh(monkeypatch)
+    monkeypatch.setattr(
+        cand_mod,
+        "run_candidate_generation",
+        lambda **k: captured.update(k) or _candidate({"COST": "insufficient_intraday_coverage"}),
+    )
+    monkeypatch.setattr(universe_hooks, "run_universe_rotation", lambda **k: _rotation())
+
+    result = _run_hook(min_intraday_bar_coverage=0.70)
+
+    assert isinstance(captured["coverage_source"], AlpacaIntradayCoverageSource)
+    assert captured["config"].min_intraday_bar_coverage == 0.70
+    assert result.summary["min_intraday_bar_coverage"] == 0.70
+    assert result.summary["rejections_by_reason"] == {"insufficient_intraday_coverage": 1}
+
+
+def _failing_candidate_generation(**kwargs: Any) -> Any:
+    raise RuntimeError("alpaca 5xx")
+
+
+def test_with_a_coverage_minimum_a_failed_scoring_run_does_not_rotate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The fallback candidate would be an older one that was never checked for coverage.
+    rotated: list[Any] = []
+    _patch_pool_refresh(monkeypatch)
+    monkeypatch.setattr(cand_mod, "run_candidate_generation", _failing_candidate_generation)
+
+    def _rotate(**kwargs: Any) -> Any:
+        rotated.append(kwargs)
+        return _rotation()
+
+    monkeypatch.setattr(universe_hooks, "run_universe_rotation", _rotate)
+
+    result = _run_hook(min_intraday_bar_coverage=0.70)
+
+    assert result.status == "failed"
+    assert result.errors == ["candidate_generation_failed: alpaca 5xx"]
+    assert rotated == []
+
+
+def test_without_a_coverage_minimum_a_failed_scoring_run_still_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Unchanged behaviour for the scheduler's month-end step.
+    rotation: dict[str, Any] = {}
+    _patch_pool_refresh(monkeypatch)
+    monkeypatch.setattr(cand_mod, "run_candidate_generation", _failing_candidate_generation)
+    monkeypatch.setattr(
+        universe_hooks, "run_universe_rotation", lambda **k: rotation.update(k) or _rotation()
+    )
+
+    result = _run_hook()
+
+    assert result.status == "ok"
+    assert result.warnings == ["candidate_generation_failed: alpaca 5xx"]
+    assert rotation["candidate_version_id"] is None

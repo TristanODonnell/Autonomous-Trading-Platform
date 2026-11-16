@@ -5,7 +5,7 @@ import json
 import time
 import uuid
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from statistics import stdev
@@ -31,11 +31,16 @@ from autonomous_trading_platform.storage.sor.models.universe_versions import (
     UniverseMember,
     UniverseVersion,
 )
-from autonomous_trading_platform.universe.types import CandidateBarSource, CandidateGenerationConfig
+from autonomous_trading_platform.universe.types import (
+    CandidateBarSource,
+    CandidateCoverageSource,
+    CandidateGenerationConfig,
+)
 
 logger = get_logger(__name__)
 
 _EXPECTED_BARS_PER_US_EQUITY_DAY = 78  # 6.5 trading hours × 12 five-minute bars
+INSUFFICIENT_INTRADAY_COVERAGE = "insufficient_intraday_coverage"
 
 
 class RawMarketPoolQuery(Protocol):
@@ -65,6 +70,8 @@ class CandidateQualityMetrics:
     trading_consistency: float
     daily_return_volatility: float | None
     average_trade_count: float | None
+    # Share of five-minute bars over recent sessions; None when the check is off.
+    intraday_bar_coverage: float | None = None
 
 
 @dataclass
@@ -99,14 +106,19 @@ class UniverseCandidateBuilder:
         *,
         dataset_version_id: str | None = None,
         bar_source: CandidateBarSource | None = None,
+        coverage_source: CandidateCoverageSource | None = None,
     ) -> None:
         """Market data comes from, in order of precedence: ``bar_source`` (fetched per run,
         e.g. Alpaca daily bars for the live monthly rotation), the Parquet
-        ``dataset_version_id`` (replays), else the ``market_bars`` table."""
+        ``dataset_version_id`` (replays), else the ``market_bars`` table.
+
+        ``coverage_source`` is only read when the config sets
+        ``min_intraday_bar_coverage``."""
         self.session = session
         self.raw_pool_query_service = raw_pool_query_service
         self.dataset_version_id = dataset_version_id
         self.bar_source = bar_source
+        self.coverage_source = coverage_source
         self._prefetched: dict[str, list[tuple[datetime, Any, Any, Any]]] | None = None
 
     @property
@@ -209,6 +221,15 @@ class UniverseCandidateBuilder:
                 continue
             metrics_by_symbol[symbol] = metrics
 
+        # Before ranking: the rotation acts on a name's rank among the eligible names.
+        if config.min_intraday_bar_coverage is not None:
+            self._reject_thin_intraday_coverage(
+                config=config,
+                metrics_by_symbol=metrics_by_symbol,
+                rejected=rejected,
+                base_log=base_log,
+            )
+
         eligible_symbols = sorted(metrics_by_symbol.keys())
         ranking_started = time.perf_counter()
         scores = self._compute_scores(eligible_symbols, metrics_by_symbol, config)
@@ -231,6 +252,11 @@ class UniverseCandidateBuilder:
             excluded_count=len(rejected) + len(beyond_max),
             generation_timestamp=now_utc,
             market_data_source=self.market_data_source,
+            intraday_coverage_source=(
+                self.coverage_source.source_name
+                if config.min_intraday_bar_coverage is not None and self.coverage_source
+                else None
+            ),
         )
 
         version = UniverseVersion(
@@ -338,6 +364,52 @@ class UniverseCandidateBuilder:
             generation_metadata=generation_metadata,
             diagnostics=diagnostics,
         )
+
+    def _reject_thin_intraday_coverage(
+        self,
+        *,
+        config: CandidateGenerationConfig,
+        metrics_by_symbol: dict[str, _SymbolMetrics],
+        rejected: list[
+            tuple[str, str, CandidateLiquidityMetrics | None, CandidateQualityMetrics | None]
+        ],
+        base_log: dict[str, Any],
+    ) -> None:
+        """Move names with too few five-minute bars from eligible to rejected, and
+        record every checked name's coverage with its quality metrics."""
+        minimum = config.min_intraday_bar_coverage
+        if minimum is None:
+            return
+        if self.coverage_source is None:
+            raise ValueError(
+                "min_intraday_bar_coverage is set but the builder has no coverage_source"
+            )
+        symbols = sorted(metrics_by_symbol)
+        coverage = self.coverage_source.fetch_coverage(
+            symbols, as_of=config.as_of, sessions=config.intraday_coverage_sessions
+        )
+        for symbol in symbols:
+            metrics = metrics_by_symbol[symbol]
+            value = round(float(coverage.get(symbol, 0.0)), 6)
+            metrics.quality = replace(metrics.quality, intraday_bar_coverage=value)
+            if value >= minimum:
+                continue
+            del metrics_by_symbol[symbol]
+            rejected.append(
+                (symbol, INSUFFICIENT_INTRADAY_COVERAGE, metrics.liquidity, metrics.quality)
+            )
+            logger.info(
+                "universe candidate rejected: %s (%s)",
+                symbol,
+                INSUFFICIENT_INTRADAY_COVERAGE,
+                extra={
+                    **base_log,
+                    "step": "rejection_reason",
+                    "symbol": symbol,
+                    "reason": INSUFFICIENT_INTRADAY_COVERAGE,
+                    "intraday_bar_coverage": value,
+                },
+            )
 
     def _compute_metrics(
         self,
@@ -540,20 +612,8 @@ def _normalize_config(config: CandidateGenerationConfig) -> CandidateGenerationC
     as_of = as_of.replace(tzinfo=UTC) if as_of.tzinfo is None else as_of.astimezone(UTC)
     if as_of is config.as_of:
         return config
-    return CandidateGenerationConfig(
-        as_of=as_of,
-        lookback_days=config.lookback_days,
-        min_history_days=config.min_history_days,
-        min_price=config.min_price,
-        min_average_daily_dollar_volume=config.min_average_daily_dollar_volume,
-        max_missing_bar_pct=config.max_missing_bar_pct,
-        max_symbols=config.max_symbols,
-        asset_type=config.asset_type,
-        weight_dollar_volume=config.weight_dollar_volume,
-        weight_trading_consistency=config.weight_trading_consistency,
-        weight_bar_completeness=config.weight_bar_completeness,
-        weight_volatility_penalty=config.weight_volatility_penalty,
-    )
+    # replace() carries every other setting, including ones added later.
+    return replace(config, as_of=as_of)
 
 
 def _required_volatility(metrics: _SymbolMetrics) -> float:
@@ -637,6 +697,10 @@ def _compute_config_hash(included_symbols: list[str], config: CandidateGeneratio
         "weight_bar_completeness": config.weight_bar_completeness,
         "weight_volatility_penalty": config.weight_volatility_penalty,
     }
+    # Only when the check is on, so hashes of runs without it are unchanged.
+    if config.min_intraday_bar_coverage is not None:
+        payload["min_intraday_bar_coverage"] = config.min_intraday_bar_coverage
+        payload["intraday_coverage_sessions"] = config.intraday_coverage_sessions
     serialized = json.dumps(payload, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
@@ -651,7 +715,19 @@ def _build_generation_metadata(
     excluded_count: int,
     generation_timestamp: datetime,
     market_data_source: str = "market_bars_table",
+    intraday_coverage_source: str | None = None,
 ) -> dict[str, Any]:
+    filter_config: dict[str, Any] = {
+        "min_price": str(config.min_price),
+        "min_average_daily_dollar_volume": str(config.min_average_daily_dollar_volume),
+        "max_missing_bar_pct": config.max_missing_bar_pct,
+        "max_symbols": config.max_symbols,
+        "asset_type": config.asset_type,
+    }
+    if config.min_intraday_bar_coverage is not None:
+        filter_config["min_intraday_bar_coverage"] = config.min_intraday_bar_coverage
+        filter_config["intraday_coverage_sessions"] = config.intraday_coverage_sessions
+        filter_config["intraday_coverage_source"] = intraday_coverage_source
     return {
         "schema_version": 1,
         "market_data_source": market_data_source,
@@ -659,13 +735,7 @@ def _build_generation_metadata(
         "lookback_days": config.lookback_days,
         "min_history_days": config.min_history_days,
         "raw_pool_snapshot_id": snapshot_id,
-        "filter_config": {
-            "min_price": str(config.min_price),
-            "min_average_daily_dollar_volume": str(config.min_average_daily_dollar_volume),
-            "max_missing_bar_pct": config.max_missing_bar_pct,
-            "max_symbols": config.max_symbols,
-            "asset_type": config.asset_type,
-        },
+        "filter_config": filter_config,
         "ranking_config": {
             "weight_dollar_volume": config.weight_dollar_volume,
             "weight_trading_consistency": config.weight_trading_consistency,
@@ -751,10 +821,13 @@ def _liq_to_dict(liq: CandidateLiquidityMetrics) -> dict[str, Any]:
 
 
 def _qual_to_dict(qual: CandidateQualityMetrics) -> dict[str, Any]:
-    return {
+    out: dict[str, Any] = {
         "history_days": qual.history_days,
         "bar_completeness_pct": qual.bar_completeness_pct,
         "trading_consistency": qual.trading_consistency,
         "daily_return_volatility": qual.daily_return_volatility,
         "average_trade_count": qual.average_trade_count,
     }
+    if qual.intraday_bar_coverage is not None:
+        out["intraday_bar_coverage"] = qual.intraday_bar_coverage
+    return out

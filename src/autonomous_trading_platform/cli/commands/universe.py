@@ -317,6 +317,17 @@ def register(subparsers) -> None:
         ),
     )
     monthly_rotation_parser.add_argument(
+        "--min-bar-coverage",
+        type=_coverage_fraction,
+        default=None,
+        metavar="FRACTION",
+        help=(
+            "Only names with at least this share of their five-minute bars over the "
+            "last 20 sessions are eligible, e.g. 0.70 (default: no check, as the "
+            "scheduler does). Fetches minute bars for the whole pool"
+        ),
+    )
+    monthly_rotation_parser.add_argument(
         "--dataset-version-id",
         default=None,
         help="raw_bars version for --market-data dataset",
@@ -680,6 +691,15 @@ def handle_seed(args: argparse.Namespace) -> int:
         return 0
     finally:
         deps.session.close()
+
+
+def _coverage_fraction(raw: str) -> float:
+    value = float(raw)
+    if not 0.0 < value <= 1.0:
+        raise argparse.ArgumentTypeError(
+            f"must be a fraction above 0 and at most 1 (0.70 for 70%), got {raw}"
+        )
+    return value
 
 
 def _resolve_timestamp(raw: str | None) -> datetime:
@@ -1632,6 +1652,7 @@ def handle_monthly_rotation(args: argparse.Namespace) -> int:
     timestamp = _resolve_timestamp(args.timestamp)
     dry_run = bool(getattr(args, "dry_run", False))
     screener_source = getattr(args, "screener_source", ALPACA_ACTIVE)
+    min_bar_coverage = getattr(args, "min_bar_coverage", None)
     context = PlatformReplayContext.create(
         symbols=[], timestamp=timestamp, actor=getattr(args, "approved_by", None) or "operator"
     )
@@ -1647,6 +1668,7 @@ def handle_monthly_rotation(args: argparse.Namespace) -> int:
             rotation_reason="operator_monthly",
             screener_source=screener_source,
             candidate_market_data=getattr(args, "market_data", CANDIDATE_MARKET_DATA_ALPACA_DAILY),
+            min_intraday_bar_coverage=min_bar_coverage,
         )
         kept = result.status == "ok" and not dry_run
         if kept:
@@ -1664,6 +1686,7 @@ def handle_monthly_rotation(args: argparse.Namespace) -> int:
             "rotation_kept": kept,
             "timestamp": timestamp.isoformat(),
             "screener_source": screener_source,
+            "min_bar_coverage": min_bar_coverage,
             "errors": list(result.errors),
             "warnings": list(result.warnings),
             **dict(result.summary),

@@ -772,3 +772,143 @@ def test_market_data_source_is_recorded_for_the_stored_paths_too() -> None:
         ]
         == "market_bars_table"
     )
+
+
+# ---------------------------------------------------------------------------
+# Tests: intraday coverage check (off unless the config sets a minimum)
+# ---------------------------------------------------------------------------
+
+
+class _StubCoverageSource:
+    """Coverage served from memory; records what was asked for."""
+
+    source_name = "stub_minute"
+
+    def __init__(self, coverage: dict[str, float]) -> None:
+        self._coverage = coverage
+        self.calls: list[tuple[list[str], datetime, int]] = []
+
+    def fetch_coverage(
+        self, symbols: list[str], *, as_of: datetime, sessions: int
+    ) -> dict[str, float]:
+        self.calls.append((list(symbols), as_of, sessions))
+        return {s: self._coverage[s] for s in symbols if s in self._coverage}
+
+
+def _make_coverage_builder(
+    rows_by_symbol: dict[str, list[tuple[Any, Any, Any, Any]]], coverage: dict[str, float] | None
+) -> tuple[UniverseCandidateBuilder, _StubCoverageSource | None]:
+    source = _StubCoverageSource(coverage) if coverage is not None else None
+    builder = UniverseCandidateBuilder(
+        _make_session_with_bars({}),
+        _StubRawPoolQueryService(symbols=sorted(rows_by_symbol)),
+        bar_source=_StubBarSource(rows_by_symbol),
+        coverage_source=source,
+    )
+    return builder, source
+
+
+# Daily dollar volume, largest first: BIG, MID, SMALL. NEW has too little history.
+_COVERAGE_POOL = {
+    "BIG": _daily_rows(20, volume=9_000_000),
+    "MID": _daily_rows(20, volume=5_000_000),
+    "SMALL": _daily_rows(20, volume=2_000_000),
+    "NEW": _daily_rows(2),
+}
+
+
+def test_coverage_is_not_fetched_or_recorded_unless_a_minimum_is_set() -> None:
+    builder, source = _make_coverage_builder(_COVERAGE_POOL, {"BIG": 0.0})
+    assert source is not None
+
+    result = builder.build_candidate(config=_default_config(min_history_days=10), name="off")
+
+    assert source.calls == []
+    assert sorted(m.symbol for m in result.included_members) == ["BIG", "MID", "SMALL"]
+    for member in result.included_members:
+        assert "intraday_bar_coverage" not in member.quality_metrics_json
+    assert "min_intraday_bar_coverage" not in result.generation_metadata["filter_config"]
+
+
+def test_names_below_the_minimum_are_rejected_before_ranking() -> None:
+    builder, source = _make_coverage_builder(
+        _COVERAGE_POOL, {"BIG": 0.08, "MID": 0.70, "SMALL": 0.95}
+    )
+    assert source is not None
+    config = _default_config(min_history_days=10, min_intraday_bar_coverage=0.70)
+
+    result = builder.build_candidate(config=config, name="on")
+
+    # Only names that passed the other checks are measured, over the configured sessions.
+    assert source.calls == [(["BIG", "MID", "SMALL"], _AS_OF, 20)]
+    excluded = {m.symbol: m for m in result.excluded_members}
+    assert {s: m.excluded_reason for s, m in excluded.items()} == {
+        "BIG": "insufficient_intraday_coverage",
+        "NEW": "insufficient_history",
+    }
+    assert excluded["BIG"].quality_metrics_json["intraday_bar_coverage"] == 0.08
+    assert excluded["BIG"].liquidity_metrics_json is not None
+    # Exactly at the minimum passes. Ranks run over the names that are left, so the
+    # rotation's rank rules never see the rejected name.
+    included = {m.symbol: m for m in result.included_members}
+    assert {s: m.rank for s, m in included.items()} == {"MID": 1, "SMALL": 2}
+    assert included["MID"].quality_metrics_json["intraday_bar_coverage"] == 0.70
+    assert result.diagnostics["rejection_summary"]["insufficient_intraday_coverage"] == 1
+    assert result.generation_metadata["eligible_count"] == 2
+    assert result.generation_metadata["filter_config"]["min_intraday_bar_coverage"] == 0.70
+    assert result.generation_metadata["filter_config"]["intraday_coverage_sessions"] == 20
+    assert result.generation_metadata["filter_config"]["intraday_coverage_source"] == "stub_minute"
+
+
+def test_a_name_the_coverage_source_leaves_out_counts_as_zero() -> None:
+    builder, _ = _make_coverage_builder(_COVERAGE_POOL, {"MID": 0.9, "SMALL": 0.9})
+    config = _default_config(min_history_days=10, min_intraday_bar_coverage=0.5)
+
+    result = builder.build_candidate(config=config, name="on")
+
+    rejected = {m.symbol: m for m in result.excluded_members}
+    assert rejected["BIG"].excluded_reason == "insufficient_intraday_coverage"
+    assert rejected["BIG"].quality_metrics_json["intraday_bar_coverage"] == 0.0
+
+
+def test_a_minimum_without_a_coverage_source_is_an_error() -> None:
+    builder, _ = _make_coverage_builder(_COVERAGE_POOL, None)
+    config = _default_config(min_history_days=10, min_intraday_bar_coverage=0.70)
+    try:
+        builder.build_candidate(config=config, name="on")
+    except ValueError as exc:
+        assert "coverage_source" in str(exc)
+    else:
+        raise AssertionError("expected the missing coverage source to be rejected")
+
+
+def test_the_minimum_survives_a_naive_as_of() -> None:
+    # A naive as_of is normalised to UTC; the copy must keep every other setting.
+    builder, source = _make_coverage_builder(_COVERAGE_POOL, {"BIG": 0.1, "MID": 0.9, "SMALL": 0.9})
+    assert source is not None
+    config = _default_config(
+        as_of=_AS_OF.replace(tzinfo=None),
+        min_history_days=10,
+        min_intraday_bar_coverage=0.70,
+        intraday_coverage_sessions=10,
+    )
+
+    result = builder.build_candidate(config=config, name="naive")
+
+    assert source.calls == [(["BIG", "MID", "SMALL"], _AS_OF, 10)]
+    assert sorted(m.symbol for m in result.included_members) == ["MID", "SMALL"]
+
+
+def test_the_minimum_is_part_of_the_config_hash_only_when_set() -> None:
+    coverage = {"BIG": 0.9, "MID": 0.9, "SMALL": 0.9}
+
+    def _hash(**overrides: Any) -> str:
+        builder, _ = _make_coverage_builder(_COVERAGE_POOL, coverage)
+        config = _default_config(min_history_days=10, **overrides)
+        return str(builder.build_candidate(config=config, name="h").version.config_hash)
+
+    off = _hash()
+    # Same included names in all three; only the setting differs.
+    assert _hash(intraday_coverage_sessions=5) == off
+    assert _hash(min_intraday_bar_coverage=0.5) != off
+    assert _hash(min_intraday_bar_coverage=0.5) != _hash(min_intraday_bar_coverage=0.7)

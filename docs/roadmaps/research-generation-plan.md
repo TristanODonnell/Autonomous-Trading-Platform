@@ -46,7 +46,7 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 >
 > **Agreed with the user the same day** ("yes lets do it your way"): rehearse on the
 > current box before choosing between a larger box and a smaller way of holding
-> bars; safety nets and a bar cache first. Committed, PR pending: a memory ceiling per
+> bars; safety nets and a bar cache first. Merged as PR #185 and deployed 2026-11-16: a memory ceiling per
 > worker job, a swap installer for B (written, not run on B), bars parsed once per
 > pipeline run. New finding R17 (short warmups on Monday starts). The next decision
 > was the stock list (answered: the universe generator as of the window's first day,
@@ -111,7 +111,7 @@ Package A is merged and deployed. Nothing is running.
 | # | Package | Boxes it closes | Waits on | Size |
 |---|---|---|---|---|
 | 🟢 A | **Validators and evidence** (done: merged PR #184, deployed 2026-11-16) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | Nothing | One PR, no new data (#184) |
-| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code committed the same day, PR pending (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; decisions being taken | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
+| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) built, committed, PR pending (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; decisions being taken | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
 | 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
 | 🔴 D | **Test hardening (R7)** | R7 both boxes, and the R7 boxes under R10, R14, R15 | Nothing | Can ride along with A and B |
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R8, R12's slippage in fill rows, D2 | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
@@ -1853,7 +1853,7 @@ identical bars like R10.
 - Worker resource budget: one measured full pipeline run on B with peak memory and
   wall-clock recorded in section 5, and a memory cap in `infra/ops/worker_job.sh` before
   Step 5's timer (the runbook already warns research jobs are memory-hungry). The cap
-  was built 2026-11-16 (committed, PR pending; see "Package B investigation"); the measured run
+  was built 2026-11-16 (merged PR #185; see "Package B investigation"); the measured run
   on B is still open.
 
 **D1 — SIP bars: one feed everywhere, switched together (check now, switch later).**
@@ -2295,7 +2295,7 @@ behind a fixture flag; default stays `alpaca`.
           them on daily bars and picks 20; five-minute bars are then backfilled for
           those 20 only. Not today's 22 symbols.
     - [x] `atp universe monthly-rotation --screener-source sp500_point_in_time`
-          (2026-11-16, committed, PR pending): the generator can run for an old `--timestamp`
+          (2026-11-16, merged PR #185): the generator can run for an old `--timestamp`
           outside a replay. The default stays `alpaca_active`, so the scheduler's
           month-end step is unchanged. Tested at the command level; not yet run
           against the provider for an old date.
@@ -2303,7 +2303,94 @@ behind a fixture flag; default stays `alpaca`.
       back-dated run there writes the first record. A rotation retires the version
       active on its date and activates the new one, so if several dates are ever
       generated they must be run oldest first.
-    - [ ] Run it on B with `--dry-run` first, then `--enforce`, once B has a key.
+    - [x] Dry run on B (2026-11-16, PR #185 deployed as `28eadfd86` on A and B), through
+          `worker_job.sh`, so also the first real job under the memory ceiling (3055m):
+          `--timestamp 2024-11-18T00:00:00Z --screener-source sp500_point_in_time`,
+          9.5 s, exit 0. Pool 465 index members, 464 scored, 20 proposed: AAPL, BA,
+          BKNG, COST, ELV, GOOG, GOOGL, HD, INTU, LIN, MA, MCD, META, MSFT, NFLX, NVDA,
+          PFE, UNH, V, XOM. Nothing active was kept; one `candidate` row remains as an
+          audit record. The timestamp must be midnight UTC of the window's first day:
+          research looks the universe up at that instant and the version is stamped
+          with the time given.
+    - What the proposed list shows (measured 2026-11-16, six sessions from 2024-11 to
+      2026-11, five-minute bars with all five minutes, of 78 a session, averaged):
+      NVDA 100%, AAPL 97%, GOOGL 95%, MSFT 87%, PFE 86%, GOOG 85%, META 81%, XOM 78%,
+      V 61%, BA 60%, UNH 60%, NFLX 56%, HD 38%, MA 33%, MCD 33%, ELV 25%, BKNG 24%,
+      LIN 23%, INTU 22%, COST 8%. Eight of twenty are under 40%.
+      - Cause: this feed is one exchange with a few percent of trading, so a
+        high-priced share often has no trade there in a given minute, and ingestion
+        keeps a five-minute bar only when all five minutes traded. A quiet minute is
+        treated as missing data. The same rule and feed run on A (COST, CRM and DIA are
+        in today's universe), so this is not only a research matter.
+      - GOOG and GOOGL are two share classes of one company: 19 companies, not 20.
+      - No index funds in the list: the pool is index members only, while today's
+        universe holds some.
+    - *Decision, 2026-11-16 (user, after asking whether research should move to
+      full-market history now): one feed for research and live until the go-live
+      switch (D1's rule stands).* Research on full-market bars and trading on this
+      feed would be training-serving skew: lookbacks, volume thresholds and ranges
+      tuned on data the live loop never sees. Thin names are handled in the stock
+      list instead: a coverage check in the universe generator, written against the
+      data (share of five-minute bars over the 20 sessions before the pick), not
+      against the feed, off by default. On a full-market feed nearly every name
+      passes, so nothing is rolled back at the switch; it stays as a guard.
+    - Measured for the threshold (2026-11-16; every index member, 20 sessions before
+      each date, names at or above each coverage level):
+
+      | As of | 90% | 80% | 70% | 60% | 50% |
+      |---|---|---|---|---|---|
+      | 2024-11-18 | 9 | 17 | 37 | 54 | 74 |
+      | 2025-11-17 | 26 | 48 | 73 | 99 | 117 |
+      | 2026-11-16 | 31 | 57 | 82 | 129 | 158 |
+
+      Passing on all three dates: 16 at 80%, 31 at 70%, 43 at 60%. Of the generator's
+      20 for 2024-11-18, 8 pass 70% and 9 pass 60% (BKNG 0%, COST 4%, INTU 6%, LIN 8%
+      over those 20 sessions). Median share price: 74 dollars above 80% coverage, 159
+      below 40%. Box A's universe today: COST 40%, CRM 44%, ADBE 53%, HD 61%, MA 64%.
+    - *Decision, 2026-11-16 (user): 70%.* 80% leaves 17 names at the window's start,
+      fewer than the universe holds; 60% admits names missing about 31 of 78 bars a
+      day.
+    - [x] Coverage check built (2026-11-16, committed, PR pending, branch
+          `research/package-b-long-dataset`): `CandidateGenerationConfig.
+          min_intraday_bar_coverage` (None = off, the default) and
+          `atp universe monthly-rotation --min-bar-coverage 0.70`. A name that passed
+          the other checks is rejected as `insufficient_intraday_coverage` when its
+          share of five-minute bars over the last 20 sessions is under the minimum;
+          every checked name's coverage is stored with its quality metrics.
+          `AlpacaIntradayCoverageSource` fetches one-minute bars for the pool and
+          counts buckets with all five minutes, ingestion's rule. Sessions are taken
+          from the data (a day nobody traded is not a session), because the static
+          calendar lists holidays for 2025-2026 only.
+      - It checks every name that passed the other checks, not the top of the
+        ranking as first planned: the rotation acts on a name's rank among eligible
+        names (add at rank 20 or better, keep until rank 30), so a name is judged
+        before ranks exist. Cost measured: 84 s for 501 names, paced at one batch of
+        20 names every 3 s because the request allowance is shared with A.
+      - Checked on real bars: the source agrees with the independent probe on all
+        501 names (largest difference 0.0). End to end on the laptop against a
+        scratch SQLite file (provider calls real): without the option, the same 20
+        names B proposed; with 0.70, 37 of 465 eligible and the 20 are AAPL, AMD,
+        AMZN, AVGO, BA, BAC, CSCO, GOOG, GOOGL, INTC, MRK, MSFT, MU, NVDA, PFE, PLTR,
+        TSLA, UBER, WFC, XOM (coverage 72% to 100%).
+      - About 14 of the 20 are technology or close to it, and GOOG and GOOGL are one
+        company. User, 2026-11-16: that is fine; the universe is chosen on data
+        quality, not on sector.
+    - [x] The rotation uses the candidate it just scored (same change). It used to
+          take "the latest candidate by effective date", so a second candidate for
+          the same date (B has one from the dry run) or a later-dated one would have
+          been picked up instead. Live behaviour is the same whenever the scoring
+          step succeeds.
+    - [ ] Found, not changed: when candidate scoring fails, the rotation goes ahead on
+          the latest stored candidate with only a warning. That is A's month-end path.
+          With the coverage option on, the run now fails instead; without it the old
+          behaviour stands. Decide whether a failed scoring step should always stop
+          the rotation.
+    - [ ] Dry run on B with `--min-bar-coverage 0.70` after merge and deploy (the
+          morning's candidate row for the same date is still there, which is the case
+          the candidate fix covers).
+    - [ ] Box A's rotation turns the check on separately, at a monthly rotation, as
+          its own decision (at 70% today it would drop COST, CRM, ADBE, HD, MA).
+    - [ ] `--enforce` on B once the start date and the coverage question are settled.
     - [x] Decide where the long dataset is built. User, 2026-11-16: on Box B, with a
           market-data key added to `.env.worker` (read-only use; B never submits
           orders). The generator, the fetch and the research then all run on B: no
@@ -2337,18 +2424,18 @@ behind a fixture flag; default stays `alpaca`.
       roughly twice the instance cost) before re-engineering bars mid-sprint. The
       smaller bar format stays a separate, later item: strategies and the trading
       cycle consume the same bar objects, so it touches research-to-live parity.
-    - [x] Memory ceiling per job (2026-11-16, committed, PR pending): `worker_job.sh` sets
+    - [x] Memory ceiling per job (2026-11-16, merged PR #185): `worker_job.sh` sets
           `RATP_JOB_MEMORY` to the box's memory minus a 768 MB reserve (about 3055 MB
           on B today; follows a resize) and `docker-compose.worker.yml` applies it to
           the job container. Exit 137 is reported as a memory kill. Checked: the
           script's branches with stand-in commands on the laptop; B's Docker parses
           the file and resolves the limit. Not yet exercised by a real job on B.
     - [x] Swap installer `infra/ops/install_worker_swap.sh` (2026-11-16,
-          committed, PR pending; 4 GB, swappiness 10, safe to re-run). Written and
+          merged PR #185; 4 GB, swappiness 10, safe to re-run). Written and
           syntax-checked only.
-    - [ ] Run the swap installer on B after the deploy (one sudo command; B has no
-          swap today).
-    - [x] Bars parsed once per pipeline run (2026-11-16, committed, PR pending):
+    - [x] Swap installer run on B after the deploy (2026-11-16 08:20 UTC): 4 GB at
+          `/swapfile`, in `/etc/fstab`, swappiness 10; a second run did nothing.
+    - [x] Bars parsed once per pipeline run (2026-11-16, merged PR #185):
           `SimulationWindowLoader.reuse_bars`, entered by `run_staged_experiment`.
           Keeps one (dataset, version, end date) at a time and drops it before
           reading the next. Keyed below the warmup, because warmups differ per

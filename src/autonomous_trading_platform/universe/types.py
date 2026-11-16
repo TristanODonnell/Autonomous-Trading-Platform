@@ -108,6 +108,22 @@ class CandidateBarSource(Protocol):
     ) -> dict[str, list[tuple[datetime, Any, Any, Any]]]: ...
 
 
+class CandidateCoverageSource(Protocol):
+    """How complete each symbol's five-minute bars were over recent sessions.
+
+    ``fetch_coverage`` returns, per symbol, the five-minute bars it had divided by the
+    bars full sessions hold (0.0 to 1.0), over the last ``sessions`` sessions that
+    closed at or before ``as_of``. A symbol left out of the result counts as 0.0.
+    """
+
+    @property
+    def source_name(self) -> str: ...
+
+    def fetch_coverage(
+        self, symbols: list[str], *, as_of: datetime, sessions: int
+    ) -> dict[str, float]: ...
+
+
 class RawSymbolProvider(Protocol):
     @property
     def source_name(self) -> str: ...
@@ -129,6 +145,11 @@ class CandidateGenerationConfig:
     weight_trading_consistency: float = 0.20
     weight_bar_completeness: float = 0.20
     weight_volatility_penalty: float = 0.10
+    # Off when None. With a value, a symbol is eligible only if it had at least this
+    # share of its five-minute bars over the last ``intraday_coverage_sessions``
+    # sessions (the builder then needs a ``CandidateCoverageSource``).
+    min_intraday_bar_coverage: float | None = None
+    intraday_coverage_sessions: int = 20
 
 
 @dataclass(frozen=True)
