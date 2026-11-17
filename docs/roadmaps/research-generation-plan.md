@@ -61,9 +61,11 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > admission window is **24 months**, cut **9 / 9 / 6** (selection / evaluation /
 > holdout), and the holdout date is **2026-05-18**, fixed and moved forward six
 > months at a time on a schedule. The timeline is **built on B** (2026-11-16, 25
-> steps, 31 names in the union, equal to the laptop build step for step). Next:
-> backfill five-minute bars for those 31 names, and change the research engine to
-> read the timeline (own PR, measured before and after).
+> steps, 31 names in the union, equal to the laptop build step for step), and so
+> are the five-minute bars for those 31 names (26 monthly backfill versions,
+> 2024-10-01 to 2026-11-16). Next: deploy `atp datasets build-window` to B and
+> merge the 26 versions into one checked dataset; then change the research
+> engine to read the timeline (own PR, measured before and after).
 > Open decisions: the pass rule over the three test folds; when R17 is fixed.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
@@ -2842,6 +2844,39 @@ behind a fixture flag; default stays `alpaca`.
     - [ ] Build the long-history dataset on B: chunked backfill, corporate actions for
           the same symbols and span, a merge into one validated version, the checks in
           the box above.
+      - Backfill done on B 2026-11-16 (about 22:05 New York): 26 monthly
+        `atp ingestion run-backfill` versions, 2024-10-01 to 2026-11-16, the 31 names
+        of the timeline's union, five-minute bars, IEX. Every chunk exit 0, about 100
+        to 110 seconds each; every version `validated`; consecutive versions meet
+        with no gap and no overlap. The start is 2024-10-01, about 33 sessions before
+        the window's first day, for indicator warm-up (my choice, not asked). Logs
+        and the list of versions: `~/rehearsals/backfill_20261116/` on B.
+      - Merge command written, not yet on B: `atp datasets build-window --start
+        --end --symbols | --symbols-file --plan | --enforce`
+        (`research_window_dataset_service.py`). It merges the validated backfill
+        versions that hold every requested symbol into one version tagged
+        `research_window`, which the bench window does not look for. A session with
+        no bars for any symbol, or with a number of distinct bar times other than its
+        opening hours give, refuses the build and writes nothing. A name missing a
+        session, each name's share of the five-minute slots and any close more than
+        25% from the previous close are reported. It needs a deploy to B before the
+        dataset can be built there.
+      - Checked on real bars (laptop, throwaway database, November 2025, NFLX AAPL
+        MSFT): 19 sessions, the 2025-11-28 half day accepted at 42 bar times; share
+        of slots AAPL 99.8%, MSFT 99.1%, NFLX 94.0%; one jump, **NFLX 1112.11 to
+        110.96 at the open of 2025-11-17, its 10-for-1 split, a 90% drop in raw
+        prices.** Research reads raw prices, so this is the case the split box below
+        is about. For this window it does no harm: in the timeline NFLX is a member
+        only from 2026-01-30. Whether another of the 31 names split while it was a
+        member is not known until the merged dataset's report is read.
+      - Still open in this box: run `build-window` on B; corporate actions for the
+        same names and span.
+      - Read from the code 2026-11-16, because B's database now holds universe
+        versions and backfill versions it did not hold before: the weekly bench
+        re-sim on B takes its window, dataset version and symbols from Box A's API
+        (`handle_bench_resim`, `fetch_bench_inputs`) and builds its run from those,
+        so neither changes Saturday's re-sim. Not traced inside the simulation
+        service itself.
     - [x] Seed a universe version for the window's start outside a replay.
           Covered 2026-11-16 by `atp universe build-timeline`: its first step picks the
           window's first universe from nothing.
