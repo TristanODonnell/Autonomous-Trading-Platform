@@ -51,7 +51,15 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > pipeline run. New finding R17 (short warmups on Monday starts). The next decision
 > was the stock list (answered: the universe generator as of the window's first day,
 > then a backfill of the names it picks), then where it is built (answered: on Box B,
-> with a market-data key). Next: how the two years are split.
+> with a market-data key). PR #187 merged 2026-11-16: a failed pool refresh or
+> scoring step stops the rotation, and a backtest reports a failed universe step.
+> The universe as a monthly timeline built before any simulation (the user's design,
+> Step 5, "Universe over the long window"): the builder command is written
+> 2026-11-16 (`atp universe build-timeline`, branch
+> `research/package-b-universe-timeline`, not yet merged or run on B). Next: the
+> window's total length, which was never agreed, then its split; then build the
+> timeline on B for that window, backfill the union of its names, and change the
+> research engine to read it (own PR, measured before and after).
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
 
@@ -111,7 +119,7 @@ Package A is merged and deployed. Nothing is running.
 | # | Package | Boxes it closes | Waits on | Size |
 |---|---|---|---|---|
 | 🟢 A | **Validators and evidence** (done: merged PR #184, deployed 2026-11-16) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | Nothing | One PR, no new data (#184) |
-| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; decisions being taken | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
+| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder written 2026-11-16, not merged; decisions being taken | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
 | 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
 | 🔴 D | **Test hardening (R7)** | R7 both boxes, and the R7 boxes under R10, R14, R15 | Nothing | Can ride along with A and B |
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R8, R12's slippage in fill rows, D2 | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
@@ -2294,6 +2302,279 @@ behind a fixture flag; default stays `alpaca`.
           any simulation. Candidates are the index members on that date; it scores
           them on daily bars and picks 20; five-minute bars are then backfilled for
           those 20 only. Not today's 22 symbols.
+    - **Universe over the long window: a monthly timeline, built before any simulation
+      (user's design, 2026-11-16, later the same day; replaces "one list for the
+      whole window" above for long windows).** Builder built 2026-11-16; not yet run
+      on B; the engine does not read the timeline yet.
+      - Why. The user: "i always thought our experiement variable should always be
+        the strategy but the simulation itself should get as close to our A box's
+        logic". A rotates its universe every month. A list fixed for 12 to 24 months
+        is honest (it uses nothing from the future) and unrealistic: names fade or
+        are delisted, new liquid names never enter. A list that changes monthly is
+        still the same for every strategy, because it depends on the dates and not on
+        the strategy, so the strategy stays the only variable. (My earlier point that
+        a fixed list is the "controlled" choice was wrong for that reason.)
+      - The design, in the user's words: "map out the simulation timeline, THEN we
+        compute a universe for window A, B, C, D ... a registry of universe lists and
+        we slot in the corresponding when we reach that point in time ... precomputing
+        before the sim starts ... saving that universe in the db for later".
+      - What exists already (read from the code 2026-11-16): `universe_versions` rows
+        carry `effective_from` / `effective_to`, a `config_hash` and their members
+        with rank and score; `get_version_effective_at(date)` answers any past date,
+        retired versions included; `UniverseHistoryService.reconstruct_timeline(start,
+        end)` returns the ordered (start, end, symbols) entries for a window and
+        `build_replay_transitions` the names added, removed and kept at each
+        rotation; `export-version` / `import-version` move versions between boxes.
+      - What research does today: one list, the version in effect on the run's first
+        day, handed to every stage (`research_hooks.py`, `_resolve_research_universe_
+        scope`). A simulation request carries one `symbols` list; the universe label
+        in the runner is the constant `"v1"`.
+      - A's rule for a name that leaves (`portfolio_construction_service.py`,
+        `hold_symbols`): a held position in a universe name with no signal is kept; a
+        held position in a name outside the universe, with no signal, is sold at the
+        next evaluation. The research engine does not use that code: it has its own
+        order path and shares only the sizing function (`sleeve_sizing`).
+        `OrderSimulatorService`, which wraps A's order builder, is not called from
+        the research package. So the exit rule has to be added to the engine.
+      - [x] Timeline builder (2026-11-16): `atp universe build-timeline --start
+            <first day> --end <day after the last> [--min-bar-coverage 0.70] --plan |
+            --enforce` (`application/services/universe_timeline_service.py`). It holds
+            no picking logic: it calls the scheduler's own month-end step
+            (`run_universe_at_timestamp`, churn guard on) once for the window's first
+            day and once per month end, oldest first, and commits after each. In order,
+            each month sees the month before, so A's rule (add at rank 20 or better,
+            keep until rank 30) applies as it does live. Step times: midnight UTC of
+            the first day (a pick from nothing, on bars up to the day before), then
+            each month's last session at 18:00 New York, when A's end-of-day chain
+            opens; A's holiday calendar. `--plan` prints the dates and fetches nothing
+            (24 months from 2024-11-18 is 25 steps). Each step's outcome is one of
+            rotated / unchanged / refused / failed. A failed step (pool, scoring or a
+            broken rotation) stops the build, exit 1; the months before it are kept
+            and a second run continues from there. A refused step (the rotation's
+            safety check, see the churn guard below) keeps the list in force and the
+            build goes on, as on A. The output lists every step and the union of all
+            member names, which is the list to backfill.
+      - [x] An overlap in the stored timeline is an error, on the building side
+            (2026-11-16): the builder refuses a database that holds any universe
+            version in force on or after the window's first day that the timeline did
+            not make. The shared lookup (`get_version_effective_at`, "the most recently
+            created version wins") is unchanged, because A reads it. The reading side
+            is part of the engine box below.
+      - [x] Reuse only on equal rules (2026-11-16). Not through `config_hash` (see
+            below): every step leaves one rotation record, and the builder stamps it
+            (`summary_json["timeline"]`) with the timeline's first day, pool source,
+            bar source and coverage minimum. One database holds one timeline. A run
+            with the same first day and rules reuses every stored step and continues;
+            any other first day or rule is refused with the stored values named. A
+            later window inside a stored timeline is read from it, not rebuilt,
+            because a month's list depends on the month before it.
+      - [ ] Engine: take the timeline (read once before the run, no database calls
+            inside the loop); refuse a window whose stored versions overlap; signals
+            only for names that are members on the bar's date; holdings in names that
+            left are sold, A's rule; a name that enters needs bars from before its
+            first month for its indicators.
+      - [ ] Dataset: backfill the union of the names in the timeline, not 20.
+      - [ ] Memory measured again at the union's size (it grows with the number of
+            names; a 12-month run at 22 names is about 1.7 GB of 3.0 GB).
+      - Measured 2026-11-16 (five more dry runs on B through `worker_job.sh`, 89 to
+        133 s each, all exit 0, outputs in `~/rehearsals/churn_20261116/` on B;
+        nothing kept, five more candidate rows as audit records). Each run starts
+        from no universe, so each is a fresh top 20 and not what A's keep-until-rank-30
+        rule would produce month to month:
+
+        | As of | Names passing 70% coverage | Same as the 2024-11-18 list | Changed since the previous sample |
+        |---|---|---|---|
+        | 2024-11-18 | 37 | 20 | |
+        | 2024-12-16 | 29 | 17 | 3 |
+        | 2025-05-19 | 45 | 17 | 3 |
+        | 2025-11-17 | 73 | 17 | 4 |
+        | 2026-05-18 | 79 | 14 | 5 |
+        | 2026-08-17 | 90 | 13 | 4 |
+
+        - A fixed list is 17 of 20 right for the first year and 13 of 20 by month 21.
+          Twelve names are in all six lists (AAPL, AMD, AMZN, AVGO, BAC, GOOG, GOOGL,
+          INTC, MSFT, NVDA, PLTR, TSLA).
+        - 35 different names across the six samples. Four left and came back (CSCO,
+          MU, PFE, WMT): names near rank 20 flicker, which is what A's rule damps, so
+          the true month-by-month figure needs the timeline builder.
+        - Early in the window the list is decided mostly by coverage: 20 names are
+          picked from 29 to 37 that pass. By 2026 there are 79 to 90 to choose from.
+          The dip from 37 to 29 a month later is not explained.
+        - Consequence for memory: bars are needed for more names than 20. Loading
+          every name for a whole run would scale the 1.7 GB of a 12-month run by the
+          number of names; loading a name only for the months it is a member (plus
+          warm-up) would not. To be designed with the engine change.
+      - Read 2026-11-16: `config_hash` cannot carry the rules. A candidate's hash
+        includes the coverage minimum; the active version's hash covers only its
+        symbols and the rotation thresholds; neither includes the pool source. And a
+        month whose list does not change writes no new version (`config_hash_
+        unchanged`, the earlier version stays in effect), so "computed, unchanged"
+        and "never computed" look alike. The builder needs its own record of the
+        rules and of the months done.
+      - Read 2026-11-16, what the builder has to copy from A
+        (`paper_trading_golden_path_orchestrator.py`, `universe_rotation_service.py`):
+        - When: the end-of-day chain runs the rotation on the last trading day of
+          each month, after the close, so the new list is in force for the first
+          session of the next month. The window's first entry is a start from nothing.
+        - The churn guard is on (`force_rotation=False`). A proposal that would change
+          more than 30% of the list is refused: the step fails and the universe stays
+          as it was. In a timeline that month is "unchanged, guard", which the
+          builder must tell apart from a failure of the pool or the scoring (stop the
+          build).
+        - A month whose proposal equals the current list is skipped and nothing is
+          stored: the rotation record is built and not saved. On A too, "ran and
+          changed nothing" cannot be told from "did not run".
+      - [x] Decided by the user 2026-11-16 ("Save the skipped record"): the builder's
+            record of the months done is the rotation record, and a month with no
+            change now saves one (`UniverseRotationService.rotate`, status `skipped`,
+            reason `config_hash_unchanged`). No new table, no migration. The record and
+            the result name the version that stays in force; before, they named a
+            proposed version that was never stored, so the step reported 0 symbols.
+            Its rebalance-run reference is empty, since that run is not stored either.
+            What changes on A: one more audit row in a month with no change. Readers
+            checked: `rotation-history` and `rotation-status` list the row with its
+            status; the replay summary's "last churn" is empty after a no-change month
+            (it showed the earlier month's figure); rollback and the version history
+            do not read it.
+      - Read 2026-11-16, while building: when the churn guard can refuse. The
+        rotation has its own budget of six changes for a 20-name list, so changes
+        driven by rank alone never exceed 30%. Only names that are no longer
+        candidates at all are removed regardless of the budget: gone from the pool, or
+        failing a filter such as the 70% coverage check. Seven or more of those in one
+        month is over 30%, the proposal is refused and the list stays, with those
+        names still in it. The removals also use up the budget for additions, so six
+        such removals in a month leave the list at 14 names until later months refill
+        it. Both are A's behaviour and the timeline will show them (`refused` steps,
+        `symbol_count` per step). Not measured: whether either happens on real data
+        is read off the first real build. The coverage check was added for research;
+        A's scheduler runs without it.
+      - Measured 2026-11-16 on the laptop (a throwaway SQLite file, real provider
+        calls, the real command with `--min-bar-coverage 0.70 --enforce`; not yet on
+        B). First run, window 2024-11-18 to 2025-01-02, three steps in 286 s, exit 0.
+        Second run on the same file with the end moved to 2025-02-03: the three
+        stored steps reused, only January fetched, 103 s. A third run without the
+        coverage option was refused with both sets of rules named, exit 1.
+
+        | Step | Outcome | Names passing 70% coverage | Added | Removed |
+        |---|---|---|---|---|
+        | 2024-11-18 (start) | rotated | 37 | the 20 of the earlier dry run | |
+        | 2024-11-29 | unchanged | 34 | | |
+        | 2024-12-31 | rotated, 30% | 22 | GM, KO, SMCI | BA, MRK, MSFT |
+        | 2025-01-31 | rotated, 20% | 40 | JNJ, MSFT | GM, SMCI |
+
+        - 24 names in the union after four steps.
+        - **Finding: the coverage check removes MSFT for January 2025.** All three
+          December removals were coverage exclusions, not rank: MSFT's share of
+          complete five-minute bars over the last 20 sessions went 0.84, 0.83, 0.68;
+          BA 0.78, 0.72, 0.63; MRK 0.74, 0.76, 0.65. Nearly every name dipped in the
+          sessions to 2024-12-31 (AAPL 0.95 to 0.90, NVDA 1.00 to 0.95) and the
+          number passing fell from 37 to 22. The half days (11-29, 12-24) are counted
+          at their real length, so this is thin trading on IEX over the holidays,
+          not a counting error. It fits the earlier unexplained dip (37 to 29 on
+          2024-12-16). MSFT is back a month later.
+        - What it means: a 70% line chosen on November's numbers sits inside the
+          seasonal swing of names near it, so the list changes for a reason that has
+          nothing to do with the stocks. Three such removals used half of the month's
+          budget of six changes; a fourth would have left the list at 18 names.
+        - [x] Decided by the user 2026-11-16 ("yes lets do 2 then"), after the three
+              options were explained (leave as is; a lower line to stay than to
+              enter; a longer measuring window than 20 sessions): **two lines**. A
+              name needs the minimum (70%) to enter; a name already in the universe
+              in force stays eligible down to a lower line. Same idea as the rank
+              rule (add at 20, keep until 30).
+        - [x] Built 2026-11-16, off unless asked for: `--held-min-bar-coverage` on
+              `monthly-rotation` and `build-timeline`
+              (`CandidateGenerationConfig.held_min_intraday_bar_coverage`). The
+              scoring job reads the members of the universe in force on the scoring
+              date and hands them to the scorer; the scorer keeps a held name that is
+              under the minimum and at or above the lower line, ranks it with the
+              rest, and lists such names in the candidate's stored settings
+              (`held_below_entry_coverage`), which the timeline shows per step. The
+              lower line needs the minimum and cannot be above it. It is part of the
+              candidate's hash and of the timeline's stamped rules, so a one-line and
+              a two-line build are different timelines. The first step of a timeline
+              has no universe in force, so every name needs the minimum there. A's
+              scheduler passes neither option and is unchanged.
+        - [x] The lower line is **0.55**, chosen by the user 2026-11-16 ("okay 0.55")
+              from the numbers below. The research timeline's rules are therefore:
+              pool `sp500_point_in_time`, daily bars from Alpaca, enter at 70%
+              five-minute coverage, stay down to 55%
+              (`--min-bar-coverage 0.70 --held-min-bar-coverage 0.55`). Neither
+              number is a default in the code; both are given on the command and
+              stamped on the timeline.
+        - Checked 2026-11-16 with the real command and real provider calls (laptop,
+          a fresh scratch file, 0.70 / 0.55, four steps, 356 s, exit 0): at
+          2024-12-31 the list is unchanged, with BA, MRK and MSFT listed as kept by
+          the lower line (one line removed all three); at 2025-01-31 BA, now at 0.47,
+          is removed and JNJ added. The remaining 21 steps were then built on the same
+          file (1,938 s, exit 0, no warnings), giving the same 24 months under both
+          rules:
+
+          | 24 months, 2024-11-18 to 2026-11-16 | One line (0.70) | Two lines (0.70 / 0.55) |
+          |---|---|---|
+          | Month ends that changed the list | 19 of 24 | 15 of 24 |
+          | Names swapped in after the start | 27 | 16 |
+          | Removals of a held name for coverage | 17 | 7 |
+          | of those, back at 70% within three months | 12 | 2 (ORCL, GOOG) |
+          | Different names over the window (to backfill) | 38 | 31 |
+          | List size, every month | 20 | 20 |
+          | Months refused by the churn guard | 0 | 0 |
+
+          - Names were kept by the lower line in 8 months, 14 name-months in all (BA,
+            MRK and MSFT in 2024-12; JNJ; MRK, MSFT and AVGO in mid-2025; CVX and
+            GOOG in 2026-04; MRVL in 2026-09). MSFT is a member in all 24 months.
+          - The two lists are identical in 9 of 25 steps and differ by one to three
+            names in the others; the final lists differ by one name (JPM / MRVL).
+          - The seven coverage removals left: BA, JNJ, META, UNH and CVX, which did
+            not recover, and ORCL (0.52) and GOOG (0.54), which did. As predicted
+            from the one-line build.
+          - Laptop scratch files, not the timeline of record: that is built on B once
+            the window is decided.
+        - Measured 2026-11-16: the full 25-step build, 2024-11-18 to 2026-11-16, one
+          line at 70%, on the laptop's scratch file (2,381 s for the 21 new steps,
+          exit 0, no warnings). 19 steps rotated, 6 unchanged, none refused; the list
+          held 20 names in every month; 38 names in the union. Names passing 70%
+          ranged from 22 (2024-12) to 98 (2026-06): 22 to 64 through 2025-08, 54 to
+          98 from 2025-09 on.
+          - A held name fell under 70% 17 times in 24 months, so 17 of the removals
+            under one line were for coverage. They are not only holiday months: three
+            in December 2024, eight in June to August 2025, the rest scattered.
+          - Twelve were temporary (back at 70% within one to three months): MRK,
+            MSFT twice, JNJ, AVGO, KO, ORCL, FCX, NKE, GOOG twice, UNH. Four were a
+            name thinning out for good (BA, META, UNH in 2025-06, CVX). One is too
+            recent to tell (SNDK, 2026-09).
+          - Each dip followed month by month under a lower line (a name is kept while
+            it is at or above the line, until it is back at 70%):
+
+            | Lower line | Temporary dips ridden out (of 12) | Temporary dips still removed | Name-months held under 70% |
+            |---|---|---|---|
+            | 0.65 | 3 | 9 | 6 |
+            | 0.60 | 8 | 4 (ORCL, GOOG twice, UNH) | 17 |
+            | 0.55 | 10 | 2 (ORCL at 0.52, GOOG at 0.54) | 19 |
+            | 0.50 | 12 | 0 | 26 |
+
+          - The four names that thinned for good are removed under every line, at
+            most one month late at 0.55 or above. At 0.50 CVX is held four months at
+            51 to 60%.
+          - At 0.60 two of the eight sit on the line (KO 0.601, JNJ 0.604).
+          - Limits: 17 cases in one two-year window; counted on the one-line build,
+            so the two-line build will differ a little because different names are
+            held; the line is chosen on the same window the strategies will be tested
+            on (it is a rule about data, the same for every strategy, and uses no
+            returns).
+      - [x] The hook reports a refused rotation as `rotation_refused: ...`
+            (2026-11-16): still a failed step for the scheduler and the command, now
+            with the candidate's counts. The builder records it as a `rejected`
+            rotation record.
+      - Not decided: A's own refused month still leaves no record, because its chain
+        rolls the step back. Whether A should keep one has not been asked.
+      - Still open, and asked before this: the total length of the window. "About two
+        years" was a proposal and never agreed (the user, 2026-11-16: "so 2 year is
+        that too long though?"). The split into selection / evaluation / holdout
+        follows from the length. Three lengths to keep apart: how long a platform
+        replay runs (`two_year_full.yaml`: 2023-2024), the research lookback inside
+        each monthly run (90 days), and the window a strategy is admitted on (this
+        one).
     - [x] `atp universe monthly-rotation --screener-source sp500_point_in_time`
           (2026-11-16, merged PR #185): the generator can run for an old `--timestamp`
           outside a replay. The default stays `alpaca_active`, so the scheduler's
