@@ -2,14 +2,22 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from autonomous_trading_platform.application.services.universe_timeline_service import (
+    UniverseTimelineError,
+)
 from autonomous_trading_platform.cli.commands import universe as universe_cmd
 from autonomous_trading_platform.cli.main import build_parser
+from autonomous_trading_platform.contracts.runtime.universe_timeline import (
+    UniverseTimelineBuildResult,
+    UniverseTimelineRules,
+    UniverseTimelineStep,
+)
 
 
 class TestUniverseParserRegistration:
@@ -351,3 +359,180 @@ class TestHeldCoverageLineCli:
         assert calls["hook"]["held_min_intraday_bar_coverage"] == 0.55
         out = capsys.readouterr().out
         assert json.loads(out[out.index("{") :])["held_min_bar_coverage"] == 0.55
+
+
+class TestBuildTimelineCli:
+    _WINDOW = ["--start", "2024-11-18", "--end", "2025-02-03"]
+
+    def _result(self, status: str) -> UniverseTimelineBuildResult:
+        rules = UniverseTimelineRules(
+            screener_source="sp500_point_in_time",
+            candidate_market_data="alpaca_daily",
+            min_intraday_bar_coverage=0.7,
+        )
+        steps = [
+            UniverseTimelineStep(
+                timestamp=datetime(2024, 11, 18, tzinfo=UTC),
+                kind="start",
+                outcome="rotated",
+                universe_version_id="uv-1",
+                symbols=["AAPL", "MSFT"],
+                added=["AAPL", "MSFT"],
+                eligible_count=37,
+            )
+        ]
+        errors = []
+        if status == "stopped":
+            steps.append(
+                UniverseTimelineStep(
+                    timestamp=datetime(2024, 11, 29, 23, tzinfo=UTC),
+                    kind="month_end",
+                    outcome="failed",
+                    detail="screener_refresh_failed: boom",
+                )
+            )
+            errors = ["2024-11-29T23:00:00+00:00: screener_refresh_failed: boom"]
+        return UniverseTimelineBuildResult(
+            start=date(2024, 11, 18),
+            end=date(2025, 2, 3),
+            rules=rules,
+            status=status,  # type: ignore[arg-type]
+            steps=steps,
+            symbols_union=["AAPL", "MSFT"],
+            errors=errors,
+        )
+
+    def test_a_mode_is_required_and_the_pool_defaults_to_point_in_time(self) -> None:
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["universe", "build-timeline", *self._WINDOW])
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(
+                ["universe", "build-timeline", *self._WINDOW, "--plan", "--enforce"]
+            )
+        args = build_parser().parse_args(["universe", "build-timeline", *self._WINDOW, "--plan"])
+        assert (args.start, args.end) == (date(2024, 11, 18), date(2025, 2, 3))
+        assert args.screener_source == "sp500_point_in_time"
+        assert args.market_data == "alpaca_daily"
+        assert args.min_bar_coverage is None
+
+    @pytest.mark.parametrize(
+        ("mode", "status", "expect_exit"),
+        [("--plan", "planned", 0), ("--enforce", "complete", 0), ("--enforce", "stopped", 1)],
+    )
+    def test_handler_builds_with_the_given_rules_and_reports_each_step(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        mode: str,
+        status: str,
+        expect_exit: int,
+    ) -> None:
+        calls: dict[str, Any] = {}
+        session = SimpleNamespace(
+            rollback=lambda: None, close=lambda: calls.setdefault("close", True)
+        )
+        monkeypatch.setattr(universe_cmd, "get_session", lambda: session)
+
+        def fake_build(**kwargs: Any) -> UniverseTimelineBuildResult:
+            calls["build"] = kwargs
+            return self._result(status)
+
+        monkeypatch.setattr(universe_cmd, "build_universe_timeline", fake_build)
+
+        args = build_parser().parse_args(
+            ["universe", "build-timeline", *self._WINDOW, mode, "--min-bar-coverage", "0.70"]
+        )
+        assert universe_cmd.handle_build_timeline(args) == expect_exit
+
+        built = calls["build"]
+        assert built["session"] is session
+        assert (built["start"], built["end"]) == (date(2024, 11, 18), date(2025, 2, 3))
+        assert built["plan_only"] is (mode == "--plan")
+        assert built["rules"] == UniverseTimelineRules(
+            screener_source="sp500_point_in_time",
+            candidate_market_data="alpaca_daily",
+            min_intraday_bar_coverage=0.7,
+        )
+        assert calls["close"] is True
+
+        out = capsys.readouterr().out
+        payload = json.loads(out[out.index("{") :])
+        assert payload["status"] == status
+        assert payload["rules"]["min_intraday_bar_coverage"] == 0.7
+        assert payload["steps"][0]["symbol_count"] == 2
+        assert payload["steps"][0]["eligible_count"] == 37
+        assert payload["symbols_union"] == ["AAPL", "MSFT"]
+        assert payload["symbols_union_count"] == 2
+        assert len(payload["errors"]) == (1 if status == "stopped" else 0)
+
+    def test_a_refused_build_exits_1_and_says_why(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        session = SimpleNamespace(rollback=lambda: None, close=lambda: None)
+        monkeypatch.setattr(universe_cmd, "get_session", lambda: session)
+
+        def refuse(**kwargs: Any) -> UniverseTimelineBuildResult:
+            raise UniverseTimelineError("2 universe version(s) were not made by this timeline")
+
+        monkeypatch.setattr(universe_cmd, "build_universe_timeline", refuse)
+
+        args = build_parser().parse_args(["universe", "build-timeline", *self._WINDOW, "--enforce"])
+        assert universe_cmd.handle_build_timeline(args) == 1
+        assert "were not made by this timeline" in capsys.readouterr().out
+
+
+class TestBuildTimelineHeldCoverageCli:
+    _BASE = ["universe", "build-timeline", "--start", "2024-11-18", "--end", "2025-02-03"]
+
+    def test_the_lower_line_is_off_unless_given(self) -> None:
+        assert build_parser().parse_args([*self._BASE, "--plan"]).held_min_bar_coverage is None
+
+    @pytest.mark.parametrize(
+        ("options", "message"),
+        [
+            (["--held-min-bar-coverage", "0.55"], "needs --min-bar-coverage"),
+            (
+                ["--min-bar-coverage", "0.55", "--held-min-bar-coverage", "0.70"],
+                "must be at most",
+            ),
+        ],
+    )
+    def test_lines_that_do_not_fit_stop_the_build_before_any_work(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        options: list[str],
+        message: str,
+    ) -> None:
+        def _not_reached(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("no session and no provider call for bad options")
+
+        monkeypatch.setattr(universe_cmd, "get_session", _not_reached)
+
+        args = build_parser().parse_args([*self._BASE, "--enforce", *options])
+        assert universe_cmd.handle_build_timeline(args) == 1
+        assert message in capsys.readouterr().out
+
+    def test_the_lower_line_is_part_of_the_rules_the_build_gets(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        calls: dict[str, Any] = {}
+        session = SimpleNamespace(rollback=lambda: None, close=lambda: None)
+        monkeypatch.setattr(universe_cmd, "get_session", lambda: session)
+
+        def fake_build(**kwargs: Any) -> UniverseTimelineBuildResult:
+            calls["build"] = kwargs
+            return UniverseTimelineBuildResult(
+                start=kwargs["start"], end=kwargs["end"], rules=kwargs["rules"], status="planned"
+            )
+
+        monkeypatch.setattr(universe_cmd, "build_universe_timeline", fake_build)
+
+        args = build_parser().parse_args(
+            [*self._BASE, "--plan", "--min-bar-coverage", "0.70", "--held-min-bar-coverage", "0.55"]
+        )
+        assert universe_cmd.handle_build_timeline(args) == 0
+
+        assert calls["build"]["rules"].held_min_intraday_bar_coverage == 0.55
+        out = capsys.readouterr().out
+        assert json.loads(out[out.index("{") :])["rules"]["held_min_intraday_bar_coverage"] == 0.55

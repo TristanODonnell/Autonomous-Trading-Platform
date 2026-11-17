@@ -63,6 +63,15 @@ class UniverseRotationRepository(BaseRepository):
         )
         return list(self.session.execute(stmt).scalars().all())
 
+    def get_for_reason(self, rotation_reason: str) -> list[UniverseRotationRecord]:
+        """Every record written with ``rotation_reason``, oldest first."""
+        stmt = (
+            select(UniverseRotationRecord)
+            .where(UniverseRotationRecord.rotation_reason == rotation_reason)
+            .order_by(UniverseRotationRecord.created_at.asc())
+        )
+        return list(self.session.execute(stmt).scalars().all())
+
     def get_for_previous_version(self, version_id: str) -> list[UniverseRotationRecord]:
         stmt = (
             select(UniverseRotationRecord)
