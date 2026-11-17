@@ -55,11 +55,15 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > scoring step stops the rotation, and a backtest reports a failed universe step.
 > The universe as a monthly timeline built before any simulation (the user's design,
 > Step 5, "Universe over the long window"): the builder command is written
-> 2026-11-16 (`atp universe build-timeline`, branch
-> `research/package-b-universe-timeline`, not yet merged or run on B). Next: the
-> window's total length, which was never agreed, then its split; then build the
-> timeline on B for that window, backfill the union of its names, and change the
-> research engine to read it (own PR, measured before and after).
+> 2026-11-16 (`atp universe build-timeline`) and **merged as PR #188** (`69a9b1b0c`),
+> on A and B the same day (both checked on the merge commit; A's app and scheduler
+> restarted). It has not been run on B. Decided by the user 2026-11-16: the
+> admission window is **24 months**, cut **9 / 9 / 6** (selection / evaluation /
+> holdout), and the holdout date is **2026-05-18**, fixed and moved forward six
+> months at a time on a schedule. Next: build the timeline on B for 2024-11-18
+> onward with the 0.70 / 0.55 coverage lines, backfill the union of its names,
+> and change the research engine to read it (own PR, measured before and after).
+> Open decisions: the pass rule over the three test folds; when R17 is fixed.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
 
@@ -68,28 +72,48 @@ Keep this board in step with the boxes: when a box changes in section 3, change 
 
 **Step 0, pipeline integrity (the current work)**
 
-| Item | What it is | Status | Done / open | What is left |
+Regrouped 2026-11-16 (user: "can we do some cleanup here"): open items first, in the order
+they will be worked, then what is deferred, then what is done. "Boxes" counts checkboxes in
+section 3: done, then still open.
+
+*Open: will be worked*
+
+| Item | What it is | Status | Boxes | What is left | When |
+|---|---|---|---|---|---|
+| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 7 done, 13 open | Code only, still open: pooled or median fold gate, daily resample, the walk-forward "entered" count (found 2026-11-15). The rest waits on longer history (package B): selection / evaluation / holdout split, fold geometry, folds in sessions, minimum test span. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Now. The split and fold boxes are package B, which is the current work; the three code-only boxes can be done at any time |
+| 🔴 R17 | Short warmups get no bars when a window starts on a Monday | Found 2026-11-16, checked on the real loader; not fixed | 0 done, 2 open | Measure the effect, then fix with a before / after | Not scheduled. Suggested (not agreed): before the long run's results are read, because the fix changes results |
+| 🔴 R7 | Test hardening per stage | Not started as its own item. Realistic-curve tests now exist at gate level for Monte Carlo, stress and regime | 0 done, 2 open | A real-runner test per stage, the cross-process checksum test. R4's "Verify" (a real-runner test per stage where the gate fails) is this work too | Rides along with package B (package D) |
+| 🔴 R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 done, 5 open | All of the wiring | After package B, before Step 5 (package C). It saves time on long runs; it does not change any result |
+| 🔴 R13 | No parameter-stability check | Not decided. A decision, not work yet | 0 done, 2 open | Decide whether to build the neighbour check | The user's decision, asked once package B gives more survivors (package F) |
+
+*Deferred: nothing to do until its trigger*
+
+| Item | What it is | Why it can wait | Boxes | Trigger |
 |---|---|---|---|---|
-| 🟢 R1 | Monte Carlo resamples for real | **Done.** Merged PR #181, deployed to A and B | 4 / 0 | Nothing |
-| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 7 / 13 | Code only, still open: pooled or median fold gate, daily resample, the walk-forward "entered" count (found 2026-11-15). The rest waits on longer history (package B): selection / evaluation / holdout split, fold geometry, folds in sessions, minimum test span. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook |
-| 🔴 R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 / 5 | All of the wiring. Scheduled before Step 5 |
-| 🟡 R4 | Audit of the remaining gates | **Audit done**: notes for stress, overfitting, parameter stability, regime; problems are R11 to R15 | 1 / 1 | The 12% drawdown kill is missing from the backtest path. R4's "Verify" (a real-runner test per stage where the gate fails) is not met; that work is R7 |
-| 🟢 R5 | Composite score hides missing evidence | **Done.** Merged PR #184, deployed 2026-11-16. No score without walk-forward and Monte Carlo; report-only measures carry weight 0 | 2 / 0 | Nothing |
-| 🟢 R6 | Experiment-config and holdout validator | **Validator shipped.** Merged PR #184, deployed 2026-11-16 | 1 / 1 | Repo-level holdout date (package B) |
-| 🔴 R7 | Test hardening per stage | Not started as its own item. Realistic-curve tests now exist at gate level for Monte Carlo, stress and regime | 0 / 2 | A real-runner test per stage, the cross-process checksum test |
-| 🔴 R8 | Simulator RNG keyed per decision | Not started | 0 / 4 | Inert until stochastic fills are switched on |
-| ⚪ R9 | Generator has no selection | Folds into Step 2 | no boxes | Step 2 |
-| 🟢 R10 | Stale marks when a bar is missing | **Done.** Merged PR #182, deployed to A and B | 6 / 2 | The re-sim vs platform correlation was not re-measured; more sparse-bar fixtures (R7) |
-| 🟢 R11 | Stress gate: shocks report-only, costs decide | **Done.** Merged PR #183, deployed 2026-11-16. Rerun done: funnel 30 → 30 → 4 → 2 → 2 → 2, the first run with final survivors | 5 / 0 | Nothing. "Verify" met by the all-30 audit pass: 7 pass, 23 fail, for causes that differ. Stress at the new cost is R12's box |
-| 🟢 R12 | Research trading cost: 1 basis point per trade | **Done except two boxes.** Merged PR #183, deployed 2026-11-16. Measured on real bars (funnel 30 → 30 → 2 → 2 → 2 → 2, stress passes 3 of 30) and on B's bench re-sim (order unchanged; momentum -1.8% → -7.8%) | 4 / 3 | Slippage written to fill rows. Two midpoint guards wait for a `LIMIT` / `TWAP` policy |
-| 🔴 R13 | No parameter-stability check | Not decided | 0 / 2 | Decide whether to build the neighbour check |
-| 🟢 R14 | Overfitting gate never exercised | **Report-only shipped.** Merged PR #184, deployed 2026-11-16 (agreed 2026-11-15). Measured first: on all 30 strategies it passed 26, including 16 of 20 losing ones, and changed no outcome | 3 / 1 | The prerequisites before `enforce` is switched on; they wait on longer history |
-| 🟢 R15 | Regime gate report-only on a short window | **Report-only shipped.** Merged PR #183, deployed 2026-11-16 | 1 / 4 | The four prerequisites before `enforce` is switched on; all wait on longer history |
-| 🔴 R17 | Short warmups get no bars when a window starts on a Monday | Found 2026-11-16, checked on the real loader; not fixed | 0 / 2 | Measure the effect, then fix with a before / after |
-| 🟢 R16 | The deployable decision rests on the three report-only measures | **Decided and shipped.** Merged PR #184, deployed 2026-11-16 (user: "Trusted evidence only"). Deployable is now the average of walk-forward and Monte Carlo. Measured first: nothing was flagged deployable, the regime input was always 0.5, shocks near-constant | 2 / 2 | Calibrate the 0.55 threshold (needs longer history); pass the regime profile to the scoring request so the reported regime fields are real |
+| ⚪ R8 | Simulator RNG keyed per decision | It only matters when fills are random. Checked in the code 2026-11-16: the three random-fill settings (`partial_fill_probability`, `fill_probability_on_touch`, `order_rejection_probability`) default to off and no config, fixture or experiment sets one; `settlement_days` is 0 everywhere | 0 done, 4 open | Before any random-fill setting or a non-zero `settlement_days` is switched on in research. Not enforced by code: the second box (raise when a probability is set without a seeded RNG) is the guard that would enforce it |
+
+R9 (the generator has no selection) has no row: it has no boxes of its own and is Step 2's
+work. Its note stays in section 3.
+
+*Done* (anything left is in the parked list below)
+
+| Item | What it is | Status | Boxes | What is left |
+|---|---|---|---|---|
+| 🟢 R1 | Monte Carlo resamples for real | **Done.** Merged PR #181, deployed to A and B | 4 done, 0 open | Nothing |
+| 🟢 R4 | Audit of the remaining gates | **Audit done** 2026-11-15: notes for stress, overfitting, parameter stability, regime; the problems it found are R11 to R15 | 1 done, 1 open | The 12% drawdown kill on the backtest path (parked below, package E). Its "Verify" is R7's work |
+| 🟢 R5 | Composite score hides missing evidence | **Done.** Merged PR #184, deployed 2026-11-16. No score without walk-forward and Monte Carlo; report-only measures carry weight 0 | 2 done, 0 open | Nothing |
+| 🟢 R6 | Experiment-config and holdout validator | **Validator shipped.** Merged PR #184, deployed 2026-11-16 | 1 done, 1 open | Repo-level holdout date (package B) |
+| 🟢 R10 | Stale marks when a bar is missing | **Done.** Merged PR #182, deployed to A and B | 6 done, 2 open | The re-sim vs platform correlation was not re-measured; more sparse-bar fixtures (R7) |
+| 🟢 R11 | Stress gate: shocks report-only, costs decide | **Done.** Merged PR #183, deployed 2026-11-16. Rerun done: funnel 30 → 30 → 4 → 2 → 2 → 2, the first run with final survivors | 5 done, 0 open | Nothing. "Verify" met by the all-30 audit pass: 7 pass, 23 fail, for causes that differ. Stress at the new cost is R12's box |
+| 🟢 R12 | Research trading cost: 1 basis point per trade | **Done except two boxes.** Merged PR #183, deployed 2026-11-16. Measured on real bars (funnel 30 → 30 → 2 → 2 → 2 → 2, stress passes 3 of 30) and on B's bench re-sim (order unchanged; momentum -1.8% → -7.8%) | 4 done, 3 open | Slippage written to fill rows. Two midpoint guards wait for a `LIMIT` / `TWAP` policy |
+| 🟢 R14 | Overfitting gate never exercised | **Report-only shipped.** Merged PR #184, deployed 2026-11-16 (agreed 2026-11-15). Measured first: on all 30 strategies it passed 26, including 16 of 20 losing ones, and changed no outcome | 3 done, 1 open | The prerequisites before `enforce` is switched on; they wait on longer history |
+| 🟢 R15 | Regime gate report-only on a short window | **Report-only shipped.** Merged PR #183, deployed 2026-11-16 | 1 done, 4 open | The four prerequisites before `enforce` is switched on; all wait on longer history |
+| 🟢 R16 | The deployable decision rests on the three report-only measures | **Decided and shipped.** Merged PR #184, deployed 2026-11-16 (user: "Trusted evidence only"). Deployable is now the average of walk-forward and Monte Carlo. Measured first: nothing was flagged deployable, the regime input was always 0.5, shocks near-constant | 2 done, 2 open | Calibrate the 0.55 threshold (needs longer history); pass the regime profile to the scoring request so the reported regime fields are real |
 
 **Parked follow-ups on green items** (shipped, but these boxes are still open; none is forgotten)
 
+- R4: nothing on the backtest trading path reads the 12% drawdown kill (package E; goes
+  through the safety doctrine and the rehearsal rule). The largest item in this list.
 - R6: the repo-level holdout date (package B).
 - R10: re-measure the re-sim vs platform correlation; more sparse-bar test fixtures (package D).
 - R12: write the charged slippage into the fill rows (package E); the two quote-midpoint guards, before any `LIMIT` / `TWAP` policy is switched on.
@@ -122,7 +146,7 @@ Package A is merged and deployed. Nothing is running.
 | 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder written 2026-11-16, not merged; decisions being taken | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
 | 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
 | 🔴 D | **Test hardening (R7)** | R7 both boxes, and the R7 boxes under R10, R14, R15 | Nothing | Can ride along with A and B |
-| 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R8, R12's slippage in fill rows, D2 | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
+| 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R12's slippage in fill rows, D2. R8 left this package 2026-11-16: deferred until random fills are switched on | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
 | 🔴 F | **R13** | Decide whether to build the neighbour check | The user | A decision, then maybe one PR |
 
 After these: Step 1 (baseline, waits on R2), then Steps 2 to 5.
@@ -779,8 +803,9 @@ restarts.
 
 **Verify:** the e2e test above; `research inspect-checkpoints` lists a real run's store.
 
-**R4 — Audit the remaining gates the same way (started 2026-11-15: notes below for
-stress, overfitting, parameter stability and regime, problems recorded as R11 to R15).**
+**R4 — Audit the remaining gates the same way (audit done 2026-11-15: notes below for
+stress, overfitting, parameter stability and regime, problems recorded as R11 to R15; the
+one open box, the drawdown kill, is package E).**
 Regime, stress, overfitting and parameter-stability stages (`pipeline/stages/regime_stage.py`, `stress_stage.py`,
 `overfitting_stage.py`, `pipeline/gates/*`, the `ParameterSensitivityAnalyzer`) were not
 read on 2026-11-07 and sit in the same funnel. Stress re-runs the simulation under cost
@@ -1024,6 +1049,8 @@ suite `v1` rule "holdout never tuned on" (`pre-launch-deployment-plan.md` §5) e
 - [ ] A repo-level holdout declaration (one date, one place) that every experiment YAML is
       checked against. Moved to package B (2026-11-15): a holdout needs history long
       enough to set one aside.
+      Decided 2026-11-16: the date is 2026-05-18, moved forward six months at a time on a
+      schedule (see Step 5, "Universe over the long window"). Not built.
 
 **R7 — Test hardening per stage (not started).** Every stage audited so far is tested with
 `MagicMock` results and permissive filters, so gating logic is never exercised.
@@ -1035,7 +1062,8 @@ suite `v1` rule "holdout never tuned on" (`pre-launch-deployment-plan.md` §5) e
       guarantee R8 and the cache work depend on; without it "same seed, same result" is
       a hope.
 
-**R8 — Simulator RNG is positional, not keyed (not started).** The fill model draws from
+**R8 — Simulator RNG is positional, not keyed (deferred 2026-11-16: inert until random
+fills are switched on; checked in the code that day, nothing sets one).** The fill model draws from
 one RNG stream in intent order, so adding or removing one symbol changes every other
 symbol's fills in the same run **[7.5 #1]**; a config that sets any stochastic
 probability without a seeded RNG runs unseeded instead of failing, and
@@ -1980,6 +2008,17 @@ table written in two chunk layouts hashes identically.
 
 ### Step 1 — Baseline measurement (not started)
 
+Note, 2026-11-16 (not a decision): this section was written 2026-11-06, before package B.
+Its window (about 54 sessions, a 14-session holdout), its 22-symbol list and its pinned
+rolling dataset describe the short window. Once package B is done the baseline would run
+on the long window, the timeline's universes and the long dataset, so the boxes below need
+rewriting then. What Step 1 waits on, read from this plan: R2 (through package B), and the
+two conditions in the next paragraphs (the D1 check, which the user deferred 2026-11-15,
+and the Finding 27 re-pull, which a newly built long dataset may replace). Whether those
+two still apply is the user's call when Step 1 is reached. R17 is not named as a condition
+anywhere; it changes results, so fixing it first avoids measuring the baseline twice.
+R3, R7, R8 and R13 do not block Step 1.
+
 Run the existing pipeline on the window B now holds and record the numbers, so the
 generator change has a "before". Run it **after R1, R2 and the D1 check land** (and after the SIP re-pull if it
 turns out free), or the baseline is scored by a vacuous Monte Carlo and leaky folds on thin
@@ -2568,10 +2607,67 @@ behind a fixture flag; default stays `alpaca`.
             rotation record.
       - Not decided: A's own refused month still leaves no record, because its chain
         rolls the step back. Whether A should keep one has not been asked.
-      - Still open, and asked before this: the total length of the window. "About two
-        years" was a proposal and never agreed (the user, 2026-11-16: "so 2 year is
-        that too long though?"). The split into selection / evaluation / holdout
-        follows from the length. Three lengths to keep apart: how long a platform
+      - Decided 2026-11-16 (the user, asked with 12 / 18 / 24 months as the choices):
+        **the admission window is 24 months in total.** Reasons given with the
+        question: both timeline builds covered 24 months with a full list every
+        month; it allows about a six-month holdout (yearly Sharpe uncertainty about
+        1.4, against about 2.0 for three months); no single run spans the whole
+        window, so the longest run stays at or under 12 months (about 1.7 GB of B's
+        3.0 GB). Known cost: only 22 names passed the 70% coverage line at the old end
+        (2024-12). Before this, "about two years" was a proposal and never agreed
+        (the user, earlier the same day: "so 2 year is that too long though?"). The
+        split into selection / evaluation / holdout is the next decision.
+      - Decided 2026-11-16 (the user, asked with 9 / 9 / 6, 12 / 6 / 6 and 12 / 8 / 4
+        as the choices): **the split is 9 months selection, 9 evaluation, 6 holdout.**
+        This replaces the 12 / 6 / 6 pencilled in above. Reasons given with the
+        question: nine months of evaluation fit three test folds of about 63 sessions
+        (the minimum useful fold is about 60), so a "most folds must pass" rule has a
+        middle (2 of 3) where six months fit only two; selection only ranks, and its
+        yearly Sharpe uncertainty goes from about 1.0 to about 1.15; the longest run
+        drops from 12 months to 9 (about 1.4 GB on B, interpolated between the measured
+        6- and 12-month points, not measured). Known cost: selection sees three fewer
+        months, and Monte Carlo over nine months takes about 2.25 times as long as
+        over six. On the window the timeline builds used (2024-11-18 to 2026-11-16)
+        the pieces are: selection 2024-11-18 to 2025-08-17, evaluation 2025-08-18 to
+        2026-05-17, holdout from 2026-05-18. The pass rule over the three folds is
+        not decided (R2's "pooled or median" box).
+      - Decided 2026-11-16 (the user, asked with "fixed, moved on a schedule", "rolling
+        monthly" and "fixed now, decide later" as the choices): **the holdout date is
+        fixed at 2026-05-18 and moves on a schedule.** One date in one place, checked
+        by the validator (R6's open box): no gate reads that day or a later one. It
+        only moves forward, six months at a time, and each move is recorded here.
+        Between moves the holdout grows from 6 to 12 months and every month's
+        candidates are judged on the same selection and evaluation days. Read from
+        that rule, not asked separately: the first move falls due when the holdout
+        reaches 12 months, 2027-05-18, and takes the date to 2026-11-18. Known cost:
+        the gates do not see the newest 6 to 12 months; that stretch is covered by the
+        holdout report and by the bench's shadow tier. This matches the deployment
+        plan's "most recent 6-12 months, never tuned on". Not decided: whether the
+        selection and evaluation pieces move with the date at each move (the natural
+        reading, each six months later) and what is recorded about days that leave
+        the holdout after having been scored.
+      - Found 2026-11-16, read from the code, not decided: **an ordinary worker run
+        deletes the timeline.** `atp worker run` resets B's database unless
+        `--no-reset` or `--resume` is given (`cli/commands/worker.py`, `reset=not
+        (args.no_reset or args.resume)`), and the reset's table list includes
+        `universe_versions`, `universe_members`, `universe_rotation_records`,
+        `universe_rebalance_runs` and `universe_snapshots`
+        (`worker_state_reset_service.py`). Pulled datasets are the only thing a reset
+        keeps. Neither of B's timers runs `worker run` today (nightly `datasets pull`,
+        Saturday `worker bench-resim`; the re-sim command checks the environment and
+        does not call the reset in the part read, not traced further). So a stored
+        timeline is safe until someone runs a fixture on B. Also open with it: a
+        platform replay creates its own universe version, which the timeline builder
+        would refuse to share a database with. The engine change (next box) has to
+        say where the timeline lives while other jobs use B: kept by the reset the way
+        pulled datasets are, rebuilt before each long run (about 25 provider-backed
+        steps), or exported to a file the engine reads. To be asked before that PR.
+      - Started 2026-11-16 20:32 New York on B: `atp universe build-timeline --start
+        2024-11-18 --end 2026-11-16 --min-bar-coverage 0.70 --held-min-bar-coverage
+        0.55 --enforce` through `worker_job.sh`, output in
+        `~/rehearsals/timeline_20261116/` on B. `--plan` first: 25 steps, first
+        2024-11-18, last 2026-10-30 18:00 New York. Result to be recorded here.
+      - Three lengths to keep apart: how long a platform
         replay runs (`two_year_full.yaml`: 2023-2024), the research lookback inside
         each monthly run (90 days), and the window a strategy is admitted on (this
         one).
@@ -2731,7 +2827,9 @@ behind a fixture flag; default stays `alpaca`.
     - [ ] Build the long-history dataset on B: chunked backfill, corporate actions for
           the same symbols and span, a merge into one validated version, the checks in
           the box above.
-    - [ ] Seed a universe version for the window's start outside a replay.
+    - [x] Seed a universe version for the window's start outside a replay.
+          Covered 2026-11-16 by `atp universe build-timeline`: its first step picks the
+          window's first universe from nothing.
     - [ ] Prove split adjustment on the research read path with a test that crosses a
           known split, before any multi-year score is read.
     - [ ] Hook: take the dataset version explicitly; fail loudly when the window is
