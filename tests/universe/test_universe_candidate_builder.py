@@ -5,6 +5,8 @@ from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
 from autonomous_trading_platform.contracts.common.enums import (
     UniverseStatus,
 )
@@ -912,3 +914,92 @@ def test_the_minimum_is_part_of_the_config_hash_only_when_set() -> None:
     assert _hash(intraday_coverage_sessions=5) == off
     assert _hash(min_intraday_bar_coverage=0.5) != off
     assert _hash(min_intraday_bar_coverage=0.5) != _hash(min_intraday_bar_coverage=0.7)
+
+
+# ---------------------------------------------------------------------------
+# A lower coverage line for names already in the universe
+# ---------------------------------------------------------------------------
+
+
+def test_a_held_name_stays_eligible_down_to_the_lower_line() -> None:
+    # BIG and MID both sit between the two lines; only BIG is held.
+    builder, _ = _make_coverage_builder(_COVERAGE_POOL, {"BIG": 0.66, "MID": 0.66, "SMALL": 0.95})
+    config = _default_config(
+        min_history_days=10,
+        min_intraday_bar_coverage=0.70,
+        held_min_intraday_bar_coverage=0.60,
+    )
+
+    result = builder.build_candidate(config=config, name="two-lines", held_symbols=["BIG"])
+
+    included = {m.symbol: m for m in result.included_members}
+    excluded = {m.symbol: m.excluded_reason for m in result.excluded_members}
+    assert sorted(included) == ["BIG", "SMALL"]
+    assert included["BIG"].rank is not None
+    assert included["BIG"].quality_metrics_json["intraday_bar_coverage"] == 0.66
+    assert excluded["MID"] == "insufficient_intraday_coverage"
+    filters = result.generation_metadata["filter_config"]
+    assert filters["held_min_intraday_bar_coverage"] == 0.60
+    assert filters["held_below_entry_coverage"] == ["BIG"]
+
+
+def test_a_held_name_below_the_lower_line_is_rejected() -> None:
+    builder, _ = _make_coverage_builder(_COVERAGE_POOL, {"BIG": 0.59, "MID": 0.9, "SMALL": 0.9})
+    config = _default_config(
+        min_history_days=10,
+        min_intraday_bar_coverage=0.70,
+        held_min_intraday_bar_coverage=0.60,
+    )
+
+    result = builder.build_candidate(config=config, name="two-lines", held_symbols=["BIG"])
+
+    excluded = {m.symbol: m.excluded_reason for m in result.excluded_members}
+    assert excluded["BIG"] == "insufficient_intraday_coverage"
+    assert result.generation_metadata["filter_config"]["held_below_entry_coverage"] == []
+
+
+def test_held_names_get_no_lower_line_unless_it_is_set() -> None:
+    builder, _ = _make_coverage_builder(_COVERAGE_POOL, {"BIG": 0.66, "MID": 0.9, "SMALL": 0.9})
+    config = _default_config(min_history_days=10, min_intraday_bar_coverage=0.70)
+
+    result = builder.build_candidate(config=config, name="one-line", held_symbols=["BIG"])
+
+    excluded = {m.symbol: m.excluded_reason for m in result.excluded_members}
+    assert excluded["BIG"] == "insufficient_intraday_coverage"
+    assert "held_min_intraday_bar_coverage" not in result.generation_metadata["filter_config"]
+    assert "held_below_entry_coverage" not in result.generation_metadata["filter_config"]
+
+
+@pytest.mark.parametrize(
+    ("minimum", "held_minimum", "message"),
+    [
+        (None, 0.60, "needs min_intraday_bar_coverage"),
+        (0.70, 0.80, "at most min_intraday_bar_coverage"),
+        (0.70, 0.0, "must be above 0"),
+    ],
+)
+def test_a_lower_line_that_does_not_fit_the_minimum_is_an_error(
+    minimum: float | None, held_minimum: float, message: str
+) -> None:
+    builder, _ = _make_coverage_builder(_COVERAGE_POOL, {"BIG": 0.9, "MID": 0.9, "SMALL": 0.9})
+    config = _default_config(
+        min_history_days=10,
+        min_intraday_bar_coverage=minimum,
+        held_min_intraday_bar_coverage=held_minimum,
+    )
+
+    with pytest.raises(ValueError, match=message):
+        builder.build_candidate(config=config, name="bad")
+
+
+def test_the_lower_line_is_part_of_the_config_hash_only_when_set() -> None:
+    coverage = {"BIG": 0.9, "MID": 0.9, "SMALL": 0.9}
+
+    def _hash(**overrides: Any) -> str:
+        builder, _ = _make_coverage_builder(_COVERAGE_POOL, coverage)
+        config = _default_config(min_history_days=10, min_intraday_bar_coverage=0.70, **overrides)
+        return str(builder.build_candidate(config=config, name="h").version.config_hash)
+
+    one_line = _hash()
+    assert _hash(held_min_intraday_bar_coverage=0.60) != one_line
+    assert _hash(held_min_intraday_bar_coverage=0.60) != _hash(held_min_intraday_bar_coverage=0.50)

@@ -5,6 +5,7 @@ import json
 import time
 import uuid
 from collections import defaultdict
+from collections.abc import Collection
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -142,7 +143,10 @@ class UniverseCandidateBuilder:
         name: str,
         source: str = UniverseSource.CUSTOM,
         rebalance_reason: str | None = None,
+        held_symbols: Collection[str] = (),
     ) -> CandidateBuildResult:
+        """``held_symbols``: the members of the universe in force, read by the caller.
+        Only used when the config sets ``held_min_intraday_bar_coverage``."""
         logger.disabled = False
         logger.propagate = True
         config = _normalize_config(config)
@@ -222,12 +226,14 @@ class UniverseCandidateBuilder:
             metrics_by_symbol[symbol] = metrics
 
         # Before ranking: the rotation acts on a name's rank among the eligible names.
+        held_below_entry: list[str] = []
         if config.min_intraday_bar_coverage is not None:
-            self._reject_thin_intraday_coverage(
+            held_below_entry = self._reject_thin_intraday_coverage(
                 config=config,
                 metrics_by_symbol=metrics_by_symbol,
                 rejected=rejected,
                 base_log=base_log,
+                held_symbols=frozenset(held_symbols),
             )
 
         eligible_symbols = sorted(metrics_by_symbol.keys())
@@ -257,6 +263,7 @@ class UniverseCandidateBuilder:
                 if config.min_intraday_bar_coverage is not None and self.coverage_source
                 else None
             ),
+            held_below_entry_coverage=held_below_entry,
         )
 
         version = UniverseVersion(
@@ -374,12 +381,19 @@ class UniverseCandidateBuilder:
             tuple[str, str, CandidateLiquidityMetrics | None, CandidateQualityMetrics | None]
         ],
         base_log: dict[str, Any],
-    ) -> None:
+        held_symbols: frozenset[str],
+    ) -> list[str]:
         """Move names with too few five-minute bars from eligible to rejected, and
-        record every checked name's coverage with its quality metrics."""
+        record every checked name's coverage with its quality metrics.
+
+        Returns the held names that stay eligible only because of the lower line for
+        held names (below the minimum, at or above ``held_min_intraday_bar_coverage``).
+        """
         minimum = config.min_intraday_bar_coverage
         if minimum is None:
-            return
+            return []
+        held_minimum = config.held_min_intraday_bar_coverage
+        held_below_entry: list[str] = []
         if self.coverage_source is None:
             raise ValueError(
                 "min_intraday_bar_coverage is set but the builder has no coverage_source"
@@ -393,6 +407,9 @@ class UniverseCandidateBuilder:
             value = round(float(coverage.get(symbol, 0.0)), 6)
             metrics.quality = replace(metrics.quality, intraday_bar_coverage=value)
             if value >= minimum:
+                continue
+            if held_minimum is not None and symbol in held_symbols and value >= held_minimum:
+                held_below_entry.append(symbol)
                 continue
             del metrics_by_symbol[symbol]
             rejected.append(
@@ -410,6 +427,7 @@ class UniverseCandidateBuilder:
                     "intraday_bar_coverage": value,
                 },
             )
+        return held_below_entry
 
     def _compute_metrics(
         self,
@@ -608,6 +626,19 @@ class UniverseCandidateBuilder:
 
 
 def _normalize_config(config: CandidateGenerationConfig) -> CandidateGenerationConfig:
+    held_minimum = config.held_min_intraday_bar_coverage
+    if held_minimum is not None:
+        minimum = config.min_intraday_bar_coverage
+        if minimum is None:
+            raise ValueError(
+                "held_min_intraday_bar_coverage needs min_intraday_bar_coverage: it is the "
+                "lower of two lines"
+            )
+        if not 0.0 < held_minimum <= minimum:
+            raise ValueError(
+                f"held_min_intraday_bar_coverage ({held_minimum}) must be above 0 and at "
+                f"most min_intraday_bar_coverage ({minimum})"
+            )
     as_of = config.as_of
     as_of = as_of.replace(tzinfo=UTC) if as_of.tzinfo is None else as_of.astimezone(UTC)
     if as_of is config.as_of:
@@ -701,6 +732,8 @@ def _compute_config_hash(included_symbols: list[str], config: CandidateGeneratio
     if config.min_intraday_bar_coverage is not None:
         payload["min_intraday_bar_coverage"] = config.min_intraday_bar_coverage
         payload["intraday_coverage_sessions"] = config.intraday_coverage_sessions
+    if config.held_min_intraday_bar_coverage is not None:
+        payload["held_min_intraday_bar_coverage"] = config.held_min_intraday_bar_coverage
     serialized = json.dumps(payload, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
@@ -716,6 +749,7 @@ def _build_generation_metadata(
     generation_timestamp: datetime,
     market_data_source: str = "market_bars_table",
     intraday_coverage_source: str | None = None,
+    held_below_entry_coverage: list[str] | None = None,
 ) -> dict[str, Any]:
     filter_config: dict[str, Any] = {
         "min_price": str(config.min_price),
@@ -728,6 +762,10 @@ def _build_generation_metadata(
         filter_config["min_intraday_bar_coverage"] = config.min_intraday_bar_coverage
         filter_config["intraday_coverage_sessions"] = config.intraday_coverage_sessions
         filter_config["intraday_coverage_source"] = intraday_coverage_source
+    if config.held_min_intraday_bar_coverage is not None:
+        filter_config["held_min_intraday_bar_coverage"] = config.held_min_intraday_bar_coverage
+        # Held names that are eligible only because of the lower line.
+        filter_config["held_below_entry_coverage"] = sorted(held_below_entry_coverage or [])
     return {
         "schema_version": 1,
         "market_data_source": market_data_source,

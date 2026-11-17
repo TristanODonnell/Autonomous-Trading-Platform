@@ -291,3 +291,63 @@ class TestMonthlyRotationCli:
         assert calls["hook"]["min_intraday_bar_coverage"] == expected
         out = capsys.readouterr().out
         assert json.loads(out[out.index("{") :])["min_bar_coverage"] == expected
+
+
+class TestHeldCoverageLineCli:
+    _BASE = ["universe", "monthly-rotation", "--dry-run"]
+
+    def test_the_lower_line_is_off_unless_given(self) -> None:
+        assert build_parser().parse_args(self._BASE).held_min_bar_coverage is None
+        args = build_parser().parse_args(
+            [*self._BASE, "--min-bar-coverage", "0.70", "--held-min-bar-coverage", "0.55"]
+        )
+        assert (args.min_bar_coverage, args.held_min_bar_coverage) == (0.70, 0.55)
+
+    @pytest.mark.parametrize(
+        ("options", "message"),
+        [
+            (["--held-min-bar-coverage", "0.55"], "needs --min-bar-coverage"),
+            (
+                ["--min-bar-coverage", "0.55", "--held-min-bar-coverage", "0.70"],
+                "must be at most",
+            ),
+        ],
+    )
+    def test_lines_that_do_not_fit_stop_the_command_before_any_work(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        options: list[str],
+        message: str,
+    ) -> None:
+        def _not_reached(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("no session and no provider call for bad options")
+
+        monkeypatch.setattr(universe_cmd, "get_session", _not_reached)
+
+        args = build_parser().parse_args([*self._BASE, *options])
+        assert universe_cmd.handle_monthly_rotation(args) == 1
+        assert message in capsys.readouterr().out
+
+    def test_handler_passes_the_lower_line_on(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        calls: dict[str, Any] = {}
+        session = SimpleNamespace(commit=lambda: None, rollback=lambda: None, close=lambda: None)
+        monkeypatch.setattr(universe_cmd, "get_session", lambda: session)
+
+        def fake_hook(**kwargs: Any) -> Any:
+            calls["hook"] = kwargs
+            return SimpleNamespace(status="ok", errors=[], warnings=[], summary={})
+
+        monkeypatch.setattr(universe_cmd, "run_universe_at_timestamp", fake_hook)
+
+        args = build_parser().parse_args(
+            [*self._BASE, "--min-bar-coverage", "0.70", "--held-min-bar-coverage", "0.55"]
+        )
+        assert universe_cmd.handle_monthly_rotation(args) == 0
+
+        assert calls["hook"]["min_intraday_bar_coverage"] == 0.70
+        assert calls["hook"]["held_min_intraday_bar_coverage"] == 0.55
+        out = capsys.readouterr().out
+        assert json.loads(out[out.index("{") :])["held_min_bar_coverage"] == 0.55

@@ -328,6 +328,17 @@ def register(subparsers) -> None:
         ),
     )
     monthly_rotation_parser.add_argument(
+        "--held-min-bar-coverage",
+        type=_coverage_fraction,
+        default=None,
+        metavar="FRACTION",
+        help=(
+            "With --min-bar-coverage: a lower line for names already in the universe, "
+            "e.g. 0.60. They stay eligible down to it, so a short dip in coverage does "
+            "not remove a name for a month (default: one line for every name)"
+        ),
+    )
+    monthly_rotation_parser.add_argument(
         "--dataset-version-id",
         default=None,
         help="raw_bars version for --market-data dataset",
@@ -700,6 +711,20 @@ def _coverage_fraction(raw: str) -> float:
             f"must be a fraction above 0 and at most 1 (0.70 for 70%), got {raw}"
         )
     return value
+
+
+def _coverage_options_error(minimum: float | None, held_minimum: float | None) -> str | None:
+    """Why the two coverage options do not fit together, or None when they do."""
+    if held_minimum is None:
+        return None
+    if minimum is None:
+        return "--held-min-bar-coverage needs --min-bar-coverage: it is the lower of two lines"
+    if held_minimum > minimum:
+        return (
+            f"--held-min-bar-coverage ({held_minimum}) must be at most "
+            f"--min-bar-coverage ({minimum})"
+        )
+    return None
 
 
 def _resolve_timestamp(raw: str | None) -> datetime:
@@ -1653,6 +1678,11 @@ def handle_monthly_rotation(args: argparse.Namespace) -> int:
     dry_run = bool(getattr(args, "dry_run", False))
     screener_source = getattr(args, "screener_source", ALPACA_ACTIVE)
     min_bar_coverage = getattr(args, "min_bar_coverage", None)
+    held_min_bar_coverage = getattr(args, "held_min_bar_coverage", None)
+    options_error = _coverage_options_error(min_bar_coverage, held_min_bar_coverage)
+    if options_error is not None:
+        print_error(options_error)
+        return 1
     context = PlatformReplayContext.create(
         symbols=[], timestamp=timestamp, actor=getattr(args, "approved_by", None) or "operator"
     )
@@ -1669,6 +1699,7 @@ def handle_monthly_rotation(args: argparse.Namespace) -> int:
             screener_source=screener_source,
             candidate_market_data=getattr(args, "market_data", CANDIDATE_MARKET_DATA_ALPACA_DAILY),
             min_intraday_bar_coverage=min_bar_coverage,
+            held_min_intraday_bar_coverage=held_min_bar_coverage,
         )
         kept = result.status == "ok" and not dry_run
         if kept:
@@ -1687,6 +1718,7 @@ def handle_monthly_rotation(args: argparse.Namespace) -> int:
             "timestamp": timestamp.isoformat(),
             "screener_source": screener_source,
             "min_bar_coverage": min_bar_coverage,
+            "held_min_bar_coverage": held_min_bar_coverage,
             "errors": list(result.errors),
             "warnings": list(result.warnings),
             **dict(result.summary),

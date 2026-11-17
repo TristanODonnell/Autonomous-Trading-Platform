@@ -336,3 +336,27 @@ def test_a_rotation_that_breaks_is_failed_without_the_refused_name(
 
     assert result.status == "failed"
     assert result.errors == ["connection reset"]
+
+
+def test_the_lower_coverage_line_is_passed_to_the_scorer_and_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+    _patch_pool_refresh(monkeypatch)
+
+    def _score(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        candidate = _candidate({})
+        candidate.generation_metadata["filter_config"] = {"held_below_entry_coverage": ["MSFT"]}
+        return candidate
+
+    monkeypatch.setattr(cand_mod, "run_candidate_generation", _score)
+    monkeypatch.setattr(universe_hooks, "build_candidate_coverage_source", lambda minimum: None)
+    monkeypatch.setattr(universe_hooks, "run_universe_rotation", lambda **k: _rotation())
+
+    result = _run_hook(min_intraday_bar_coverage=0.7, held_min_intraday_bar_coverage=0.6)
+
+    assert captured["config"].min_intraday_bar_coverage == 0.7
+    assert captured["config"].held_min_intraday_bar_coverage == 0.6
+    assert result.summary["held_min_intraday_bar_coverage"] == 0.6
+    assert result.summary["held_below_entry_coverage"] == ["MSFT"]
