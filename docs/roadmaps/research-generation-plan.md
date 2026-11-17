@@ -63,9 +63,12 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > months at a time on a schedule. The timeline is **built on B** (2026-11-16, 25
 > steps, 31 names in the union, equal to the laptop build step for step), and so
 > are the five-minute bars for those 31 names (26 monthly backfill versions,
-> 2024-10-01 to 2026-11-16). Next: deploy `atp datasets build-window` to B and
-> merge the 26 versions into one checked dataset; then change the research
-> engine to read the timeline (own PR, measured before and after).
+> 2024-10-01 to 2026-11-16). The first merge on B was refused, correctly: the IEX
+> feed has no bars on 2025-03-10 and stops at 10:22 New York on 2024-12-23. The
+> user decided both sessions are left out by name (`--exclude-session`, on branch
+> `research/package-b-window-exclusions`). Next: deploy that, build the dataset
+> on B; then change the research engine to read the timeline (own PR, measured
+> before and after).
 > Open decisions: the pass rule over the three test folds; when R17 is fixed.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
@@ -2869,8 +2872,50 @@ behind a fixture flag; default stays `alpaca`.
         is about. For this window it does no harm: in the timeline NFLX is a member
         only from 2026-01-30. Whether another of the 31 names split while it was a
         member is not known until the merged dataset's report is read.
-      - Still open in this box: run `build-window` on B; corporate actions for the
-        same names and span.
+      - First real build on B, 2026-11-16 (PR #189 on A and B, `de8a3bfc2`): `--plan`
+        gave 26 sources, 534 sessions, 31 names; `--enforce` was **refused**, as
+        meant, in 16 seconds with nothing written. 1,030,543 bars merged. Two faults:
+        **2025-03-10 has no bars for any name, and 2024-12-23 has 10 of 78 bar
+        times.** Report: `~/rehearsals/backfill_20261116/window_build.out` on B.
+        - Cause, checked two ways. A fresh fetch of each day alone on the laptop gives
+          the same (nothing; bars from 09:30 to 10:15 New York only). Asked directly,
+          the provider returns for AAPL and NVDA on IEX: nothing on 2025-03-10; one-
+          minute bars up to 10:22 New York on 2024-12-23; a full day on 2025-03-11.
+          On SIP it returns a full day for all three dates. So the holes are in the
+          IEX feed's history, not in the fetch.
+        - Decided 2026-11-16 (the user, asked with "leave both out by name", "fill
+          the two days from SIP" and "keep the partial day, drop the empty one" as
+          the choices): **both sessions are left out by name.** The dataset stays on
+          one feed, 532 of 534 sessions. Both days are in the selection piece.
+        - Built for it: `--exclude-session DATE` (repeatable) on `build-window`.
+          The named sessions' bars are dropped and the list is stored with the
+          version and in its identity. A date that is not a session in the window is
+          an error, and excluding a session that has every bar time is refused, so
+          the list cannot drop good data. Checked on real December 2024 bars: the
+          faulty 2024-12-23 is accepted as an exclusion, the complete 2024-12-20 is
+          refused. Needs a deploy to B, then the build is run again with both dates.
+        - The rest of the report (it is computed before a refusal). Six closes more
+          than 25% from the previous close: NFLX on 2025-11-17 (the split, -90%);
+          ORCL +35% on 2025-09-10; AMD +31% on 2025-10-06; INTC +25% on 2025-09-18,
+          +27% on 2026-04-24 and -29% on 2026-10-30. The five others are single
+          gaps at the open and look like news; not checked against a list of
+          corporate actions. Share of five-minute slots over the whole span, lowest:
+          BA 43%, CVX 50%, JNJ 50%, NFLX 54%, UNH 54%, V 59%; highest NVDA 99.5%,
+          AAPL 97.9%. NFLX has 19 sessions with no bars at all; every other name has
+          one (2025-03-10).
+        - Seen while diagnosing, not acted on: this account's key returns full SIP
+          history for the three dates asked. This is a comparison made to find the
+          cause, not D1's planned probe, and the one-feed rule is unchanged.
+        - Finding, not measured, not decided: **the two faulty days also sit inside
+          the timeline's coverage measure.** Coverage is the share of complete
+          five-minute bars over the last 20 sessions, so at the 2024-12-31 step
+          every name is short by most of 2024-12-23 and at the 2025-03-31 step by all
+          of 2025-03-10, up to five points each. The 2024-12 step is the one where
+          fewest names passed the 70% line (25 on B). How much the lists would change
+          if those days were left out of the measure is not known; a change would
+          mean rebuilding the timeline.
+      - Still open in this box: run `build-window` on B with the two exclusions;
+        corporate actions for the same names and span.
       - Read from the code 2026-11-16, because B's database now holds universe
         versions and backfill versions it did not hold before: the weekly bench
         re-sim on B takes its window, dataset version and symbols from Box A's API

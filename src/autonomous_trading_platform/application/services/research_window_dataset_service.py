@@ -11,6 +11,11 @@ registering it:
 - A symbol with no bars on a session, and a close far from the previous close, are
   reported. Thin names and splits make both normal in raw prices.
 
+A session the feed has no usable data for can be left out by name. Its bars are dropped,
+the list is stored with the version, and the simulator sees a day without bars, as it
+does a holiday. Only a session that is in fact missing or short can be left out, so the
+list cannot drop good data.
+
 The version is tagged ``dataset_lifecycle = "research_window"``. The bench window looks
 for ``rolling_bench_window`` versions, so it never picks this one up.
 
@@ -66,6 +71,7 @@ class ResearchWindowDatasetService(RollingRawBarsService):
         now_utc: datetime,
         calendar: MarketCalendar | None = None,
         plan_only: bool = False,
+        exclude_sessions: Iterable[date] = (),
     ) -> ResearchWindowDatasetResult:
         names = sorted({s.strip().upper() for s in symbols if s and s.strip()})
         if not names:
@@ -73,9 +79,16 @@ class ResearchWindowDatasetService(RollingRawBarsService):
         if end < start:
             raise ValueError(f"--end {end} is before --start {start}")
         market = calendar or RealMarketCalendar()
-        sessions = list(market.trading_days(start, end))
-        if not sessions:
+        every_session = list(market.trading_days(start, end))
+        if not every_session:
             raise ValueError(f"no trading session between {start} and {end}")
+        excluded = sorted(set(exclude_sessions))
+        unknown = [day for day in excluded if day not in every_session]
+        if unknown:
+            raise ValueError(f"{unknown[0]} is not a trading session between {start} and {end}")
+        sessions = [day for day in every_session if day not in excluded]
+        if not sessions:
+            raise ValueError("every session in the window is excluded")
 
         sources = self.window_sources(start=start, end=end, symbols=names)
         source_ids = [row.dataset_version_id for row in sources]
@@ -85,6 +98,7 @@ class ResearchWindowDatasetService(RollingRawBarsService):
             "symbols": names,
             "source_versions": source_ids,
             "sessions_expected": len(sessions),
+            "sessions_excluded": excluded,
         }
 
         uncovered = [day for day in sessions if not _covered(day, sources)]
@@ -99,7 +113,9 @@ class ResearchWindowDatasetService(RollingRawBarsService):
                 **base,
             )
 
-        existing = self.latest_window(start=start, end=end, symbols=names, sources=source_ids)
+        existing = self.latest_window(
+            start=start, end=end, symbols=names, sources=source_ids, excluded=excluded
+        )
         if existing is not None:
             return ResearchWindowDatasetResult(
                 status="up_to_date", dataset_version_id=existing.dataset_version_id, **base
@@ -108,17 +124,31 @@ class ResearchWindowDatasetService(RollingRawBarsService):
             return ResearchWindowDatasetResult(status="planned", **base)
 
         table = self._merge_window(sources, names, start=start, end=end)
+        if excluded:
+            sound = _sound_sessions(table, excluded, market)
+            if sound:
+                return ResearchWindowDatasetResult(
+                    status="refused",
+                    rows=table.num_rows,
+                    errors=[
+                        f"{len(sound)} excluded session(s) have every bar time and need no "
+                        f"exclusion, the first is {sound[0]}"
+                    ],
+                    **base,
+                )
+            table = _without_sessions(table, excluded)
         checks = _check(table, names, sessions, market)
         found: dict[str, Any] = {**base, "rows": table.num_rows, **checks}
         errors = _faults(checks)
         if errors:
             return ResearchWindowDatasetResult(status="refused", errors=errors, **found)
 
-        days = table.column("timestamp").to_pandas().dt.tz_convert(_SESSION_ZONE).dt.date
+        days = _session_days(table)
         window_facts = {
             "source_versions": source_ids,
             "window_start": start.isoformat(),
             "window_end": end.isoformat(),
+            "excluded_sessions": [day.isoformat() for day in excluded],
         }
         version_id = self._write_and_register(
             table,
@@ -180,7 +210,13 @@ class ResearchWindowDatasetService(RollingRawBarsService):
         ]
 
     def latest_window(
-        self, *, start: date, end: date, symbols: list[str], sources: list[str]
+        self,
+        *,
+        start: date,
+        end: date,
+        symbols: list[str],
+        sources: list[str],
+        excluded: list[date],
     ) -> DatasetVersions | None:
         """The newest research-window version built from exactly these inputs, if any."""
         rows = (
@@ -201,6 +237,7 @@ class ResearchWindowDatasetService(RollingRawBarsService):
             if (
                 meta.get("window_start") == start.isoformat()
                 and meta.get("window_end") == end.isoformat()
+                and (meta.get("excluded_sessions") or []) == [d.isoformat() for d in excluded]
                 and _declared_symbols(row) == symbols
                 and _source_versions(row) == sources
             ):
@@ -241,6 +278,24 @@ def _covered(day: date, sources: list[DatasetVersions]) -> bool:
         and row.date_coverage_start <= day <= row.date_coverage_end
         for row in sources
     )
+
+
+def _session_days(table: pa.Table) -> pd.Series:
+    """The New York calendar day of every bar."""
+    stamps: pd.Series = table.column("timestamp").to_pandas()
+    return stamps.dt.tz_convert(_SESSION_ZONE).dt.date
+
+
+def _sound_sessions(table: pa.Table, days: list[date], calendar: MarketCalendar) -> list[date]:
+    """The days among ``days`` that have every bar time their opening hours give."""
+    stamps: pd.Series = table.column("timestamp").to_pandas()
+    bar_times = stamps.groupby(_session_days(table)).nunique().to_dict()
+    return [day for day in days if int(bar_times.get(day, 0)) == _expected_bar_times(day, calendar)]
+
+
+def _without_sessions(table: pa.Table, days: list[date]) -> pa.Table:
+    keep = ~_session_days(table).isin(days)
+    return table.filter(pa.array(keep.to_numpy(), type=pa.bool_()))
 
 
 def _expected_bar_times(day: date, calendar: MarketCalendar) -> int:

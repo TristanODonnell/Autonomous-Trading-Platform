@@ -90,6 +90,17 @@ def register(subparsers) -> None:
         "--plan", action="store_true", help="List the versions it would merge; read no bars."
     )
     mode.add_argument("--enforce", action="store_true", help="Merge, check and register.")
+    window.add_argument(
+        "--exclude-session",
+        dest="exclude_sessions",
+        type=date.fromisoformat,
+        action="append",
+        default=None,
+        help=(
+            "Leave this session out (repeatable). Only for a session the feed has no "
+            "usable data for: excluding a complete session is refused."
+        ),
+    )
     window.add_argument("--data-root", type=Path, default=None, help="Override DATA_ROOT.")
     window.set_defaults(func=handle_build_window)
 
@@ -159,6 +170,7 @@ def handle_build_window(args: argparse.Namespace) -> int:
                 symbols=symbols,
                 now_utc=datetime.now(UTC),
                 plan_only=args.plan,
+                exclude_sessions=args.exclude_sessions or [],
             )
     except ValueError as exc:
         print_error(f"Window dataset not built: {exc}")

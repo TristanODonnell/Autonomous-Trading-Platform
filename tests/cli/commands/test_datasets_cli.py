@@ -155,6 +155,30 @@ class TestBuildWindowCli:
         assert (built[0]["start"], built[0]["end"]) == (date(2024, 10, 1), date(2026, 11, 16))
         assert '"dataset_version_id": "raw_bars_x"' in capsys.readouterr().out
 
+    def test_sessions_to_leave_out_are_passed_on(self, built: list[dict[str, Any]]) -> None:
+        self.result = self._result("created", dataset_version_id="raw_bars_x")
+        parser = build_parser()
+
+        args = parser.parse_args([*self._BASE, "--symbols", "AAPL", "--enforce"])
+        assert args.exclude_sessions is None
+        assert args.func(args) == 0
+        assert built[0]["exclude_sessions"] == []
+
+        args = parser.parse_args(
+            [
+                *self._BASE,
+                "--symbols",
+                "AAPL",
+                "--enforce",
+                "--exclude-session",
+                "2024-12-23",
+                "--exclude-session",
+                "2025-03-10",
+            ]
+        )
+        assert args.func(args) == 0
+        assert built[1]["exclude_sessions"] == [date(2024, 12, 23), date(2025, 3, 10)]
+
     def test_a_refused_dataset_exits_one_and_says_why(
         self, built: list[dict[str, Any]], capsys: pytest.CaptureFixture[str]
     ) -> None:
