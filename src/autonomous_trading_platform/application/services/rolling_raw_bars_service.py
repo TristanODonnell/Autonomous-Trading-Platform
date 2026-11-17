@@ -138,55 +138,29 @@ class RollingRawBarsService:
 
         coverage_start = min(row.date_coverage_start for row in sources if row.date_coverage_start)
         coverage_end = max(row.date_coverage_end for row in sources if row.date_coverage_end)
-        version_id = generate_dataset_version("raw_bars")
-        write_table(table, RAW_BARS_DATASET, self._base_path, version_id)
-        try:
-            # Finding 15: ``checksums.dataset_version`` references ``dataset_versions``, so the
-            # version row must be committed before any checksum row (SQLite tests do not
-            # enforce the constraint; Postgres does).
-            files = self._file_checksums(version_id)
-            DatasetRegistrationService(session=self._session).save(
-                DatasetVersion(
-                    dataset_version_id=version_id,
-                    dataset_name=RAW_BARS_DATASET.dataset_key,
-                    created_at=now_utc,
-                    source=ROLLING_SOURCE,
-                    price_basis=PriceBasis.RAW,
-                    interval=BarInterval.FIVE_MIN,
-                    schema_version=RAW_BARS_DATASET.schema_version,
-                    symbol_coverage=len(symbols),
-                    date_coverage_start=coverage_start,
-                    date_coverage_end=coverage_end,
-                    validation_status="validated",
-                    checksum=_aggregate_checksum(files),
-                    source_manifest={
-                        "pipeline": ROLLING_SOURCE,
-                        "symbols": symbols,
-                        "source_versions": source_ids,
-                        "backfill_versions": [row.dataset_version_id for row in backfills],
-                        "sessions": len(daily),
-                        "as_of": as_of.isoformat(),
-                    },
-                    metadata_json={
-                        "dataset_lifecycle": ROLLING_LIFECYCLE,
-                        "source_versions": source_ids,
-                        "backfill_versions": [row.dataset_version_id for row in backfills],
-                        "sessions": len(daily),
-                        "as_of": as_of.isoformat(),
-                    },
-                )
-            )
-            self._register_checksums(version_id, files)
-            self._session.flush()
-        except Exception:
-            # Never leave an unregistered version on disk: the publish step ships every
-            # local version directory, registered or not, and a retried step would stack
-            # one orphan per attempt.
-            shutil.rmtree(
-                dataset_version_root(self._base_path, RAW_BARS_DATASET, version_id),
-                ignore_errors=True,
-            )
-            raise
+        version_id = self._write_and_register(
+            table,
+            symbols=symbols,
+            coverage_start=coverage_start,
+            coverage_end=coverage_end,
+            now_utc=now_utc,
+            source=ROLLING_SOURCE,
+            source_manifest={
+                "pipeline": ROLLING_SOURCE,
+                "symbols": symbols,
+                "source_versions": source_ids,
+                "backfill_versions": [row.dataset_version_id for row in backfills],
+                "sessions": len(daily),
+                "as_of": as_of.isoformat(),
+            },
+            metadata_json={
+                "dataset_lifecycle": ROLLING_LIFECYCLE,
+                "source_versions": source_ids,
+                "backfill_versions": [row.dataset_version_id for row in backfills],
+                "sessions": len(daily),
+                "as_of": as_of.isoformat(),
+            },
+        )
         result = RollingRawBarsResult(
             status="created",
             dataset_version_id=version_id,
@@ -294,6 +268,58 @@ class RollingRawBarsService:
         combined = pa.concat_tables(tables, promote_options="default")
         combined = _dedupe_by_bar_id(combined)
         return combined.sort_by([("symbol", "ascending"), ("timestamp", "ascending")])
+
+    def _write_and_register(
+        self,
+        table: pa.Table,
+        *,
+        symbols: list[str],
+        coverage_start: date,
+        coverage_end: date,
+        now_utc: datetime,
+        source: str,
+        source_manifest: dict[str, Any],
+        metadata_json: dict[str, Any],
+    ) -> str:
+        """Write ``table`` as a new immutable raw-bars version and register it as
+        ``validated`` with its file checksums. Returns the new version id."""
+        version_id = generate_dataset_version("raw_bars")
+        write_table(table, RAW_BARS_DATASET, self._base_path, version_id)
+        try:
+            # Finding 15: ``checksums.dataset_version`` references ``dataset_versions``, so the
+            # version row must be committed before any checksum row (SQLite tests do not
+            # enforce the constraint; Postgres does).
+            files = self._file_checksums(version_id)
+            DatasetRegistrationService(session=self._session).save(
+                DatasetVersion(
+                    dataset_version_id=version_id,
+                    dataset_name=RAW_BARS_DATASET.dataset_key,
+                    created_at=now_utc,
+                    source=source,
+                    price_basis=PriceBasis.RAW,
+                    interval=BarInterval.FIVE_MIN,
+                    schema_version=RAW_BARS_DATASET.schema_version,
+                    symbol_coverage=len(symbols),
+                    date_coverage_start=coverage_start,
+                    date_coverage_end=coverage_end,
+                    validation_status="validated",
+                    checksum=_aggregate_checksum(files),
+                    source_manifest=source_manifest,
+                    metadata_json=metadata_json,
+                )
+            )
+            self._register_checksums(version_id, files)
+            self._session.flush()
+        except Exception:
+            # Never leave an unregistered version on disk: the publish step ships every
+            # local version directory, registered or not, and a retried step would stack
+            # one orphan per attempt.
+            shutil.rmtree(
+                dataset_version_root(self._base_path, RAW_BARS_DATASET, version_id),
+                ignore_errors=True,
+            )
+            raise
+        return version_id
 
     def _file_checksums(self, version_id: str) -> list[tuple[Path, str]]:
         """sha256 of every Parquet file in the written version, in path order (no I/O to

@@ -19,7 +19,7 @@ from autonomous_trading_platform.application.services.dataset_publish_service im
 from autonomous_trading_platform.application.services.dataset_pull_service import (
     DatasetPullService,
 )
-from autonomous_trading_platform.cli.formatters import print_header, print_json
+from autonomous_trading_platform.cli.formatters import print_error, print_header, print_json
 from autonomous_trading_platform.config.settings import Settings
 from autonomous_trading_platform.db import session_scope
 from autonomous_trading_platform.storage.parquet.object_store import ObjectStore, S3ObjectStore
@@ -71,6 +71,28 @@ def register(subparsers) -> None:
     pull.add_argument("--data-root", type=Path, default=None, help="Override DATA_ROOT.")
     pull.set_defaults(func=handle_pull)
 
+    window = sub.add_parser(
+        "build-window",
+        help=(
+            "Merge backfill versions into one checked raw-bars version for a research "
+            "window. Refused, with nothing written, when a session is missing or short."
+        ),
+    )
+    window.add_argument("--start", type=date.fromisoformat, required=True, help="First day.")
+    window.add_argument("--end", type=date.fromisoformat, required=True, help="Last day.")
+    names = window.add_mutually_exclusive_group(required=True)
+    names.add_argument("--symbols", help="Comma-separated symbols, e.g. AAPL,MSFT")
+    names.add_argument(
+        "--symbols-file", type=Path, help="A file of symbols, separated by commas or lines."
+    )
+    mode = window.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
+        "--plan", action="store_true", help="List the versions it would merge; read no bars."
+    )
+    mode.add_argument("--enforce", action="store_true", help="Merge, check and register.")
+    window.add_argument("--data-root", type=Path, default=None, help="Override DATA_ROOT.")
+    window.set_defaults(func=handle_build_window)
+
     remote = sub.add_parser("list-remote", help="List dataset versions published to the bucket.")
     remote.add_argument(
         "--as-of",
@@ -114,6 +136,41 @@ def handle_pull(args: argparse.Namespace) -> int:
             prefix=settings.dataset_s3_prefix,
         ).pull(versions=args.versions, as_of=args.as_of, register=not args.no_register)
     print_json(result.summary())
+    return 0
+
+
+_PRICE_JUMPS_PRINTED = 50
+
+
+def handle_build_window(args: argparse.Namespace) -> int:
+    from autonomous_trading_platform.application.services.research_window_dataset_service import (
+        ResearchWindowDatasetService,
+    )
+
+    text = args.symbols if args.symbols else args.symbols_file.read_text(encoding="utf-8")
+    # Commas, spaces and line breaks all separate names.
+    symbols = text.replace(",", " ").split()
+    print_header(f"Research window dataset {args.start} to {args.end}")
+    try:
+        with session_scope() as session:
+            result = ResearchWindowDatasetService(session, base_path=args.data_root).build_window(
+                start=args.start,
+                end=args.end,
+                symbols=symbols,
+                now_utc=datetime.now(UTC),
+                plan_only=args.plan,
+            )
+    except ValueError as exc:
+        print_error(f"Window dataset not built: {exc}")
+        return 1
+    payload = result.model_dump(mode="json")
+    # A long list of jumps would bury the rest: print the first ones and the count.
+    payload["price_jump_count"] = len(result.price_jumps)
+    payload["price_jumps"] = payload["price_jumps"][:_PRICE_JUMPS_PRINTED]
+    print_json(payload)
+    if result.status == "refused":
+        print_error("Window dataset not built: " + "; ".join(result.errors))
+        return 1
     return 0
 
 
