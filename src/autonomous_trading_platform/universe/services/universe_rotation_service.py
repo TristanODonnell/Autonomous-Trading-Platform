@@ -201,10 +201,13 @@ class UniverseRotationService:
         )
 
         if not force_rotation and active is not None and proposed.config_hash == active.config_hash:
+            # Nothing changes, and the record says so: the proposal is never stored, so
+            # the record and the result name the version that stays in force. Saved, so
+            # "ran and changed nothing" can be told from "did not run".
             rotation_record = self._build_rotation_record(
                 rotation_type="scheduled",
                 previous_version=active,
-                new_version=proposed,
+                new_version=active,
                 rebalance_result=rebalance_result,
                 rotation_reason=rotation_reason,
                 force_rotation=force_rotation,
@@ -213,6 +216,9 @@ class UniverseRotationService:
                 status="skipped",
                 rejection_reason="config_hash_unchanged",
             )
+            # The proposal's rebalance run is not stored either.
+            rotation_record.rebalance_run_id = None
+            self._rotation_repo.insert_record(rotation_record)
             logger.info(
                 "universe rotation decision",
                 extra={
@@ -226,7 +232,7 @@ class UniverseRotationService:
             )
             return RotationResult(
                 previous_version=active,
-                new_version=proposed,
+                new_version=active,
                 rebalance_result=rebalance_result,
                 rotation_record=rotation_record,
                 rotation_type="scheduled",
