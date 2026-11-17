@@ -45,7 +45,10 @@ class ResearchWindowDatasetResult(BaseModel):
     dataset_version_id: str | None = None
     source_versions: list[str] = Field(default_factory=list)
     rows: int = 0
+    # Sessions in the window, less the ones left out by name.
     sessions_expected: int = 0
+    # Sessions left out on the operator's word because the feed has no usable data.
+    sessions_excluded: list[date] = Field(default_factory=list)
     # Dataset-wide faults: either one refuses the build.
     sessions_missing: list[date] = Field(default_factory=list)
     sessions_off_shape: list[SessionShape] = Field(default_factory=list)

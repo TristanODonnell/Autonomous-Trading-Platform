@@ -130,6 +130,7 @@ def _build(
     symbols: tuple[str, ...] = ("AAA", "BBB"),
     calendar: FakeMarketCalendar | None = None,
     plan_only: bool = False,
+    exclude: tuple[date, ...] = (),
 ) -> ResearchWindowDatasetResult:
     return ResearchWindowDatasetService(session, base_path=base_path).build_window(
         start=start,
@@ -138,6 +139,7 @@ def _build(
         now_utc=_NOW,
         calendar=calendar or FakeMarketCalendar(),
         plan_only=plan_only,
+        exclude_sessions=exclude,
     )
 
 
@@ -357,6 +359,88 @@ def test_plan_lists_the_sources_and_writes_nothing(db_session: Session, base_pat
     assert result.rows == 0
     assert _window_rows(db_session) == []
     assert _version_dirs(base_path) == before
+
+
+def _one_empty_one_short(session: Session, base_path: Path) -> None:
+    """Tuesday has 10 bar times, Wednesday has no bars: the two faults seen in the feed."""
+    faulty = {f"{name}_8": _session_bars(name, TUE, bars=10) for name in ("AAA", "BBB")}
+    faulty.update({"AAA_9": _NO_BARS, "BBB_9": _NO_BARS})
+    _two_chunks(session, base_path, **faulty)
+
+
+def test_faulty_sessions_left_out_by_name_are_dropped_and_recorded(
+    db_session: Session, base_path: Path
+) -> None:
+    _one_empty_one_short(db_session, base_path)
+    assert _build(db_session, base_path).status == "refused"
+
+    result = _build(db_session, base_path, exclude=(WED, TUE))
+
+    assert result.status == "created"
+    assert result.sessions_excluded == [TUE, WED]
+    assert result.sessions_expected == 3
+    assert result.sessions_missing == []
+    assert result.sessions_off_shape == []
+    # Tuesday's ten bars are gone as well: a left-out session keeps nothing.
+    assert result.rows == 2 * 3 * FULL
+    assert result.symbol_coverage == {"AAA": 1.0, "BBB": 1.0}
+    (row,) = _window_rows(db_session)
+    assert row.metadata_json["excluded_sessions"] == ["2024-10-08", "2024-10-09"]
+    assert row.source_manifest["excluded_sessions"] == ["2024-10-08", "2024-10-09"]
+    assert row.metadata_json["sessions"] == 3
+    stored = HistoricalBarDatasetReader(db_session, base_path=base_path).read(
+        dataset=RAW_BARS_DATASET,
+        dataset_version=row.dataset_version_id,
+        symbol="AAA",
+        start_date=TUE,
+        end_date=WED,
+    )
+    assert stored.num_rows == 0
+
+
+def test_leaving_out_a_complete_session_is_refused(db_session: Session, base_path: Path) -> None:
+    _one_empty_one_short(db_session, base_path)
+    before = _version_dirs(base_path)
+
+    result = _build(db_session, base_path, exclude=(TUE, WED, THU))
+
+    assert result.status == "refused"
+    assert "1 excluded session(s) have every bar time" in result.errors[0]
+    assert "2024-10-10" in result.errors[0]
+    assert _window_rows(db_session) == []
+    assert _version_dirs(base_path) == before
+
+
+def test_the_exclusion_list_is_part_of_what_makes_a_dataset(
+    db_session: Session, base_path: Path
+) -> None:
+    _one_empty_one_short(db_session, base_path)
+    first = _build(db_session, base_path, exclude=(TUE, WED))
+
+    again = _build(db_session, base_path, exclude=(WED, TUE))
+    without = _build(db_session, base_path)
+
+    assert again.status == "up_to_date"
+    assert again.dataset_version_id == first.dataset_version_id
+    # Without the list the same chunks are still the faulty dataset, not the stored one.
+    assert without.status == "refused"
+
+
+@pytest.mark.parametrize(
+    ("exclude", "message"),
+    [
+        ((date(2024, 10, 12),), "2024-10-12 is not a trading session"),
+        ((date(2024, 10, 14),), "2024-10-14 is not a trading session"),
+        ((MON, TUE, WED, THU, FRI), "every session in the window is excluded"),
+    ],
+)
+def test_a_bad_exclusion_list_is_an_error(
+    db_session: Session, base_path: Path, exclude: tuple[date, ...], message: str
+) -> None:
+    _two_chunks(db_session, base_path)
+
+    with pytest.raises(ValueError, match=message):
+        _build(db_session, base_path, exclude=exclude)
 
 
 @pytest.mark.parametrize(
