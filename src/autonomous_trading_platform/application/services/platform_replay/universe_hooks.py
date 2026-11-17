@@ -23,9 +23,15 @@ from autonomous_trading_platform.storage.sor.repositories.core.universe_version_
 from autonomous_trading_platform.universe.jobs.run_universe_rotation import (
     run_universe_rotation,
 )
+from autonomous_trading_platform.universe.services.universe_rotation_service import (
+    RotationSafetyError,
+)
 from autonomous_trading_platform.universe.types import UniverseRebalanceConfig
 
 _logger = get_logger(__name__)
+
+# First error of a failed result whose rotation was refused by its safety check.
+ROTATION_REFUSED_PREFIX = "rotation_refused: "
 
 CANDIDATE_MARKET_DATA_DATASET = "dataset"
 CANDIDATE_MARKET_DATA_ALPACA_DAILY = "alpaca_daily"
@@ -197,6 +203,21 @@ def run_universe_at_timestamp(
             skip_cadence_check=skip_cadence_check,
             dry_run=False,
             session=session,
+        )
+    except RotationSafetyError as exc:
+        # The rotation ran and its safety check turned the proposal down (the churn
+        # guard, an empty or out-of-size list). Still a failed step; named so a caller
+        # can tell "refused, the universe stays" from a rotation that broke.
+        _logger.error(
+            "universe rotation refused by its safety check",
+            extra={"timestamp": timestamp.isoformat(), "error": str(exc)},
+        )
+        return UniverseReplayResult(
+            **base,
+            status="failed",
+            errors=[f"{ROTATION_REFUSED_PREFIX}{exc}"],
+            # The scoring did run: say which candidate was turned down.
+            summary=dict(candidate_summary),
         )
     except Exception as exc:
         _logger.error(
