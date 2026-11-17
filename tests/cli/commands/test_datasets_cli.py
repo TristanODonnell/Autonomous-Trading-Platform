@@ -71,6 +71,10 @@ class TestDatasetsParserCoverage:
 def test_store_requires_bucket(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
+    # Settings() wants broker keys in paper mode. No broker is called; without these
+    # the test would need a developer's local .env.
+    monkeypatch.setenv("PAPER_BROKER_API_KEY", "test-key")
+    monkeypatch.setenv("PAPER_BROKER_API_SECRET", "test-secret")
     monkeypatch.delenv("DATASET_S3_BUCKET", raising=False)
     from autonomous_trading_platform.config.settings import Settings
 
