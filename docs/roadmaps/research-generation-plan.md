@@ -60,9 +60,10 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > restarted). It has not been run on B. Decided by the user 2026-11-16: the
 > admission window is **24 months**, cut **9 / 9 / 6** (selection / evaluation /
 > holdout), and the holdout date is **2026-05-18**, fixed and moved forward six
-> months at a time on a schedule. Next: build the timeline on B for 2024-11-18
-> onward with the 0.70 / 0.55 coverage lines, backfill the union of its names,
-> and change the research engine to read it (own PR, measured before and after).
+> months at a time on a schedule. The timeline is **built on B** (2026-11-16, 25
+> steps, 31 names in the union, equal to the laptop build step for step). Next:
+> backfill five-minute bars for those 31 names, and change the research engine to
+> read the timeline (own PR, measured before and after).
 > Open decisions: the pass rule over the three test folds; when R17 is fixed.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
@@ -2666,7 +2667,20 @@ behind a fixture flag; default stays `alpaca`.
         2024-11-18 --end 2026-11-16 --min-bar-coverage 0.70 --held-min-bar-coverage
         0.55 --enforce` through `worker_job.sh`, output in
         `~/rehearsals/timeline_20261116/` on B. `--plan` first: 25 steps, first
-        2024-11-18, last 2026-10-30 18:00 New York. Result to be recorded here.
+        2024-11-18, last 2026-10-30 18:00 New York.
+      - **Built on B 2026-11-16** (finished about 21:16 New York, 44 minutes, exit 0,
+        status `complete`, no errors): 25 steps, 15 rotated and 10 unchanged, none
+        refused or failed; 20 names in every month; names passing the 70% line 25
+        (2024-12) to 98 (2026-06); names kept by the lower line in 8 months, 14
+        name-months (BA, MRK, MSFT, JNJ, AVGO, CVX, GOOG, MRVL). Every step equals the
+        laptop's two-line build of the same afternoon on outcome, names added and
+        removed, list size, eligible count, churn and names kept by the lower line,
+        so two builds on two machines and two databases (SQLite there, Postgres
+        here) gave the same timeline. The union is 31 names: AAPL AMD AMZN AVGO BA
+        BAC C CSCO CVX GOOG GOOGL INTC JNJ META MRK MRVL MSFT MU NFLX NVDA ORCL PFE
+        PLTR SCHW TSLA UBER UNH V WFC WMT XOM. This is the list the five-minute
+        backfill covers. B's database now holds the timeline; see the reset finding
+        above before running any fixture there.
       - Three lengths to keep apart: how long a platform
         replay runs (`two_year_full.yaml`: 2023-2024), the research lookback inside
         each monthly run (90 days), and the window a strategy is admitted on (this
@@ -2806,7 +2820,8 @@ behind a fixture flag; default stays `alpaca`.
           rows as audit records.
     - [ ] Box A's rotation turns the check on separately, at a monthly rotation, as
           its own decision (at 70% today it would drop COST, CRM, ADBE, HD, MA).
-    - [ ] `--enforce` on B once the start date and the coverage question are settled.
+    - [x] `--enforce` on B once the start date and the coverage question are settled.
+          Done 2026-11-16 as the timeline build (see "Built on B" above).
     - [x] Decide where the long dataset is built. User, 2026-11-16: on Box B, with a
           market-data key added to `.env.worker` (read-only use; B never submits
           orders). The generator, the fetch and the research then all run on B: no
