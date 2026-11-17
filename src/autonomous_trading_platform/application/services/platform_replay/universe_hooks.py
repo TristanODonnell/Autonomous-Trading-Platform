@@ -23,9 +23,15 @@ from autonomous_trading_platform.storage.sor.repositories.core.universe_version_
 from autonomous_trading_platform.universe.jobs.run_universe_rotation import (
     run_universe_rotation,
 )
+from autonomous_trading_platform.universe.services.universe_rotation_service import (
+    RotationSafetyError,
+)
 from autonomous_trading_platform.universe.types import UniverseRebalanceConfig
 
 _logger = get_logger(__name__)
+
+# First error of a failed result whose rotation was refused by its safety check.
+ROTATION_REFUSED_PREFIX = "rotation_refused: "
 
 CANDIDATE_MARKET_DATA_DATASET = "dataset"
 CANDIDATE_MARKET_DATA_ALPACA_DAILY = "alpaca_daily"
@@ -46,6 +52,7 @@ def run_universe_at_timestamp(
     rotation_reason: str = "platform_replay",
     candidate_market_data: str = CANDIDATE_MARKET_DATA_DATASET,
     min_intraday_bar_coverage: float | None = None,
+    held_min_intraday_bar_coverage: float | None = None,
 ) -> UniverseReplayResult:
     """Run universe selection/rotation at timestamp T.
 
@@ -65,6 +72,11 @@ def run_universe_at_timestamp(
     min_intraday_bar_coverage, when set, adds an eligibility check: a name needs at
     least that share of its five-minute bars over the last 20 sessions (minute bars
     fetched from Alpaca for the pool). Off by default.
+
+    held_min_intraday_bar_coverage, when set with the minimum above, is a lower line
+    for names already in the universe in force: they stay eligible down to it, so a
+    short dip (holiday weeks on a thin feed) does not remove a name for a month. Off
+    by default.
 
     If the pool refresh (step 1) or candidate scoring (step 2) fails, the result is
     ``failed`` and nothing is rotated: the universe stays as it was. Scoring reads the
@@ -147,6 +159,7 @@ def run_universe_at_timestamp(
                 lookback_days=20,
                 max_symbols=500,
                 min_intraday_bar_coverage=min_intraday_bar_coverage,
+                held_min_intraday_bar_coverage=held_min_intraday_bar_coverage,
             ),
             rebalance_reason=f"{rotation_reason}_monthly",
             dataset_version_id=replay_context.dataset_version_id,
@@ -164,6 +177,12 @@ def run_universe_at_timestamp(
         }
         if min_intraday_bar_coverage is not None:
             candidate_summary["min_intraday_bar_coverage"] = min_intraday_bar_coverage
+        if held_min_intraday_bar_coverage is not None:
+            filters = candidate.generation_metadata.get("filter_config") or {}
+            candidate_summary["held_min_intraday_bar_coverage"] = held_min_intraday_bar_coverage
+            candidate_summary["held_below_entry_coverage"] = list(
+                filters.get("held_below_entry_coverage") or []
+            )
     except Exception as exc:
         # No rotation without this run's scores: the universe stays as it was.
         _logger.error(
@@ -197,6 +216,21 @@ def run_universe_at_timestamp(
             skip_cadence_check=skip_cadence_check,
             dry_run=False,
             session=session,
+        )
+    except RotationSafetyError as exc:
+        # The rotation ran and its safety check turned the proposal down (the churn
+        # guard, an empty or out-of-size list). Still a failed step; named so a caller
+        # can tell "refused, the universe stays" from a rotation that broke.
+        _logger.error(
+            "universe rotation refused by its safety check",
+            extra={"timestamp": timestamp.isoformat(), "error": str(exc)},
+        )
+        return UniverseReplayResult(
+            **base,
+            status="failed",
+            errors=[f"{ROTATION_REFUSED_PREFIX}{exc}"],
+            # The scoring did run: say which candidate was turned down.
+            summary=dict(candidate_summary),
         )
     except Exception as exc:
         _logger.error(

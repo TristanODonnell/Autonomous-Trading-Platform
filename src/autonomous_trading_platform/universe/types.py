@@ -150,6 +150,11 @@ class CandidateGenerationConfig:
     # sessions (the builder then needs a ``CandidateCoverageSource``).
     min_intraday_bar_coverage: float | None = None
     intraday_coverage_sessions: int = 20
+    # Off when None. With a value, a symbol that is in the universe in force stays
+    # eligible down to this lower share; a symbol that is not needs the minimum above.
+    # Two lines, like the rotation's add and keep ranks, so a short dip in a held
+    # name's coverage does not remove it for a month.
+    held_min_intraday_bar_coverage: float | None = None
 
 
 @dataclass(frozen=True)

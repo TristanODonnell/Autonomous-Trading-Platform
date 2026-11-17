@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, cast
@@ -17,9 +17,14 @@ from autonomous_trading_platform.application.services.platform_replay.universe_h
     build_candidate_bar_source,
     run_universe_at_timestamp,
 )
+from autonomous_trading_platform.application.services.universe_timeline_service import (
+    UniverseTimelineError,
+    build_universe_timeline,
+)
 from autonomous_trading_platform.cli.formatters import print_error, print_header, print_json
 from autonomous_trading_platform.cli.helpers import parse_datetime
 from autonomous_trading_platform.contracts.common.enums import UniverseSource
+from autonomous_trading_platform.contracts.runtime.universe_timeline import UniverseTimelineRules
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.storage.sor.repositories.core import (
     universe_rebalance_repository,
@@ -52,6 +57,7 @@ from autonomous_trading_platform.universe.jobs.run_universe_selection_cycle impo
 from autonomous_trading_platform.universe.providers.point_in_time_index_provider import (
     ALPACA_ACTIVE,
     SCREENER_SOURCES,
+    SP500_POINT_IN_TIME,
 )
 from autonomous_trading_platform.universe.services.raw_market_pool_refresh_service import (
     RawMarketPoolRefreshPreview,
@@ -328,6 +334,17 @@ def register(subparsers) -> None:
         ),
     )
     monthly_rotation_parser.add_argument(
+        "--held-min-bar-coverage",
+        type=_coverage_fraction,
+        default=None,
+        metavar="FRACTION",
+        help=(
+            "With --min-bar-coverage: a lower line for names already in the universe, "
+            "e.g. 0.60. They stay eligible down to it, so a short dip in coverage does "
+            "not remove a name for a month (default: one line for every name)"
+        ),
+    )
+    monthly_rotation_parser.add_argument(
         "--dataset-version-id",
         default=None,
         help="raw_bars version for --market-data dataset",
@@ -351,6 +368,74 @@ def register(subparsers) -> None:
         help="Activate the proposed universe (what the month-end step does)",
     )
     monthly_rotation_parser.set_defaults(func=handle_monthly_rotation)
+
+    build_timeline_parser = universe_subparsers.add_parser(
+        "build-timeline",
+        help=(
+            "Run the month-end rotation for every month of a window, oldest first, and "
+            "keep each universe as a dated version: the lists a long research window "
+            "is tested on. Continues a stopped build; --plan prints the dates only"
+        ),
+    )
+    build_timeline_parser.add_argument(
+        "--start", required=True, type=date.fromisoformat, metavar="YYYY-MM-DD"
+    )
+    build_timeline_parser.add_argument(
+        "--end",
+        required=True,
+        type=date.fromisoformat,
+        metavar="YYYY-MM-DD",
+        help="Day after the window's last day: a month end on or after it is not run",
+    )
+    build_timeline_parser.add_argument(
+        "--screener-source",
+        choices=sorted(SCREENER_SOURCES),
+        default=SP500_POINT_IN_TIME,
+        help=(
+            "Candidate pool (default: sp500_point_in_time, the index members on each "
+            "date, so no month's pool carries hindsight)"
+        ),
+    )
+    build_timeline_parser.add_argument(
+        "--market-data",
+        choices=sorted(CANDIDATE_MARKET_DATA_SOURCES),
+        default=CANDIDATE_MARKET_DATA_ALPACA_DAILY,
+        help="Where the scorer reads bars (default: alpaca_daily, as the scheduler does)",
+    )
+    build_timeline_parser.add_argument(
+        "--min-bar-coverage",
+        type=_coverage_fraction,
+        default=None,
+        metavar="FRACTION",
+        help="As on monthly-rotation; part of the rules a stored month is reused under",
+    )
+    build_timeline_parser.add_argument(
+        "--held-min-bar-coverage",
+        type=_coverage_fraction,
+        default=None,
+        metavar="FRACTION",
+        help=(
+            "With --min-bar-coverage: a lower line for names already in the universe, "
+            "e.g. 0.60. They stay eligible down to it, so a short dip in coverage does "
+            "not remove a name for a month (default: one line for every name)"
+        ),
+    )
+    build_timeline_parser.add_argument("--approved-by", default=None)
+    timeline_mode = build_timeline_parser.add_mutually_exclusive_group(required=True)
+    timeline_mode.add_argument(
+        "--plan",
+        action="store_true",
+        help="Print the step dates and the rules; nothing is fetched or stored",
+    )
+    timeline_mode.add_argument(
+        "--enforce",
+        action="store_true",
+        help=(
+            "Build and keep. Refused when the database holds universe versions in the "
+            "window that this timeline did not make"
+        ),
+    )
+    build_timeline_parser.set_defaults(func=handle_build_timeline)
 
     candidate_inspect_parser = universe_subparsers.add_parser(
         "candidate-inspect",
@@ -700,6 +785,20 @@ def _coverage_fraction(raw: str) -> float:
             f"must be a fraction above 0 and at most 1 (0.70 for 70%), got {raw}"
         )
     return value
+
+
+def _coverage_options_error(minimum: float | None, held_minimum: float | None) -> str | None:
+    """Why the two coverage options do not fit together, or None when they do."""
+    if held_minimum is None:
+        return None
+    if minimum is None:
+        return "--held-min-bar-coverage needs --min-bar-coverage: it is the lower of two lines"
+    if held_minimum > minimum:
+        return (
+            f"--held-min-bar-coverage ({held_minimum}) must be at most "
+            f"--min-bar-coverage ({minimum})"
+        )
+    return None
 
 
 def _resolve_timestamp(raw: str | None) -> datetime:
@@ -1653,6 +1752,11 @@ def handle_monthly_rotation(args: argparse.Namespace) -> int:
     dry_run = bool(getattr(args, "dry_run", False))
     screener_source = getattr(args, "screener_source", ALPACA_ACTIVE)
     min_bar_coverage = getattr(args, "min_bar_coverage", None)
+    held_min_bar_coverage = getattr(args, "held_min_bar_coverage", None)
+    options_error = _coverage_options_error(min_bar_coverage, held_min_bar_coverage)
+    if options_error is not None:
+        print_error(options_error)
+        return 1
     context = PlatformReplayContext.create(
         symbols=[], timestamp=timestamp, actor=getattr(args, "approved_by", None) or "operator"
     )
@@ -1669,6 +1773,7 @@ def handle_monthly_rotation(args: argparse.Namespace) -> int:
             screener_source=screener_source,
             candidate_market_data=getattr(args, "market_data", CANDIDATE_MARKET_DATA_ALPACA_DAILY),
             min_intraday_bar_coverage=min_bar_coverage,
+            held_min_intraday_bar_coverage=held_min_bar_coverage,
         )
         kept = result.status == "ok" and not dry_run
         if kept:
@@ -1687,12 +1792,77 @@ def handle_monthly_rotation(args: argparse.Namespace) -> int:
             "timestamp": timestamp.isoformat(),
             "screener_source": screener_source,
             "min_bar_coverage": min_bar_coverage,
+            "held_min_bar_coverage": held_min_bar_coverage,
             "errors": list(result.errors),
             "warnings": list(result.warnings),
             **dict(result.summary),
         }
     )
     return 0 if result.status != "failed" else 1
+
+
+def handle_build_timeline(args: argparse.Namespace) -> int:
+    """One universe per month over a window, each picked by the scheduler's month-end
+    rotation with the churn guard on, kept as dated versions. Exit 1 when a step fails
+    (the months before it are kept and a second run continues) or the build is refused."""
+    held_min_bar_coverage = getattr(args, "held_min_bar_coverage", None)
+    options_error = _coverage_options_error(args.min_bar_coverage, held_min_bar_coverage)
+    if options_error is not None:
+        print_error(options_error)
+        return 1
+    rules = UniverseTimelineRules(
+        screener_source=args.screener_source,
+        candidate_market_data=args.market_data,
+        min_intraday_bar_coverage=args.min_bar_coverage,
+        held_min_intraday_bar_coverage=held_min_bar_coverage,
+    )
+    session = get_session()
+    try:
+        result = build_universe_timeline(
+            session=session,
+            start=args.start,
+            end=args.end,
+            rules=rules,
+            actor=getattr(args, "approved_by", None) or "operator",
+            plan_only=bool(args.plan),
+        )
+    except (UniverseTimelineError, ValueError) as exc:
+        session.rollback()
+        print_error(f"Timeline not built: {exc}")
+        return 1
+    finally:
+        session.close()
+
+    print_header("Universe Timeline")
+    print_json(
+        {
+            "status": result.status,
+            "start": result.start.isoformat(),
+            "end": result.end.isoformat(),
+            "rules": rules.model_dump(),
+            "steps": [
+                {
+                    "timestamp": step.timestamp.isoformat(),
+                    "kind": step.kind,
+                    "outcome": step.outcome,
+                    "reused": step.reused,
+                    "universe_version_id": step.universe_version_id,
+                    "symbol_count": len(step.symbols),
+                    "added": step.added,
+                    "removed": step.removed,
+                    "churn_pct": step.churn_pct,
+                    "eligible_count": step.eligible_count,
+                    "held_below_entry_coverage": step.held_below_entry_coverage,
+                    "detail": step.detail,
+                }
+                for step in result.steps
+            ],
+            "symbols_union_count": len(result.symbols_union),
+            "symbols_union": result.symbols_union,
+            "errors": result.errors,
+        }
+    )
+    return 1 if result.status == "stopped" else 0
 
 
 def handle_rollback(args: argparse.Namespace) -> int:

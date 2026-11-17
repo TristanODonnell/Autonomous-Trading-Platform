@@ -533,7 +533,7 @@ class TestRotate:
             version_id="prop-1", status=UniverseStatus.PROPOSED, config_hash=shared_hash
         )
 
-        svc, version_repo, _, _ = self._build(
+        svc, version_repo, _, rotation_repo = self._build(
             active=active,
             candidate=candidate,
             proposed=proposed,
@@ -547,6 +547,19 @@ class TestRotate:
         assert result.skipped is True
         assert result.skip_reason is not None
         assert version_repo.activated_version_id is None
+        # The proposal is never stored, so the result names the version still in force.
+        assert result.new_version.universe_version_id == active.universe_version_id
+
+        # "Ran and changed nothing" leaves a record; without one it looks like "did not run".
+        assert len(rotation_repo.inserted_records) == 1
+        rec = rotation_repo.inserted_records[0]
+        assert rec.status == "skipped"
+        assert rec.rejection_reason == "config_hash_unchanged"
+        assert rec.new_universe_version_id == active.universe_version_id
+        assert rec.previous_universe_version_id == active.universe_version_id
+        assert rec.candidate_universe_version_id == candidate.universe_version_id
+        assert rec.rebalance_run_id is None
+        assert rec.created_at == _T0
 
     def test_does_not_skip_when_force_rotation(self) -> None:
         shared_hash = "same-hash-value"

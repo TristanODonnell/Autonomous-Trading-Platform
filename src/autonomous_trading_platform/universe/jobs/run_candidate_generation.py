@@ -70,11 +70,19 @@ def run_candidate_generation(
         )
         version_repository = UniverseVersionRepository(session)
 
+        # The lower coverage line applies to the names in the universe in force.
+        held_symbols: list[str] = []
+        if config.held_min_intraday_bar_coverage is not None:
+            in_force = version_repository.get_active_version(config.as_of)
+            if in_force is not None:
+                held_symbols = version_repository.get_included_symbols(in_force.universe_version_id)
+
         result = builder.build_candidate(
             config=config,
             name=name,
             source=source,
             rebalance_reason=rebalance_reason,
+            held_symbols=held_symbols,
         )
 
         if dry_run:

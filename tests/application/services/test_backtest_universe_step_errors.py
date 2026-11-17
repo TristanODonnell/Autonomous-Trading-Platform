@@ -38,6 +38,11 @@ _OTHER_JOBS = (
 def _run_one_tick(
     db_session: Session, monkeypatch: pytest.MonkeyPatch, *, status: str, errors: list[str]
 ) -> Any:
+    # The runner builds Settings(), which wants broker keys in paper mode. No broker is
+    # called; without these the tests would need a developer's local .env.
+    monkeypatch.setenv("PAPER_BROKER_API_KEY", "test-key")
+    monkeypatch.setenv("PAPER_BROKER_API_SECRET", "test-secret")
+
     def fake_universe_step(**kwargs: Any) -> UniverseReplayResult:
         return UniverseReplayResult(
             domain="universe",

@@ -17,6 +17,9 @@ from autonomous_trading_platform.universe.providers.alpaca_daily_bar_source impo
 from autonomous_trading_platform.universe.providers.alpaca_intraday_coverage_source import (
     AlpacaIntradayCoverageSource,
 )
+from autonomous_trading_platform.universe.services.universe_rotation_service import (
+    RotationSafetyError,
+)
 
 _TS = datetime(2026, 10, 30, 22, 0, tzinfo=UTC)
 
@@ -294,3 +297,66 @@ def test_a_failed_pool_refresh_does_not_score_or_rotate(
     assert result.status == "failed"
     assert result.errors == ["screener_refresh_failed: membership unavailable"]
     assert later_steps == []
+
+
+def test_a_rotation_its_safety_check_refuses_is_failed_and_named(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Still a failed step for the scheduler and the CLI. The prefix lets the timeline
+    # builder tell "refused, the list in force stays" from a rotation that broke.
+    _patch_pool_refresh(monkeypatch)
+    monkeypatch.setattr(cand_mod, "run_candidate_generation", lambda **k: _candidate({}))
+
+    def _refuse(**kwargs: Any) -> Any:
+        raise RotationSafetyError("Churn 35.00% exceeds max_churn_pct 30.00%.")
+
+    monkeypatch.setattr(universe_hooks, "run_universe_rotation", _refuse)
+
+    result = _run_hook()
+
+    assert result.status == "failed"
+    assert result.errors == ["rotation_refused: Churn 35.00% exceeds max_churn_pct 30.00%."]
+    assert result.errors[0].startswith(universe_hooks.ROTATION_REFUSED_PREFIX)
+    assert result.summary["candidate_version_id"] == "cand-1"
+    assert result.summary["candidate_included"] == 1
+
+
+def test_a_rotation_that_breaks_is_failed_without_the_refused_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_pool_refresh(monkeypatch)
+    monkeypatch.setattr(cand_mod, "run_candidate_generation", lambda **k: _candidate({}))
+
+    def _break(**kwargs: Any) -> Any:
+        raise RuntimeError("connection reset")
+
+    monkeypatch.setattr(universe_hooks, "run_universe_rotation", _break)
+
+    result = _run_hook()
+
+    assert result.status == "failed"
+    assert result.errors == ["connection reset"]
+
+
+def test_the_lower_coverage_line_is_passed_to_the_scorer_and_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+    _patch_pool_refresh(monkeypatch)
+
+    def _score(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        candidate = _candidate({})
+        candidate.generation_metadata["filter_config"] = {"held_below_entry_coverage": ["MSFT"]}
+        return candidate
+
+    monkeypatch.setattr(cand_mod, "run_candidate_generation", _score)
+    monkeypatch.setattr(universe_hooks, "build_candidate_coverage_source", lambda minimum: None)
+    monkeypatch.setattr(universe_hooks, "run_universe_rotation", lambda **k: _rotation())
+
+    result = _run_hook(min_intraday_bar_coverage=0.7, held_min_intraday_bar_coverage=0.6)
+
+    assert captured["config"].min_intraday_bar_coverage == 0.7
+    assert captured["config"].held_min_intraday_bar_coverage == 0.6
+    assert result.summary["held_min_intraday_bar_coverage"] == 0.6
+    assert result.summary["held_below_entry_coverage"] == ["MSFT"]
