@@ -65,11 +65,20 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > are the five-minute bars for those 31 names (26 monthly backfill versions,
 > 2024-10-01 to 2026-11-16). The first merge on B was refused, correctly: the IEX
 > feed has no bars on 2025-03-10 and stops at 10:22 New York on 2024-12-23. The
-> user decided both sessions are left out by name (`--exclude-session`, on branch
-> `research/package-b-window-exclusions`). Next: deploy that, build the dataset
-> on B; then change the research engine to read the timeline (own PR, measured
-> before and after).
-> Open decisions: the pass rule over the three test folds; when R17 is fixed.
+> user decided both sessions are left out by name (`--exclude-session`, **merged
+> as PR #190**, `2e7202ea1`, on A and B). **The 24-month dataset is built on B**
+> (2026-11-18, `raw_bars_20261118T234501Z_043e50ad`, 532 sessions, 31 names,
+> 1,030,321 bars).
+> Decided 2026-11-18: the pass rule over the three test folds is both (2 of 3
+> folds, and the pooled nine-month record); the timeline is exported as a
+> versioned dataset that the engine reads (survives a worker reset); R17 is
+> fixed before the long run's results are read.
+> Next, in this order: (1) R17, its own PR, measured before and after;
+> (2) the timeline export and the research engine reading it, with A's exit
+> rule (own PR, measured before and after); (3) the hook's 9 / 9 / 6 layout,
+> the holdout-date check and the two-part fold rule.
+> Open decisions: none waiting. Until (2) is on B, do not run `atp worker run`
+> there without `--no-reset` (the reset deletes the timeline).
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
 
@@ -87,7 +96,7 @@ section 3: done, then still open.
 | Item | What it is | Status | Boxes | What is left | When |
 |---|---|---|---|---|---|
 | 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 7 done, 13 open | Code only, still open: pooled or median fold gate, daily resample, the walk-forward "entered" count (found 2026-11-15). The rest waits on longer history (package B): selection / evaluation / holdout split, fold geometry, folds in sessions, minimum test span. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Now. The split and fold boxes are package B, which is the current work; the three code-only boxes can be done at any time |
-| 🔴 R17 | Short warmups get no bars when a window starts on a Monday | Found 2026-11-16, checked on the real loader; not fixed | 0 done, 2 open | Measure the effect, then fix with a before / after | Not scheduled. Suggested (not agreed): before the long run's results are read, because the fix changes results |
+| 🔴 R17 | Short warmups get no bars when a window starts on a Monday | Found 2026-11-16, checked on the real loader; not fixed | 0 done, 2 open | Measure the effect, then fix with a before / after | **Next.** Decided 2026-11-18 (the user): before the long run's results are read, as its own PR ahead of the engine change. All three pieces of the long window start on a Monday |
 | 🔴 R7 | Test hardening per stage | Not started as its own item. Realistic-curve tests now exist at gate level for Monte Carlo, stress and regime | 0 done, 2 open | A real-runner test per stage, the cross-process checksum test. R4's "Verify" (a real-runner test per stage where the gate fails) is this work too | Rides along with package B (package D) |
 | 🔴 R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 done, 5 open | All of the wiring | After package B, before Step 5 (package C). It saves time on long runs; it does not change any result |
 | 🔴 R13 | No parameter-stability check | Not decided. A decision, not work yet | 0 done, 2 open | Decide whether to build the neighbour check | The user's decision, asked once package B gives more survivors (package F) |
@@ -621,7 +630,8 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
       this stage; `n_passed` is right. Shown in the hook's `stage_funnel`, the CLI and
       the stage metrics.
 - [ ] Gate on a pooled or median test Sharpe across folds in addition to per-fold pass
-      counts.
+      counts. Rule decided 2026-11-18 (the user): both, 2 of 3 folds and the pooled
+      nine-month record (Step 5, "Universe over the long window"). Not built.
 - [x] Validate `step_days >= test_days` and `min_folds_passed <= n_folds` (split from the
       box above). Done 2026-11-15 (package A, merged PR #184): both in `WalkForwardStageConfig.__post_init__`, so YAML and
       Python-built configs meet them. Overlap needs `allow_overlapping_test_folds: true`,
@@ -1852,7 +1862,16 @@ scored on defaults. `scripts/analyze_validation.py`, which works from an equity 
 alone, likewise reports "not scored" and exits 1.
 
 **R17 — Short warmups get no bars when a window starts on a Monday (found 2026-11-16
-while testing the bar cache; not fixed, no decision yet).**
+while testing the bar cache; not fixed; timing decided 2026-11-18).**
+
+Decided 2026-11-18 (the user, asked with "before the long results", "after the first
+long run" and "park it" as the choices): **R17 is fixed before the long run's results
+are read**, as a small PR of its own with a before / after on identical bars, ahead of
+the engine change, so the two result-changing changes are measured apart. Given with
+the question: all three piece boundaries of the 24-month window are Mondays
+(2024-11-18, 2025-08-18, 2026-05-18), so every piece starts in the broken case for a
+warmup of one session or less. The size of the effect on a nine-month run is not
+measured.
 
 `SimulationWindowLoader` reaches back for warmup bars by calendar days: trading days
 needed × 7/5, rounded up. The comment calls that conservative; it is not across a
@@ -2635,8 +2654,22 @@ behind a fixture flag; default stays `alpaca`.
         months, and Monte Carlo over nine months takes about 2.25 times as long as
         over six. On the window the timeline builds used (2024-11-18 to 2026-11-16)
         the pieces are: selection 2024-11-18 to 2025-08-17, evaluation 2025-08-18 to
-        2026-05-17, holdout from 2026-05-18. The pass rule over the three folds is
-        not decided (R2's "pooled or median" box).
+        2026-05-17, holdout from 2026-05-18.
+      - Decided 2026-11-18 (the user, asked with "both", "2 of 3 folds", "pooled
+        only" and "keep any 1 of 3" as the choices): **the pass rule over the three
+        test folds is both: at least 2 of 3 folds pass, and the three test periods
+        joined into one nine-month record clear the same filter.** This is R2's
+        "pooled or median" box; with three folds a median rule is the 2-of-3 rule.
+        Numbers given with the question, from a simulation on random numbers
+        (independent folds, normal, fold standard error √(252/63) = 2.0 against the
+        0.3 line; not measured on our data): share that passes at a true Sharpe of
+        0.0 / 1.0 / 2.0 is 82% / 95% / 99% under today's any-1 rule, 41% / 70% / 90%
+        under 2 of 3, 40% / 73% / 93% pooled, 33% / 64% / 88% under both. The two
+        single rules disagree on about 16% of no-skill strategies. No rule is very
+        selective at a 0.3 line over nine months; the line itself is the calibration
+        parked under R5 / R16. Not built yet: the pooled record needs the three test
+        curves joined, and whether a fold whose train window failed counts in the
+        pool is not settled (its test run is kept as evidence only).
       - Decided 2026-11-16 (the user, asked with "fixed, moved on a schedule", "rolling
         monthly" and "fixed now, decide later" as the choices): **the holdout date is
         fixed at 2026-05-18 and moves on a schedule.** One date in one place, checked
@@ -2668,6 +2701,18 @@ behind a fixture flag; default stays `alpaca`.
         say where the timeline lives while other jobs use B: kept by the reset the way
         pulled datasets are, rebuilt before each long run (about 25 provider-backed
         steps), or exported to a file the engine reads. To be asked before that PR.
+      - Decided 2026-11-18 (the user, asked with "versioned dataset", "reset keeps
+        it" and "rebuild each run" as the choices): **the timeline is exported as a
+        versioned dataset and the research engine reads that.** It is built once in
+        the database, exported through the versioned dataset store next to the bars
+        (no raw files), survives a worker reset the way the bars do, and a result
+        names the timeline version it used. The engine does not read the universe
+        tables, so a replay's own universe version does not collide with it. To
+        build with the engine PR: the export command, the loader, and the rule that
+        an export is only ever produced from a database timeline (with its stamp:
+        first day, pool source, bar source, both coverage lines). Until the export
+        exists the timeline on B is still only in the database: do not run `atp
+        worker run` on B without `--no-reset`.
       - Started 2026-11-16 20:32 New York on B: `atp universe build-timeline --start
         2024-11-18 --end 2026-11-16 --min-bar-coverage 0.70 --held-min-bar-coverage
         0.55 --enforce` through `worker_job.sh`, output in
@@ -2893,8 +2938,22 @@ behind a fixture flag; default stays `alpaca`.
           an error, and excluding a session that has every bar time is refused, so
           the list cannot drop good data. Checked on real December 2024 bars: the
           faulty 2024-12-23 is accepted as an exclusion, the complete 2024-12-20 is
-          refused. Needs a deploy to B, then the build is run again with both dates.
-        - The rest of the report (it is computed before a refusal). Six closes more
+          refused. Merged as PR #190 (`2e7202ea1`), on A and B since 2026-11-17
+          05:03 UTC (both checked on the commit 2026-11-18).
+        - **Built on B, 2026-11-18** (23:45 UTC, 38 seconds, exit 0), with both
+          dates excluded: version **`raw_bars_20261118T234501Z_043e50ad`**, status
+          `created`, 26 sources, 31 names, **532 sessions, none missing and none off
+          shape**, 1,030,321 bars (222 fewer than the refused merge: the partial
+          2024-12-23). `--plan` run first, clean. Report and plan output:
+          `~/rehearsals/window_20261118/` on B. Against the refused report below:
+          the same six price jumps; NFLX has 18 sessions with no bars (was 19) and no
+          other name has any (each had 2025-03-10); share of slots lowest BA 43.2%,
+          CVX 49.8%, JNJ 49.8%, NFLX 53.7%, UNH 54.3%, V 59.0%, highest NVDA 99.8%,
+          AAPL 98.3%. These shares are over the whole span; the timeline's lines
+          (0.70 / 0.55) are measured over the last 20 sessions at each month end,
+          so the two are not the same measure. Each name's share while it is a
+          timeline member is not in this report and not measured.
+        - The rest of the refused report (it is computed before a refusal). Six closes more
           than 25% from the previous close: NFLX on 2025-11-17 (the split, -90%);
           ORCL +35% on 2025-09-10; AMD +31% on 2025-10-06; INTC +25% on 2025-09-18,
           +27% on 2026-04-24 and -29% on 2026-10-30. The five others are single
@@ -2914,8 +2973,8 @@ behind a fixture flag; default stays `alpaca`.
           fewest names passed the 70% line (25 on B). How much the lists would change
           if those days were left out of the measure is not known; a change would
           mean rebuilding the timeline.
-      - Still open in this box: run `build-window` on B with the two exclusions;
-        corporate actions for the same names and span.
+      - Still open in this box: corporate actions for the same names and span
+        (the five price gaps that are not the NFLX split are unchecked against them).
       - Read from the code 2026-11-16, because B's database now holds universe
         versions and backfill versions it did not hold before: the weekly bench
         re-sim on B takes its window, dataset version and symbols from Box A's API
