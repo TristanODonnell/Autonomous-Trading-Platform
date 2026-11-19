@@ -2673,9 +2673,111 @@ behind a fixture flag; default stays `alpaca`.
                 20. The one the rest leans on: a timeline of one list in force on
                 every bar gives every result frame identical to the run with no
                 timeline. Research and execution suites pass; pre-commit passes.
-          - [ ] Piece 2, threading: the timeline's version id from the hook
+          - [x] Piece 2, threading: the timeline's version id from the hook
                 through every stage; each run and each walk-forward fold loads the
-                names that are members during its own dates.
+                names that are members during its own dates. Cut in two
+                (2026-11-19): the first part changes nothing until the second
+                gives a run a timeline. Both parts built 2026-11-19.
+            - [x] 2a, request, runner and stages (built 2026-11-19, not
+                  committed; full unit suite 5,717 passed, 5 skipped, 0 failed).
+                  A request names the timeline by its dataset version
+                  id (`SimulationRunRequest.universe_timeline_version`), beside
+                  its symbols; the five stage configs and the gate window carry
+                  the same field and pass it to every request they build. The
+                  runner does the rest in one place: reads the timeline once (a
+                  loader function it is given, as it is given the corporate
+                  actions; the research package does not import the application
+                  layer), loads bars for the names of the lists in force during
+                  the run's own dates (`UniverseTimeline.symbols_between`), and
+                  hands the timeline to the engine. So a fold loads the names of
+                  its own months without the stage knowing.
+                  - Refused by the runner: a timeline named with no loader; a
+                    request whose symbols do not cover the lists in force during
+                    its dates; dates with no list in force; a timeline together
+                    with shuffled bar timestamps.
+                  - A run's span is counted in whole days, so a run that ends on a
+                    rotation day also loads the incoming list (never traded). One
+                    name more than needed, never one fewer.
+                  - Gate stages reuse an earlier full-window run. A run on a
+                    timeline reports the names it loaded, not the config's list,
+                    so matching on names alone stopped the reuse (measured: 8
+                    simulations where 6 are needed). Runs on a timeline are now
+                    matched by timeline and dates; a run on a timeline never
+                    stands in for one without, or for one on another timeline.
+                  - Tests: 34 in `tests/contracts/test_universe_timeline_contract.py`,
+                    `tests/research/simulation/test_simulation_runner_universe_timeline.py`,
+                    `tests/research/pipeline/test_stage_universe_timeline.py`.
+                  - Left as they are, on purpose: stage configs read from a YAML
+                    file do not take a timeline (the hook builds its configs in
+                    code); the older single-stage path
+                    (`ExperimentOrchestrationService.run_experiment`) is not
+                    threaded.
+                  - Open, for 2b: the regime stage labels market regimes from the
+                    bars of the config's symbol list for the whole window
+                    (`OnTheFlyRegimeLabelProvider.load_daily_regimes`; a name with
+                    no bars is skipped, not refused). On a timeline that list
+                    holds names that were members for part of the window only, so
+                    a name's bars would shape the labels of months before it was
+                    picked. **Decided 2026-11-19 (the user, asked with "window-start
+                    list", "every name in the window" and "members on each date"
+                    as the choices): the window-start list**, the names in force
+                    on the window's first day, as today. No hindsight, and the
+                    labels are the same in the before and the after run, so the
+                    measurement shows the engine change alone. Known cost: late in
+                    a 24-month window the labels come from a list that has since
+                    rotated.
+                  - **Must not merge without piece 3:** the cache key does not hold
+                    the timeline yet, so a run on a timeline and one without, on
+                    the same names and dates, would share a key.
+            - [x] 2b, the hook (built 2026-11-19, not committed; full unit suite
+                  5,741 passed, 5 skipped, 0 failed). A research tick
+                  is told its timeline by one research option,
+                  `universe_timeline: <dataset version id>`, beside `profile` and
+                  `lookback_days`; never "the newest". With it
+                  (`research_hooks.py`):
+                  - The timeline is read once and checked against its registered
+                    hash before anything runs; a timeline that cannot be read
+                    fails the tick (`universe_timeline: ...`).
+                  - The universe tables are not read (decided 2026-11-18). The
+                    scope the survivorship checks take is built from the timeline
+                    (`universe/services/timeline_universe_scope.py`), in the shape
+                    they already know for a universe that rotates inside the
+                    window; the guard runs on it unchanged.
+                  - The stages are handed every name of the window and the
+                    timeline's id; the experiment's universe version is the
+                    timeline's id, where it was the window-start list's.
+                  - Market regimes are labelled from the window-start list
+                    (`RegimeStageConfig.label_symbols`), decided above.
+                  - Refused, as a survivorship failure: a window that starts
+                    before the timeline's first list; in a replay, a timeline
+                    naming symbols the replay did not ingest (without a timeline
+                    the list is cut down to what was ingested; a timeline's lists
+                    are not cut down).
+                  - The tick's summary names the timeline
+                    (`universe_timeline_version`; none when it ran on a fixed
+                    list).
+                  - One rule for dates, used by the window and by every run in it
+                    (`UniverseTimeline.symbols_on_dates`, whole UTC days, both
+                    ends included), so a run never needs a name its window lacks.
+                  - Tests: the hook end to end on real bars with the real runner
+                    and engine (`tests/research/test_research_hooks_smoke.py`, 10
+                    added: the id reaches the experiment, every stage config and
+                    the engine; a name is asked for signals only while it is in
+                    the list; the tables are not read; the refusals), the scope
+                    (`tests/universe/test_timeline_universe_scope.py`, 10), the
+                    label list and the date rule.
+                  - Found in the build: two existing test fixtures wrap the
+                    function that builds the simulation context with a fixed
+                    list of arguments, so the hook's new argument failed their
+                    smoke tests. Both now pass extra arguments through.
+                  - Not changed, and it matters for the long run: the hook's
+                    window is still `lookback_days` back from the tick with 45 /
+                    30 / 15-day folds. The 9 / 9 / 6 layout is the hook-layout
+                    work (R2) that follows the engine.
+                  - Not changed: `_resolve_active_universe_size` still asks the
+                    universe tables for the number the sizer is built with. On a
+                    timeline the engine does not use that number (it takes the
+                    count from the list in force).
           - [ ] Piece 3, records: the timeline's version id in the run row, the
                 manifest, the cache key and the run id, where `"v1"` is today;
                 the exit log stored.
