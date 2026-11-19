@@ -13,9 +13,13 @@ from . import corporate_action_applications as corporate_action_applications
 from . import corporate_actions as corporate_actions
 from . import correlation_snapshots as correlation_snapshots
 from . import dataset_versions as dataset_versions
+from . import drawdown_governance_ladder_state as drawdown_governance_ladder_state
+from . import drawdown_governance_ladder_transition as drawdown_governance_ladder_transition
 from . import experiments as experiments
 from . import factor_exposure_snapshots as factor_exposure_snapshots
 from . import factor_neutralization_runs as factor_neutralization_runs
+from . import feature_dataset_versions as feature_dataset_versions
+from . import fill_quality_metrics as fill_quality_metrics
 from . import fills as fills
 from . import governance_audit_events as governance_audit_events
 from . import ingestion_checkpoint as ingestion_checkpoint
@@ -45,6 +49,9 @@ from . import runtime_control_state as runtime_control_state
 from . import runtime_job_run_steps as runtime_job_run_steps
 from . import runtime_job_runs as runtime_job_runs
 from . import runtime_soak_reports as runtime_soak_reports
+from . import shadow_comparison_snapshots as shadow_comparison_snapshots
+from . import shadow_divergences as shadow_divergences
+from . import shadow_runs as shadow_runs
 from . import signals as signals
 from . import simulation_runs as simulation_runs
 from . import strategy_configs as strategy_configs
@@ -131,4 +138,12 @@ __all__ = [
     "runtime_soak_reports",
     "rebalance_runs",
     "universe_rotation_records",
+    "drawdown_governance_ladder_state",
+    "drawdown_governance_ladder_transition",
+    "feature_dataset_versions",
+    "fill_quality_metrics",
+    "shadow_comparison_snapshots",
+    "shadow_divergences",
+    "shadow_runs",
+    "worker_result_submissions",
 ]
