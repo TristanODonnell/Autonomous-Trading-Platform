@@ -7,7 +7,8 @@ from bisect import bisect_left
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from math import ceil
 from typing import Any
 
 import pyarrow as pa
@@ -180,11 +181,15 @@ class SimulationWindowLoader:
                 if self._reuse_depth == 0:
                     self._loaded = None
 
-    # 5-min bars per trading day (9:30→16:00 = 6.5h = 78 bars)
+    # First guess at how far back a warmup lies: sessions of 78 five-minute bars
+    # (9:30→16:00), five sessions to seven calendar days. It is only where the
+    # search starts. A weekend, a holiday or a name that trades in fewer than 78
+    # slots a session needs more, and _warmup_read_start looks further back
+    # until the bars are there (plan R17).
     _BARS_PER_TRADING_DAY: int = 78
-    # Conservative calendar-day multiplier to guarantee enough trading days
-    # are fetched even across weekends/holidays (5 trading days per ~7 cal days)
     _CALENDAR_DAYS_PER_TRADING_DAY: float = 7 / 5
+    # Where the search for warmup bars stops: no dataset holds bars before this.
+    _EARLIEST_BAR_DATE: date = date(2000, 1, 1)
 
     def load_window(
         self,
@@ -206,6 +211,9 @@ class SimulationWindowLoader:
         ----------
         warmup_bars:
             Number of bars to load *before* start_date to seed indicator state.
+            Each symbol gets its own last ``warmup_bars`` bars, however many
+            sessions back they lie, or every earlier bar it has when its history
+            is shorter than that.
             These bars are included in ``bars_by_symbol`` and ``timeline`` so the
             strategy context builder can warm up MAs/RSI/etc., but they are
             flagged in ``warmup_timestamps`` so the execution engine skips order
@@ -228,24 +236,26 @@ class SimulationWindowLoader:
         if not normalized_symbols:
             raise ValueError("At least one symbol is required")
 
-        # Compute the extended read start to cover warmup bars.
-        # We over-fetch slightly (ceiling) to account for weekends/holidays,
-        # then trim to the exact bar count after reading.
-        from datetime import timedelta
-        from math import ceil
-
-        if warmup_bars > 0:
-            warmup_trading_days = ceil(warmup_bars / self._BARS_PER_TRADING_DAY)
-            warmup_calendar_days = ceil(warmup_trading_days * self._CALENDAR_DAYS_PER_TRADING_DAY)
-            read_start = start_date - timedelta(days=warmup_calendar_days)
-        else:
-            read_start = start_date
-
         bars_by_symbol: dict[str, list[MarketBar]] = {}
         feature_requests = list(feature_datasets or [])
         feature_tables_by_symbol: dict[str, dict[str, pa.Table]] = {}
 
         for symbol in normalized_symbols:
+            # Each symbol reads from where its own warmup bars begin. The read may
+            # hold more earlier bars than asked for; they are trimmed below.
+            read_start = (
+                self._warmup_read_start(
+                    bars_dataset=bars_dataset,
+                    dataset_version=dataset_version,
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                    warmup_bars=warmup_bars,
+                    engine=engine,
+                )
+                if warmup_bars > 0
+                else start_date
+            )
             all_bars = self._symbol_bars(
                 bars_dataset=bars_dataset,
                 dataset_version=dataset_version,
@@ -343,6 +353,58 @@ class SimulationWindowLoader:
             warmup_bars_by_symbol=warmup_bars_by_symbol,
             warmup_timestamps=warmup_timestamps,
         )
+
+    def _warmup_read_start(
+        self,
+        *,
+        bars_dataset: ParquetDataset,
+        dataset_version: str,
+        symbol: str,
+        start_date: date,
+        end_date: date,
+        warmup_bars: int,
+        engine: str,
+    ) -> date:
+        """A date from which a read holds this symbol's ``warmup_bars`` bars before
+        ``start_date``, or ``_EARLIEST_BAR_DATE`` when it has fewer than that.
+
+        It counts the symbol's own bars before the window, starting from the usual
+        estimate and doubling the reach until enough are found. Counting does not
+        build bar objects, so the search is cheap and the window is still parsed
+        once. A request the estimate already covers reads from the same date as
+        before this search existed.
+
+        The search runs to a fixed earliest date, not until a stretch with no
+        bars, so a gap in a symbol's history does not end it early.
+        """
+        earliest = self._EARLIEST_BAR_DATE
+        if start_date <= earliest:
+            return start_date
+
+        day_before = start_date - timedelta(days=1)
+        estimated_sessions = ceil(warmup_bars / self._BARS_PER_TRADING_DAY)
+        reach_days = ceil(estimated_sessions * self._CALENDAR_DAYS_PER_TRADING_DAY)
+
+        while True:
+            read_start = max(start_date - timedelta(days=reach_days), earliest)
+            try:
+                found = self.bar_reader.read(
+                    dataset=bars_dataset,
+                    dataset_version=dataset_version,
+                    symbol=symbol,
+                    start_date=read_start,
+                    end_date=day_before,
+                    engine=engine,
+                ).num_rows
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to load bar data for symbol={symbol}, "
+                    f"dataset_version={dataset_version}, "
+                    f"window={start_date}..{end_date}"
+                ) from exc
+            if found >= warmup_bars or read_start <= earliest:
+                return read_start
+            reach_days *= 2
 
     def _symbol_bars(
         self,

@@ -59,11 +59,17 @@ def _rows(symbol: str) -> list[dict[str, Any]]:
 
 
 class _CountingReader:
-    """The Parquet reader's date rule over rows held in memory, counting each read."""
+    """The Parquet reader's date rule over rows held in memory, counting each read.
+
+    ``reads`` are reads of the window, the ones whose bars are parsed. The loader
+    also counts a symbol's bars before the window to find where its warmup begins
+    (a read that ends before ``_START``); those go to ``warmup_counts``.
+    """
 
     def __init__(self) -> None:
         self.rows = {symbol: _rows(symbol) for symbol in _SYMBOLS}
         self.reads: list[tuple[str, date, date]] = []
+        self.warmup_counts: list[tuple[str, date, date]] = []
         self.before_read: Callable[[], None] | None = None
 
     def read(
@@ -76,9 +82,12 @@ class _CountingReader:
         end_date: date,
         engine: str = "pyarrow",
     ) -> pa.Table:
-        if self.before_read is not None:
-            self.before_read()
-        self.reads.append((symbol, start_date, end_date))
+        if end_date < _START:
+            self.warmup_counts.append((symbol, start_date, end_date))
+        else:
+            if self.before_read is not None:
+                self.before_read()
+            self.reads.append((symbol, start_date, end_date))
         start_ts, end_ts = HistoricalBarDatasetReader._date_range_to_timestamps(
             start_date, end_date
         )
