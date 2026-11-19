@@ -65,11 +65,24 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > are the five-minute bars for those 31 names (26 monthly backfill versions,
 > 2024-10-01 to 2026-11-16). The first merge on B was refused, correctly: the IEX
 > feed has no bars on 2025-03-10 and stops at 10:22 New York on 2024-12-23. The
-> user decided both sessions are left out by name (`--exclude-session`, on branch
-> `research/package-b-window-exclusions`). Next: deploy that, build the dataset
-> on B; then change the research engine to read the timeline (own PR, measured
-> before and after).
-> Open decisions: the pass rule over the three test folds; when R17 is fixed.
+> user decided both sessions are left out by name (`--exclude-session`, **merged
+> as PR #190**, `2e7202ea1`, on A and B). **The 24-month dataset is built on B**
+> (2026-11-18, `raw_bars_20261118T234501Z_043e50ad`, 532 sessions, 31 names,
+> 1,030,321 bars).
+> Decided 2026-11-18: the pass rule over the three test folds is both (2 of 3
+> folds, and the pooled nine-month record); the timeline is exported as a
+> versioned dataset that the engine reads (survives a worker reset); R17 is
+> fixed before the long run's results are read.
+> R17 is fixed and measured 2026-11-18 (the loader counts each name's own bars
+> before the window; over nine months no pass / fail verdict changes, over four
+> weeks one does), on branch
+> `research/package-b-window-dataset`, PR pending.
+> Next, in this order: (1) R17: PR, merge, deploy;
+> (2) the timeline export and the research engine reading it, with A's exit
+> rule (own PR, measured before and after); (3) the hook's 9 / 9 / 6 layout,
+> the holdout-date check and the two-part fold rule.
+> Open decisions: none waiting. Until (2) is on B, do not run `atp worker run`
+> there without `--no-reset` (the reset deletes the timeline).
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
 
@@ -87,7 +100,7 @@ section 3: done, then still open.
 | Item | What it is | Status | Boxes | What is left | When |
 |---|---|---|---|---|---|
 | 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 7 done, 13 open | Code only, still open: pooled or median fold gate, daily resample, the walk-forward "entered" count (found 2026-11-15). The rest waits on longer history (package B): selection / evaluation / holdout split, fold geometry, folds in sessions, minimum test span. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Now. The split and fold boxes are package B, which is the current work; the three code-only boxes can be done at any time |
-| 🔴 R17 | Short warmups get no bars when a window starts on a Monday | Found 2026-11-16, checked on the real loader; not fixed | 0 done, 2 open | Measure the effect, then fix with a before / after | Not scheduled. Suggested (not agreed): before the long run's results are read, because the fix changes results |
+| 🟡 R17 | Short warmups get no bars when a window starts on a Monday; measured 2026-11-18, also after holidays and for thin names on any day (23% to 68% of starts by warmup size) | Found 2026-11-16; counted on the real 24-month dataset, fixed and measured before / after 2026-11-18 (0 pass / fail flips and Sharpe moves of up to 0.04 over nine months; 1 flip and up to 0.62 over four weeks). On branch `research/package-b-window-dataset`, **PR pending** | 2 done, 0 open | PR, merge, deploy. A name with less history than its warmup is recorded on the run's result and logged (the user's decision 2026-11-18); showing it in the funnel rides with R2's layout change | **Next.** Decided 2026-11-18 (the user): before the long run's results are read, as its own PR ahead of the engine change. All three pieces of the long window start on a Monday |
 | 🔴 R7 | Test hardening per stage | Not started as its own item. Realistic-curve tests now exist at gate level for Monte Carlo, stress and regime | 0 done, 2 open | A real-runner test per stage, the cross-process checksum test. R4's "Verify" (a real-runner test per stage where the gate fails) is this work too | Rides along with package B (package D) |
 | 🔴 R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 done, 5 open | All of the wiring | After package B, before Step 5 (package C). It saves time on long runs; it does not change any result |
 | 🔴 R13 | No parameter-stability check | Not decided. A decision, not work yet | 0 done, 2 open | Decide whether to build the neighbour check | The user's decision, asked once package B gives more survivors (package F) |
@@ -621,7 +634,8 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
       this stage; `n_passed` is right. Shown in the hook's `stage_funnel`, the CLI and
       the stage metrics.
 - [ ] Gate on a pooled or median test Sharpe across folds in addition to per-fold pass
-      counts.
+      counts. Rule decided 2026-11-18 (the user): both, 2 of 3 folds and the pooled
+      nine-month record (Step 5, "Universe over the long window"). Not built.
 - [x] Validate `step_days >= test_days` and `min_folds_passed <= n_folds` (split from the
       box above). Done 2026-11-15 (package A, merged PR #184): both in `WalkForwardStageConfig.__post_init__`, so YAML and
       Python-built configs meet them. Overlap needs `allow_overlapping_test_folds: true`,
@@ -1852,7 +1866,16 @@ scored on defaults. `scripts/analyze_validation.py`, which works from an equity 
 alone, likewise reports "not scored" and exits 1.
 
 **R17 — Short warmups get no bars when a window starts on a Monday (found 2026-11-16
-while testing the bar cache; not fixed, no decision yet).**
+while testing the bar cache; not fixed; timing decided 2026-11-18).**
+
+Decided 2026-11-18 (the user, asked with "before the long results", "after the first
+long run" and "park it" as the choices): **R17 is fixed before the long run's results
+are read**, as a small PR of its own with a before / after on identical bars, ahead of
+the engine change, so the two result-changing changes are measured apart. Given with
+the question: all three piece boundaries of the 24-month window are Mondays
+(2024-11-18, 2025-08-18, 2026-05-18), so every piece starts in the broken case for a
+warmup of one session or less. The size of the effect on a nine-month run is not
+measured.
 
 `SimulationWindowLoader` reaches back for warmup bars by calendar days: trading days
 needed × 7/5, rounded up. The comment calls that conservative; it is not across a
@@ -1872,10 +1895,136 @@ weekday varies from fold to fold. A day after a market holiday behaves the same 
 Size not measured on real runs. A fix changes results, so it gets a before / after on
 identical bars like R10.
 
-- [ ] Measure: how many of the hook's runs start short, and how far their results move
-      when the warmup is complete.
-- [ ] Fix: reach back by sessions found, not by a calendar multiplier (read further
-      until enough earlier bars exist or the dataset starts).
+**Measured 2026-11-18 on the real 24-month dataset: R17 is wider than Monday starts.**
+The loader's reach-back rule was applied to the bar timestamps of
+`raw_bars_20261118T234501Z_043e50ad` (31 names, a copy on the laptop; nothing
+simulated). Every session from 2024-11-18 was taken as a possible start (498 starts,
+15,438 start-and-name pairs), and "short" means the loader hands over fewer bars than
+exist before the start.
+
+- What a run asks for: `max(strategy warmup, 20)` (`simulation_runner.py`, the 20 is the
+  sizer's volatility closes). By parameter range the hook's families ask for 20 to 61
+  (momentum), 20 to 100 (mean reversion), about 20 to 101 (factor based), 20 to 201
+  (moving-average crossover); composite not read. So most candidates ask for one
+  session or less.
+- The three piece starts (all Mondays): a warmup of 20 to 78 gets **no bars for any of
+  the 31 names** at each of the three; 101 and 156 are short for all 31; 201 is short for
+  11 to 20 of the 31.
+- All starts, share of pairs handed fewer bars than exist:
+
+  | Warmup | Mon | Tue | Wed | Thu | Fri | All | None at all | Mean bars missing |
+  |---|---|---|---|---|---|---|---|---|
+  | 20 | 100% | 13% | 2% | 2% | 2% | 23% | 21% | 4 |
+  | 61 | 100% | 38% | 10% | 9% | 11% | 33% | 21% | 16 |
+  | 78 | 100% | 79% | 18% | 14% | 18% | 46% | 21% | 22 |
+  | 101 | 100% | 100% | 28% | 11% | 11% | 50% | 3% | 21 |
+  | 156 | 100% | 100% | 86% | 28% | 26% | 68% | 3% | 52 |
+  | 201 | 49% | 53% | 51% | 48% | 25% | 45% | 0% | 30 |
+
+- Three causes, not one. (1) The weekend, as found. (2) A start after a market holiday:
+  70% to 98% of pairs short. (3) **The rule assumes 78 bars per session, and on this feed
+  only NVDA has them**: mean bars per session run from BA 34, CVX 39, JNJ 39, UNH 42,
+  NFLX 43, V 46 up to AAPL 76, NVDA 78 (ingestion drops a five-minute bar unless all five
+  minutes traded). On Tuesday to Friday starts a warmup of 61 is short for 49% of pairs
+  among those six thin names against 5% among the 11 names with 70 or more.
+- Many shortfalls are small (a name with 76 bars a session asked for 78 is two bars
+  short). With a warmup of 78, 21% of pairs get nothing, 5% under half, 13% between
+  half and all but five bars, 6% within five bars.
+- What a short warmup does, read from the strategies: with fewer bars than it needs a
+  strategy returns no signal, so it is silent at the start of the window until the
+  bars have accumulated; the sizer's volatility measure starts on fewer closes too.
+  How far results move is not measured (the second half of the box below).
+- Script: `r17_count.py` in the 36f17a09 session scratchpad (may be cleared).
+
+- [x] Measure: how many of the hook's runs start short, and how far their results move
+      when the warmup is complete. First half done 2026-11-18 (above): counted on the
+      real dataset for every possible start, not for the hook's own runs. Second half
+      done 2026-11-18 (below).
+
+**Before / after, 2026-11-18, identical bars** (laptop copy of
+`raw_bars_20261118T234501Z_043e50ad`; the 20 names of the timeline's first step, read
+from B's database; the hook's 30 candidates, seed, cash and fill settings; one
+simulation each over the whole window, judged by the hook's stage 1 filter; old and
+new run side by side in two processes). "Old" is the fix with its search replaced by
+the old estimate; 100 windows on the real dataset compared against the committed
+loader loaded as its own module gave no difference.
+
+| | Four weeks from 2024-11-18 (19 sessions) | Selection piece, 2024-11-18 to 2025-08-17 (183 sessions) |
+|---|---|---|
+| Warmup handed, old | none for warmups of 20 to 61 (every name, every load); 46 to 100 of 100; 169 to 201 of 201 | the same |
+| Warmup handed, fix | complete for every name on every load | the same |
+| Candidates whose equity curve changed | 26 of 30 | 26 of 30 |
+| Pass / fail flips at stage 1 | 1 (a mean reversion candidate, Sharpe 0.23 to 0.84, fail to pass) | 0 (8 pass both ways) |
+| Change in Sharpe, absolute | median 0.20, largest 0.62 | median 0.014, largest 0.042 |
+| Change in return | up to 0.33 points | up to 0.35 points |
+| Sharpe ranking | rank correlation 0.982; 21 change rank, by up to 4 places; the top five are not the same five | 0.998; 7 change rank, by up to 2; the same top five |
+| Run time, old / new | not comparable (the old run shared the machine with two others) | 863 s / 860 s, side by side |
+
+- The four that do not change: the two moving-average crossovers (warmup 201, where the
+  old reach was short for 6 of 40 name-loads only) and two factor-based candidates
+  that never trade.
+- **It is a first-session effect that is then carried.** On the nine-month run the gap
+  between the two equity curves is, at the median over the 26, 9.8 basis points of
+  equity at the end of day 1, 10.0 at day 21, 9.6 at the end (largest: 30, 31, 34);
+  95% of the final gap is already there after day 1. Bar-by-bar returns still differ on
+  nearly every later session, at a size that does not grow the gap; my reading, not
+  traced, is that sizing follows current equity. So the cost of the bug is about ten
+  basis points of return per window start, in either direction, and how much that
+  matters depends on the window's length: a fifth of a Sharpe point at the median
+  over four weeks, about a hundredth over nine months.
+- Not measured: a 63-session window (the evaluation folds' length). It lies between
+  the two measured lengths, and every fold start pays the effect once, so the fix
+  matters more to the fold verdicts than the nine-month column suggests.
+- The Sharpe levels of the four-week column (5 to 7 for many candidates) are an
+  artefact of annualising 19 sessions; only the changes are to be read.
+- Harness and outputs (session scratchpads, may be cleared): `test_zz_r17.py`,
+  `run_r17.sh`, `compare_r17.py`, `r17_old_equiv.py`, `out_r17/` in the 36f17a09
+  scratchpad.
+- [x] Fix: reach back by sessions found, not by a calendar multiplier (read further
+      until enough earlier bars exist or the dataset starts). After the 2026-11-18
+      measurement this has to count **each name's own bars**, not sessions: a thin name
+      needs more sessions than a full one for the same warmup.
+      **Written and measured 2026-11-18 (before / after above); on branch
+      `research/package-b-window-dataset`, PR pending.**
+  - What it does (`SimulationWindowLoader._warmup_read_start`): for each name it
+    counts the bars before the window, starting from the old estimate and doubling the
+    reach until the warmup is there or a fixed earliest date (2000-01-01) is reached,
+    then reads the window once from that date. Counting builds no bar objects. The
+    old trim to exactly the warmup asked for is unchanged, so a run whose warmup was
+    already complete reads from the same date and gets the same bars as before.
+  - Not chosen: a larger multiplier (still an estimate); stopping at the first stretch
+    with no bars (a gap in a name's feed would end the search early).
+  - A name whose history is shorter than the warmup is handed every earlier bar it
+    has and the run starts. **Decided 2026-11-18 (the user, asked with "record it",
+    "refuse the run" and "leave as is" as the choices): record it.** Built the same
+    day: the window carries `warmup_shortfall_by_symbol` (name to bars
+    missing), the runner logs `simulation.warmup_short` at warning level with the
+    run, strategy, start date, warmup asked and the names, and
+    `SimulationRunResult.warmup_shortfall_by_symbol` holds it. It does not occur on
+    the 24-month window (all 31 names have 201 earlier bars at the three piece
+    starts). Limit: nothing reads the field yet. No stage, funnel line or stored run
+    row shows it; that belongs with the hook's layout change (R2), where a result is
+    turned into evidence.
+  - Tests: `tests/research/simulation/test_simulation_window_loader_warmup.py` (52
+    cases on generated sessions: a Monday start, a start after Memorial Day, a
+    30-bar-a-session name mid-week, a three-week gap in a name's history, a name whose
+    history runs out, every start of five weeks against every warmup size). 41 of them
+    fail on the old loader; the 11 that pass are cases it already handled (a warmup of
+    201 on a Monday, bars inside the window, history that runs out, no warmup asked).
+    The reuse tests' fake reader now records the count reads apart from the window
+    reads; its assertions are unchanged. The shortfall record added five loader cases
+    to that file and three runner cases to `test_simulation_warmup_resolution.py`
+    (the run completes, the result and the log name the symbol and the bars missing). Full unit suite passes with the fix
+    (`-m "not integration and not external and not alpaca"`, exit 0), and pre-commit
+    passes on the three changed files.
+  - On the real dataset (real loader, real Parquet reader, the laptop copy): at the
+    three piece starts, warmups of 20 to 201, **all 31 names are handed the full
+    warmup** (the old rule: none for 20 to 78). Cost of the counting: 45 to 73 count
+    reads per load of 31 names, about 8 ms a name.
+  - Seen, not examined: the same "sessions × 7/5" estimate sizes windows in
+    `bench_hooks.py`, `rotation_simulator.py`, `rolling_raw_bars_service.py` and
+    `alpaca_intraday_coverage_source.py` (the last adds seven days). They count
+    sessions, not a name's bars, and may or may not have the same weakness.
 
 **Step 0 follow-ups (trail the fixes above; do before Step 5):**
 - Cache and identity hygiene: `SimulationResultCache` keys and the checkpoint identity
@@ -2635,8 +2784,22 @@ behind a fixture flag; default stays `alpaca`.
         months, and Monte Carlo over nine months takes about 2.25 times as long as
         over six. On the window the timeline builds used (2024-11-18 to 2026-11-16)
         the pieces are: selection 2024-11-18 to 2025-08-17, evaluation 2025-08-18 to
-        2026-05-17, holdout from 2026-05-18. The pass rule over the three folds is
-        not decided (R2's "pooled or median" box).
+        2026-05-17, holdout from 2026-05-18.
+      - Decided 2026-11-18 (the user, asked with "both", "2 of 3 folds", "pooled
+        only" and "keep any 1 of 3" as the choices): **the pass rule over the three
+        test folds is both: at least 2 of 3 folds pass, and the three test periods
+        joined into one nine-month record clear the same filter.** This is R2's
+        "pooled or median" box; with three folds a median rule is the 2-of-3 rule.
+        Numbers given with the question, from a simulation on random numbers
+        (independent folds, normal, fold standard error √(252/63) = 2.0 against the
+        0.3 line; not measured on our data): share that passes at a true Sharpe of
+        0.0 / 1.0 / 2.0 is 82% / 95% / 99% under today's any-1 rule, 41% / 70% / 90%
+        under 2 of 3, 40% / 73% / 93% pooled, 33% / 64% / 88% under both. The two
+        single rules disagree on about 16% of no-skill strategies. No rule is very
+        selective at a 0.3 line over nine months; the line itself is the calibration
+        parked under R5 / R16. Not built yet: the pooled record needs the three test
+        curves joined, and whether a fold whose train window failed counts in the
+        pool is not settled (its test run is kept as evidence only).
       - Decided 2026-11-16 (the user, asked with "fixed, moved on a schedule", "rolling
         monthly" and "fixed now, decide later" as the choices): **the holdout date is
         fixed at 2026-05-18 and moves on a schedule.** One date in one place, checked
@@ -2668,6 +2831,18 @@ behind a fixture flag; default stays `alpaca`.
         say where the timeline lives while other jobs use B: kept by the reset the way
         pulled datasets are, rebuilt before each long run (about 25 provider-backed
         steps), or exported to a file the engine reads. To be asked before that PR.
+      - Decided 2026-11-18 (the user, asked with "versioned dataset", "reset keeps
+        it" and "rebuild each run" as the choices): **the timeline is exported as a
+        versioned dataset and the research engine reads that.** It is built once in
+        the database, exported through the versioned dataset store next to the bars
+        (no raw files), survives a worker reset the way the bars do, and a result
+        names the timeline version it used. The engine does not read the universe
+        tables, so a replay's own universe version does not collide with it. To
+        build with the engine PR: the export command, the loader, and the rule that
+        an export is only ever produced from a database timeline (with its stamp:
+        first day, pool source, bar source, both coverage lines). Until the export
+        exists the timeline on B is still only in the database: do not run `atp
+        worker run` on B without `--no-reset`.
       - Started 2026-11-16 20:32 New York on B: `atp universe build-timeline --start
         2024-11-18 --end 2026-11-16 --min-bar-coverage 0.70 --held-min-bar-coverage
         0.55 --enforce` through `worker_job.sh`, output in
@@ -2893,8 +3068,22 @@ behind a fixture flag; default stays `alpaca`.
           an error, and excluding a session that has every bar time is refused, so
           the list cannot drop good data. Checked on real December 2024 bars: the
           faulty 2024-12-23 is accepted as an exclusion, the complete 2024-12-20 is
-          refused. Needs a deploy to B, then the build is run again with both dates.
-        - The rest of the report (it is computed before a refusal). Six closes more
+          refused. Merged as PR #190 (`2e7202ea1`), on A and B since 2026-11-17
+          05:03 UTC (both checked on the commit 2026-11-18).
+        - **Built on B, 2026-11-18** (23:45 UTC, 38 seconds, exit 0), with both
+          dates excluded: version **`raw_bars_20261118T234501Z_043e50ad`**, status
+          `created`, 26 sources, 31 names, **532 sessions, none missing and none off
+          shape**, 1,030,321 bars (222 fewer than the refused merge: the partial
+          2024-12-23). `--plan` run first, clean. Report and plan output:
+          `~/rehearsals/window_20261118/` on B. Against the refused report below:
+          the same six price jumps; NFLX has 18 sessions with no bars (was 19) and no
+          other name has any (each had 2025-03-10); share of slots lowest BA 43.2%,
+          CVX 49.8%, JNJ 49.8%, NFLX 53.7%, UNH 54.3%, V 59.0%, highest NVDA 99.8%,
+          AAPL 98.3%. These shares are over the whole span; the timeline's lines
+          (0.70 / 0.55) are measured over the last 20 sessions at each month end,
+          so the two are not the same measure. Each name's share while it is a
+          timeline member is not in this report and not measured.
+        - The rest of the refused report (it is computed before a refusal). Six closes more
           than 25% from the previous close: NFLX on 2025-11-17 (the split, -90%);
           ORCL +35% on 2025-09-10; AMD +31% on 2025-10-06; INTC +25% on 2025-09-18,
           +27% on 2026-04-24 and -29% on 2026-10-30. The five others are single
@@ -2914,8 +3103,8 @@ behind a fixture flag; default stays `alpaca`.
           fewest names passed the 70% line (25 on B). How much the lists would change
           if those days were left out of the measure is not known; a change would
           mean rebuilding the timeline.
-      - Still open in this box: run `build-window` on B with the two exclusions;
-        corporate actions for the same names and span.
+      - Still open in this box: corporate actions for the same names and span
+        (the five price gaps that are not the NFLX split are unchecked against them).
       - Read from the code 2026-11-16, because B's database now holds universe
         versions and backfill versions it did not hold before: the weekly bench
         re-sim on B takes its window, dataset version and symbols from Box A's API
