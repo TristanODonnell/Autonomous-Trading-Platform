@@ -15,6 +15,7 @@ from autonomous_trading_platform.contracts.common.enums import BarInterval, Pric
 from autonomous_trading_platform.research.simulation.services.simulation_window_loader_service import (
     SimulationWindowData,
     SimulationWindowLoader,
+    shuffle_window_bar_timestamps,
 )
 from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.reader import HistoricalBarDatasetReader
@@ -263,6 +264,40 @@ def test_no_warmup_asked_means_no_count_and_a_read_from_the_start() -> None:
     _load(_MONDAY, 0, _FULL, reader=reader)
 
     assert reader.reads == [(_FULL, _MONDAY, _END)]
+
+
+def test_a_window_whose_names_all_got_their_warmup_reports_no_shortfall() -> None:
+    # A Monday, a holiday, a thin name and a gap: none of them is a short history.
+    for start in (_MONDAY, _AFTER_HOLIDAY, _WEDNESDAY):
+        window = _load(start, 201, _FULL, _THIN, _GAPPY)
+        assert window.warmup_shortfall_by_symbol == {}
+
+
+def test_a_name_with_less_history_than_the_warmup_is_reported_with_the_bars_missing() -> None:
+    tuesday = date(2024, 6, 11)
+
+    window = _load(tuesday, 201, _LATE, _FULL)
+
+    # LATE has one earlier session of 78 bars; FULL has all 201.
+    assert window.warmup_shortfall_by_symbol == {_LATE: 201 - 78}
+
+
+def test_a_name_with_no_earlier_bars_is_short_by_the_whole_warmup() -> None:
+    window = _load(_LATE_FIRST_SESSION, 20, _LATE, _FULL)
+
+    assert window.warmup_shortfall_by_symbol == {_LATE: 20}
+
+
+def test_no_warmup_asked_reports_no_shortfall() -> None:
+    assert _load(_LATE_FIRST_SESSION, 0, _LATE).warmup_shortfall_by_symbol == {}
+
+
+def test_shuffling_a_window_keeps_its_shortfall() -> None:
+    window = _load(date(2024, 6, 11), 201, _LATE)
+
+    shuffled = shuffle_window_bar_timestamps(window, random_seed=7)
+
+    assert shuffled.warmup_shortfall_by_symbol == {_LATE: 201 - 78}
 
 
 def test_a_failed_count_is_reported_like_a_failed_read() -> None:

@@ -68,6 +68,7 @@ def shuffle_window_bar_timestamps(
         feature_tables_by_symbol=window.feature_tables_by_symbol,
         warmup_bars_by_symbol=window.warmup_bars_by_symbol,
         warmup_timestamps=window.warmup_timestamps,
+        warmup_shortfall_by_symbol=window.warmup_shortfall_by_symbol,
         sorted_timestamps_by_symbol=shuffled_timestamps_by_symbol,
     )
 
@@ -98,6 +99,11 @@ class SimulationWindowData:
     warmup_bars_by_symbol: dict[str, list[MarketBar]] = None  # type: ignore[assignment]
     warmup_timestamps: set[datetime] = None  # type: ignore[assignment]
 
+    # Symbols whose history before start_date is shorter than the warmup asked
+    # for, with the number of bars missing. Their indicators are not warmed up
+    # when the window opens. Empty when every symbol got its warmup.
+    warmup_shortfall_by_symbol: dict[str, int] = None  # type: ignore[assignment]
+
     # Precomputed sorted timestamp lists per symbol for O(log N) bisect lookups
     # in build_from_window. Populated by SimulationWindowLoader.load_window().
     sorted_timestamps_by_symbol: dict[str, list[datetime]] = None  # type: ignore[assignment]
@@ -107,6 +113,8 @@ class SimulationWindowData:
             self.warmup_bars_by_symbol = {}
         if self.warmup_timestamps is None:
             self.warmup_timestamps = set()
+        if self.warmup_shortfall_by_symbol is None:
+            self.warmup_shortfall_by_symbol = {}
         if self.sorted_timestamps_by_symbol is None:
             self.sorted_timestamps_by_symbol = {
                 symbol: [b.timestamp for b in bars] for symbol, bars in self.bars_by_symbol.items()
@@ -237,6 +245,7 @@ class SimulationWindowLoader:
             raise ValueError("At least one symbol is required")
 
         bars_by_symbol: dict[str, list[MarketBar]] = {}
+        warmup_shortfall_by_symbol: dict[str, int] = {}
         feature_requests = list(feature_datasets or [])
         feature_tables_by_symbol: dict[str, dict[str, pa.Table]] = {}
 
@@ -279,6 +288,10 @@ class SimulationWindowLoader:
                 # Trim pre_bars to exactly warmup_bars (take the most recent ones)
                 warmup_slice = pre_bars[-warmup_bars:] if len(pre_bars) > warmup_bars else pre_bars
                 bars_by_symbol[symbol] = warmup_slice + live_bars
+                # The search above went back as far as bars can be, so fewer than
+                # asked means the symbol's history is that short.
+                if len(warmup_slice) < warmup_bars:
+                    warmup_shortfall_by_symbol[symbol] = warmup_bars - len(warmup_slice)
             else:
                 bars_by_symbol[symbol] = all_bars
 
@@ -352,6 +365,7 @@ class SimulationWindowLoader:
             feature_tables_by_symbol=feature_tables_by_symbol,
             warmup_bars_by_symbol=warmup_bars_by_symbol,
             warmup_timestamps=warmup_timestamps,
+            warmup_shortfall_by_symbol=warmup_shortfall_by_symbol,
         )
 
     def _warmup_read_start(

@@ -33,6 +33,7 @@ from autonomous_trading_platform.contracts.runtime.strategy_config import (
 from autonomous_trading_platform.contracts.simulation.dividend_event import DividendEvent
 from autonomous_trading_platform.execution.services.sleeve_sizing import VOL_LOOKBACK_BARS
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.research.experiments.filtering.metrics.return_metrics import (
     ReturnMetrics,
 )
@@ -94,6 +95,8 @@ from autonomous_trading_platform.strategy.contexts.strategy_context_builder impo
 )
 from autonomous_trading_platform.strategy.factories.strategy_factory import StrategyFactory
 from autonomous_trading_platform.strategy.registry.strategy_registry import get_registry
+
+logger = get_logger(__name__)
 
 # Stable namespace for deterministic run_id generation (P-01).
 _RUN_NS = uuid5(NAMESPACE_URL, "autonomous-trading-platform:run")
@@ -173,6 +176,11 @@ class SimulationRunResult:
     equity_curve: pd.DataFrame
     # Fills of the run (one row per fill); used to slice trade metrics by window.
     trade_logs: pd.DataFrame = field(default_factory=pd.DataFrame)
+    # Symbols whose history before start_date was shorter than the warmup the run
+    # asked for, with the number of bars missing (plan R17). The run goes ahead;
+    # those symbols give no signal until the bars have accumulated. Empty when
+    # every symbol was warmed up.
+    warmup_shortfall_by_symbol: dict[str, int] = field(default_factory=dict)
 
 
 class SimulationRunner:
@@ -321,6 +329,20 @@ class SimulationRunner:
                 resample_to_daily=request.resample_to_daily,
             )
 
+            if window.warmup_shortfall_by_symbol:
+                # Recorded, not refused (the user's decision, plan R17): the run
+                # is still evidence, and its result says which names began cold.
+                logger.warning(
+                    "simulation.warmup_short",
+                    extra={
+                        "run_id": str(run_id),
+                        "strategy_id": request.strategy_id,
+                        "start_date": request.start_date.isoformat(),
+                        "warmup_bars": warmup_bars,
+                        "bars_missing_by_symbol": dict(window.warmup_shortfall_by_symbol),
+                    },
+                )
+
             if request.shuffle_timestamp:
                 window = shuffle_window_bar_timestamps(
                     window,
@@ -403,6 +425,7 @@ class SimulationRunner:
                 stability_metrics=sm,
                 equity_curve=live_equity_curve,
                 trade_logs=trade_logs,
+                warmup_shortfall_by_symbol=dict(window.warmup_shortfall_by_symbol),
             )
 
         except Exception as exc:

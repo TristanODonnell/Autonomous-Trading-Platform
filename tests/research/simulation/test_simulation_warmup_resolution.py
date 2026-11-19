@@ -72,6 +72,7 @@ def _build_runner() -> tuple[SimulationRunner, MagicMock]:
 
     mock_window = MagicMock()
     mock_window.warmup_timestamps = set()
+    mock_window.warmup_shortfall_by_symbol = {}
     mock_window.symbols = ["AAPL"]
 
     mock_window_loader = MagicMock()
@@ -275,3 +276,53 @@ def test_strategy_is_handed_its_registry_warmup_in_bars(
     # The window also holds the sizer's volatility closes (step 5c-E).
     _, loader_kwargs = mock_loader.load_window.call_args
     assert loader_kwargs["warmup_bars"] == max(expected, VOL_LOOKBACK_BARS)
+
+
+# ---------------------------------------------------------------------------
+# Tests: a name with less history than the warmup (plan R17)
+# ---------------------------------------------------------------------------
+
+_WARMUP_SHORT_EVENT = "simulation.warmup_short"
+
+
+def test_a_run_whose_name_lacks_history_goes_ahead_and_says_so(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Recorded, not refused: the run completes, its result names the symbol and the
+    bars missing, and a warning is logged."""
+    runner, mock_loader = _build_runner()
+    mock_loader.load_window.return_value.warmup_shortfall_by_symbol = {"AAPL": 12}
+
+    with caplog.at_level("WARNING"):
+        result = runner.run(_make_request("momentum", {"lookback": 30}))
+
+    assert result.status == "completed"
+    assert result.warmup_shortfall_by_symbol == {"AAPL": 12}
+    (record,) = [r for r in caplog.records if r.getMessage() == _WARMUP_SHORT_EVENT]
+    assert record.levelname == "WARNING"
+    assert record.__dict__["bars_missing_by_symbol"] == {"AAPL": 12}
+    assert record.__dict__["warmup_bars"] == 31
+    assert record.__dict__["strategy_id"] == "test-strategy"
+
+
+def test_a_run_whose_names_are_all_warmed_up_records_nothing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    runner, _ = _build_runner()
+
+    with caplog.at_level("WARNING"):
+        result = runner.run(_make_request("momentum", {"lookback": 30}))
+
+    assert result.warmup_shortfall_by_symbol == {}
+    assert not [r for r in caplog.records if r.getMessage() == _WARMUP_SHORT_EVENT]
+
+
+def test_the_result_keeps_its_own_copy_of_the_shortfall() -> None:
+    runner, mock_loader = _build_runner()
+    from_loader = {"AAPL": 12}
+    mock_loader.load_window.return_value.warmup_shortfall_by_symbol = from_loader
+
+    result = runner.run(_make_request("momentum", {"lookback": 30}))
+    from_loader.clear()
+
+    assert result.warmup_shortfall_by_symbol == {"AAPL": 12}
