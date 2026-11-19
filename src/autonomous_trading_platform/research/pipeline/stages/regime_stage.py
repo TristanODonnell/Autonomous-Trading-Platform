@@ -110,6 +110,11 @@ class RegimeStageConfig:
     # The exported universe timeline the runs trade on (a dataset version id).
     # None = the symbols above are the universe for the whole window.
     universe_timeline_version: str | None = None
+    # The names whose bars the market regimes are labelled from. None = the
+    # symbols above. On a timeline the symbols above hold every name of the
+    # window, and a name's bars would shape the labels of months before it was
+    # picked; the caller gives the list in force on the window's first day.
+    label_symbols: list[str] | None = None
 
     def __post_init__(self) -> None:
         if self.start_date >= self.end_date:
@@ -307,7 +312,11 @@ class RegimeStage(BaseStage):
             daily = self._label_provider.load_daily_regimes(
                 dataset_version=ctx.dataset_version,
                 price_basis=ctx.price_basis,
-                symbols=self._cfg.symbols,
+                symbols=(
+                    self._cfg.label_symbols
+                    if self._cfg.label_symbols is not None
+                    else self._cfg.symbols
+                ),
                 start_date=self._cfg.start_date,
                 end_date=self._cfg.end_date,
             )

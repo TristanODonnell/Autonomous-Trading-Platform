@@ -7,7 +7,7 @@ leaves behind, plus one rotation record per step carrying the rules the step ran
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -186,3 +186,12 @@ class UniverseTimeline(BaseModel):
             if begins_before_end and ends_after_start:
                 names.update(member.symbol for member in period.members)
         return sorted(names)
+
+    def symbols_on_dates(self, first: date, last: date) -> list[str]:
+        """Every name of a list in force at some moment of the days ``first`` to
+        ``last``, both included, counted as whole UTC days. A window and the runs
+        inside it use this one rule, so a run never needs a name its window lacks."""
+        return self.symbols_between(
+            datetime.combine(first, time.min, tzinfo=UTC),
+            datetime.combine(last + timedelta(days=1), time.min, tzinfo=UTC),
+        )

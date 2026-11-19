@@ -154,8 +154,8 @@ def smoke_data_root(tmp_path: Path, db_session, monkeypatch) -> Path:
 
     orig_build = ctx_mod.build_simulation_context
 
-    def _patched_build(*, session, universe_size=None):
-        ctx = orig_build(session=session, universe_size=universe_size)
+    def _patched_build(*, session, universe_size=None, **kwargs):
+        ctx = orig_build(session=session, universe_size=universe_size, **kwargs)
         ctx.bar_reader.base_path = tmp_path
         ctx.dataset_resolver.base_path = tmp_path
         ctx.window_loader.bar_reader.base_path = tmp_path

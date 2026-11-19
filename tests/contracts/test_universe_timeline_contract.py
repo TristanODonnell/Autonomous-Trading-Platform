@@ -84,3 +84,32 @@ def test_times_without_a_timezone_are_refused() -> None:
         _timeline().symbols_between(datetime(2025, 1, 6), _at(1, 25))
     with pytest.raises(ValueError, match="timezone-aware"):
         _timeline().symbols_between(_at(1, 6), datetime(2025, 1, 25))
+
+
+def test_dates_are_counted_as_whole_days_both_included() -> None:
+    """The rule a research window and the runs inside it share."""
+    from datetime import date
+
+    timeline = _timeline()
+
+    assert timeline.symbols_on_dates(date(2025, 1, 6), date(2025, 1, 24)) == ["AAA", "BBB"]
+    assert timeline.symbols_on_dates(date(2025, 2, 3), date(2025, 2, 14)) == ["BBB", "CCC"]
+    # The last day counts to its end: a rotation that evening brings its list in.
+    assert timeline.symbols_on_dates(date(2025, 1, 20), date(2025, 1, 31)) == ["AAA", "BBB", "CCC"]
+    # The first day counts from its start: the list that ended the evening before is out.
+    assert timeline.symbols_on_dates(date(2025, 2, 1), date(2025, 2, 14)) == ["BBB", "CCC"]
+
+
+def test_a_run_inside_a_window_never_needs_a_name_the_window_lacks() -> None:
+    from datetime import date, timedelta
+
+    timeline = _timeline()
+    first, last = date(2025, 1, 6), date(2025, 3, 14)
+    window_names = set(timeline.symbols_on_dates(first, last))
+
+    day = first
+    while day <= last:
+        for length in (0, 4, 19):
+            end = min(day + timedelta(days=length), last)
+            assert set(timeline.symbols_on_dates(day, end)) <= window_names
+        day += timedelta(days=1)

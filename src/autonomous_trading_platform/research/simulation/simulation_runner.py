@@ -480,12 +480,7 @@ class SimulationRunner:
             timeline = self.universe_timeline_source(version_id)
             self._universe_timelines[version_id] = timeline
 
-        first = request.start_date
-        after_last = request.end_date + timedelta(days=1)
-        names = timeline.symbols_between(
-            datetime(first.year, first.month, first.day, tzinfo=UTC),
-            datetime(after_last.year, after_last.month, after_last.day, tzinfo=UTC),
-        )
+        names = timeline.symbols_on_dates(request.start_date, request.end_date)
         if not names:
             raise ValueError(
                 f"universe timeline {version_id} has no list in force between "

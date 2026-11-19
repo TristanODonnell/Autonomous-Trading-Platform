@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
@@ -18,6 +19,7 @@ from autonomous_trading_platform.contracts.runtime.platform_replay import (
     ResearchReplayResult,
     ResearchSummary,
 )
+from autonomous_trading_platform.contracts.runtime.universe_timeline import UniverseTimeline
 from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
 
 logger = logging.getLogger(__name__)
@@ -113,9 +115,15 @@ def run_scheduled_research_at_timestamp(
                Monte Carlo runs and cost scenarios for cheap verification runs.
       lookback_days: calendar days of history the research window covers
                (default 90). The window is still clamped to the dataset's start.
+      universe_timeline: dataset version id of an exported universe timeline
+               (``atp universe export-timeline``). With it the universe follows
+               the timeline month by month, as on the trading platform, and the
+               universe tables are not read. Without it the universe is the
+               list active on the window's first day, for the whole window.
     """
     profile = _resolve_research_profile(research_options)
     lookback_days = _resolve_lookback_days(research_options)
+    universe_timeline_id = _resolve_universe_timeline_option(research_options)
     base = dict(
         domain="research",
         timestamp=timestamp,
@@ -135,12 +143,28 @@ def run_scheduled_research_at_timestamp(
         session=session, timestamp=timestamp, replay_context=replay_context
     )
 
+    # The timeline is read once, here, and checked against its registered hash;
+    # the runner asks the same source for it and gets the copy already read.
+    timeline_source = _universe_timeline_source(session)
+    universe_timeline: UniverseTimeline | None = None
+    if universe_timeline_id is not None:
+        try:
+            universe_timeline = timeline_source(universe_timeline_id)
+        except Exception as exc:
+            return ResearchReplayResult(
+                **base, status="failed", errors=[f"universe_timeline: {exc}"]
+            )
+
     try:
         from autonomous_trading_platform.research.simulation.contexts.build_simulation_context import (
             build_simulation_context,
         )
 
-        simulation_context = build_simulation_context(session=session, universe_size=_universe_size)
+        simulation_context = build_simulation_context(
+            session=session,
+            universe_size=_universe_size,
+            universe_timeline_source=timeline_source,
+        )
     except Exception as exc:
         return ResearchReplayResult(**base, status="failed", errors=[str(exc)])
 
@@ -157,6 +181,7 @@ def run_scheduled_research_at_timestamp(
             dataset_version_id_override=dataset_version_id,
             profile=profile,
             lookback_days=lookback_days,
+            universe_timeline=universe_timeline,
         )
     except SurvivorshipBiasError as exc:
         return ResearchReplayResult(**base, status="failed", errors=[f"survivorship_guard: {exc}"])
@@ -229,10 +254,16 @@ def run_scheduled_research_at_timestamp(
                 survivorship_guard=SurvivorshipGuard()
             )
         )
-        universe_scope = _resolve_research_universe_scope(
-            session=session,
-            start_date=experiment_def.start_date,
-            end_date=experiment_def.end_date,
+        universe_scope = (
+            _timeline_universe_scope(
+                universe_timeline, experiment_def.start_date, experiment_def.end_date
+            )
+            if universe_timeline is not None
+            else _resolve_research_universe_scope(
+                session=session,
+                start_date=experiment_def.start_date,
+                end_date=experiment_def.end_date,
+            )
         )
         intel_svc = ResearchIntelligenceService()
 
@@ -361,6 +392,7 @@ def run_scheduled_research_at_timestamp(
             "stage_3_survivors": stage3_count,
             "stage_funnel": stage_funnel,
             "research_profile": profile,
+            "universe_timeline_version": universe_timeline_id,
             "intelligence_analyzed": len(intelligence_summaries),
             "deployable_seeded": len(deployable),
             "spam_cluster_excluded": len(spam_excluded),
@@ -413,6 +445,7 @@ def _build_replay_experiment_definition(
     dataset_version_id_override: str | None = None,
     profile: str = "full",
     lookback_days: int = DEFAULT_RESEARCH_LOOKBACK_DAYS,
+    universe_timeline: UniverseTimeline | None = None,
 ):
     """Build an ExperimentDefinition with the staged pipeline for the monthly research tick.
 
@@ -524,15 +557,45 @@ def _build_replay_experiment_definition(
     # research window, not at tick_date. A tick-date universe silently drops
     # names that died inside the window; anchoring at the window start keeps
     # them (their bars simply stop). SurvivorshipGuard enforces the anchor.
-    scope = _resolve_research_universe_scope(
-        session=session, start_date=start_date, end_date=tick_date
-    )
-    universe_version = scope.universe_version_id or "v1"
-    symbols = sorted(scope.member_symbols)
-    if dataset_version_id_override is not None:
-        # Backtest mode: only symbols the replay ingested have Parquet bars.
-        _ingested = set(replay_context.symbols)
-        symbols = [s for s in symbols if s in _ingested]
+    universe_timeline_version: str | None = None
+    regime_label_symbols: list[str] | None = None
+    if universe_timeline is not None:
+        # On a timeline the universe tables are not read (plan, decided
+        # 2026-11-18): the timeline is the point-in-time universe. The stages are
+        # handed every name of the window; each run loads the names of its own
+        # dates, and the engine trades the list in force on each bar.
+        scope = _timeline_universe_scope(universe_timeline, start_date, tick_date)
+        universe_timeline_version = universe_timeline.dataset_version_id
+        universe_version = universe_timeline_version
+        symbols = universe_timeline.symbols_on_dates(start_date, tick_date)
+        # Market regimes are labelled from the list in force on the window's first
+        # day, as without a timeline (decided 2026-11-19): a name picked later
+        # does not shape the labels of the months before it was picked.
+        regime_label_symbols = sorted(scope.member_symbols)
+        if dataset_version_id_override is not None:
+            # Backtest mode: only symbols the replay ingested have Parquet bars.
+            # A timeline's names are not cut down to fit; the run is refused.
+            _not_ingested = sorted(set(symbols) - set(replay_context.symbols))
+            if _not_ingested:
+                from autonomous_trading_platform.universe.services.survivorship_guard import (
+                    SurvivorshipBiasError,
+                )
+
+                raise SurvivorshipBiasError(
+                    f"Universe timeline {universe_timeline_version} names symbols the "
+                    f"replay did not ingest: {_not_ingested}. Running on the rest "
+                    "would not be the timeline's universe."
+                )
+    else:
+        scope = _resolve_research_universe_scope(
+            session=session, start_date=start_date, end_date=tick_date
+        )
+        universe_version = scope.universe_version_id or "v1"
+        symbols = sorted(scope.member_symbols)
+        if dataset_version_id_override is not None:
+            # Backtest mode: only symbols the replay ingested have Parquet bars.
+            _ingested = set(replay_context.symbols)
+            symbols = [s for s in symbols if s in _ingested]
     if not symbols:
         from autonomous_trading_platform.universe.services.survivorship_guard import (
             SurvivorshipBiasError,
@@ -581,6 +644,7 @@ def _build_replay_experiment_definition(
             start_date=start_date,
             end_date=selection_end,
             symbols=symbols,
+            universe_timeline_version=universe_timeline_version,
             filter_config=FilterConfig(
                 min_sharpe=0.5,
                 max_drawdown=-0.30,
@@ -606,6 +670,7 @@ def _build_replay_experiment_definition(
             stage_config=WalkForwardStageConfig(
                 name="walk_forward_robustness",
                 symbols=symbols,
+                universe_timeline_version=universe_timeline_version,
                 start_date=start_date,
                 end_date=tick_date,
                 train_days=_wf_train_days,
@@ -635,6 +700,7 @@ def _build_replay_experiment_definition(
             stage_config=MonteCarloStageConfig(
                 name="monte_carlo_structural_robustness",
                 symbols=symbols,
+                universe_timeline_version=universe_timeline_version,
                 start_date=start_date,
                 end_date=tick_date,
                 n_runs=200 if smoke else 2000,
@@ -658,6 +724,8 @@ def _build_replay_experiment_definition(
                 stage_config=RegimeStageConfig(
                     name="regime_robustness",
                     symbols=symbols,
+                    universe_timeline_version=universe_timeline_version,
+                    label_symbols=regime_label_symbols,
                     start_date=start_date,
                     end_date=tick_date,
                     gate=RegimeGateConfig(
@@ -686,6 +754,7 @@ def _build_replay_experiment_definition(
                 stage_config=StressStageConfig(
                     name="stress_robustness",
                     symbols=symbols,
+                    universe_timeline_version=universe_timeline_version,
                     start_date=start_date,
                     end_date=tick_date,
                     gate=StressGateConfig(
@@ -769,6 +838,48 @@ def _resolve_research_universe_scope(*, session: Session, start_date: date, end_
     scope = resolver.resolve_active_as_of(start_date)
     SurvivorshipGuard().validate_experiment_scope(scope, start_date, end_date)
     return scope
+
+
+def _timeline_universe_scope(timeline: UniverseTimeline, start_date: date, end_date: date):
+    """Point-in-time universe scope for a research window on a universe timeline.
+
+    Raises SurvivorshipBiasError when the window starts before the timeline.
+    """
+    from autonomous_trading_platform.universe.services.timeline_universe_scope import (
+        universe_scope_from_timeline,
+    )
+
+    return universe_scope_from_timeline(timeline, start_date, end_date)
+
+
+def _universe_timeline_source(session: Session) -> Callable[[str], UniverseTimeline]:
+    """Reads an exported universe timeline by its version id, once per id. The read
+    recomputes the timeline's content hash and refuses one that differs from the
+    registered hash (``load_universe_timeline``)."""
+    from autonomous_trading_platform.application.services.universe_timeline_loader import (
+        load_universe_timeline,
+    )
+
+    read: dict[str, UniverseTimeline] = {}
+
+    def source(version_id: str) -> UniverseTimeline:
+        if version_id not in read:
+            read[version_id] = load_universe_timeline(session, version_id)
+        return read[version_id]
+
+    return source
+
+
+def _resolve_universe_timeline_option(research_options: dict | None) -> str | None:
+    raw: object = (research_options or {}).get("universe_timeline")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError(
+            "research.options.universe_timeline must be the dataset version id of an "
+            f"exported universe timeline, got {raw!r}"
+        )
+    return raw.strip()
 
 
 _RESEARCH_PROFILES = frozenset({"full", "smoke"})

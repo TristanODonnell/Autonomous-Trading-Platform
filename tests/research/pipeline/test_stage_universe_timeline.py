@@ -327,3 +327,66 @@ class TestFindReusableReference:
 
         assert same is reference
         assert other is None
+
+
+class _RecordingLabels(FixedLabels):
+    """FixedLabels that also keeps the names it was asked to label from."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.symbols_asked: list[list[str]] = []
+
+    def load_daily_regimes(self, *, start_date, end_date, **kwargs):  # type: ignore[override]
+        self.symbols_asked.append(list(kwargs["symbols"]))
+        return super().load_daily_regimes(start_date=start_date, end_date=end_date, **kwargs)
+
+
+def _regime_stage(runner: ScriptedRunner, labels: _RecordingLabels, **config) -> RegimeStage:
+    return RegimeStage(
+        stage_config=RegimeStageConfig(
+            name="regime",
+            symbols=SYMBOLS,
+            start_date=START,
+            end_date=END,
+            gate=RegimeGateConfig(dimensions=("trend",), min_bars_per_regime=20),
+            **config,
+        ),
+        simulation_runner=runner,  # type: ignore[arg-type]
+        label_provider=labels,  # type: ignore[arg-type]
+    )
+
+
+def _run_stage(stage: RegimeStage) -> None:
+    stage.run(
+        survivors=[_cfg("steady")],
+        experiment_id="exp",
+        dataset_version="v1",
+        random_seed=7,
+        price_basis=PriceBasis.RAW,
+        initial_cash=100_000.0,
+    )
+
+
+class TestRegimeLabelsAreBuiltFromTheirOwnList:
+    def test_the_label_list_is_used_when_one_is_given(self) -> None:
+        """On a timeline the stage's symbols are every name of the window; the labels
+        come from the list in force on the window's first day."""
+        labels = _RecordingLabels()
+        runner = TimelineRunner(_all_weather)
+
+        _run_stage(
+            _regime_stage(
+                runner, labels, universe_timeline_version=_TIMELINE, label_symbols=["AAA"]
+            )
+        )
+
+        assert labels.symbols_asked == [["AAA"]]
+        # The simulation is still asked for with the stage's own symbols.
+        assert [r.symbols for r in runner.requests] == [SYMBOLS]
+
+    def test_without_one_the_stage_symbols_are_used_as_before(self) -> None:
+        labels = _RecordingLabels()
+
+        _run_stage(_regime_stage(ScriptedRunner(_all_weather), labels))
+
+        assert labels.symbols_asked == [SYMBOLS]
