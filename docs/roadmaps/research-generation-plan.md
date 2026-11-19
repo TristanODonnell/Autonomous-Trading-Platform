@@ -75,13 +75,17 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > fixed before the long run's results are read.
 > R17 is fixed and measured 2026-11-18 (the loader counts each name's own bars
 > before the window; over nine months no pass / fail verdict changes, over four
-> weeks one does), on branch
-> `research/package-b-window-dataset`, PR pending.
-> Next, in this order: (1) R17: PR, merge, deploy;
-> (2) the timeline export and the research engine reading it, with A's exit
-> rule (own PR, measured before and after); (3) the hook's 9 / 9 / 6 layout,
-> the holdout-date check and the two-part fold rule.
-> Open decisions: none waiting. Until (2) is on B, do not run `atp worker run`
+> weeks one does), **merged as PR #191** (`b25fedc30`), on A and B 2026-11-19 (both checked on the merge commit and inside the image; A's app and scheduler restarted).
+> Next, in this order: (1) the timeline export and the research engine reading
+> it, with A's exit rule (own PR, measured before and after; branch
+> `research/package-b-timeline-export`, off `main` 2026-11-19, nothing written
+> yet); (2) the hook's 9 / 9 / 6 layout, the holdout-date check and the
+> two-part fold rule.
+> Found 2026-11-19: a worker reset would also drop the 24-month dataset's
+> registration (it keeps pulled rows only). Decided the same day (the user): a
+> reset keeps research datasets built on the worker; built and pushed on that
+> branch, and its PR opens together with the export (the user, 2026-11-19).
+> Open decisions: none waiting. Until (1) is on B, do not run `atp worker run`
 > there without `--no-reset` (the reset deletes the timeline).
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
@@ -100,7 +104,6 @@ section 3: done, then still open.
 | Item | What it is | Status | Boxes | What is left | When |
 |---|---|---|---|---|---|
 | 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 7 done, 13 open | Code only, still open: pooled or median fold gate, daily resample, the walk-forward "entered" count (found 2026-11-15). The rest waits on longer history (package B): selection / evaluation / holdout split, fold geometry, folds in sessions, minimum test span. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Now. The split and fold boxes are package B, which is the current work; the three code-only boxes can be done at any time |
-| 🟡 R17 | Short warmups get no bars when a window starts on a Monday; measured 2026-11-18, also after holidays and for thin names on any day (23% to 68% of starts by warmup size) | Found 2026-11-16; counted on the real 24-month dataset, fixed and measured before / after 2026-11-18 (0 pass / fail flips and Sharpe moves of up to 0.04 over nine months; 1 flip and up to 0.62 over four weeks). On branch `research/package-b-window-dataset`, **PR pending** | 2 done, 0 open | PR, merge, deploy. A name with less history than its warmup is recorded on the run's result and logged (the user's decision 2026-11-18); showing it in the funnel rides with R2's layout change | **Next.** Decided 2026-11-18 (the user): before the long run's results are read, as its own PR ahead of the engine change. All three pieces of the long window start on a Monday |
 | 🔴 R7 | Test hardening per stage | Not started as its own item. Realistic-curve tests now exist at gate level for Monte Carlo, stress and regime | 0 done, 2 open | A real-runner test per stage, the cross-process checksum test. R4's "Verify" (a real-runner test per stage where the gate fails) is this work too | Rides along with package B (package D) |
 | 🔴 R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 done, 5 open | All of the wiring | After package B, before Step 5 (package C). It saves time on long runs; it does not change any result |
 | 🔴 R13 | No parameter-stability check | Not decided. A decision, not work yet | 0 done, 2 open | Decide whether to build the neighbour check | The user's decision, asked once package B gives more survivors (package F) |
@@ -128,6 +131,7 @@ work. Its note stays in section 3.
 | 🟢 R14 | Overfitting gate never exercised | **Report-only shipped.** Merged PR #184, deployed 2026-11-16 (agreed 2026-11-15). Measured first: on all 30 strategies it passed 26, including 16 of 20 losing ones, and changed no outcome | 3 done, 1 open | The prerequisites before `enforce` is switched on; they wait on longer history |
 | 🟢 R15 | Regime gate report-only on a short window | **Report-only shipped.** Merged PR #183, deployed 2026-11-16 | 1 done, 4 open | The four prerequisites before `enforce` is switched on; all wait on longer history |
 | 🟢 R16 | The deployable decision rests on the three report-only measures | **Decided and shipped.** Merged PR #184, deployed 2026-11-16 (user: "Trusted evidence only"). Deployable is now the average of walk-forward and Monte Carlo. Measured first: nothing was flagged deployable, the regime input was always 0.5, shocks near-constant | 2 done, 2 open | Calibrate the 0.55 threshold (needs longer history); pass the regime profile to the scoring request so the reported regime fields are real |
+| 🟢 R17 | Short warmups got no bars at a Monday start, after a holiday, or for a thinly traded name (23% to 68% of starts by warmup size on the 24-month dataset) | **Done.** Merged PR #191, deployed to A and B 2026-11-19. The loader counts each name's own bars before the window. Before / after on identical bars: 0 pass / fail flips and Sharpe moves of up to 0.04 over nine months; 1 flip and up to 0.62 over four weeks | 2 done, 0 open | A name with less history than its warmup is recorded on the run's result and logged (the user's decision 2026-11-18), but nothing reads it yet: showing it in the funnel rides with R2's layout change. Not measured: a 63-session window. Seen, not examined: the same sessions-times-7/5 estimate in four other files |
 
 **Parked follow-ups on green items** (shipped, but these boxes are still open; none is forgotten)
 
@@ -1984,8 +1988,8 @@ loader loaded as its own module gave no difference.
       until enough earlier bars exist or the dataset starts). After the 2026-11-18
       measurement this has to count **each name's own bars**, not sessions: a thin name
       needs more sessions than a full one for the same warmup.
-      **Written and measured 2026-11-18 (before / after above); on branch
-      `research/package-b-window-dataset`, PR pending.**
+      **Written and measured 2026-11-18 (before / after above); merged as PR #191
+      (`b25fedc30`), on A and B 2026-11-19.**
   - What it does (`SimulationWindowLoader._warmup_read_start`): for each name it
     counts the bars before the window, starting from the old estimate and doubling the
     reach until the warmup is there or a fixed earliest date (2000-01-01) is reached,
@@ -2567,7 +2571,15 @@ behind a fixture flag; default stays `alpaca`.
             only for names that are members on the bar's date; holdings in names that
             left are sold, A's rule; a name that enters needs bars from before its
             first month for its indicators.
-      - [ ] Dataset: backfill the union of the names in the timeline, not 20.
+      - [x] Dataset: backfill the union of the names in the timeline, not 20. Done
+            2026-11-18 on B: 31 names, 26 monthly backfill versions, merged into
+            `raw_bars_20261118T234501Z_043e50ad` (532 sessions, two IEX holes left out
+            by name). Box ticked 2026-11-19; it had been left open.
+      - [ ] Export: the timeline as a versioned dataset (decided 2026-11-18): the
+            dataset definition, a command that writes it from the database (only
+            from versions that stamped, completed rotation records name as new), a
+            loader, and the export's lifecycle added to the reset's keep list. Not
+            started.
       - [ ] Memory measured again at the union's size (it grows with the number of
             names; a 12-month run at 22 names is about 1.7 GB of 3.0 GB).
       - Measured 2026-11-16 (five more dry runs on B through `worker_job.sh`, 89 to
@@ -2843,6 +2855,63 @@ behind a fixture flag; default stays `alpaca`.
         first day, pool source, bar source, both coverage lines). Until the export
         exists the timeline on B is still only in the database: do not run `atp
         worker run` on B without `--no-reset`.
+      - Found 2026-11-19, read from the code and checked on B (read-only query), not
+        decided: **a worker reset would also drop the 24-month dataset's
+        registration, not only the timeline.** The reset keeps a `dataset_versions`
+        row only when its metadata has `pulled_from`
+        (`worker_state_reset_service.py`, `_delete_unpulled_dataset_versions`), and
+        `build-window` does not write that key. On B today: the window dataset
+        (`raw_bars_20261118T234501Z_043e50ad`, lifecycle `research_window`) is not
+        marked pulled, and neither are the 26 backfill versions it was merged from;
+        52 other rows are. The Parquet files are never touched by a reset, so the
+        bars would stay on disk with no row pointing at them. So "survives a worker
+        reset the way the bars do" (the decision above) holds for pulled bars only.
+        A timeline export written on B would be in the same position.
+      - [x] Decided 2026-11-19 (the user, asked with "keep built research data", "publish
+        from B and pull back" and "leave the reset as is" as the choices): **a reset
+        keeps research datasets built on the worker.** Built the same day, committed
+        and pushed on branch `research/package-b-timeline-export`; the PR opens
+        together with the export (the user, 2026-11-19, asked with "PR later", "PR
+        now" and "leave uncommitted" as the choices):
+        `BUILT_RESEARCH_LIFECYCLES` in `worker_state_reset_service.py` (today the
+        research window; the timeline export joins it when it exists). A reset keeps
+        a row with one of those lifecycles and each version it names in
+        `source_versions`, and deletes every other row that is not pulled, as before.
+        Kept by lineage, not by type: a backfill no kept window names is still run
+        state. `--drop-pulled-datasets` drops pulled rows only; built rows, and a
+        pulled version a kept window was merged from, stay. There is no switch that
+        drops built rows. The summary gains `kept_built_dataset_versions`. Tests:
+        seven added to `test_worker_state_reset_service.py`; the four that test what is kept fail under the old
+        rule (emulated by emptying the list), the others pin what did not change (a
+        merged dataset of a run does not protect its sources; unreadable metadata is
+        run state). Checked against B's rows with a read-only query, not by running a
+        reset: the window names 26 sources and all 26 have a row; the new rule would
+        keep 27 as built and 60 as pulled and delete none, where the old rule deleted
+        those 27. Not on B until merged and deployed, so the `--no-reset` warning
+        stands until then, and for the timeline until its export exists.
+      - [ ] Merge and deploy the reset's keep rule to B, then check it there (a
+        reset's summary shows `kept_built_dataset_versions` 27). Until then the
+        `--no-reset` warning stands. The check is a real reset, and a real reset
+        deletes the timeline, so it waits for the export to be on B as well; that
+        is why the rule's PR opens with the export and not on its own. Checked
+        2026-11-19: no timer on B resets (the Saturday bench re-sim and the nightly
+        pull do not call it); only `atp worker run` and `atp worker reset` do.
+      - [ ] Seen while building it, not traced: a kept window is registered `validated`,
+        and a platform replay's feature and summary hooks fall back to the newest
+        validated raw-bars version when they are not handed one
+        (`get_latest_validated`; `features_hooks.py`, `ingestion_hooks.py`). So after
+        a reset a fixture run could read the 24-month window through that fallback.
+        The same was already true of the 60 pulled rows, and of the window between
+        resets. Whether the fallback fires in a fixture run was not followed.
+      - Traced 2026-11-19 (read-only query on B): the 47 `universe_versions` rows are
+        15 versions that were in force (14 retired, 1 active, source `rebalance`: one
+        per rotated step) and 32 candidate lists (source `custom`) that never were.
+        The 25 rotation records (15 completed, 10 skipped) all carry the builder's
+        stamp, the 15 completed ones name the 15 in-force versions, and no two
+        in-force versions overlap. 25 of the 32 candidates are named by a record;
+        the other 7 are named by none (where they came from was not followed). So
+        the export is: the versions that stamped, completed rotation records name as
+        new, with their members and dates.
       - Started 2026-11-16 20:32 New York on B: `atp universe build-timeline --start
         2024-11-18 --end 2026-11-16 --min-bar-coverage 0.70 --held-min-bar-coverage
         0.55 --enforce` through `worker_job.sh`, output in
