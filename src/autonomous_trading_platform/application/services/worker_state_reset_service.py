@@ -4,9 +4,12 @@ Lifted from ``scripts/reset_backtest_state.py`` (which now calls this). Used by 
 job runner before every run. Child tables come first so FK constraints hold; a table that
 does not exist in this database is skipped.
 
-The worker's pulled datasets are the one thing a reset must keep: ``dataset_versions`` rows
-that ``DatasetPullService`` registered (``metadata_json.pulled_from``) survive unless
-``keep_pulled_datasets=False``. The Parquet files themselves are never touched.
+A reset keeps two kinds of ``dataset_versions`` rows. Pulled datasets: rows that
+``DatasetPullService`` registered (``metadata_json.pulled_from``) survive unless
+``keep_pulled_datasets=False``; they can be pulled again. Research datasets built on the
+worker (``BUILT_RESEARCH_LIFECYCLES``), with the versions they were merged from
+(``metadata_json.source_versions``): always kept, because nothing can fetch them again
+and a rebuild is many provider calls. The Parquet files themselves are never touched.
 
 Refuses to run against a paper or live environment: this wipes shared system-of-record
 tables such as ``audit_logs`` and ``governance_audit_events``.
@@ -21,6 +24,9 @@ from typing import Any
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.contracts.runtime.research_window_dataset import (
+    RESEARCH_WINDOW_LIFECYCLE,
+)
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
 
@@ -28,6 +34,11 @@ logger = get_logger(__name__)
 
 # Environments where wiping state is acceptable. APP_ENV on Box A is paper (later live).
 RESETTABLE_APP_ENVS = frozenset({"backtest", "dev", "test"})
+
+# ``metadata_json.dataset_lifecycle`` values of datasets a worker builds for research
+# and no run produces. A row with one of these, and each version it names as a source,
+# is kept by every reset. Anything else that is not pulled is run state and is deleted.
+BUILT_RESEARCH_LIFECYCLES = frozenset({RESEARCH_WINDOW_LIFECYCLE})
 
 # Order matters: children before parents.
 BACKTEST_STATE_TABLES: tuple[str, ...] = (
@@ -127,6 +138,8 @@ class ResetResult:
     deleted: dict[str, int] = field(default_factory=dict)
     skipped_missing: list[str] = field(default_factory=list)
     kept_pulled_dataset_versions: int = 0
+    # Built research datasets and the versions they were merged from.
+    kept_built_dataset_versions: int = 0
 
     @property
     def rows_deleted(self) -> int:
@@ -138,6 +151,7 @@ class ResetResult:
             "tables_cleared": sum(1 for n in self.deleted.values() if n),
             "tables_missing": len(self.skipped_missing),
             "kept_pulled_dataset_versions": self.kept_pulled_dataset_versions,
+            "kept_built_dataset_versions": self.kept_built_dataset_versions,
         }
 
 
@@ -165,23 +179,52 @@ class WorkerStateResetService:
             if table not in existing:
                 result.skipped_missing.append(table)
                 continue
-            if table == "dataset_versions" and keep_pulled_datasets:
-                result.deleted[table], result.kept_pulled_dataset_versions = (
-                    self._delete_unpulled_dataset_versions()
-                )
+            if table == "dataset_versions":
+                (
+                    result.deleted[table],
+                    result.kept_pulled_dataset_versions,
+                    result.kept_built_dataset_versions,
+                ) = self._delete_run_dataset_versions(keep_pulled=keep_pulled_datasets)
                 continue
             result.deleted[table] = self._session.execute(text(f"DELETE FROM {table}")).rowcount
         self._session.flush()
         logger.info("worker_state_reset.finished", extra=result.summary())
         return result
 
-    def _delete_unpulled_dataset_versions(self) -> tuple[int, int]:
-        deleted = kept = 0
-        for row in list(self._session.query(DatasetVersions)):
-            if isinstance(row.metadata_json, dict) and "pulled_from" in row.metadata_json:
-                kept += 1
-                continue
-            self._session.delete(row)
-            deleted += 1
+    def _delete_run_dataset_versions(self, *, keep_pulled: bool) -> tuple[int, int, int]:
+        """Delete the dataset rows a run left behind. Returns (deleted, kept pulled, kept built).
+
+        A pulled version that a kept research dataset was merged from counts as built, and
+        stays even when pulled datasets are dropped.
+        """
+        rows = list(self._session.query(DatasetVersions))
+        built = [row for row in rows if _lifecycle(row) in BUILT_RESEARCH_LIFECYCLES]
+        keep_as_built = {row.dataset_version_id for row in built}
+        for row in built:
+            keep_as_built.update(_source_versions(row))
+
+        deleted = kept_pulled = kept_built = 0
+        for row in rows:
+            if row.dataset_version_id in keep_as_built:
+                kept_built += 1
+            elif keep_pulled and "pulled_from" in _metadata(row):
+                kept_pulled += 1
+            else:
+                self._session.delete(row)
+                deleted += 1
         self._session.flush()
-        return deleted, kept
+        return deleted, kept_pulled, kept_built
+
+
+def _metadata(row: DatasetVersions) -> dict[str, Any]:
+    return row.metadata_json if isinstance(row.metadata_json, dict) else {}
+
+
+def _lifecycle(row: DatasetVersions) -> str | None:
+    value = _metadata(row).get("dataset_lifecycle")
+    return value if isinstance(value, str) else None
+
+
+def _source_versions(row: DatasetVersions) -> list[str]:
+    versions = _metadata(row).get("source_versions")
+    return [str(v) for v in versions] if isinstance(versions, list) else []
