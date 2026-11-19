@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.universe_timeline_loader import (
+    load_universe_timeline,
+)
 from autonomous_trading_platform.application.services.worker_state_reset_service import (
     BACKTEST_STATE_TABLES,
     BUILT_RESEARCH_LIFECYCLES,
@@ -16,7 +20,20 @@ from autonomous_trading_platform.contracts.common.enums import BarInterval, Pric
 from autonomous_trading_platform.contracts.runtime.research_window_dataset import (
     RESEARCH_WINDOW_LIFECYCLE,
 )
+from autonomous_trading_platform.contracts.runtime.universe_timeline import (
+    TIMELINE_ROTATION_REASON,
+    UNIVERSE_TIMELINE_LIFECYCLE,
+)
+from autonomous_trading_platform.storage.sor.models.checksums import Checksums
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from autonomous_trading_platform.storage.sor.models.universe_versions import UniverseVersion
+from autonomous_trading_platform.storage.sor.repositories.core.universe_rotation_repository import (
+    UniverseRotationRepository,
+)
+from tests.application.services.test_universe_timeline_export_service import (
+    _export,
+    _seed_timeline,
+)
 
 
 def _version(
@@ -226,3 +243,67 @@ def test_a_row_with_unreadable_metadata_is_run_state(db_session: Session, metada
 
     assert _ids(db_session) == set()
     assert result.deleted["dataset_versions"] == 1
+
+
+# ---------------------------------------------------------------------------
+# An exported universe timeline is built research data too. A reset deletes the universe
+# versions and rotation records it was exported from, so the export is the only copy.
+# ---------------------------------------------------------------------------
+
+
+def test_the_universe_timeline_is_a_built_lifecycle() -> None:
+    assert UNIVERSE_TIMELINE_LIFECYCLE in BUILT_RESEARCH_LIFECYCLES
+
+
+@pytest.mark.parametrize("keep_pulled_datasets", [True, False])
+def test_reset_keeps_an_exported_timeline_row(
+    db_session: Session, keep_pulled_datasets: bool
+) -> None:
+    db_session.add_all(
+        [
+            _version(
+                "timeline_v1",
+                pulled=False,
+                metadata={"dataset_lifecycle": UNIVERSE_TIMELINE_LIFECYCLE},
+            ),
+            _version("local_v1", pulled=False),
+        ]
+    )
+    db_session.flush()
+
+    result = WorkerStateResetService(db_session).reset(
+        keep_pulled_datasets=keep_pulled_datasets, app_env="backtest"
+    )
+
+    assert _ids(db_session) == {"timeline_v1"}
+    assert result.kept_built_dataset_versions == 1
+    assert result.deleted["dataset_versions"] == 1
+
+
+def test_an_exported_timeline_still_loads_after_a_reset_deleted_what_it_was_built_from(
+    db_session: Session, tmp_path: Path
+) -> None:
+    # The real export, then the real reset, then the real loader.
+    base_path = tmp_path / "data"
+    _seed_timeline(db_session)
+    exported = _export(db_session, base_path)
+    assert exported.status == "created" and exported.dataset_version_id is not None
+
+    result = WorkerStateResetService(db_session).reset(app_env="backtest")
+
+    # The timeline in the database is gone: its lists and its step records.
+    assert db_session.query(UniverseVersion).count() == 0
+    assert UniverseRotationRepository(db_session).get_for_reason(TIMELINE_ROTATION_REASON) == []
+    assert result.deleted["universe_versions"] == 2
+    # The export is not: its row, its checksum row and its file.
+    assert _ids(db_session) == {exported.dataset_version_id}
+    assert result.kept_built_dataset_versions == 1
+    assert db_session.query(Checksums).count() == 1
+
+    timeline = load_universe_timeline(db_session, exported.dataset_version_id, base_path=base_path)
+    assert timeline.content_hash == exported.content_hash
+    assert timeline.periods == exported.periods
+    # With nothing left to export from, a second export refuses; it does not overwrite.
+    again = _export(db_session, base_path)
+    assert again.status == "refused"
+    assert "holds no universe timeline" in again.errors[0]

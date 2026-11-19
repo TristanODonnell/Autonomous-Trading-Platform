@@ -9,7 +9,8 @@ A reset keeps two kinds of ``dataset_versions`` rows. Pulled datasets: rows that
 ``keep_pulled_datasets=False``; they can be pulled again. Research datasets built on the
 worker (``BUILT_RESEARCH_LIFECYCLES``), with the versions they were merged from
 (``metadata_json.source_versions``): always kept, because nothing can fetch them again
-and a rebuild is many provider calls. The Parquet files themselves are never touched.
+and a rebuild is many provider calls. That is the research window's bars and an exported
+universe timeline. The Parquet files themselves are never touched.
 
 Refuses to run against a paper or live environment: this wipes shared system-of-record
 tables such as ``audit_logs`` and ``governance_audit_events``.
@@ -27,6 +28,9 @@ from sqlalchemy.orm import Session
 from autonomous_trading_platform.contracts.runtime.research_window_dataset import (
     RESEARCH_WINDOW_LIFECYCLE,
 )
+from autonomous_trading_platform.contracts.runtime.universe_timeline import (
+    UNIVERSE_TIMELINE_LIFECYCLE,
+)
 from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
 
@@ -38,7 +42,10 @@ RESETTABLE_APP_ENVS = frozenset({"backtest", "dev", "test"})
 # ``metadata_json.dataset_lifecycle`` values of datasets a worker builds for research
 # and no run produces. A row with one of these, and each version it names as a source,
 # is kept by every reset. Anything else that is not pulled is run state and is deleted.
-BUILT_RESEARCH_LIFECYCLES = frozenset({RESEARCH_WINDOW_LIFECYCLE})
+#
+# An exported universe timeline is one of them: a reset deletes the universe versions and
+# rotation records it was exported from, so the export is the only copy left.
+BUILT_RESEARCH_LIFECYCLES = frozenset({RESEARCH_WINDOW_LIFECYCLE, UNIVERSE_TIMELINE_LIFECYCLE})
 
 # Order matters: children before parents.
 BACKTEST_STATE_TABLES: tuple[str, ...] = (
