@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import platform
 import random
+from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -30,6 +31,7 @@ from autonomous_trading_platform.contracts.runtime.simulation_run import Simulat
 from autonomous_trading_platform.contracts.runtime.strategy_config import (
     StrategyConfig as RuntimeStrategyConfig,
 )
+from autonomous_trading_platform.contracts.runtime.universe_timeline import UniverseTimeline
 from autonomous_trading_platform.contracts.simulation.dividend_event import DividendEvent
 from autonomous_trading_platform.execution.services.sleeve_sizing import VOL_LOOKBACK_BARS
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
@@ -153,6 +155,12 @@ class SimulationRunRequest:
     # unless ``dividend_events`` is given explicitly.
     corporate_actions: list[CorporateAction] | None = None
     dividend_events: list[DividendEvent] | None = None
+    # The exported universe timeline the run trades on (a dataset version id). With
+    # one, the universe on each bar is the list in force at the bar's time, and the
+    # run loads bars for the names of the lists in force during its own dates;
+    # ``symbols`` must cover those names. None = ``symbols`` is the universe for
+    # the whole run.
+    universe_timeline_version: str | None = None
 
 
 @dataclass(slots=True)
@@ -181,6 +189,8 @@ class SimulationRunResult:
     # those symbols give no signal until the bars have accumulated. Empty when
     # every symbol was warmed up.
     warmup_shortfall_by_symbol: dict[str, int] = field(default_factory=dict)
+    # The universe timeline the run traded on; None when it had a fixed list.
+    universe_timeline_version: str | None = None
 
 
 class SimulationRunner:
@@ -215,8 +225,13 @@ class SimulationRunner:
         strategy_factory: StrategyFactory,
         feature_dependency_resolver: FeatureDependencyResolverService | None = None,
         corporate_action_source: CorporateActionSource | None = None,
+        universe_timeline_source: Callable[[str], UniverseTimeline] | None = None,
     ) -> None:
         self.strategy_factory = strategy_factory
+        # Reads an exported universe timeline by its version id. Each timeline is
+        # read once and kept: a pipeline asks for the same one for every run.
+        self.universe_timeline_source = universe_timeline_source
+        self._universe_timelines: dict[str, UniverseTimeline] = {}
         self.corporate_action_source = corporate_action_source
         self.dataset_resolver = dataset_resolver
         self.window_loader = window_loader
@@ -317,10 +332,11 @@ class SimulationRunner:
         self._commit_metadata()
 
         try:
+            universe_timeline, load_symbols = self._resolve_universe_timeline(request)
             window = self.window_loader.load_window(
                 dataset_version=request.dataset_version,
                 bars_dataset=resolved_dataset.dataset,
-                symbols=request.symbols,
+                symbols=load_symbols,
                 start_date=request.start_date,
                 end_date=request.end_date,
                 feature_datasets=feature_requests or None,
@@ -366,6 +382,7 @@ class SimulationRunner:
                     strategy=strategy,
                     lookback_bars=lookback_bars,
                     corporate_actions=corporate_actions,
+                    universe_timeline=universe_timeline,
                 )
             )
 
@@ -426,12 +443,63 @@ class SimulationRunner:
                 equity_curve=live_equity_curve,
                 trade_logs=trade_logs,
                 warmup_shortfall_by_symbol=dict(window.warmup_shortfall_by_symbol),
+                universe_timeline_version=request.universe_timeline_version,
             )
 
         except Exception as exc:
             self._record_run_failed(run_id=run_id, error_message=str(exc))
             self._commit_metadata()
             raise
+
+    def _resolve_universe_timeline(
+        self, request: SimulationRunRequest
+    ) -> tuple[UniverseTimeline | None, list[str]]:
+        """The timeline a request names, and the symbols to load bars for.
+
+        With no timeline the request's own symbols are loaded, as before. With one,
+        the names loaded are those of the lists in force during the run's dates: a
+        name that is a member only before or after the run is not loaded, so it
+        cannot fail the run for having no bars in it, and a walk-forward fold loads
+        the names of its own months.
+        """
+        version_id = request.universe_timeline_version
+        if version_id is None:
+            return None, request.symbols
+        if request.shuffle_timestamp:
+            raise ValueError(
+                "a run on a universe timeline cannot shuffle bar timestamps: the list "
+                "in force is looked up by a bar's time"
+            )
+        timeline = self._universe_timelines.get(version_id)
+        if timeline is None:
+            if self.universe_timeline_source is None:
+                raise ValueError(
+                    f"the request names universe timeline {version_id}, but this "
+                    "runner was built without a universe timeline source"
+                )
+            timeline = self.universe_timeline_source(version_id)
+            self._universe_timelines[version_id] = timeline
+
+        first = request.start_date
+        after_last = request.end_date + timedelta(days=1)
+        names = timeline.symbols_between(
+            datetime(first.year, first.month, first.day, tzinfo=UTC),
+            datetime(after_last.year, after_last.month, after_last.day, tzinfo=UTC),
+        )
+        if not names:
+            raise ValueError(
+                f"universe timeline {version_id} has no list in force between "
+                f"{request.start_date} and {request.end_date}"
+            )
+        requested = {symbol.upper() for symbol in request.symbols}
+        missing = sorted(name for name in names if name.upper() not in requested)
+        if missing:
+            raise ValueError(
+                f"universe timeline {version_id}: the lists in force between "
+                f"{request.start_date} and {request.end_date} name symbols the request "
+                f"does not: {missing}"
+            )
+        return timeline, names
 
     def _execute_simulation(
         self,
@@ -442,6 +510,7 @@ class SimulationRunner:
         strategy,
         lookback_bars,
         corporate_actions: list[CorporateAction] | None = None,
+        universe_timeline: UniverseTimeline | None = None,
     ):
         actions = list(corporate_actions or [])
         context_builder = self.context_builder.with_lookback(lookback_bars)
@@ -469,6 +538,7 @@ class SimulationRunner:
             settlement_days=request.settlement_days,
             dividend_events=dividend_events,
             corporate_actions=[a for a in in_window if is_split(a)],
+            universe_timeline=universe_timeline,
         )
 
         return (

@@ -43,6 +43,9 @@ class GateWindow:
     symbols: list[str]
     start_date: date
     end_date: date
+    # The exported universe timeline the gate's runs trade on; None = ``symbols``
+    # is the universe for the whole window.
+    universe_timeline_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -67,6 +70,12 @@ def find_reusable_reference(
     Monte Carlo's base run (and RegimeStage's own run) are recorded
     as reference_result; when the window matches, later gates reuse it rather
     than re-simulating identical inputs.
+
+    A run on a universe timeline reports the names it loaded, which are the
+    timeline's for those dates and not the window's whole list. Two such runs over
+    the same dates on the same timeline loaded the same names, so they are matched
+    by the timeline. A run on a timeline never stands in for one without, or for
+    one on another timeline.
     """
     wanted_symbols = sorted(s.upper() for s in window.symbols)
     for stage_result in reversed(prior_results):
@@ -74,10 +83,13 @@ def find_reusable_reference(
         ref = diag.reference_result if diag is not None else None
         if ref is None:
             continue
+        if ref.start_date != window.start_date or ref.end_date != window.end_date:
+            continue
+        if ref.universe_timeline_version != window.universe_timeline_version:
+            continue
         if (
-            ref.start_date == window.start_date
-            and ref.end_date == window.end_date
-            and sorted(s.upper() for s in ref.symbols) == wanted_symbols
+            window.universe_timeline_version is not None
+            or sorted(s.upper() for s in ref.symbols) == wanted_symbols
         ):
             return ref
     return None
@@ -137,6 +149,7 @@ class GateSimulationRunner:
                 random_seed=seed,
                 price_basis=ctx.price_basis,
                 symbols=window.symbols,
+                universe_timeline_version=window.universe_timeline_version,
                 start_date=window.start_date,
                 end_date=window.end_date,
                 initial_cash=ctx.initial_cash,

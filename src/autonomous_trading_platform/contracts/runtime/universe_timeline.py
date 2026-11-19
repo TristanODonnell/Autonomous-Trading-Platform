@@ -173,3 +173,16 @@ class UniverseTimeline(BaseModel):
         """The names in the list in force at ``moment``; none before the first step."""
         period = self.period_at(moment)
         return frozenset(m.symbol for m in period.members) if period is not None else frozenset()
+
+    def symbols_between(self, start: datetime, end: datetime) -> list[str]:
+        """Every name of a list in force at some moment from ``start`` up to, not
+        including, ``end``: the names a run over that span needs bars for."""
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("a timeline is asked with timezone-aware times")
+        names: set[str] = set()
+        for period in self.periods:
+            begins_before_end = period.effective_from < end
+            ends_after_start = period.effective_to is None or period.effective_to > start
+            if begins_before_end and ends_after_start:
+                names.update(member.symbol for member in period.members)
+        return sorted(names)

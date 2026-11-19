@@ -61,6 +61,9 @@ class SimulationStageConfig:
     execution_mode: ExecutionMode = ExecutionMode.SERIAL
     max_workers: int = 1
     fail_fast: bool = False
+    # The exported universe timeline the runs trade on (a dataset version id).
+    # None = the symbols above are the universe for the whole window.
+    universe_timeline_version: str | None = None
 
 
 class SimulationStage(BaseStage):
@@ -172,6 +175,7 @@ class SimulationStage(BaseStage):
                 random_seed=seed,
                 price_basis=price_basis,
                 symbols=cfg.symbols,
+                universe_timeline_version=cfg.universe_timeline_version,
                 start_date=cfg.start_date,
                 end_date=cfg.end_date,
                 initial_cash=initial_cash,

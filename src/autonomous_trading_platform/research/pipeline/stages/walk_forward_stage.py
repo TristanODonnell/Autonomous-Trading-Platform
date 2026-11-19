@@ -129,6 +129,10 @@ class WalkForwardStageConfig:
     # short to hold two separate test folds. Overlapping folds share days, so
     # two passes are less than two independent pieces of evidence.
     allow_overlapping_test_folds: bool = False
+    # The exported universe timeline the folds trade on (a dataset version id).
+    # Each fold then loads the names of the lists in force during its own dates.
+    # None = the symbols above are the universe for every fold.
+    universe_timeline_version: str | None = None
 
     def __post_init__(self) -> None:
         if self.train_days <= 0:
@@ -498,6 +502,7 @@ class WalkForwardStage(BaseStage):
                 random_seed=seed,
                 price_basis=price_basis,
                 symbols=cfg.symbols,
+                universe_timeline_version=cfg.universe_timeline_version,
                 start_date=fold.train_start,
                 end_date=fold.train_end,
                 initial_cash=initial_cash,
@@ -572,6 +577,7 @@ class WalkForwardStage(BaseStage):
                 random_seed=seed,
                 price_basis=price_basis,
                 symbols=cfg.symbols,
+                universe_timeline_version=cfg.universe_timeline_version,
                 start_date=fold.test_start,
                 end_date=fold.test_end,
                 initial_cash=initial_cash,
