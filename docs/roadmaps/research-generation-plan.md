@@ -78,8 +78,11 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > weeks one does), **merged as PR #191** (`b25fedc30`), on A and B 2026-11-19 (both checked on the merge commit and inside the image; A's app and scheduler restarted).
 > Next, in this order: (1) the timeline export and the research engine reading
 > it, with A's exit rule (own PR, measured before and after; branch
-> `research/package-b-timeline-export`, off `main` 2026-11-19, nothing written
-> yet); (2) the hook's 9 / 9 / 6 layout, the holdout-date check and the
+> `research/package-b-timeline-export`, off `main` 2026-11-19; the dataset
+> definition, `atp universe export-timeline`, the loader and the reset's keep
+> list are written, tested and committed on that branch 2026-11-19, not pushed
+> and not on B; the engine is not started); (2) the hook's 9 / 9 / 6 layout,
+> the holdout-date check and the
 > two-part fold rule.
 > Found 2026-11-19: a worker reset would also drop the 24-month dataset's
 > registration (it keeps pulled rows only). Decided the same day (the user): a
@@ -639,7 +642,9 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
       the stage metrics.
 - [ ] Gate on a pooled or median test Sharpe across folds in addition to per-fold pass
       counts. Rule decided 2026-11-18 (the user): both, 2 of 3 folds and the pooled
-      nine-month record (Step 5, "Universe over the long window"). Not built.
+      nine-month record (Step 5, "Universe over the long window"). Decided
+      2026-11-19 (the user): a train-failed fold's test period is in the pooled
+      record. Not built.
 - [x] Validate `step_days >= test_days` and `min_folds_passed <= n_folds` (split from the
       box above). Done 2026-11-15 (package A, merged PR #184): both in `WalkForwardStageConfig.__post_init__`, so YAML and
       Python-built configs meet them. Overlap needs `allow_overlapping_test_folds: true`,
@@ -2578,8 +2583,106 @@ behind a fixture flag; default stays `alpaca`.
       - [ ] Export: the timeline as a versioned dataset (decided 2026-11-18): the
             dataset definition, a command that writes it from the database (only
             from versions that stamped, completed rotation records name as new), a
-            loader, and the export's lifecycle added to the reset's keep list. Not
-            started.
+            loader, and the export's lifecycle added to the reset's keep list. All
+            four pieces are written and committed on the branch (2026-11-19; the
+            user: "okay yes lets do 1 and 2", then the loader and the keep list
+            the same day), one commit each for the export, the loader and the keep
+            list. Not pushed, and not run on B:
+        - [x] Dataset definition (`UNIVERSE_TIMELINE_DATASET`, folder
+              `universe_timeline/`): one row per name per list (list id, in force
+              from, in force to, name, rank in the candidate pool). No partition
+              columns, so a version is one file; the 24-month timeline is 300 rows
+              in about 4 KB. Asked first by the user ("does 1 mess up our parquet
+              runtime?"), checked in the code: nothing walks every dataset
+              definition; "newest validated version" lookups filter on the dataset
+              name, so a timeline is never read as bars; the writer adds the
+              symbol / year / month columns for bars and corporate actions only (a
+              dataset with no partition columns was written and read back on the
+              project's pyarrow); publish and pull go by path. Two things the change
+              had to bring: an entry for the new name in the dataset-version
+              validator (`SUPPORTED_SCHEMA_VERSIONS`), and its own read path later,
+              because the bar reader walks symbol / year / month folders.
+        - [x] `atp universe export-timeline --plan | --enforce [--data-root]`
+              (`UniverseTimelineExportService`). The timeline is read from the
+              rotation records (what each step did) and checked against the
+              universe versions (what was in force when); they must agree. Refused,
+              with nothing written: no timeline, steps under different rules or
+              with none, a first step that is not the window's first day, a step
+              naming a list that is missing, was never in force, has no members or
+              starts at another time than its step, a gap or an overlap between two
+              lists, a last list something else retired, a no-change step naming
+              another list than the one in force. A second export of the same
+              timeline writes nothing (`up_to_date`); a timeline one month longer
+              is a new version. The check is a content hash over the rules, each
+              step's time and outcome and each list's dates and members, without
+              database ids, so two databases holding the same timeline give the
+              same value. Registered through the validating path, with the
+              checksum row; a failed registration removes the written folder.
+              The registry table requires a price basis and a bar interval, which a
+              timeline does not have: the row carries the stand-ins the corporate
+              actions dataset uses (raw, one day) and names them in its metadata
+              (`registry_stand_ins`).
+          - Tests: `test_universe_timeline_export_service.py` (29: what is
+            written, the registry row, written once, the hash, 17 planted
+            faults), one export of a timeline built by the real rotation in
+            `test_universe_timeline_service.py`, the command in
+            `test_universe_cli.py`, the validator entry in
+            `tests/contracts/validators/test_dataset_version.py`.
+          - Run on a copy of the laptop's 24-month scratch timeline (the one that
+            equalled B's step for step): 25 steps (15 rotated, 10 unchanged), 15
+            lists, 300 rows, 31 names, last list open from 2026-10-30 22:00 UTC;
+            content hash `b3c483d6b66e…b62ce4`. A second run reported `up_to_date`
+            with the same version id. B's own export should give the same hash;
+            that is the check to make there.
+        - [x] Loader (`load_universe_timeline`, written 2026-11-19):
+              one timeline read by its version id, never "the newest", so a run
+              names the timeline it traded on the way it names its bars. Returns a
+              `UniverseTimeline` that answers `members_at(moment)` and
+              `period_at(moment)`. A list is in force from its start up to, not
+              including, its end, so the moment of a rotation belongs to the new
+              list; before the first step there is no list (no names). The time
+              must carry a zone. The file has its own read
+              (`ParquetUniverseTimelineRepository`), because the bar reader walks
+              symbol / year / month folders. On load the content hash is computed
+              again from the file and the row's steps and rules and compared with
+              the registered one. Refused: a version that is not registered, is
+              not a validated timeline (a bars version, for one), is registered
+              without its rules, steps or hash, has no file, or whose file does not
+              match (a name swapped, rows cut off, a step dropped from the row).
+          - Tests: `test_universe_timeline_loader.py` (19) and
+            `tests/storage/test_parquet_universe_timeline_repository.py` (5).
+        - [x] The export's lifecycle (`universe_timeline`) added to the reset's keep
+              list (`BUILT_RESEARCH_LIFECYCLES`; written 2026-11-19).
+              A reset deletes the universe versions and rotation records the export
+              was made from, so after one the export is the only copy. Tests in
+              `test_worker_state_reset_service.py`, one of them the real export,
+              then the real reset, then the real loader.
+          - Rehearsed on a throwaway copy of the laptop's 24-month timeline
+            database: before the reset 40 universe versions, 12,066 member rows,
+            25 rotation records; after it none of the three, and the export's row
+            and checksum row still there (`kept built 1`). The timeline loaded
+            with the same content hash before and after, 20 names on every date
+            asked from 2024-11-18 on and none on 2024-11-15. An export after the
+            reset is refused ("holds no universe timeline"); it does not write an
+            empty version over the kept one.
+          - Seen beside this, not fixed here: `test_reset_clears_state_but_keeps_pulled_dataset_versions`
+            fails when its file is run alone, on `main` too
+            (`skipped_missing == ['fill_quality_metrics']`). The model for that
+            table is not imported by `storage/sor/models/__init__.py`, so the test
+            database has the table only when another collected test file imports
+            it. It passes in the full suite. Not a new finding (the user,
+            2026-11-19): it is [5.8 #2] in `interview-study-revisit-backlog.md`,
+            seven model files missing from the package, fix recorded there as the
+            imports plus a test that every model file is imported. Reproduced
+            2026-11-19: loaded the way Alembic loads them, the models declare 83
+            tables and those seven are not among them. Fixed the same day in its
+            own commit on this branch (the user: "Now, own commit"); the record is
+            in the backlog file, and its box there stays open until the merge and
+            an autogenerate check against Postgres.
+        - [ ] On B, after the merge and deploy: `atp universe export-timeline
+              --plan`, then `--enforce`; the content hash should equal the
+              laptop's (`b3c483d6b66e…b62ce4`). Then the real reset that checks the
+              keep rule (the "Merge and deploy the reset's keep rule" box).
       - [ ] Memory measured again at the union's size (it grows with the number of
             names; a 12-month run at 22 names is about 1.7 GB of 3.0 GB).
       - Measured 2026-11-16 (five more dry runs on B through `worker_job.sh`, 89 to
@@ -2810,8 +2913,18 @@ behind a fixture flag; default stays `alpaca`.
         single rules disagree on about 16% of no-skill strategies. No rule is very
         selective at a 0.3 line over nine months; the line itself is the calibration
         parked under R5 / R16. Not built yet: the pooled record needs the three test
-        curves joined, and whether a fold whose train window failed counts in the
-        pool is not settled (its test run is kept as evidence only).
+        curves joined.
+      - Decided 2026-11-19 (the user, asked with "include it always", "leave it out"
+        and "leave it out, and require 9 months" as the choices): **a fold whose
+        train window failed still puts its test period into the pooled record.**
+        The pooled record is the full nine months for every strategy, so all are
+        judged on the same days and the same length; the failed train check counts
+        against the strategy in the 2-of-3 part only. Reasons given with the
+        question: a strategy's parameters are the same in every fold (nothing is
+        fitted on the train window, `walk_forward_stage.py`), so the test period is
+        an out-of-sample record either way; leaving folds out shortens the record
+        to six or three months (yearly Sharpe uncertainty about 1.4 or 2.0 against
+        1.15 for nine). Not built.
       - Decided 2026-11-16 (the user, asked with "fixed, moved on a schedule", "rolling
         monthly" and "fixed now, decide later" as the choices): **the holdout date is
         fixed at 2026-05-18 and moves on a schedule.** One date in one place, checked
@@ -3171,7 +3284,40 @@ behind a fixture flag; default stays `alpaca`.
           of 2025-03-10, up to five points each. The 2024-12 step is the one where
           fewest names passed the 70% line (25 on B). How much the lists would change
           if those days were left out of the measure is not known; a change would
-          mean rebuilding the timeline.
+          mean rebuilding the timeline. **Measured 2026-11-19, next bullet: no list
+          changes, and the March half of this finding was wrong.**
+        - Measured 2026-11-19 (the user chose "measure the two months first" over
+          "accept as built" and "rebuild"). On the laptop, read-only: the same
+          one-minute bars the builder fetches, counted per day with the source's own
+          method, for every name the two steps checked (425 and 463). The stored
+          coverage of all 888 was reproduced exactly before anything was compared.
+          **Neither faulty day changes a list, so there is nothing to rebuild.**
+          - 2025-03-10 was never in the measure. A day counts as a session only when
+            some requested name has a bar on it, and no name has one, so the March
+            step measured 20 other sessions (2025-03-03 to 2025-03-31 without the
+            10th). The sentence above that says every name is short by that day is
+            wrong.
+          - 2024-12-23 is in the measure: counted as a full session of 78 bars, where
+            no name has more than 10 (198 of 425 have any). Leaving it out raises a
+            name's coverage by up to 4.5 points (median 0.5) over the 19 remaining
+            sessions, and by up to 4.8 with one earlier session taken in its place.
+            Names at or above 0.70 go from 22 to 27 either way; eligible names with
+            the held line from 25 to 29. The four that become eligible are C, CMCSA,
+            FCX and T (0.68 to 0.69 as built, 0.71 to 0.73 without the day); none was
+            held. No held name stops being eligible.
+          - The list of 20 is the same with 29 eligible names as with 25, whatever the
+            four score: every held name stays eligible, a held name is kept while its
+            rank is 30 or better and there are only 29 ranks, and a full list adds
+            nobody. This is read from the rotation's rule (`_hysteresis_rebalance`,
+            keep to rank 30, add to rank 20, size 20), not from a second run of the
+            step. The December step was a no-change month as built, and stays one.
+          - Not measured: the same day's daily bar also feeds the dollar-volume
+            ranking at the December and January steps (20 daily bars); whether that
+            bar is short on IEX, and what it does to ranks, was not looked at.
+          - Seen, not acted on: a whole day with no bars is skipped by the measure,
+            while a day that stops early is counted in full against every name. On
+            Box A, where the coverage check is not yet on and has no lower line for
+            held names, a part-day outage could thin every name for one rotation.
       - Still open in this box: corporate actions for the same names and span
         (the five price gaps that are not the NFLX split are unchecked against them).
       - Read from the code 2026-11-16, because B's database now holds universe
