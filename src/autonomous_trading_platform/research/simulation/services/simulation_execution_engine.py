@@ -27,6 +27,7 @@ from autonomous_trading_platform.contracts.execution.execution_policy_config imp
     ExecutionPolicyConfig,
 )
 from autonomous_trading_platform.contracts.market.corporate_action import CorporateAction
+from autonomous_trading_platform.contracts.runtime.universe_timeline import UniverseTimeline
 from autonomous_trading_platform.contracts.simulation.dividend_event import DividendEvent
 from autonomous_trading_platform.contracts.trading.order_intent import OrderIntent
 from autonomous_trading_platform.contracts.trading.signal import Signal
@@ -74,6 +75,15 @@ class PendingSettlement:
     order_id: str = ""
 
 
+_UNIVERSE_EXIT_LOG_COLUMNS = (
+    "run_id",
+    "strategy_id",
+    "symbol",
+    "timestamp",
+    "quantity",
+    "universe_version_id",
+)
+
 _CORPORATE_ACTION_LOG_COLUMNS = (
     "run_id",
     "strategy_id",
@@ -102,6 +112,58 @@ class SimulationExecutionResult:
     dividend_log: pd.DataFrame
     # One row per split applied to a held position (plan 5d-E).
     corporate_action_log: pd.DataFrame = field(default_factory=pd.DataFrame)
+    # One row per sale ordered because the held name was no longer in the universe.
+    # Empty when the run was given no universe timeline.
+    universe_exit_log: pd.DataFrame = field(default_factory=pd.DataFrame)
+
+
+class _UniverseMembership:
+    """Which names are in the universe at a bar's time, from a timeline read before
+    the run. No database is touched here."""
+
+    def __init__(self, timeline: UniverseTimeline) -> None:
+        self._timeline = timeline
+        self._members_by_version: dict[str, frozenset[str]] = {}
+
+    def at(self, timestamp: datetime) -> tuple[str, frozenset[str]]:
+        """The list in force at ``timestamp``: its version id and its names."""
+        period = self._timeline.period_at(timestamp)
+        if period is None:
+            raise ValueError(
+                f"universe timeline {self._timeline.dataset_version_id} has no list in "
+                f"force at {timestamp.isoformat()}; a run's bars must lie inside the timeline"
+            )
+        members = self._members_by_version.get(period.universe_version_id)
+        if members is None:
+            members = frozenset(member.symbol for member in period.members)
+            self._members_by_version[period.universe_version_id] = members
+        return period.universe_version_id, members
+
+    def require_window(self, *, window: Any, timeline: list[datetime]) -> None:
+        """Refuse a window the timeline does not cover: every bar that can trade needs
+        a list in force, and every name of such a list needs its bars loaded. A member
+        that was not loaded could never be bought, while sizing still counted it."""
+        loaded = set(window.symbols)
+        checked: set[str] = set()
+        for timestamp in timeline:
+            if window.is_warmup(timestamp):
+                continue
+            version_id, members = self.at(timestamp)
+            if version_id in checked:
+                continue
+            checked.add(version_id)
+            if not members:
+                raise ValueError(
+                    f"universe timeline {self._timeline.dataset_version_id}: the list "
+                    f"{version_id} in force at {timestamp.isoformat()} has no names"
+                )
+            missing = sorted(members - loaded)
+            if missing:
+                raise ValueError(
+                    f"universe timeline {self._timeline.dataset_version_id}: the list "
+                    f"{version_id} in force at {timestamp.isoformat()} names symbols the "
+                    f"window did not load: {missing}"
+                )
 
 
 class SimulationExecutionEngine:
@@ -133,7 +195,18 @@ class SimulationExecutionEngine:
         settlement_days: int = 0,
         dividend_events: list[DividendEvent] | None = None,
         corporate_actions: list[CorporateAction] | None = None,
+        universe_timeline: UniverseTimeline | None = None,
     ) -> SimulationExecutionResult:
+        """Run one simulation over ``window``.
+
+        With ``universe_timeline`` the universe follows the timeline bar by bar, by the
+        rule of the trading platform (``PortfolioConstructionService.
+        generate_order_intents``): the strategy is asked only about names in the list
+        in force at the bar's time; a held name that is in that list and gave no signal
+        is kept; a held name that is not in it is sold in full; the budget is split by
+        the number of names in that list. Without it the whole of ``window.symbols`` is
+        the universe for the whole run, as before.
+        """
         settled_cash = Decimal(str(initial_cash))
         unsettled_cash = ZERO
         # Aggregate cash reserved for all pending buy orders.
@@ -167,6 +240,13 @@ class SimulationExecutionEngine:
         timeline = list(window.timeline)
 
         self.lookahead_guard_service.assert_timeline_strictly_increasing(timeline=timeline)
+
+        membership = (
+            _UniverseMembership(universe_timeline) if universe_timeline is not None else None
+        )
+        if membership is not None:
+            membership.require_window(window=window, timeline=timeline)
+        universe_exit_rows: list[dict[str, Any]] = []
 
         latency_bars = simulated_execution_service.fill_model_config.latency_bars
         # Execution scheduler: maps target_bar_index → orders to execute on that bar.
@@ -231,6 +311,13 @@ class SimulationExecutionEngine:
                 if deferred_carry_forward:
                     scheduled.setdefault(bar_index + 1, []).extend(deferred_carry_forward)
 
+            # The list in force on this bar. Warmup bars trade nothing and may lie
+            # before the timeline's first list, so they are left as they were.
+            universe_version_id: str | None = None
+            members: frozenset[str] | None = None
+            if membership is not None and not is_warmup:
+                universe_version_id, members = membership.at(timestamp)
+
             signals = self._evaluate_signals(
                 run_id=run_id,
                 strategy=strategy,
@@ -239,6 +326,7 @@ class SimulationExecutionEngine:
                 timestamp=timestamp,
                 positions=positions,
                 strategy_state=strategy_state,
+                members=members,
             )
             signal_rows.extend(
                 self._build_signal_rows(
@@ -294,6 +382,14 @@ class SimulationExecutionEngine:
                 )
                 dividend_rows.extend(new_dividend_rows)
 
+            exit_symbols = (
+                self._universe_exit_symbols(
+                    positions=positions, members=members, scheduled=scheduled
+                )
+                if members is not None
+                else []
+            )
+
             order_intents = self._construct_orders(
                 signals=signals,
                 positions=positions,
@@ -302,6 +398,8 @@ class SimulationExecutionEngine:
                 strategy_id=strategy.strategy_id,
                 timestamp=timestamp,
                 recent_closes=close_history,
+                exit_symbols=exit_symbols,
+                symbol_count=len(members) if members is not None else None,
                 # Size from equity marked at the previous bar, as the trading cycle
                 # sizes from the account equity of its last snapshot.
                 capital_scale=(
@@ -310,6 +408,21 @@ class SimulationExecutionEngine:
                     else Decimal("1")
                 ),
             )
+
+            if exit_symbols:
+                leaving = set(exit_symbols)
+                for intent in order_intents:
+                    if intent.symbol in leaving:
+                        universe_exit_rows.append(
+                            {
+                                "run_id": str(run_id),
+                                "strategy_id": strategy.strategy_id,
+                                "symbol": intent.symbol,
+                                "timestamp": timestamp,
+                                "quantity": float(intent.qty or 0),
+                                "universe_version_id": universe_version_id,
+                            }
+                        )
 
             child_pairs = self._plan_child_orders(
                 order_intents=order_intents,
@@ -504,6 +617,9 @@ class SimulationExecutionEngine:
             corporate_action_log=pd.DataFrame(corporate_action_rows)
             if corporate_action_rows
             else pd.DataFrame(columns=list(_CORPORATE_ACTION_LOG_COLUMNS)),
+            universe_exit_log=pd.DataFrame(
+                universe_exit_rows, columns=list(_UNIVERSE_EXIT_LOG_COLUMNS)
+            ),
         )
 
     # ------------------------------------------------------------------
@@ -759,10 +875,15 @@ class SimulationExecutionEngine:
         timestamp: datetime,
         positions: dict[str, Position],
         strategy_state: dict[str, Any],
+        members: frozenset[str] | None = None,
     ) -> list[Signal]:
         signals: list[Signal] = []
 
         for symbol in window.symbols:
+            # A name outside the list in force is not asked for a signal, as on the
+            # platform (StrategyEvaluationService walks the universe's members).
+            if members is not None and symbol not in members:
+                continue
             context = context_builder.build_from_window(
                 run_id=run_id,
                 strategy_id=strategy.strategy_id,
@@ -800,6 +921,8 @@ class SimulationExecutionEngine:
         timestamp: datetime,
         recent_closes: dict[str, deque[float]] | None = None,
         capital_scale: Decimal = Decimal("1"),
+        exit_symbols: list[str] | None = None,
+        symbol_count: int | None = None,
     ) -> list[OrderIntent]:
         closes = (
             {s.symbol: list(recent_closes.get(s.symbol, ())) for s in signals}
@@ -807,8 +930,17 @@ class SimulationExecutionEngine:
             else None
         )
         targets = self.position_sizer.compute_targets(
-            signals=signals, prices=prices, recent_closes=closes, capital_scale=capital_scale
+            signals=signals,
+            prices=prices,
+            recent_closes=closes,
+            capital_scale=capital_scale,
+            symbol_count=symbol_count,
         )
+        # A held name that left the universe has no signal, so no target: its target
+        # is zero. With no price on this bar no order is built below, and the name is
+        # tried again on the next bar, as the platform skips an order it cannot price.
+        for symbol in exit_symbols or ():
+            targets.setdefault(symbol, 0)
         order_intents: list[OrderIntent] = []
 
         for symbol, target_qty in targets.items():
@@ -853,6 +985,30 @@ class SimulationExecutionEngine:
             )
 
         return order_intents
+
+    @staticmethod
+    def _universe_exit_symbols(
+        *,
+        positions: dict[str, Position],
+        members: frozenset[str],
+        scheduled: dict[int, list[OrderIntent]],
+    ) -> list[str]:
+        """Held names that are not in the list in force, in a fixed order.
+
+        A name with an order still waiting to fill is left out until that order is
+        done: an exit can fill over several bars, and a second exit for the same
+        shares would sell them twice. The platform waits in the same way while a
+        broker order on the name is open.
+        """
+        left = sorted(
+            symbol
+            for symbol, position in positions.items()
+            if symbol not in members and position.quantity != 0
+        )
+        if not left:
+            return []
+        waiting = {intent.symbol for intents in scheduled.values() for intent in intents}
+        return [symbol for symbol in left if symbol not in waiting]
 
     def _simulate_fills(
         self,
