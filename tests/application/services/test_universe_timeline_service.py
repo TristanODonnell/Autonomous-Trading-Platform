@@ -9,12 +9,16 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, date, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.application.services.universe_timeline_export_service import (
+    UniverseTimelineExportService,
+)
 from autonomous_trading_platform.application.services.universe_timeline_service import (
     UniverseTimelineError,
     build_universe_timeline,
@@ -418,3 +422,39 @@ def test_a_universe_this_timeline_did_not_make_is_refused(
     with pytest.raises(UniverseTimelineError, match="were not made by this timeline"):
         build()
     assert market.scored == []
+
+
+# ---------------------------------------------------------------------------
+# Export
+# ---------------------------------------------------------------------------
+
+
+def test_a_built_timeline_exports_as_the_lists_the_build_reported(
+    market: _Market,
+    build: Callable[..., UniverseTimelineBuildResult],
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    built = build()
+
+    exported = UniverseTimelineExportService(db_session, base_path=tmp_path / "data").export(
+        now_utc=datetime(2026, 11, 19, tzinfo=UTC)
+    )
+
+    assert exported.status == "created" and exported.errors == []
+    assert [(s.timestamp, s.outcome, s.universe_version_id) for s in exported.steps] == [
+        (s.timestamp, s.outcome, s.universe_version_id) for s in built.steps
+    ]
+    # A list per step that rotated, in force from its step until the next one.
+    rotated = [step for step in built.steps if step.outcome == "rotated"]
+    assert [(p.effective_from, p.symbols) for p in exported.periods] == [
+        (step.timestamp, step.symbols) for step in rotated
+    ]
+    assert [p.effective_to for p in exported.periods] == [_T_DEC, None]
+    assert exported.symbols_union == built.symbols_union
+    assert exported.rows == 40
+    assert exported.rules == {
+        "window_start": "2024-11-18",
+        "screener_source": "sp500_point_in_time",
+        "candidate_market_data": "dataset",
+    }

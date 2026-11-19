@@ -8,7 +8,7 @@ leaves behind, plus one rotation record per step carrying the rules the step ran
 from __future__ import annotations
 
 from datetime import date
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -71,4 +71,66 @@ class UniverseTimelineBuildResult(BaseModel):
     steps: list[UniverseTimelineStep] = Field(default_factory=list)
     # Every name that is a member in some month: the list to backfill bars for.
     symbols_union: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# The timeline as a dataset (``atp universe export-timeline``)
+# ---------------------------------------------------------------------------
+
+# ``metadata_json.dataset_lifecycle`` of an exported timeline's ``dataset_versions`` row.
+UNIVERSE_TIMELINE_LIFECYCLE = "universe_timeline"
+# ``source`` of that row, and ``source_manifest.pipeline``.
+UNIVERSE_TIMELINE_SOURCE = "universe_timeline_export"
+
+# created: a new version was written. up_to_date: the newest version already holds this
+# timeline, nothing written. planned: what would be written. refused: the stored
+# timeline does not hold together (see ``errors``), nothing written.
+TimelineExportStatus = Literal["created", "up_to_date", "planned", "refused"]
+
+
+class UniverseTimelineMember(BaseModel):
+    symbol: str
+    # Rank in the candidate pool the list was picked from, not a position from 1 to 20.
+    rank: int | None = None
+
+
+class UniverseTimelinePeriod(BaseModel):
+    """One list and the time it was in force: from ``effective_from`` up to, not
+    including, ``effective_to``. The last list of a timeline has no ``effective_to``."""
+
+    universe_version_id: str
+    effective_from: UTCDateTime
+    effective_to: UTCDateTime | None = None
+    members: list[UniverseTimelineMember] = Field(default_factory=list)
+
+    @property
+    def symbols(self) -> list[str]:
+        return sorted(member.symbol for member in self.members)
+
+
+class UniverseTimelineExportStep(BaseModel):
+    """One step of the build, as its rotation record tells it."""
+
+    timestamp: UTCDateTime
+    outcome: TimelineStepOutcome
+    # The list in force after the step: a new one when rotated, the same one otherwise.
+    universe_version_id: str
+
+
+class UniverseTimelineExportResult(BaseModel):
+    status: TimelineExportStatus
+    dataset_version_id: str | None = None
+    window_start: date | None = None
+    # The rules every step ran under, as stamped on its rotation record.
+    rules: dict[str, Any] = Field(default_factory=dict)
+    first_step_at: UTCDateTime | None = None
+    last_step_at: UTCDateTime | None = None
+    steps: list[UniverseTimelineExportStep] = Field(default_factory=list)
+    periods: list[UniverseTimelinePeriod] = Field(default_factory=list)
+    symbols_union: list[str] = Field(default_factory=list)
+    rows: int = 0
+    # Over the rules, the steps and the lists with their dates; no database ids. Two
+    # databases holding the same timeline give the same value.
+    content_hash: str | None = None
     errors: list[str] = Field(default_factory=list)

@@ -24,6 +24,7 @@ from .schemas import (
     SIMULATION_SIGNAL_LOG_SCHEMA,
     SIMULATION_TRADE_LOGS_SCHEMA,
     STRATEGY_REGIME_PROFILE_SCHEMA,
+    UNIVERSE_TIMELINE_SCHEMA,
     VALIDATION_OVERFITTING_SCHEMA,
     VALIDATION_ROBUSTNESS_SCORE_SCHEMA,
     VALIDATION_SENSITIVITY_SCHEMA,
@@ -266,4 +267,19 @@ INTELLIGENCE_CLUSTER_ASSIGNMENT_DATASET = ParquetDataset(
     schema=INTELLIGENCE_CLUSTER_ASSIGNMENT_SCHEMA,
     schema_version="1.0.0",
     partition_cols=("experiment_id",),
+)
+
+# ---------------------------------------------------------------------------
+# Universe timeline (research)
+# ---------------------------------------------------------------------------
+
+# A few hundred rows, always read whole, once per run: no partition columns, so a
+# version is one file. Partitioning it the way bars are would spread those rows over
+# hundreds of files for no read that could skip any of them.
+UNIVERSE_TIMELINE_DATASET = ParquetDataset(
+    dataset_key="universe_timeline",
+    schema=UNIVERSE_TIMELINE_SCHEMA,
+    schema_version="1.0.0",
+    root_parts=("universe_timeline",),
+    partition_cols=(),
 )
