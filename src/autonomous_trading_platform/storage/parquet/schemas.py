@@ -460,3 +460,20 @@ INTELLIGENCE_CLUSTER_ASSIGNMENT_SCHEMA = pa.schema(
         pa.field("date", pa.date32()),
     ]
 )
+
+# ---------------------------------------------------------------------------
+# Universe timeline (research): which names were in the universe, and when
+# ---------------------------------------------------------------------------
+
+# One row per name per list. A list is in force from ``effective_from`` up to, not
+# including, ``effective_to``; the last list of a timeline has no ``effective_to``.
+# ``rank`` is the name's rank in the candidate pool the list was picked from.
+UNIVERSE_TIMELINE_SCHEMA = pa.schema(
+    [
+        pa.field("universe_version_id", pa.string(), nullable=False),
+        pa.field("effective_from", UTC_TIMESTAMP, nullable=False),
+        pa.field("effective_to", UTC_TIMESTAMP, nullable=True),
+        pa.field("symbol", pa.string(), nullable=False),
+        pa.field("rank", pa.int32(), nullable=True),
+    ]
+)

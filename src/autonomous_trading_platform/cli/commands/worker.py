@@ -77,12 +77,19 @@ def register(subparsers) -> None:
     run.set_defaults(func=handle_run)
 
     reset = sub.add_parser(
-        "reset", help="Delete all backtest state tables (keeps pulled datasets)."
+        "reset",
+        help=(
+            "Delete all backtest state tables (keeps pulled datasets and research "
+            "datasets built here)."
+        ),
     )
     reset.add_argument(
         "--drop-pulled-datasets",
         action="store_true",
-        help="Also delete the dataset_versions rows registered by `atp datasets pull`.",
+        help=(
+            "Also delete the dataset_versions rows registered by `atp datasets pull`. "
+            "Research datasets built here, and the versions they were merged from, stay."
+        ),
     )
     reset.set_defaults(func=handle_reset)
 

@@ -17,6 +17,9 @@ from autonomous_trading_platform.application.services.platform_replay.universe_h
     build_candidate_bar_source,
     run_universe_at_timestamp,
 )
+from autonomous_trading_platform.application.services.universe_timeline_export_service import (
+    UniverseTimelineExportService,
+)
 from autonomous_trading_platform.application.services.universe_timeline_service import (
     UniverseTimelineError,
     build_universe_timeline,
@@ -26,6 +29,9 @@ from autonomous_trading_platform.cli.helpers import parse_datetime
 from autonomous_trading_platform.contracts.common.enums import UniverseSource
 from autonomous_trading_platform.contracts.runtime.universe_timeline import UniverseTimelineRules
 from autonomous_trading_platform.db import get_session
+from autonomous_trading_platform.runtime.services.dataset_registration_service import (
+    DatasetRegistrationValidationError,
+)
 from autonomous_trading_platform.storage.sor.repositories.core import (
     universe_rebalance_repository,
     universe_rotation_repository,
@@ -436,6 +442,31 @@ def register(subparsers) -> None:
         ),
     )
     build_timeline_parser.set_defaults(func=handle_build_timeline)
+
+    export_timeline_parser = universe_subparsers.add_parser(
+        "export-timeline",
+        help=(
+            "Write the timeline this database holds as one versioned dataset the "
+            "research engine reads by id. Checked first: every step under the same "
+            "rules, no gap and no overlap between lists. Writes nothing when the newest "
+            "export already holds the same timeline"
+        ),
+    )
+    export_timeline_parser.add_argument(
+        "--data-root", type=Path, default=None, help="Override DATA_ROOT."
+    )
+    export_mode = export_timeline_parser.add_mutually_exclusive_group(required=True)
+    export_mode.add_argument(
+        "--plan",
+        action="store_true",
+        help="Read and check the timeline and print what would be written; writes nothing",
+    )
+    export_mode.add_argument(
+        "--enforce",
+        action="store_true",
+        help="Write the dataset version and register it",
+    )
+    export_timeline_parser.set_defaults(func=handle_export_timeline)
 
     candidate_inspect_parser = universe_subparsers.add_parser(
         "candidate-inspect",
@@ -1863,6 +1894,60 @@ def handle_build_timeline(args: argparse.Namespace) -> int:
         }
     )
     return 1 if result.status == "stopped" else 0
+
+
+def handle_export_timeline(args: argparse.Namespace) -> int:
+    """The stored timeline as one registered dataset version. Exit 1 when the timeline
+    does not hold together (nothing is written) or the write fails."""
+    session = get_session()
+    try:
+        result = UniverseTimelineExportService(session, base_path=args.data_root).export(
+            now_utc=datetime.now(UTC), plan_only=bool(args.plan)
+        )
+        session.commit()
+    except (DatasetRegistrationValidationError, OSError) as exc:
+        session.rollback()
+        detail = "; ".join(getattr(exc, "errors", None) or [str(exc)])
+        print_error(f"Timeline not exported: {detail}")
+        return 1
+    finally:
+        session.close()
+
+    outcomes = [step.outcome for step in result.steps]
+    print_header("Universe Timeline Export")
+    print_json(
+        {
+            "status": result.status,
+            "dataset_version_id": result.dataset_version_id,
+            "window_start": result.window_start.isoformat() if result.window_start else None,
+            "rules": result.rules,
+            "first_step_at": result.first_step_at.isoformat() if result.first_step_at else None,
+            "last_step_at": result.last_step_at.isoformat() if result.last_step_at else None,
+            "step_count": len(outcomes),
+            "steps_by_outcome": {name: outcomes.count(name) for name in sorted(set(outcomes))},
+            "periods": [
+                {
+                    "universe_version_id": period.universe_version_id,
+                    "effective_from": period.effective_from.isoformat(),
+                    "effective_to": (
+                        period.effective_to.isoformat() if period.effective_to else None
+                    ),
+                    "symbol_count": len(period.members),
+                    "symbols": period.symbols,
+                }
+                for period in result.periods
+            ],
+            "rows": result.rows,
+            "symbols_union_count": len(result.symbols_union),
+            "symbols_union": result.symbols_union,
+            "content_hash": result.content_hash,
+            "errors": result.errors,
+        }
+    )
+    if result.status == "refused":
+        print_error("Timeline not exported: " + "; ".join(result.errors))
+        return 1
+    return 0
 
 
 def handle_rollback(args: argparse.Namespace) -> int:

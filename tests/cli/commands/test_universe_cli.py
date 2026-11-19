@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from datetime import UTC, date, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -15,8 +16,15 @@ from autonomous_trading_platform.cli.commands import universe as universe_cmd
 from autonomous_trading_platform.cli.main import build_parser
 from autonomous_trading_platform.contracts.runtime.universe_timeline import (
     UniverseTimelineBuildResult,
+    UniverseTimelineExportResult,
+    UniverseTimelineExportStep,
+    UniverseTimelineMember,
+    UniverseTimelinePeriod,
     UniverseTimelineRules,
     UniverseTimelineStep,
+)
+from autonomous_trading_platform.runtime.services.dataset_registration_service import (
+    DatasetRegistrationValidationError,
 )
 
 
@@ -536,3 +544,163 @@ class TestBuildTimelineHeldCoverageCli:
         assert calls["build"]["rules"].held_min_intraday_bar_coverage == 0.55
         out = capsys.readouterr().out
         assert json.loads(out[out.index("{") :])["rules"]["held_min_intraday_bar_coverage"] == 0.55
+
+
+class TestExportTimelineCli:
+    _T_START = datetime(2024, 11, 18, tzinfo=UTC)
+    _T_NOV = datetime(2024, 11, 29, 23, tzinfo=UTC)
+
+    def _result(self, status: str) -> UniverseTimelineExportResult:
+        if status == "refused":
+            return UniverseTimelineExportResult(
+                status="refused", errors=["list v2 ends at X and the next begins at Y: a gap"]
+            )
+        return UniverseTimelineExportResult(
+            status=status,  # type: ignore[arg-type]
+            dataset_version_id=None if status == "planned" else "universe_timeline_1",
+            window_start=date(2024, 11, 18),
+            rules={"window_start": "2024-11-18", "screener_source": "sp500_point_in_time"},
+            first_step_at=self._T_START,
+            last_step_at=self._T_NOV,
+            steps=[
+                UniverseTimelineExportStep(
+                    timestamp=self._T_START, outcome="rotated", universe_version_id="v1"
+                ),
+                UniverseTimelineExportStep(
+                    timestamp=self._T_NOV, outcome="unchanged", universe_version_id="v1"
+                ),
+            ],
+            periods=[
+                UniverseTimelinePeriod(
+                    universe_version_id="v1",
+                    effective_from=self._T_START,
+                    members=[
+                        UniverseTimelineMember(symbol="MSFT", rank=2),
+                        UniverseTimelineMember(symbol="AAPL", rank=1),
+                    ],
+                )
+            ],
+            symbols_union=["AAPL", "MSFT"],
+            rows=2,
+            content_hash="abc123",
+        )
+
+    def _patch(
+        self, monkeypatch: pytest.MonkeyPatch, outcome: UniverseTimelineExportResult | Exception
+    ) -> dict[str, Any]:
+        calls: dict[str, Any] = {"commit": 0, "rollback": 0, "close": 0}
+
+        def count(name: str) -> None:
+            calls[name] += 1
+
+        session = SimpleNamespace(
+            commit=lambda: count("commit"),
+            rollback=lambda: count("rollback"),
+            close=lambda: count("close"),
+        )
+        calls["session"] = session
+        monkeypatch.setattr(universe_cmd, "get_session", lambda: session)
+
+        class _FakeExport:
+            def __init__(self, session: Any, *, base_path: Any = None) -> None:
+                calls["init"] = (session, base_path)
+
+            def export(self, *, now_utc: datetime, plan_only: bool = False) -> Any:
+                calls["export"] = {"now_utc": now_utc, "plan_only": plan_only}
+                if isinstance(outcome, Exception):
+                    raise outcome
+                return outcome
+
+        monkeypatch.setattr(universe_cmd, "UniverseTimelineExportService", _FakeExport)
+        return calls
+
+    def test_a_mode_is_required(self) -> None:
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["universe", "export-timeline"])
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["universe", "export-timeline", "--plan", "--enforce"])
+        args = build_parser().parse_args(["universe", "export-timeline", "--plan"])
+        assert args.plan is True and args.data_root is None
+
+    @pytest.mark.parametrize(
+        ("mode", "status"),
+        [("--plan", "planned"), ("--enforce", "created"), ("--enforce", "up_to_date")],
+    )
+    def test_handler_exports_and_reports_the_lists(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        tmp_path: Path,
+        mode: str,
+        status: str,
+    ) -> None:
+        calls = self._patch(monkeypatch, self._result(status))
+
+        args = build_parser().parse_args(
+            ["universe", "export-timeline", mode, "--data-root", str(tmp_path)]
+        )
+        assert universe_cmd.handle_export_timeline(args) == 0
+
+        assert calls["init"] == (calls["session"], tmp_path)
+        assert calls["export"]["plan_only"] is (mode == "--plan")
+        assert calls["export"]["now_utc"].tzinfo is not None
+        assert (calls["commit"], calls["rollback"], calls["close"]) == (1, 0, 1)
+
+        out = capsys.readouterr().out
+        payload = json.loads(out[out.index("{") :])
+        assert payload["status"] == status
+        assert payload["dataset_version_id"] == (
+            None if status == "planned" else "universe_timeline_1"
+        )
+        assert payload["window_start"] == "2024-11-18"
+        assert payload["step_count"] == 2
+        assert payload["steps_by_outcome"] == {"rotated": 1, "unchanged": 1}
+        assert payload["periods"] == [
+            {
+                "universe_version_id": "v1",
+                "effective_from": "2024-11-18T00:00:00+00:00",
+                "effective_to": None,
+                "symbol_count": 2,
+                "symbols": ["AAPL", "MSFT"],
+            }
+        ]
+        assert payload["symbols_union_count"] == 2
+        assert payload["content_hash"] == "abc123"
+        assert payload["errors"] == []
+
+    def test_a_refused_timeline_exits_1_and_says_why(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._patch(monkeypatch, self._result("refused"))
+
+        args = build_parser().parse_args(["universe", "export-timeline", "--enforce"])
+        assert universe_cmd.handle_export_timeline(args) == 1
+
+        out = capsys.readouterr().out
+        assert json.loads(out[out.index("{") : out.rindex("}") + 1])["status"] == "refused"
+        assert "Timeline not exported: list v2 ends at X" in out
+
+    @pytest.mark.parametrize(
+        ("error", "says"),
+        [
+            (OSError("disk full"), "disk full"),
+            (
+                DatasetRegistrationValidationError(["schema_version 9 is not supported"]),
+                "schema_version 9 is not supported",
+            ),
+        ],
+    )
+    def test_a_failed_write_rolls_back_and_exits_1(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        error: Exception,
+        says: str,
+    ) -> None:
+        calls = self._patch(monkeypatch, error)
+
+        args = build_parser().parse_args(["universe", "export-timeline", "--enforce"])
+        assert universe_cmd.handle_export_timeline(args) == 1
+
+        assert (calls["commit"], calls["rollback"], calls["close"]) == (0, 1, 1)
+        assert f"Timeline not exported: {says}" in capsys.readouterr().out

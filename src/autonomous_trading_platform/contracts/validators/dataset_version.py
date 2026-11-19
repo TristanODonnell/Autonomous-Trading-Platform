@@ -5,6 +5,7 @@ from autonomous_trading_platform.storage.parquet.datasets import (
     ADJUSTED_BARS_DATASET,
     CORPORATE_ACTIONS_DATASET,
     RAW_BARS_DATASET,
+    UNIVERSE_TIMELINE_DATASET,
 )
 
 from .core import Rule, is_non_negative
@@ -18,6 +19,9 @@ SUPPORTED_SCHEMA_VERSIONS = {
     },
     CORPORATE_ACTIONS_DATASET.dataset_key: {
         CORPORATE_ACTIONS_DATASET.schema_version,
+    },
+    UNIVERSE_TIMELINE_DATASET.dataset_key: {
+        UNIVERSE_TIMELINE_DATASET.schema_version,
     },
 }
 
