@@ -7,7 +7,7 @@ leaves behind, plus one rotation record per step carrying the rules the step ran
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -134,3 +134,42 @@ class UniverseTimelineExportResult(BaseModel):
     # databases holding the same timeline give the same value.
     content_hash: str | None = None
     errors: list[str] = Field(default_factory=list)
+
+
+class UniverseTimeline(BaseModel):
+    """An exported timeline read back by its dataset version id: which list was in
+    force at any moment of the window."""
+
+    model_config = ConfigDict(frozen=True)
+
+    dataset_version_id: str
+    window_start: date
+    rules: dict[str, Any] = Field(default_factory=dict)
+    content_hash: str
+    steps: list[UniverseTimelineExportStep] = Field(default_factory=list)
+    # Oldest first, each ending where the next begins; the last one is open.
+    periods: list[UniverseTimelinePeriod] = Field(default_factory=list)
+
+    @property
+    def symbols_union(self) -> list[str]:
+        return sorted({m.symbol for period in self.periods for m in period.members})
+
+    def period_at(self, moment: datetime) -> UniverseTimelinePeriod | None:
+        """The list in force at ``moment``; None before the timeline's first step.
+
+        A list is in force from its start up to, not including, its end, so the moment
+        of a rotation belongs to the new list.
+        """
+        if moment.tzinfo is None:
+            raise ValueError("a timeline is asked with a timezone-aware time")
+        for period in reversed(self.periods):
+            if period.effective_from <= moment:
+                if period.effective_to is None or moment < period.effective_to:
+                    return period
+                return None
+        return None
+
+    def members_at(self, moment: datetime) -> frozenset[str]:
+        """The names in the list in force at ``moment``; none before the first step."""
+        period = self.period_at(moment)
+        return frozenset(m.symbol for m in period.members) if period is not None else frozenset()
