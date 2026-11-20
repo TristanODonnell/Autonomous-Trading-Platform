@@ -185,6 +185,9 @@ class MonteCarloStageConfig:
     execution_mode: ExecutionMode = ExecutionMode.SERIAL
     max_workers: int = 1
     fail_fast: bool = False
+    # The exported universe timeline the runs trade on (a dataset version id).
+    # None = the symbols above are the universe for the whole window.
+    universe_timeline_version: str | None = None
 
     def __post_init__(self) -> None:
         if self.n_runs < 2:
@@ -314,7 +317,12 @@ class MonteCarloStage(BaseStage):
             logger.warning("Stage %s received empty survivor list — skipping.", self.stage_name)
             return StageResult(stage_name=self.stage_name)
 
-        window = GateWindow(self._cfg.symbols, self._cfg.start_date, self._cfg.end_date)
+        window = GateWindow(
+            self._cfg.symbols,
+            self._cfg.start_date,
+            self._cfg.end_date,
+            self._cfg.universe_timeline_version,
+        )
         base_runs: dict[str, SimulationRunResult] = {}
         to_simulate: list[StrategyConfig] = []
         for config in survivors:
@@ -484,6 +492,7 @@ class MonteCarloStage(BaseStage):
                 random_seed=seed,
                 price_basis=price_basis,
                 symbols=self._cfg.symbols,
+                universe_timeline_version=self._cfg.universe_timeline_version,
                 start_date=self._cfg.start_date,
                 end_date=self._cfg.end_date,
                 initial_cash=initial_cash,

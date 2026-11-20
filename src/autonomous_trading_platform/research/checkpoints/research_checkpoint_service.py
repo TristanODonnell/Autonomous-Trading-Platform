@@ -32,6 +32,7 @@ from autonomous_trading_platform.research.config.simulation_run_config import Si
 from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunRequest,
     SimulationRunResult,
+    universe_version_for,
 )
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
@@ -369,7 +370,8 @@ def simulation_request_checkpoint_identity(
     *,
     task_type: ResearchTaskType = ResearchTaskType.SIMULATION,
     pipeline_id: str | None = None,
-    universe_version: str = "v1",
+    # None = the request's own universe: its timeline's id, or the fixed label.
+    universe_version: str | None = None,
     feature_dataset_ids: dict[str, str] | None = None,
     regime_dataset_id: str | None = None,
 ) -> ResearchCheckpointIdentity:
@@ -387,7 +389,7 @@ def simulation_request_checkpoint_identity(
         config_hash=config.config_hash(),
         dataset_version=request.dataset_version,
         price_basis=request.price_basis.value,
-        universe_version=universe_version,
+        universe_version=universe_version or universe_version_for(request),
         feature_dataset_ids=feature_dataset_ids or {},
         regime_dataset_id=regime_dataset_id,
         task_type=task_type,
@@ -421,6 +423,9 @@ def simulation_request_cache_key(request: SimulationRunRequest):
     return build_simulation_cache_key(
         strategy_config=config,
         run_config=run_config,
+        # A run on a universe timeline and one on a fixed list, over the same names
+        # and dates, are different simulations and must not share a key.
+        universe_version=universe_version_for(request),
         settlement_days=request.settlement_days,
         dividend_events=request.dividend_events,
         corporate_actions=request.corporate_actions,

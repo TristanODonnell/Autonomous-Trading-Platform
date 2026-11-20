@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -179,8 +180,8 @@ def research_smoke_data_root(tmp_path: Path, db_session, monkeypatch) -> Path:
 
     _orig_build = ctx_mod.build_simulation_context
 
-    def _patched_build(*, session, universe_size=None):
-        ctx = _orig_build(session=session, universe_size=universe_size)
+    def _patched_build(*, session, universe_size=None, **kwargs):
+        ctx = _orig_build(session=session, universe_size=universe_size, **kwargs)
         # Replace bar_reader and dataset_resolver with tmp_path-rooted versions
         ctx.bar_reader.base_path = tmp_path
         ctx.dataset_resolver.base_path = tmp_path
@@ -334,3 +335,263 @@ def test_research_hook_with_sparse_bars_logs_missing_price(
     )
 
     assert result.status in ("ok", "skipped")
+
+
+# ---------------------------------------------------------------------------
+# On a universe timeline (research plan, package B)
+#
+#   list one  2023-01-01 up to 2023-01-31 22:00   AAPL, MSFT
+#   list two  2023-01-31 22:00 onwards            MSFT, SPY
+# ---------------------------------------------------------------------------
+
+_TIMELINE_ID = "universe_timeline_smoke"
+_ROTATION_TS = datetime(2023, 1, 31, 22, 0, tzinfo=UTC)
+
+
+def _smoke_timeline(first_list_from: datetime = datetime(2023, 1, 1, tzinfo=UTC)):
+    from autonomous_trading_platform.contracts.runtime.universe_timeline import (
+        UniverseTimeline,
+        UniverseTimelineMember,
+        UniverseTimelinePeriod,
+    )
+
+    def period(version_id, symbols, start, end):
+        return UniverseTimelinePeriod(
+            universe_version_id=version_id,
+            effective_from=start,
+            effective_to=end,
+            members=[UniverseTimelineMember(symbol=s) for s in symbols],
+        )
+
+    return UniverseTimeline(
+        dataset_version_id=_TIMELINE_ID,
+        window_start=first_list_from.date(),
+        content_hash="not-checked-here",
+        periods=[
+            period("list_one", ["AAPL", "MSFT"], first_list_from, _ROTATION_TS),
+            period("list_two", ["MSFT", "SPY"], _ROTATION_TS, None),
+        ],
+    )
+
+
+def _stage_configs(experiment) -> list:
+    # The config of each stage that runs simulations (the stages keep it under two names).
+    configs = []
+    for stage in experiment.staged_pipeline_config.stages:
+        config = getattr(stage, "_cfg", None) or getattr(stage, "_stage_config", None)
+        if config is not None and hasattr(config, "symbols"):
+            configs.append(config)
+    return configs
+
+
+class _TimelineRun:
+    """One research tick on a timeline, with what the hook built and what the engine got."""
+
+    def __init__(self) -> None:
+        self.experiments: list = []
+        self.engine_calls: list[dict] = []
+        self.result: Any = None
+
+    @property
+    def signals(self):
+        import pandas as pd
+
+        frames = [call["result"].signal_log for call in self.engine_calls]
+        return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def _run_on_timeline(
+    db_session,
+    replay_context,
+    monkeypatch,
+    *,
+    timeline=None,
+    options: dict | None = None,
+    forbid_universe_tables: bool = True,
+) -> _TimelineRun:
+    import autonomous_trading_platform.application.services.platform_replay.research_hooks as rh_mod
+    from autonomous_trading_platform.research.simulation.services.simulation_execution_engine import (
+        SimulationExecutionEngine,
+    )
+
+    run = _TimelineRun()
+
+    if timeline is not None:
+        # The loader has its own tests; here the hook is handed the timeline as read.
+        def source_for(_session):
+            def source(version_id: str):
+                if version_id != timeline.dataset_version_id:
+                    raise LookupError(f"no timeline {version_id}")
+                return timeline
+
+            return source
+
+        monkeypatch.setattr(rh_mod, "_universe_timeline_source", source_for)
+
+    if forbid_universe_tables:
+
+        def _tables_read(**_kwargs):
+            raise AssertionError("the universe tables were read on a timeline run")
+
+        monkeypatch.setattr(rh_mod, "_resolve_research_universe_scope", _tables_read)
+
+    _orig_build_exp = rh_mod._build_replay_experiment_definition
+
+    def _minimal_experiment(*args, **kwargs):
+        from dataclasses import replace
+
+        exp = _orig_build_exp(*args, **kwargs)
+        if exp is None:
+            return None
+        exp = replace(
+            exp,
+            strategy_set=[{"type": "momentum", "method": "random", "options": {"n_samples": 1}}],
+        )
+        run.experiments.append(exp)
+        return exp
+
+    monkeypatch.setattr(rh_mod, "_build_replay_experiment_definition", _minimal_experiment)
+
+    _orig_execute = SimulationExecutionEngine.execute
+
+    def _spy(self, **kwargs):
+        result = _orig_execute(self, **kwargs)
+        run.engine_calls.append(
+            {
+                "universe_timeline": kwargs.get("universe_timeline"),
+                "symbols": list(kwargs["window"].symbols),
+                "result": result,
+            }
+        )
+        return result
+
+    monkeypatch.setattr(SimulationExecutionEngine, "execute", _spy)
+
+    run.result = rh_mod.run_scheduled_research_at_timestamp(
+        session=db_session,
+        timestamp=_TICK_TS,
+        replay_context=replay_context,
+        dataset_version_id=_DATASET_VERSION_ID,
+        research_options=options if options is not None else {"universe_timeline": _TIMELINE_ID},
+    )
+    return run
+
+
+def test_research_hook_on_a_timeline_hands_it_to_every_simulation(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """The option's id reaches the experiment, every stage config and the engine,
+    and the universe tables are not read."""
+    timeline = _smoke_timeline()
+
+    run = _run_on_timeline(db_session, replay_context, monkeypatch, timeline=timeline)
+
+    assert run.result.status == "ok", run.result.errors
+    assert run.result.summary["universe_timeline_version"] == _TIMELINE_ID
+
+    (experiment,) = run.experiments
+    assert experiment.universe_version == _TIMELINE_ID
+    assert experiment.symbols == ["AAPL", "MSFT", "SPY"]
+    stage_configs = _stage_configs(experiment)
+    assert stage_configs
+    assert {cfg.universe_timeline_version for cfg in stage_configs} == {_TIMELINE_ID}
+
+    assert run.engine_calls
+    assert all(call["universe_timeline"] is timeline for call in run.engine_calls)
+    # The window holds both lists, so every run of it loads all three names.
+    assert {tuple(call["symbols"]) for call in run.engine_calls} == {("AAPL", "MSFT", "SPY")}
+
+
+def test_research_hook_on_a_timeline_asks_only_members_for_signals(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """The real engine on real bars: AAPL is asked only while it is in the list, SPY
+    only once it is, MSFT throughout."""
+    run = _run_on_timeline(db_session, replay_context, monkeypatch, timeline=_smoke_timeline())
+
+    signals = run.signals
+    assert run.result.status == "ok", run.result.errors
+    assert not signals.empty, "the scenario gives no signals, so the checks below say nothing"
+
+    def stamps(symbol: str):
+        return list(signals[signals["symbol"] == symbol]["timestamp"])
+
+    assert stamps("AAPL") and all(ts < _ROTATION_TS for ts in stamps("AAPL"))
+    assert stamps("SPY") and all(ts >= _ROTATION_TS for ts in stamps("SPY"))
+    msft = stamps("MSFT")
+    assert any(ts < _ROTATION_TS for ts in msft) and any(ts >= _ROTATION_TS for ts in msft)
+
+
+def test_research_hook_without_the_option_runs_on_the_fixed_list(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    run = _run_on_timeline(
+        db_session, replay_context, monkeypatch, options={}, forbid_universe_tables=False
+    )
+
+    assert run.result.status == "ok", run.result.errors
+    assert run.result.summary["universe_timeline_version"] is None
+    assert run.engine_calls
+    assert all(call["universe_timeline"] is None for call in run.engine_calls)
+    (experiment,) = run.experiments
+    stage_configs = _stage_configs(experiment)
+    assert {cfg.universe_timeline_version for cfg in stage_configs} == {None}
+
+
+def test_research_hook_refuses_a_timeline_naming_symbols_the_replay_did_not_ingest(
+    research_smoke_data_root, db_session, monkeypatch
+):
+    """Without a timeline the list is cut down to what was ingested. A timeline's
+    lists are not cut down: trading the rest would not be the timeline's universe."""
+    two_of_three = PlatformReplayContext.create(
+        symbols=["AAPL", "MSFT"], actor="smoke_test", timestamp=_TICK_TS
+    )
+
+    run = _run_on_timeline(db_session, two_of_three, monkeypatch, timeline=_smoke_timeline())
+
+    assert run.result.status == "failed"
+    assert "survivorship_guard" in run.result.errors[0]
+    assert "did not ingest: ['SPY']" in run.result.errors[0]
+    assert run.engine_calls == []
+
+
+def test_research_hook_refuses_a_window_that_starts_before_the_timeline(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    late = _smoke_timeline(first_list_from=datetime(2023, 1, 10, tzinfo=UTC))
+
+    run = _run_on_timeline(db_session, replay_context, monkeypatch, timeline=late)
+
+    assert run.result.status == "failed"
+    assert "survivorship_guard" in run.result.errors[0]
+    assert "no list in force on 2023-01-03" in run.result.errors[0]
+    assert run.engine_calls == []
+
+
+def test_research_hook_fails_on_a_timeline_that_is_not_registered(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """The real loader this time: an id with no dataset version behind it."""
+    run = _run_on_timeline(
+        db_session, replay_context, monkeypatch, options={"universe_timeline": "no_such_timeline"}
+    )
+
+    assert run.result.status == "failed"
+    assert run.result.errors[0].startswith("universe_timeline:")
+    assert "no_such_timeline" in run.result.errors[0]
+    assert run.engine_calls == []
+
+
+@pytest.mark.parametrize("bad", ["", "   ", 7, ["universe_timeline_smoke"]])
+def test_research_hook_rejects_a_timeline_option_that_is_not_an_id(db_session, replay_context, bad):
+    from autonomous_trading_platform.application.services.platform_replay.research_hooks import (
+        run_scheduled_research_at_timestamp,
+    )
+
+    with pytest.raises(ValueError, match="research.options.universe_timeline"):
+        run_scheduled_research_at_timestamp(
+            session=db_session,
+            timestamp=_TICK_TS,
+            replay_context=replay_context,
+            research_options={"universe_timeline": bad},
+        )

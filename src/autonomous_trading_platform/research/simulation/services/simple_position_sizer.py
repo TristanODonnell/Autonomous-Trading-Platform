@@ -44,7 +44,8 @@ class SimplePositionSizer:
         if total_capital <= 0:
             raise ValueError(f"total_capital must be positive, got {total_capital}")
 
-        self._capital_per_symbol = position_budget_usd(Decimal(str(total_capital)), universe_size)
+        self._total_capital = Decimal(str(total_capital))
+        self._capital_per_symbol = position_budget_usd(self._total_capital, universe_size)
         self._min_notional = Decimal(str(min_notional_usd))
         self._vol_scaling = volatility_scaling_service
         self._max_symbol_exposure = (
@@ -62,6 +63,7 @@ class SimplePositionSizer:
         prices: dict[str, float],
         recent_closes: dict[str, list[float]] | None = None,
         capital_scale: Decimal = ONE,
+        symbol_count: int | None = None,
     ) -> dict[str, int]:
         """
         Returns a target position dict: symbol -> whole share quantity.
@@ -71,7 +73,16 @@ class SimplePositionSizer:
         recent_closes are the closes before the bar (VOL_LOOKBACK_BARS of them) the vol
         scalar needs; capital_scale is the simulation's equity growth so far (equity at
         the previous bar / initial cash) — the platform sizes from current equity.
+
+        symbol_count, when given, is the number of names in the universe on this bar
+        and replaces the constructor's universe_size for this call: the platform
+        splits the budget by the universe's member count at each evaluation.
         """
+        capital_per_symbol = (
+            self._capital_per_symbol
+            if symbol_count is None
+            else position_budget_usd(self._total_capital, symbol_count)
+        )
         targets: dict[str, int] = {}
 
         for signal in signals:
@@ -98,7 +109,7 @@ class SimplePositionSizer:
 
             price = Decimal(str(raw_price))
 
-            notional = self._capital_per_symbol * capital_scale
+            notional = capital_per_symbol * capital_scale
             closes = (recent_closes or {}).get(signal.symbol)
             if self._vol_scaling is not None and closes:
                 scalar = self._vol_scaling.compute_scalar(symbol=signal.symbol, closes=closes)

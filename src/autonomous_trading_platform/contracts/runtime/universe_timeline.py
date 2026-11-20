@@ -7,7 +7,7 @@ leaves behind, plus one rotation record per step carrying the rules the step ran
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -173,3 +173,25 @@ class UniverseTimeline(BaseModel):
         """The names in the list in force at ``moment``; none before the first step."""
         period = self.period_at(moment)
         return frozenset(m.symbol for m in period.members) if period is not None else frozenset()
+
+    def symbols_between(self, start: datetime, end: datetime) -> list[str]:
+        """Every name of a list in force at some moment from ``start`` up to, not
+        including, ``end``: the names a run over that span needs bars for."""
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("a timeline is asked with timezone-aware times")
+        names: set[str] = set()
+        for period in self.periods:
+            begins_before_end = period.effective_from < end
+            ends_after_start = period.effective_to is None or period.effective_to > start
+            if begins_before_end and ends_after_start:
+                names.update(member.symbol for member in period.members)
+        return sorted(names)
+
+    def symbols_on_dates(self, first: date, last: date) -> list[str]:
+        """Every name of a list in force at some moment of the days ``first`` to
+        ``last``, both included, counted as whole UTC days. A window and the runs
+        inside it use this one rule, so a run never needs a name its window lacks."""
+        return self.symbols_between(
+            datetime.combine(first, time.min, tzinfo=UTC),
+            datetime.combine(last + timedelta(days=1), time.min, tzinfo=UTC),
+        )

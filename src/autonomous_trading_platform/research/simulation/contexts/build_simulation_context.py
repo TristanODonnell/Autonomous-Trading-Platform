@@ -1,5 +1,8 @@
+from collections.abc import Callable
+
 from sqlalchemy.orm import Session
 
+from autonomous_trading_platform.contracts.runtime.universe_timeline import UniverseTimeline
 from autonomous_trading_platform.execution.clients.simulated_broker_client import (
     build_platform_execution_service,
 )
@@ -85,7 +88,10 @@ _DEFAULT_TOTAL_CAPITAL = 100_000.00
 
 
 def build_simulation_context(
-    *, session: Session, universe_size: int | None = None
+    *,
+    session: Session,
+    universe_size: int | None = None,
+    universe_timeline_source: Callable[[str], UniverseTimeline] | None = None,
 ) -> SimulationContext:
     strategy_factory = StrategyFactory()
 
@@ -148,6 +154,9 @@ def build_simulation_context(
         metrics_summary_repository=metrics_summary_repository,
         # Stored splits and cash dividends are applied in every research run (plan 5d-E).
         corporate_action_source=SorCorporateActionSource(session),
+        # Given by the caller: the loader lives in the application layer, which
+        # this package does not import.
+        universe_timeline_source=universe_timeline_source,
     )
 
     filter_score_service = FilterScoreService(

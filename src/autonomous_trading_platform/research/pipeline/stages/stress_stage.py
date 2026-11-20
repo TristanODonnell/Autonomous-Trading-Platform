@@ -85,6 +85,9 @@ class StressStageConfig:
     execution_mode: ExecutionMode = ExecutionMode.SERIAL
     max_workers: int = 1
     fail_fast: bool = False
+    # The exported universe timeline the runs trade on (a dataset version id).
+    # None = the symbols above are the universe for the whole window.
+    universe_timeline_version: str | None = None
 
     def __post_init__(self) -> None:
         if self.start_date >= self.end_date:
@@ -170,7 +173,12 @@ class StressStage(BaseStage):
             return StageResult(stage_name=self.stage_name)
 
         gate = self._cfg.gate
-        window = GateWindow(self._cfg.symbols, self._cfg.start_date, self._cfg.end_date)
+        window = GateWindow(
+            self._cfg.symbols,
+            self._cfg.start_date,
+            self._cfg.end_date,
+            self._cfg.universe_timeline_version,
+        )
         ctx = RunContext(
             experiment_id=experiment_id,
             dataset_version=dataset_version,

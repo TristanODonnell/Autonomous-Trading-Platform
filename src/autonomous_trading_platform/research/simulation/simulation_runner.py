@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import platform
 import random
+from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -30,6 +31,7 @@ from autonomous_trading_platform.contracts.runtime.simulation_run import Simulat
 from autonomous_trading_platform.contracts.runtime.strategy_config import (
     StrategyConfig as RuntimeStrategyConfig,
 )
+from autonomous_trading_platform.contracts.runtime.universe_timeline import UniverseTimeline
 from autonomous_trading_platform.contracts.simulation.dividend_event import DividendEvent
 from autonomous_trading_platform.execution.services.sleeve_sizing import VOL_LOOKBACK_BARS
 from autonomous_trading_platform.governance.models.governance_state import GovernanceState
@@ -153,6 +155,23 @@ class SimulationRunRequest:
     # unless ``dividend_events`` is given explicitly.
     corporate_actions: list[CorporateAction] | None = None
     dividend_events: list[DividendEvent] | None = None
+    # The exported universe timeline the run trades on (a dataset version id). With
+    # one, the universe on each bar is the list in force at the bar's time, and the
+    # run loads bars for the names of the lists in force during its own dates;
+    # ``symbols`` must cover those names. None = ``symbols`` is the universe for
+    # the whole run.
+    universe_timeline_version: str | None = None
+
+
+# The universe label of a run whose symbols are its universe for the whole run.
+FIXED_UNIVERSE_VERSION = "v1"
+
+
+def universe_version_for(request: SimulationRunRequest) -> str:
+    """The universe a run is recorded and cached under: the id of its universe
+    timeline when it trades on one, the fixed label otherwise. Two runs on the same
+    names and dates under different universes must not share an identity."""
+    return request.universe_timeline_version or FIXED_UNIVERSE_VERSION
 
 
 @dataclass(slots=True)
@@ -181,6 +200,11 @@ class SimulationRunResult:
     # those symbols give no signal until the bars have accumulated. Empty when
     # every symbol was warmed up.
     warmup_shortfall_by_symbol: dict[str, int] = field(default_factory=dict)
+    # The universe timeline the run traded on; None when it had a fixed list.
+    universe_timeline_version: str | None = None
+    # Sales ordered because the held name was no longer in the universe. None when
+    # the run had a fixed list, where no such sale exists.
+    universe_exit_count: int | None = None
 
 
 class SimulationRunner:
@@ -215,8 +239,13 @@ class SimulationRunner:
         strategy_factory: StrategyFactory,
         feature_dependency_resolver: FeatureDependencyResolverService | None = None,
         corporate_action_source: CorporateActionSource | None = None,
+        universe_timeline_source: Callable[[str], UniverseTimeline] | None = None,
     ) -> None:
         self.strategy_factory = strategy_factory
+        # Reads an exported universe timeline by its version id. Each timeline is
+        # read once and kept: a pipeline asks for the same one for every run.
+        self.universe_timeline_source = universe_timeline_source
+        self._universe_timelines: dict[str, UniverseTimeline] = {}
         self.corporate_action_source = corporate_action_source
         self.dataset_resolver = dataset_resolver
         self.window_loader = window_loader
@@ -262,7 +291,7 @@ class SimulationRunner:
             stage_name=request.stage_name or "adhoc",
             window_role=request.window_role or "default",
             seed=request.random_seed,
-            universe_version="v1",
+            universe_version=universe_version_for(request),
             price_basis=request.price_basis.value,
             start_date=request.start_date,
             end_date=request.end_date,
@@ -317,10 +346,11 @@ class SimulationRunner:
         self._commit_metadata()
 
         try:
+            universe_timeline, load_symbols = self._resolve_universe_timeline(request)
             window = self.window_loader.load_window(
                 dataset_version=request.dataset_version,
                 bars_dataset=resolved_dataset.dataset,
-                symbols=request.symbols,
+                symbols=load_symbols,
                 start_date=request.start_date,
                 end_date=request.end_date,
                 feature_datasets=feature_requests or None,
@@ -358,15 +388,21 @@ class SimulationRunner:
 
             corporate_actions = corporate_actions_for_request(self.corporate_action_source, request)
 
-            trade_logs, equity_curve, per_bar_metrics, positions, signal_log = (
-                self._execute_simulation(
-                    run_id=run_id,
-                    request=request,
-                    window=window,
-                    strategy=strategy,
-                    lookback_bars=lookback_bars,
-                    corporate_actions=corporate_actions,
-                )
+            (
+                trade_logs,
+                equity_curve,
+                per_bar_metrics,
+                positions,
+                signal_log,
+                universe_exit_count,
+            ) = self._execute_simulation(
+                run_id=run_id,
+                request=request,
+                window=window,
+                strategy=strategy,
+                lookback_bars=lookback_bars,
+                corporate_actions=corporate_actions,
+                universe_timeline=universe_timeline,
             )
 
             self.result_recorder.record_results(
@@ -403,6 +439,7 @@ class SimulationRunner:
                 volatility=risk.volatility,
                 win_rate=tm.win_rate,
                 consistency_score=sm.consistency_score,
+                universe_exit_count=universe_exit_count,
             )
             self._commit_metadata()
 
@@ -426,12 +463,59 @@ class SimulationRunner:
                 equity_curve=live_equity_curve,
                 trade_logs=trade_logs,
                 warmup_shortfall_by_symbol=dict(window.warmup_shortfall_by_symbol),
+                universe_timeline_version=request.universe_timeline_version,
+                universe_exit_count=universe_exit_count,
             )
 
         except Exception as exc:
             self._record_run_failed(run_id=run_id, error_message=str(exc))
             self._commit_metadata()
             raise
+
+    def _resolve_universe_timeline(
+        self, request: SimulationRunRequest
+    ) -> tuple[UniverseTimeline | None, list[str]]:
+        """The timeline a request names, and the symbols to load bars for.
+
+        With no timeline the request's own symbols are loaded, as before. With one,
+        the names loaded are those of the lists in force during the run's dates: a
+        name that is a member only before or after the run is not loaded, so it
+        cannot fail the run for having no bars in it, and a walk-forward fold loads
+        the names of its own months.
+        """
+        version_id = request.universe_timeline_version
+        if version_id is None:
+            return None, request.symbols
+        if request.shuffle_timestamp:
+            raise ValueError(
+                "a run on a universe timeline cannot shuffle bar timestamps: the list "
+                "in force is looked up by a bar's time"
+            )
+        timeline = self._universe_timelines.get(version_id)
+        if timeline is None:
+            if self.universe_timeline_source is None:
+                raise ValueError(
+                    f"the request names universe timeline {version_id}, but this "
+                    "runner was built without a universe timeline source"
+                )
+            timeline = self.universe_timeline_source(version_id)
+            self._universe_timelines[version_id] = timeline
+
+        names = timeline.symbols_on_dates(request.start_date, request.end_date)
+        if not names:
+            raise ValueError(
+                f"universe timeline {version_id} has no list in force between "
+                f"{request.start_date} and {request.end_date}"
+            )
+        requested = {symbol.upper() for symbol in request.symbols}
+        missing = sorted(name for name in names if name.upper() not in requested)
+        if missing:
+            raise ValueError(
+                f"universe timeline {version_id}: the lists in force between "
+                f"{request.start_date} and {request.end_date} name symbols the request "
+                f"does not: {missing}"
+            )
+        return timeline, names
 
     def _execute_simulation(
         self,
@@ -442,6 +526,7 @@ class SimulationRunner:
         strategy,
         lookback_bars,
         corporate_actions: list[CorporateAction] | None = None,
+        universe_timeline: UniverseTimeline | None = None,
     ):
         actions = list(corporate_actions or [])
         context_builder = self.context_builder.with_lookback(lookback_bars)
@@ -469,6 +554,7 @@ class SimulationRunner:
             settlement_days=request.settlement_days,
             dividend_events=dividend_events,
             corporate_actions=[a for a in in_window if is_split(a)],
+            universe_timeline=universe_timeline,
         )
 
         return (
@@ -477,6 +563,8 @@ class SimulationRunner:
             result.per_bar_metrics,
             result.positions,
             result.signal_log,
+            # Counted only on a timeline: a fixed list has no such sale to count.
+            len(result.universe_exit_log) if universe_timeline is not None else None,
         )
 
     def _record_run_started(
@@ -540,7 +628,7 @@ class SimulationRunner:
                 experiment_id=experiment_id,
                 strategy_id=request.strategy_id,
                 dataset_version=request.dataset_version,
-                universe_version="v1",
+                universe_version=universe_version_for(request),
                 price_basis=request.price_basis,
                 symbols=request.symbols,
                 start_date=request.start_date,
@@ -557,6 +645,12 @@ class SimulationRunner:
                     "initial_cash": request.initial_cash,
                     "strict_data_loading": request.strict_data_loading,
                     "stage_name": request.stage_name,
+                    # Present only for a run on a universe timeline.
+                    **(
+                        {"universe_timeline_version": request.universe_timeline_version}
+                        if request.universe_timeline_version is not None
+                        else {}
+                    ),
                     "resolved_dataset_metadata": resolved_dataset_metadata,
                     "resolved_feature_dataset_ids": resolved_feature_dataset_ids,
                 },
@@ -595,7 +689,7 @@ class SimulationRunner:
                 end_date=request.end_date,
                 dataset_version=request.dataset_version,
                 price_basis=request.price_basis,
-                universe_version="v1",
+                universe_version=universe_version_for(request),
                 cost_model=cost_model,
                 fill_model=fill_model,
                 random_seed=request.random_seed,
@@ -647,6 +741,7 @@ class SimulationRunner:
         volatility: float = 0.0,
         win_rate: float = 0.0,
         consistency_score: float = 0.0,
+        universe_exit_count: int | None = None,
     ) -> None:
         now = datetime.now(UTC)
 
@@ -685,6 +780,12 @@ class SimulationRunner:
                         "trade_count": trade_count,
                         "equity_points": equity_points,
                         "per_bar_metric_points": per_bar_metric_points,
+                        # Present only for a run on a universe timeline.
+                        **(
+                            {"universe_exit_count": universe_exit_count}
+                            if universe_exit_count is not None
+                            else {}
+                        ),
                     },
                 }
 
@@ -704,6 +805,11 @@ class SimulationRunner:
                         "trade_count": trade_count,
                         "equity_points": equity_points,
                         "per_bar_metric_points": per_bar_metric_points,
+                        **(
+                            {"universe_exit_count": universe_exit_count}
+                            if universe_exit_count is not None
+                            else {}
+                        ),
                     },
                 }
 
@@ -769,6 +875,9 @@ class SimulationRunner:
         # Only non-default multipliers extend the key so existing run_ids stay stable.
         if request.cost_multiplier != 1.0:
             key += f":cost_x{request.cost_multiplier}"
+        # The same for the universe: only a run on a timeline extends the key.
+        if request.universe_timeline_version is not None:
+            key += f":universe_timeline={request.universe_timeline_version}"
         return uuid5(_RUN_NS, key)
 
     def _init_rng(self, seed: int) -> random.Random:
