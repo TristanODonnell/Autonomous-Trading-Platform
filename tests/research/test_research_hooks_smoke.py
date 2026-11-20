@@ -12,7 +12,7 @@ Run with:
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,14 @@ import pytest
 
 from autonomous_trading_platform.contracts.common.enums import BarInterval, PriceBasis
 from autonomous_trading_platform.contracts.runtime.platform_replay import PlatformReplayContext
+from autonomous_trading_platform.research.pipeline.admission_window import (
+    EVALUATION_MONTHS,
+    SELECTION_MONTHS,
+    AdmissionWindowLayout,
+    admission_window_layout,
+    months_before,
+)
+from autonomous_trading_platform.research.pipeline.holdout import HOLDOUT_START
 from autonomous_trading_platform.storage.parquet.datasets import RAW_BARS_DATASET
 from autonomous_trading_platform.storage.parquet.metadata import (
     attach_metadata,
@@ -464,6 +472,7 @@ def _run_on_timeline(
             {
                 "universe_timeline": kwargs.get("universe_timeline"),
                 "symbols": list(kwargs["window"].symbols),
+                "dates": (kwargs["window"].start_date, kwargs["window"].end_date),
                 "result": result,
             }
         )
@@ -902,3 +911,487 @@ def test_research_hook_rejects_a_dataset_option_that_is_not_an_id(db_session, re
             replay_context=replay_context,
             research_options={"dataset_version": bad},
         )
+
+
+# ---------------------------------------------------------------------------
+# The admission layout (research.options.window_layout: admission)
+# ---------------------------------------------------------------------------
+#
+# Every date below follows from the holdout date, so these tests move with it. One test
+# (the last of the section) pins the layout in force to the dates written in the plan.
+
+# The selection piece's first calendar day.
+_ADMISSION_FROM = months_before(months_before(HOLDOUT_START, EVALUATION_MONTHS), SELECTION_MONTHS)
+_ADMISSION_BARS_FIRST = _ADMISSION_FROM - timedelta(days=45)
+_ADMISSION_BARS_LAST = HOLDOUT_START + timedelta(days=45)
+_ADMISSION_TICK = HOLDOUT_START + timedelta(days=30)
+_ADMISSION_TICK_TS = datetime.combine(_ADMISSION_TICK, time(21, 0), tzinfo=UTC)
+# Inside the selection piece: the list in force on the evaluation piece's first day is
+# not the one in force on the window's first day.
+_ADMISSION_ROTATION_TS = datetime.combine(
+    _ADMISSION_FROM + timedelta(days=100), time(22, 0), tzinfo=UTC
+)
+_ADMISSION = {
+    "window_layout": "admission",
+    "dataset_version": _WINDOW_DATASET_ID,
+    "universe_timeline": _TIMELINE_ID,
+}
+_STAGE_NAMES = [
+    "initial_quality_filter",
+    "walk_forward_robustness",
+    "monte_carlo_structural_robustness",
+    "regime_robustness",
+    "stress_robustness",
+]
+
+
+def _admission_timeline(first_list_from: date = _ADMISSION_BARS_FIRST):
+    """AAPL and MSFT from ``first_list_from``; MSFT and SPY from the rotation on."""
+    from autonomous_trading_platform.contracts.runtime.universe_timeline import (
+        UniverseTimeline,
+        UniverseTimelineMember,
+        UniverseTimelinePeriod,
+    )
+
+    begins = datetime.combine(first_list_from, time.min, tzinfo=UTC)
+
+    def period(version_id, symbols, start, end):
+        return UniverseTimelinePeriod(
+            universe_version_id=version_id,
+            effective_from=start,
+            effective_to=end,
+            members=[UniverseTimelineMember(symbol=s) for s in symbols],
+        )
+
+    return UniverseTimeline(
+        dataset_version_id=_TIMELINE_ID,
+        window_start=first_list_from,
+        content_hash="not-checked-here",
+        periods=[
+            period("list_one", ["AAPL", "MSFT"], begins, _ADMISSION_ROTATION_TS),
+            period("list_two", ["MSFT", "SPY"], _ADMISSION_ROTATION_TS, None),
+        ],
+    )
+
+
+def _nyse_sessions(first: date, last: date) -> list[date]:
+    from autonomous_trading_platform.runtime.clock import RealMarketCalendar
+
+    return list(RealMarketCalendar().trading_days(first, last))
+
+
+def _expected_layout(
+    *,
+    left_out: tuple[date, ...] = (),
+    as_of: date = _ADMISSION_TICK,
+    first: date = _ADMISSION_BARS_FIRST,
+    last: date = _ADMISSION_BARS_LAST,
+) -> AdmissionWindowLayout:
+    """The layout the hook should arrive at, from the layout function (which has its own
+    tests) and the NYSE calendar."""
+    return admission_window_layout(
+        holdout_start=HOLDOUT_START,
+        as_of=as_of,
+        data_first=first,
+        data_last=last,
+        trading_days=lambda a, b: [day for day in _nyse_sessions(a, b) if day not in left_out],
+    )
+
+
+def _run_admission(
+    db_session,
+    replay_context,
+    monkeypatch,
+    data_root: Path,
+    *,
+    first: date = _ADMISSION_BARS_FIRST,
+    last: date = _ADMISSION_BARS_LAST,
+    left_out: tuple[date, ...] = (),
+    timeline=None,
+    options: dict | None = None,
+    timestamp: datetime = _ADMISSION_TICK_TS,
+) -> _TimelineRun:
+    """One research tick in the admission layout, on a dataset registered for it. The
+    replay's own dataset has no bars, and the universe tables may not be read."""
+    from autonomous_trading_platform.contracts.runtime.research_window_dataset import (
+        RESEARCH_WINDOW_LIFECYCLE,
+    )
+
+    _register_window_dataset(
+        db_session,
+        data_root,
+        first=first,
+        last=last,
+        metadata_json={
+            "dataset_lifecycle": RESEARCH_WINDOW_LIFECYCLE,
+            "excluded_sessions": [day.isoformat() for day in left_out],
+        },
+    )
+    return _run_on_timeline(
+        db_session,
+        replay_context,
+        monkeypatch,
+        timeline=timeline if timeline is not None else _admission_timeline(),
+        options=options if options is not None else _ADMISSION,
+        forbid_universe_tables=True,
+        backtest_dataset_id=_REPLAY_DATASET_WITH_NO_BARS,
+        timestamp=timestamp,
+    )
+
+
+def _span(piece) -> dict[str, Any]:
+    return {
+        "first": piece.first.isoformat(),
+        "last": piece.last.isoformat(),
+        "sessions": piece.sessions,
+    }
+
+
+def test_admission_layout_gives_each_stage_its_days(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """Stage 1 reads the selection piece; walk-forward tests on the evaluation piece's
+    three folds, every fold trained on the selection piece, two of three to pass; Monte
+    Carlo, regime and stress read the evaluation piece."""
+    layout = _expected_layout()
+    selection, evaluation = layout.selection, layout.evaluation
+
+    run = _run_admission(db_session, replay_context, monkeypatch, research_smoke_data_root)
+
+    assert run.result.status == "ok", run.result.errors
+    (experiment,) = run.experiments
+    assert experiment.dataset_version == _WINDOW_DATASET_ID
+    assert (experiment.start_date, experiment.end_date) == (selection.first, evaluation.last)
+    by_name = {cfg.name: cfg for cfg in _stage_configs(experiment)}
+    assert list(by_name) == _STAGE_NAMES
+
+    stage_1 = by_name["initial_quality_filter"]
+    assert (stage_1.start_date, stage_1.end_date) == (selection.first, selection.last)
+
+    walk_forward = by_name["walk_forward_robustness"]
+    assert (walk_forward.start_date, walk_forward.end_date) == (selection.first, evaluation.last)
+    assert len(layout.test_folds) == 3
+    assert walk_forward.fold_windows() == [
+        (selection.first, selection.last, fold.first, fold.last) for fold in layout.test_folds
+    ]
+    # The test folds tile the evaluation piece, and start after stage 1 stops reading.
+    assert walk_forward.folds[0].test_start == evaluation.first > stage_1.end_date
+    assert walk_forward.folds[-1].test_end == evaluation.last
+    assert (walk_forward.require_all_folds, walk_forward.min_folds_passed) == (False, 2)
+    # No overlap exception, and no rolling folds beside the ones given by date.
+    assert walk_forward.allow_overlapping_test_folds is False
+    assert (walk_forward.train_days, walk_forward.test_days, walk_forward.step_days) == (0, 0, 0)
+
+    for name in _STAGE_NAMES[2:]:
+        gate = by_name[name]
+        assert (gate.start_date, gate.end_date) == (evaluation.first, evaluation.last), name
+    # The run over the evaluation piece answers for the walk-forward filter itself.
+    monte_carlo = by_name["monte_carlo_structural_robustness"]
+    assert monte_carlo.base_run_clears_filter is True
+    assert monte_carlo.filter_config == walk_forward.test_filter_config
+
+    # The first simulation is stage 1's, on the selection piece, from the named dataset.
+    assert run.engine_calls
+    assert run.engine_calls[0]["dates"] == (selection.first, selection.last)
+
+
+def test_admission_layout_reads_no_holdout_day(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """The research runs a month into the holdout and the bars go on past it; no stage
+    is given a holdout day and no simulation reads one."""
+    run = _run_admission(db_session, replay_context, monkeypatch, research_smoke_data_root)
+
+    (experiment,) = run.experiments
+    assert experiment.end_date < HOLDOUT_START <= _ADMISSION_TICK < _ADMISSION_BARS_LAST
+    for cfg in _stage_configs(experiment):
+        assert cfg.end_date < HOLDOUT_START, cfg.name
+    walk_forward = _stage_configs(experiment)[1]
+    assert all(fold.test_end < HOLDOUT_START for fold in walk_forward.folds)
+    assert run.engine_calls
+    for call in run.engine_calls:
+        assert experiment.start_date <= call["dates"][0] <= call["dates"][1] < HOLDOUT_START
+
+
+def test_admission_layout_labels_regimes_from_the_list_on_the_evaluation_pieces_first_day(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """The list rotated inside the selection piece. The stages are handed every name of
+    the window; the regime labels come from the list in force when the evaluation piece
+    begins, not the one in force on the window's first day (AAPL, MSFT)."""
+    run = _run_admission(db_session, replay_context, monkeypatch, research_smoke_data_root)
+
+    (experiment,) = run.experiments
+    assert experiment.symbols == ["AAPL", "MSFT", "SPY"]
+    by_name = {cfg.name: cfg for cfg in _stage_configs(experiment)}
+    assert {tuple(cfg.symbols) for cfg in by_name.values()} == {("AAPL", "MSFT", "SPY")}
+    assert by_name["regime_robustness"].label_symbols == ["MSFT", "SPY"]
+    # Stage 1 traded on the timeline: the first list's names until the rotation.
+    assert run.engine_calls[0]["universe_timeline"] is not None
+
+
+def test_admission_layout_holds_stage_1_to_at_least_the_train_check(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """Every fold's train window is the selection piece, the days stage 1 selected on.
+    Stage 1's filter is at least as strict as the train check on every threshold, so
+    the train check eliminates nobody stage 1 let through: the folds are decided by
+    their test periods."""
+    run = _run_admission(db_session, replay_context, monkeypatch, research_smoke_data_root)
+
+    (experiment,) = run.experiments
+    by_name = {cfg.name: cfg for cfg in _stage_configs(experiment)}
+    selected, trained = (
+        by_name["initial_quality_filter"].filter_config,
+        by_name["walk_forward_robustness"].train_filter_config,
+    )
+    for threshold in (
+        "min_sharpe",
+        "max_drawdown",
+        "min_trades",
+        "min_consistency_score",
+        "min_profit_factor",
+        "min_win_rate",
+        "min_total_return",
+        "robustness_min_sharpe",
+        "robustness_min_profitable_windows",
+    ):
+        assert getattr(selected, threshold) >= getattr(trained, threshold), threshold
+    assert selected.max_daily_turnover <= trained.max_daily_turnover
+    assert selected.max_return_variance == trained.max_return_variance
+
+
+def test_admission_layout_reports_its_pieces(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    layout = _expected_layout()
+
+    run = _run_admission(db_session, replay_context, monkeypatch, research_smoke_data_root)
+
+    assert run.result.status == "ok", run.result.errors
+    summary = run.result.summary
+    assert summary["window_layout"] == "admission"
+    assert summary["dataset_version"] == _WINDOW_DATASET_ID
+    assert summary["universe_timeline_version"] == _TIMELINE_ID
+    assert summary["window_start"] == layout.selection.first.isoformat()
+    assert summary["window_end"] == layout.evaluation.last.isoformat()
+    assert layout.holdout is not None
+    assert summary["admission_window"] == {
+        "selection": _span(layout.selection),
+        "evaluation": _span(layout.evaluation),
+        "test_folds": [_span(fold) for fold in layout.test_folds],
+        "holdout_start": HOLDOUT_START.isoformat(),
+        "holdout": _span(layout.holdout),
+    }
+    # The holdout is listed up to the research date; it is past every gate's last day.
+    assert summary["admission_window"]["holdout"]["first"] > summary["window_end"]
+    assert summary["admission_window"]["holdout"]["last"] <= _ADMISSION_TICK.isoformat()
+
+
+def test_admission_layout_counts_sessions_without_the_ones_the_dataset_left_out(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """A session the dataset left out by name is no session of a fold: with one taken
+    out of the first test fold, that fold ends a session later and the cut moves."""
+    plain = _expected_layout()
+    left_out = _nyse_sessions(plain.evaluation.first, plain.evaluation.last)[9]
+    expected = _expected_layout(left_out=(left_out,))
+    assert plain.test_folds[0].first < left_out < plain.test_folds[0].last
+    assert expected.test_folds[0].last > plain.test_folds[0].last
+
+    run = _run_admission(
+        db_session, replay_context, monkeypatch, research_smoke_data_root, left_out=(left_out,)
+    )
+
+    assert run.result.status == "ok", run.result.errors
+    (experiment,) = run.experiments
+    walk_forward = _stage_configs(experiment)[1]
+    assert [(fold.test_start, fold.test_end) for fold in walk_forward.folds] == [
+        (fold.first, fold.last) for fold in expected.test_folds
+    ]
+    reported = run.result.summary["admission_window"]
+    assert reported["evaluation"]["sessions"] == plain.evaluation.sessions - 1
+    assert [fold["sessions"] for fold in reported["test_folds"]] == [
+        fold.sessions for fold in expected.test_folds
+    ]
+
+
+@pytest.mark.parametrize(
+    ("dataset", "timestamp", "reason"),
+    [
+        pytest.param(
+            {},
+            datetime.combine(HOLDOUT_START - timedelta(days=1), time(21, 0), tzinfo=UTC),
+            f"before the holdout date {HOLDOUT_START}",
+            id="the research runs before the holdout date",
+        ),
+        pytest.param(
+            {"first": _ADMISSION_FROM + timedelta(days=7)},
+            _ADMISSION_TICK_TS,
+            f"the bars start on {_ADMISSION_FROM + timedelta(days=7)}; the selection piece "
+            f"starts on {_ADMISSION_FROM}",
+            id="the bars start after the selection piece does",
+        ),
+        pytest.param(
+            {"last": HOLDOUT_START - timedelta(days=30)},
+            _ADMISSION_TICK_TS,
+            f"the bars end on {HOLDOUT_START - timedelta(days=30)}; the evaluation piece ends",
+            id="the bars end before the evaluation piece does",
+        ),
+    ],
+)
+def test_admission_layout_that_cannot_be_laid_on_the_dataset_is_a_failed_step(
+    research_smoke_data_root, db_session, replay_context, monkeypatch, dataset, timestamp, reason
+):
+    """Failed with the reason, not skipped, and not shortened to fit: nothing is built
+    and nothing is simulated."""
+    run = _run_admission(
+        db_session,
+        replay_context,
+        monkeypatch,
+        research_smoke_data_root,
+        timestamp=timestamp,
+        **dataset,
+    )
+
+    assert run.result.status == "failed"
+    (error,) = run.result.errors
+    assert error.startswith(
+        f"research_window: the admission layout cannot be laid on dataset {_WINDOW_DATASET_ID}: "
+    )
+    assert reason in error
+    assert run.experiments == []
+    assert run.engine_calls == []
+
+
+def test_admission_layout_refuses_a_timeline_that_begins_after_the_selection_piece(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    run = _run_admission(
+        db_session,
+        replay_context,
+        monkeypatch,
+        research_smoke_data_root,
+        timeline=_admission_timeline(first_list_from=_ADMISSION_FROM + timedelta(days=10)),
+    )
+
+    assert run.result.status == "failed"
+    assert "survivorship_guard" in run.result.errors[0]
+    assert "The research window must start inside the timeline" in run.result.errors[0]
+    assert run.engine_calls == []
+
+
+def _research_tick(db_session, replay_context, options: dict):
+    from autonomous_trading_platform.application.services.platform_replay.research_hooks import (
+        run_scheduled_research_at_timestamp,
+    )
+
+    return run_scheduled_research_at_timestamp(
+        session=db_session,
+        timestamp=_ADMISSION_TICK_TS,
+        replay_context=replay_context,
+        research_options=options,
+    )
+
+
+@pytest.mark.parametrize(
+    "bad", ["Admission", "admission ", "rolling", "lookback", "", 7, True, ["admission"]]
+)
+def test_research_hook_rejects_a_window_layout_it_does_not_know(db_session, replay_context, bad):
+    """Never the lookback window in its place: the run would look valid and be a
+    different experiment."""
+    with pytest.raises(ValueError, match="research.options.window_layout must be one of"):
+        _research_tick(db_session, replay_context, {**_ADMISSION, "window_layout": bad})
+
+
+def test_admission_layout_without_a_universe_timeline_is_refused(db_session, replay_context):
+    options = {key: value for key, value in _ADMISSION.items() if key != "universe_timeline"}
+
+    with pytest.raises(ValueError, match="needs research.options.universe_timeline"):
+        _research_tick(db_session, replay_context, options)
+
+
+def test_admission_layout_without_a_dataset_is_refused(db_session, replay_context):
+    options = {key: value for key, value in _ADMISSION.items() if key != "dataset_version"}
+
+    with pytest.raises(ValueError, match="needs research.options.dataset_version"):
+        _research_tick(db_session, replay_context, options)
+
+
+@pytest.mark.parametrize("days", [90, 540])
+def test_admission_layout_with_a_window_length_is_refused(db_session, replay_context, days):
+    """Even the default length: the layout's length follows from the holdout date."""
+    with pytest.raises(ValueError, match="lookback_days does not apply with window_layout"):
+        _research_tick(db_session, replay_context, {**_ADMISSION, "lookback_days": days})
+
+
+def test_research_hook_without_the_layout_option_rolls_its_folds_as_before(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """The same window as the six-stage test above, without the option: the 90-day
+    window, rolling folds with their overlap exception, one fold to pass, and every
+    stage after walk-forward on the whole window."""
+    _register_window_dataset(
+        db_session, research_smoke_data_root, first=date(2022, 11, 1), last=_END_DATE
+    )
+
+    run = _run_named(
+        db_session,
+        replay_context,
+        monkeypatch,
+        timeline=_smoke_timeline(first_list_from=datetime(2022, 11, 1, tzinfo=UTC)),
+        options={"dataset_version": _WINDOW_DATASET_ID, "universe_timeline": _TIMELINE_ID},
+        forbid_universe_tables=True,
+    )
+
+    assert run.result.status == "ok", run.result.errors
+    assert run.result.summary["window_layout"] is None
+    assert run.result.summary["admission_window"] is None
+    (experiment,) = run.experiments
+    start, end = date(2022, 12, 3), date(2023, 3, 3)
+    by_name = {cfg.name: cfg for cfg in _stage_configs(experiment)}
+    assert list(by_name) == _STAGE_NAMES
+    walk_forward = by_name["walk_forward_robustness"]
+    assert walk_forward.folds is None
+    assert (walk_forward.train_days, walk_forward.test_days, walk_forward.step_days) == (45, 30, 15)
+    assert walk_forward.allow_overlapping_test_folds is True
+    assert (walk_forward.require_all_folds, walk_forward.min_folds_passed) == (False, 1)
+    assert by_name["initial_quality_filter"].end_date == start + timedelta(days=44)
+    for name in _STAGE_NAMES[1:]:
+        assert (by_name[name].start_date, by_name[name].end_date) == (start, end), name
+    assert by_name["monte_carlo_structural_robustness"].base_run_clears_filter is False
+    # Labels from the list in force on the window's first day.
+    assert by_name["regime_robustness"].label_symbols == ["AAPL", "MSFT"]
+
+
+def test_admission_layout_in_force_is_the_one_written_in_the_plan(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """The window in force since 2026-11-16, with the two sessions the 24-month dataset
+    leaves out by name. Pinned on purpose: when the holdout date moves, this fails until
+    the new dates are worked out and written in the plan."""
+    assert date(2026, 5, 18) == HOLDOUT_START, (
+        "the holdout date moved: work out the new pieces, record them in the research "
+        "plan, and update the dates in this test"
+    )
+
+    run = _run_admission(
+        db_session,
+        replay_context,
+        monkeypatch,
+        research_smoke_data_root,
+        first=date(2024, 10, 1),
+        left_out=(date(2024, 12, 23), date(2025, 3, 10)),
+    )
+
+    assert run.result.status == "ok", run.result.errors
+    reported = run.result.summary["admission_window"]
+    assert reported["selection"] == {"first": "2024-11-18", "last": "2025-08-15", "sessions": 183}
+    assert reported["evaluation"] == {"first": "2025-08-18", "last": "2026-05-15", "sessions": 188}
+    assert reported["test_folds"] == [
+        {"first": "2025-08-18", "last": "2025-11-13", "sessions": 63},
+        {"first": "2025-11-14", "last": "2026-02-17", "sessions": 63},
+        {"first": "2026-02-18", "last": "2026-05-15", "sessions": 62},
+    ]
+    assert reported["holdout_start"] == "2026-05-18"
+    assert reported["holdout"]["first"] == "2026-05-18"

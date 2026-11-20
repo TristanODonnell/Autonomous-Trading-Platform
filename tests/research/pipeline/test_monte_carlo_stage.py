@@ -39,11 +39,13 @@ from autonomous_trading_platform.research.simulation.simulation_runner import (
 )
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 from tests.research.pipeline.monte_carlo_support import (
+    BARS_PER_SESSION,
     CurveRunner,
     curve_with_sharpe,
     result_from_curve,
     sharpe_runner,
     strategy,
+    weekdays,
 )
 
 START, END = date(2024, 1, 2), date(2024, 3, 28)  # 63 weekdays
@@ -68,6 +70,7 @@ def _stage(
     n_runs: int = 500,
     min_pass_rate: float = 0.70,
     filter_config: FilterConfig = REALISTIC,
+    base_run_clears_filter: bool = False,
 ) -> MonteCarloStage:
     return MonteCarloStage(
         stage_config=MonteCarloStageConfig(
@@ -79,6 +82,7 @@ def _stage(
             min_pass_rate=min_pass_rate,
             filter_config=filter_config,
             scoring_weights=ScoringWeights(),
+            base_run_clears_filter=base_run_clears_filter,
         ),
         simulation_runner=runner,  # type: ignore[arg-type]
     )
@@ -284,6 +288,90 @@ class TestVerdict:
         result = _run(_stage(runner), [])
         assert result.survivors == [] and result.filter_outputs == []
         assert runner.requests == []
+
+
+def _curve_with_a_losing_streak(request: SimulationRunRequest) -> pd.DataFrame:
+    """Five-minute curve that loses 1.5% a session for its first third and gains 1.5% a
+    session after: up by a third over the window, after a drawdown of about a quarter."""
+    days = weekdays(request.start_date, request.end_date)
+    losing = len(days) // 3
+    session_open = pd.to_datetime([d.isoformat() for d in days], utc=True) + pd.Timedelta(
+        hours=14, minutes=30
+    )
+    timestamps = [session_open[0] - pd.Timedelta(minutes=5)]
+    equity = [100_000.0]
+    for index, opened in enumerate(session_open):
+        per_bar = (1.0 + (-0.015 if index < losing else 0.015)) ** (1.0 / BARS_PER_SESSION)
+        for bar in range(BARS_PER_SESSION):
+            timestamps.append(opened + pd.Timedelta(minutes=5 * bar))
+            # A little movement inside the session, none of it net.
+            equity.append(equity[-1] * per_bar * (1.0002 if bar % 2 else 1.0 / 1.0002))
+    return pd.DataFrame({"timestamp": timestamps, "equity": equity})
+
+
+class TestBaseRunClearsFilter:
+    """``base_run_clears_filter``: the base run answers for its own Sharpe, total return
+    and drawdown. Resampling keeps a run's sessions and discards their order, so the
+    paths of a run with a losing streak mostly show a shallow drawdown."""
+
+    def test_by_default_a_drawdown_past_the_limit_is_judged_by_the_paths_alone(self) -> None:
+        result = _run(_stage(CurveRunner(_curve_with_a_losing_streak)), [strategy("s1")])
+        agg = result.diagnostics["s1"].mc_aggregation
+        base = result.diagnostics["s1"].reference_result
+
+        assert agg is not None and base is not None
+        assert base.risk_metrics.max_drawdown < REALISTIC.max_drawdown
+        assert base.return_metrics.total_return > 0.25
+        # Not one path in 500 has a drawdown as deep as the limit, let alone the run's.
+        assert agg.drawdown_dist.min > REALISTIC.max_drawdown
+        assert agg.pass_rate > 0.95
+        assert agg.passed
+        assert not any(reason.startswith("base run") for reason in agg.failure_reasons)
+        assert [c.strategy_id for c in result.survivors] == ["s1"]
+
+    def test_with_it_the_base_run_answers_for_its_own_drawdown(self) -> None:
+        stage = _stage(CurveRunner(_curve_with_a_losing_streak), base_run_clears_filter=True)
+        result = _run(stage, [strategy("s1")])
+        agg = result.diagnostics["s1"].mc_aggregation
+
+        assert result.survivors == []
+        assert agg is not None and not agg.passed
+        # The paths say what they said without it; the base run is what fails.
+        assert agg.pass_rate > 0.95
+        assert [r for r in agg.failure_reasons if r.startswith("base run")] == [
+            "base run: max_drawdown -0.272 < threshold -0.2"
+        ]
+        assert agg.failure_reasons[0].startswith("base run: max_drawdown")
+        (output,) = result.filter_outputs
+        assert not output.filter_result.passed
+        assert output.filter_result.failures == agg.failure_reasons
+        assert output.score is None
+
+    def test_with_it_a_base_run_under_min_sharpe_is_named(self) -> None:
+        """Without it the same run is judged by its paths only (TestVerdict)."""
+        stage = _stage(sharpe_runner({"s1": 0.9}), base_run_clears_filter=True)
+        result = _run(stage, [strategy("s1")])
+        (output,) = result.filter_outputs
+
+        assert not output.filter_result.passed
+        assert output.filter_result.failures[0] == "base run: Sharpe 0.900 < min_sharpe 1.0"
+        assert any("paths clear the thresholds" in r for r in output.filter_result.failures)
+
+    def test_with_it_a_run_that_clears_the_filter_is_judged_as_before(self) -> None:
+        def verdict(base_run_clears_filter: bool):
+            stage = _stage(
+                sharpe_runner({"strong": 8.0, "marginal": 1.5}),
+                base_run_clears_filter=base_run_clears_filter,
+            )
+            result = _run(stage, [strategy("strong"), strategy("marginal")])
+            return (
+                [c.strategy_id for c in result.survivors],
+                {sid: result.diagnostics[sid].mc_aggregation for sid in ("strong", "marginal")},
+                {o.strategy_id: o.score for o in result.filter_outputs},
+            )
+
+        assert verdict(True) == verdict(False)
+        assert verdict(True)[0] == ["strong"]
 
 
 class TestMissingEvidenceFails:

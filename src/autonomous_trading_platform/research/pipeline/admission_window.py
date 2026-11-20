@@ -30,6 +30,9 @@ from datetime import date, timedelta
 SELECTION_MONTHS = 9
 EVALUATION_MONTHS = 9
 TEST_FOLDS = 3
+# Half of the pass rule (decided 2026-11-18): this many of the test folds must pass.
+# The other half is one run over the whole evaluation piece clearing the same filter.
+MIN_TEST_FOLDS_PASSED = 2
 # A Sharpe over fewer sessions than this is close to a coin flip (standard error of the
 # yearly figure about 2 at 63 sessions).
 MIN_TEST_FOLD_SESSIONS = 60
