@@ -106,6 +106,12 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > by 0.075 at the median (largest 0.47), rank correlation 0.942. **Merged as
 > PR #193 (`495434d6b`), on A and B 2026-11-20, verified.** No job sets the
 > timeline option yet; (2) below is where it is first switched on.
+> Hook layout, 2026-11-20: on `research/r2-hook-layout` (not pushed, not on
+> either box), five pieces. Built: piece 1, the holdout date declared once and
+> the 9 / 9 / 6 layout worked out from it in one function; piece 2, the
+> walk-forward stage takes folds given by date and refuses a train window on
+> any fold's test days. **No run changes yet:** the hook still builds the
+> 90-day layout until piece 3 gives it the option that switches the new one on.
 > Open decisions: none waiting.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
@@ -186,7 +192,7 @@ Package A is merged and deployed. Nothing is running.
 | # | Package | Boxes it closes | Waits on | Size |
 |---|---|---|---|---|
 | 🟢 A | **Validators and evidence** (done: merged PR #184, deployed 2026-11-16) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | Nothing | One PR, no new data (#184) |
-| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (done: merged as PR #193, on A and B 2026-11-20; no job uses it yet), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule, memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
+| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (done: merged as PR #193, on A and B 2026-11-20; no job uses it yet), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule (started 2026-11-20 on `research/r2-hook-layout`: pieces 1 and 2 of 5 built, the hook not switched yet), memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
 | 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
 | 🔴 D | **Test hardening (R7)** | R7 both boxes, and the R7 boxes under R10, R14, R15 | Nothing | Can ride along with A and B |
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R12's slippage in fill rows, D2. R8 left this package 2026-11-16: deferred until random fills are switched on | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
@@ -674,7 +680,14 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
       items above make folds honest; none sets how many there are or how long they run.
   - [ ] Folds in sessions from the trading calendar, not calendar days (also removes the
         shared boundary day).
-  - [ ] A minimum test span per fold, validated in the config. A Sharpe estimate's
+        2026-11-20: half built. The admission layout counts its folds in sessions
+        (hook layout piece 1) and the walk-forward stage takes folds by date and
+        refuses a shared boundary day (piece 2). Ticked when the hook hands the
+        stage those folds (piece 3). Rolling folds are still calendar days.
+  - [ ] A minimum test span per fold, validated in the config. (2026-11-20: the
+        admission layout refuses a test fold under 60 sessions, hook layout piece
+        1; the walk-forward config itself holds no minimum, so a rolling layout or
+        hand-written folds can still be short.) A Sharpe estimate's
         precision depends on the calendar span, not the bar count: a 10-session fold of
         5-minute bars has 780 observations and an annualised-Sharpe standard error of
         roughly 5 (√(252/10)), so short folds are near coin flips and the pooled gate
@@ -776,8 +789,8 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
     - Hook layout, investigated 2026-11-20 (read-only; two reading passes, the
       points below then read in the code by hand). Branch `research/r2-hook-layout`,
       off `main` at `495434d6b`. Own PR, five pieces, one commit each:
-      - [x] Piece 1, the layout in one place (built 2026-11-20, not committed; full
-            unit suite 5,792 passed, 5 skipped, 0 failed). Two new modules that
+      - [x] Piece 1, the layout in one place (built 2026-11-20, `3deb8f1ce`; full
+            unit suite 5,863 passed, 5 skipped, 0 failed). Two new modules that
             nothing calls yet, so
             no run changes until piece 2 wires them into the hook (the option
             that switches the layout on moved to piece 2 for that reason).
@@ -810,17 +823,76 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
               Checked that they can fail, with three bugs put in in memory: the
               evaluation piece reading the holdout date (5 fail), two folds
               sharing a session (4), a short fold built instead of refused (2).
-      - [ ] Piece 2, each stage reads its piece: a research option switches the
-            layout on, and without it the hook lays its window out as today; with
-            it stage 1 reads the selection days, and walk-forward, Monte Carlo,
-            regime and stress the evaluation days.
-      - [ ] Piece 3, folds and the pass rule: three test folds that do not
-            overlap, train window the selection piece, 2 of 3 and the continuous
-            nine-month run; no overlap exception in this layout.
+      - Suite totals corrected 2026-11-20. The six totals of this stretch (engine
+        pieces 1, 2a, 2b and 3, hook layout pieces 1 and 2) were each written 71
+        too low: the count read the progress dots and skipped the one line that
+        holds an `X`, 71 dots with it. Recounted from the six saved outputs, every
+        line: 5,754, 5,788, 5,812, 5,830, 5,863, 5,890. The steps between runs
+        were right as written. Totals in this plan from before 2026-11-19 were
+        counted the same way and have not been recounted (their outputs are not
+        kept). The `X` is one test marked expected-to-fail that passes
+        (`test_corporate_action_adjustment_service.py`, a placeholder for
+        coverage not written, marked 2026-03-25); pytest's exit is 0 with it.
+      - Pieces 2 and 3 cut again 2026-11-20 (first written as "each stage reads its
+        piece", then "folds and the pass rule"): the walk-forward stage could only
+        lay out rolling folds from three day counts, so the hook could not be
+        given the new layout before the stage could take folds by date. Capability
+        first, then the hook in one step, so no half-built layout exists between
+        two commits.
+      - [x] Piece 2, the walk-forward stage takes folds given by date (built
+            2026-11-20, not committed; full unit suite 5,890 passed, 5 skipped, 0 failed).
+            `WalkForwardStageConfig.folds`, a list of `FoldWindow` (train first and
+            last day, test first and last day, all four read). With it the stage
+            uses those folds as given; without it rolling folds are laid out as
+            before, from `train_days`, `test_days` and `step_days` (now given
+            only for rolling folds; the config takes its fields by name).
+            - Refused for folds by date, each with its reason: a train window
+              that ends on or after its test window's first day (no shared day);
+              test windows out of order or sharing a day; **a train window
+              covering a day of any fold's test window** (the 2026-11-20
+              decision, held by the config, with the message "one test period
+              would decide two folds"); a fold outside the stage's window; day
+              counts or the overlap exception given together with folds; an
+              empty list. There is no exception to these.
+            - A train window is simulated once. Folds that share one share its
+              runs (made under the first such fold's name and seed), and the
+              stage's results hold that run and its verdict once.
+            - The pipeline's rule that selection ends before the first test fold
+              reads the first fold given.
+            - Tests: `tests/research/pipeline/test_walk_forward_folds_by_date.py`,
+              27, among them: with one train window for all folds, losing any
+              one test period still passes 2 of 3 and losing two fails. The 261
+              existing pipeline and hook tests pass unchanged. Checked that the
+              new ones can fail, with four bugs put in in memory (a train window
+              allowed on test days, 2 fail; the train window simulated per
+              fold, 3; a shared boundary day allowed, 1; overlapping test
+              windows allowed, 2).
+            - Left as it is, on purpose: a stage read from a YAML file cannot be
+              given folds by date (the hook builds its configs in code).
+            - [ ] Later saving, not built: the train run on the selection piece
+                  repeats what stage 1 simulated for the same strategy and days
+                  (about nine minutes of a full run at the laptop's measured 68
+                  seconds per nine-month simulation and 8 survivors). Reusing
+                  stage 1's run needs stage 1 to keep it where the reuse lookup
+                  reads.
+      - [ ] Piece 3, the hook: a research option switches the layout on, and
+            without it the hook lays its window out as today; with it stage 1
+            reads the selection days, walk-forward gets the layout's three test
+            folds with the selection piece as every fold's train window and 2 of
+            3 to pass, and Monte Carlo, regime and stress read the evaluation
+            days. No overlap exception in this layout. The pooled half of the
+            pass rule is Monte Carlo's base run over the evaluation piece, which
+            it already holds to the same filter: to be shown by a test, not
+            left to how the stages happen to line up. Two decisions of
+            2026-11-20 land here: the layout named without a universe timeline
+            is refused, and the regime labels come from the list in force on
+            the evaluation piece's first day.
       - [ ] Piece 4, holdout: a check that no gate reads the holdout date or
             later; the holdout scored once for the final survivors, report only.
-      - [ ] Piece 5, the timeline option switched on for this layout; rehearsal on
-            B with memory recorded.
+      - [ ] Piece 5, rehearsal on B with memory recorded: a job that names the
+            layout and the exported timeline (first written as "the timeline
+            option switched on for this layout"; since the 2026-11-20 decision
+            the layout cannot run without one, so there is no separate switch).
       What the reading found:
       - Sessions. `RealMarketCalendar` (`runtime/clock.py`, the NYSE schedule from
         the `exchange_calendars` library) lists trading days between two dates and
@@ -886,6 +958,9 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
     - [ ] Fold geometry in the hook: test folds that do not overlap (`step_days >=
           test_days`), no train window covering another fold's test days, and a pooled or
           median pass rule in place of "any one fold" (`min_folds_passed=1`).
+          2026-11-20: the first two are held by the walk-forward config for folds
+          given by date (hook layout piece 2); the hook still builds the 90-day
+          rolling layout with its overlap exception until piece 3.
     - [x] The R2 and R6 validators cover stage configs built in Python, not only YAML;
           otherwise the hook can drift from its own rules the way the four-stage file did.
           Done 2026-11-15 (package A, merged PR #184): single-stage rules sit in the stage's config class, cross-stage
@@ -2772,7 +2847,7 @@ behind a fixture flag; default stays `alpaca`.
           pieces, one commit each. Without a timeline nothing changes, so fixture
           runs and the Saturday bench re-sim are untouched.
           - [x] Piece 1, the engine core (built and committed 2026-11-19, not
-                pushed; full unit suite 5,683 passed, 5 skipped, 0 failed).
+                pushed; full unit suite 5,754 passed, 5 skipped, 0 failed).
                 `SimulationExecutionEngine.execute` takes an optional
                 `universe_timeline`. With one: the strategy is asked only about
                 names in the list in force at the bar's time; a held name outside
@@ -2804,7 +2879,7 @@ behind a fixture flag; default stays `alpaca`.
                 (2026-11-19): the first part changes nothing until the second
                 gives a run a timeline. Both parts built 2026-11-19.
             - [x] 2a, request, runner and stages (built 2026-11-19, committed
-                  locally `7339aeaa6`; full unit suite 5,717 passed, 5 skipped, 0
+                  locally `7339aeaa6`; full unit suite 5,788 passed, 5 skipped, 0
                   failed).
                   A request names the timeline by its dataset version
                   id (`SimulationRunRequest.universe_timeline_version`), beside
@@ -2857,7 +2932,7 @@ behind a fixture flag; default stays `alpaca`.
                     the same names and dates, would share a key. Closed by piece
                     3, which is in the same PR.
             - [x] 2b, the hook (built 2026-11-19, committed locally
-                  `02b5d3982`; full unit suite 5,741 passed, 5 skipped, 0
+                  `02b5d3982`; full unit suite 5,812 passed, 5 skipped, 0
                   failed). A research tick
                   is told its timeline by one research option,
                   `universe_timeline: <dataset version id>`, beside `profile` and
@@ -2907,7 +2982,7 @@ behind a fixture flag; default stays `alpaca`.
                     timeline the engine does not use that number (it takes the
                     count from the list in force).
           - [x] Piece 3, records (built 2026-11-19, `b0cf55b3c`; full unit
-                suite 5,759 passed, 5 skipped, 0 failed). A run's universe was
+                suite 5,830 passed, 5 skipped, 0 failed). A run's universe was
                 recorded as the constant `"v1"` everywhere, so two runs on the
                 same names and dates under different universes had one identity.
                 One rule now (`universe_version_for` in `simulation_runner.py`):
@@ -3378,6 +3453,24 @@ behind a fixture flag; default stays `alpaca`.
         train window ends six months before its test starts; the overfitting
         report's train-against-test drop compares a nine-month Sharpe with
         three-month ones. Not built.
+      - Decided 2026-11-20 (the user, asked with "refuse it" and "allow it" as
+        the choices): **the admission layout requires a universe timeline.** A
+        research job that names the layout and no timeline is refused with the
+        option to add, not run on the list in force on the window's first day
+        for 18 months. Reason given with the question: that run would finish and
+        report believable numbers on a universe the platform never traded, and
+        could happen by leaving one option out. A fixed-list comparison stays
+        possible through a timeline that holds one list (it reproduced the
+        fixed-list run exactly in the engine measurement). Not built (hook
+        layout piece 3).
+      - Decided 2026-11-20 (the user, asked with "evaluation's first day" and
+        "selection's first day" as the choices): **in the admission layout the
+        regime labels are built from the list in force on the evaluation piece's
+        first day.** The 2026-11-19 rule said "the window's first day" when there
+        was one window; the regime stage now reads the evaluation piece only, so
+        the rule is applied to the days it reads. The selection piece's first-day
+        list would be nine months and six rotations old when those days begin.
+        The stage is report only either way. Not built (hook layout piece 3).
       - Decided 2026-11-20 (the user, asked with "one continuous run", "joined
         folds" and "measure both first" as the choices): **the pooled nine-month
         record is one continuous simulation over the evaluation piece**, not the
