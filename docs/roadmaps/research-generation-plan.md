@@ -112,6 +112,10 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > walk-forward stage takes folds given by date and refuses a train window on
 > any fold's test days. **No run changes yet:** the hook still builds the
 > 90-day layout until piece 3 gives it the option that switches the new one on.
+> Found on the way: the pipeline is only ever handed its backtest's own
+> dataset, so piece 3 starts with an option that names a built window dataset
+> (3a, built, not committed). Decided the same day: a layout job names its
+> timeline and its dataset or is refused.
 > Open decisions: none waiting.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
@@ -192,7 +196,7 @@ Package A is merged and deployed. Nothing is running.
 | # | Package | Boxes it closes | Waits on | Size |
 |---|---|---|---|---|
 | 🟢 A | **Validators and evidence** (done: merged PR #184, deployed 2026-11-16) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | Nothing | One PR, no new data (#184) |
-| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (done: merged as PR #193, on A and B 2026-11-20; no job uses it yet), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule (started 2026-11-20 on `research/r2-hook-layout`: pieces 1 and 2 of 5 built, the hook not switched yet), memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
+| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (done: merged as PR #193, on A and B 2026-11-20; no job uses it yet), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule (started 2026-11-20 on `research/r2-hook-layout`: pieces 1, 2 and 3a built, the hook can be told its dataset but is not switched to the layout yet), memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
 | 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
 | 🔴 D | **Test hardening (R7)** | R7 both boxes, and the R7 boxes under R10, R14, R15 | Nothing | Can ride along with A and B |
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R12's slippage in fill rows, D2. R8 left this package 2026-11-16: deferred until random fills are switched on | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
@@ -840,7 +844,7 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
         first, then the hook in one step, so no half-built layout exists between
         two commits.
       - [x] Piece 2, the walk-forward stage takes folds given by date (built
-            2026-11-20, not committed; full unit suite 5,890 passed, 5 skipped, 0 failed).
+            2026-11-20, `5fd974c98`; full unit suite 5,890 passed, 5 skipped, 0 failed).
             `WalkForwardStageConfig.folds`, a list of `FoldWindow` (train first and
             last day, test first and last day, all four read). With it the stage
             uses those folds as given; without it rolling folds are laid out as
@@ -875,7 +879,65 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
                   seconds per nine-month simulation and 8 survivors). Reusing
                   stage 1's run needs stage 1 to keep it where the reuse lookup
                   reads.
-      - [ ] Piece 3, the hook: a research option switches the layout on, and
+      - Found 2026-11-20 while reading for piece 3, and missed when the pieces
+        were first cut (the open box under Step 5, "Hook: take the dataset
+        version explicitly", already said it): the six-stage pipeline has one
+        caller, the platform backtest's monthly research step
+        (`platform_backtest_service.py`), and it is always handed that backtest's
+        own cumulative dataset, which holds the days the backtest has replayed.
+        The 24-month dataset built on B cannot reach the pipeline. The layout
+        needs bars from 2024-11-18 and a run date on or after the holdout date,
+        so it cannot run at all until a research job can name its dataset. A
+        built window dataset's row holds what the hook needs: its names
+        (`source_manifest.symbols`), first and last day, and the sessions left
+        out (`metadata_json.excluded_sessions`). Piece 3 is cut in two for it.
+      - [x] Piece 3a, a research job names its dataset (built 2026-11-20, not
+            committed; full unit suite 5,926 passed, 5 skipped, 0 failed): research option
+            `dataset_version`, the id of a dataset made by `atp datasets
+            build-window`. With it the hook reads that dataset in place of the
+            backtest's own. Without the option nothing changes. Works with the
+            90-day layout too (which gives the same-bars "before" for the
+            layout's measurement). The unused `_sim_workers` is deleted.
+            - What a named dataset is, read from its registration and not from
+              the bar files: `load_research_window_dataset`
+              (`application/services/research_window_dataset_loader.py`) gives a
+              `ResearchWindowDataset` (first and last day with bars, names held,
+              sessions left out by name). Refused: an id that is not
+              registered; raw bars that are not a research window (a replay's
+              cumulative dataset, a backfill); one not validated; one
+              registered without its days or its names.
+            - The window on a named dataset. It ends on the tick's date or the
+              dataset's last day, whichever is earlier, and is `lookback_days`
+              long counted back from that end. The replay's own dataset is still
+              clamped to (a replay starts with little history); a named one is
+              not: a window that would start before its first day, a research
+              date before its first day, or a window under 15 days is a failed
+              research step (`research_window: ...`), where the same shortfall
+              on the replay's dataset is a shorter window or a skipped step.
+            - Names. "Which names have bars" is asked of the dataset read, no
+              longer of who called: the named dataset's names, else what the
+              replay ingested. A fixed list is cut to them; a timeline naming
+              one the dataset does not hold is refused, as before.
+            - A research step's summary now says which dataset it read and the
+              window's first and last day (`dataset_version`, `window_start`,
+              `window_end`), for every run, named dataset or not.
+            - Tests: `tests/application/services/test_research_window_dataset_loader.py`
+              (20) and 16 added to `tests/research/test_research_hooks_smoke.py`,
+              run through the real hook and engine on bars written for the
+              test; the proof that the named dataset is the one read is a
+              replay dataset with no bars at all. Checked that they can fail,
+              five bugs put in in memory (the replay's dataset read anyway, 1
+              fails; a short window not refused, 1; names taken from the
+              replay, 3; the window ending on the tick, 2; any raw bars
+              accepted, 3).
+            - Not used yet: the sessions left out by name. Piece 3b takes them
+              out of the calendar the layout counts its sessions on.
+            - Not done here: the bench review that follows research in the same
+              backtest still reads the backtest's own dataset. What a
+              long-window candidate is handed on to is the hand-off's question
+              (section on the monthly worker job), looked at with the
+              rehearsal.
+      - [ ] Piece 3b, the hook: a research option switches the layout on, and
             without it the hook lays its window out as today; with it stage 1
             reads the selection days, walk-forward gets the layout's three test
             folds with the selection piece as every fold's train window and 2 of
@@ -883,10 +945,12 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
             days. No overlap exception in this layout. The pooled half of the
             pass rule is Monte Carlo's base run over the evaluation piece, which
             it already holds to the same filter: to be shown by a test, not
-            left to how the stages happen to line up. Two decisions of
+            left to how the stages happen to line up. Three decisions of
             2026-11-20 land here: the layout named without a universe timeline
-            is refused, and the regime labels come from the list in force on
-            the evaluation piece's first day.
+            is refused, the layout named without a dataset is refused, and the
+            regime labels come from the list in force on the evaluation piece's
+            first day. A window the layout cannot be laid on is a failed
+            research step with the reason, not a skipped one.
       - [ ] Piece 4, holdout: a check that no gate reads the holdout date or
             later; the holdout scored once for the final survivors, report only.
       - [ ] Piece 5, rehearsal on B with memory recorded: a job that names the
@@ -3453,6 +3517,17 @@ behind a fixture flag; default stays `alpaca`.
         train window ends six months before its test starts; the overfitting
         report's train-against-test drop compares a nine-month Sharpe with
         three-month ones. Not built.
+      - Decided 2026-11-20 (the user, asked with "required" and "optional" as the
+        choices): **a job that switches the admission layout on must name its
+        dataset**, one made by `atp datasets build-window`. With the timeline
+        decision below, a layout job names three things (layout, timeline,
+        dataset) or is refused with the missing one named. Reasons given with
+        the question: a built window dataset is the only kind checked for
+        missing sessions and price jumps; and the fallback (the backtest's own
+        dataset, when long enough) has no use while the holdout date is
+        2026-05-18, because the layout refuses any run dated before it, so a
+        historical replay cannot use the layout either way. Not built (hook
+        layout pieces 3a and 3b).
       - Decided 2026-11-20 (the user, asked with "refuse it" and "allow it" as
         the choices): **the admission layout requires a universe timeline.** A
         research job that names the layout and no timeline is refused with the
@@ -3933,6 +4008,10 @@ behind a fixture flag; default stays `alpaca`.
           known split, before any multi-year score is read.
     - [ ] Hook: take the dataset version explicitly; fail loudly when the window is
           shorter than asked; delete the unused `_sim_workers`.
+          2026-11-20: built in hook layout piece 3a (the dataset option; a window
+          a named dataset cannot hold is a failed step; `_sim_workers` deleted),
+          not committed. Piece 3b adds the same for the 9 / 9 / 6 layout. Ticked
+          when both are merged.
     - *Decision, 2026-11-16 (user: "yes lets do it your way", after asking whether to
       cache bar reads or enlarge B).* Rehearse on the current box first. Before it:
       a memory ceiling per job and swap on B as safety nets, and a bar cache for
