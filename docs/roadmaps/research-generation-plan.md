@@ -95,6 +95,16 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > moves results, which is why it was split from the export, 2026-11-19); (2)
 > the hook's 9 / 9 / 6 layout, the holdout-date check and the two-part fold
 > rule.
+> Engine, 2026-11-19: all four pieces built on
+> `research/package-b-engine-timeline` (not pushed, not on either box): the
+> engine follows the timeline bar by bar, the research tick is told its
+> timeline by one option and hands it to every stage, and a run on a timeline
+> is recorded, cached and resumed under the timeline's id. Measured before /
+> after on the selection piece (nine months, 6 rotations, identical bars): a
+> one-list control reproduces the fixed-list run exactly; on the real
+> timeline 28 of 30 candidates change, no stage 1 verdict flips, Sharpe moves
+> by 0.075 at the median (largest 0.47), rank correlation 0.942. Left: the
+> PR, merge and deploy.
 > Open decisions: none waiting.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
@@ -175,7 +185,7 @@ Package A is merged and deployed. Nothing is running.
 | # | Package | Boxes it closes | Waits on | Size |
 |---|---|---|---|---|
 | 🟢 A | **Validators and evidence** (done: merged PR #184, deployed 2026-11-16) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | Nothing | One PR, no new data (#184) |
-| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (next, own PR), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule, memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
+| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (own PR; all four pieces built and measured on its branch 2026-11-19, not merged), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule, memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
 | 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
 | 🔴 D | **Test hardening (R7)** | R7 both boxes, and the R7 boxes under R10, R14, R15 | Nothing | Can ride along with A and B |
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R12's slippage in fill rows, D2. R8 left this package 2026-11-16: deferred until random fills are switched on | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
@@ -2521,7 +2531,8 @@ behind a fixture flag; default stays `alpaca`.
       (user's design, 2026-11-16, later the same day; replaces "one list for the
       whole window" above for long windows).** Builder built 2026-11-16 and run on
       B the same day (25 steps); exported there as a versioned dataset 2026-11-19;
-      the engine does not read the timeline yet.
+      the engine reads it on a branch that is not merged yet (built and measured
+      2026-11-19).
       - Why. The user: "i always thought our experiement variable should always be
         the strategy but the simulation itself should get as close to our A box's
         logic". A rotates its universe every month. A list fixed for 12 to 24 months
@@ -2589,6 +2600,12 @@ behind a fixture flag; default stays `alpaca`.
             only for names that are members on the bar's date; holdings in names that
             left are sold, A's rule; a name that enters needs bars from before its
             first month for its indicators.
+        - Status 2026-11-19: all four pieces built and measured on the branch
+          (below); the box is ticked when the branch is merged and on the
+          boxes. Of the box's own wording: overlapping lists are refused
+          where the timeline is exported (the export refuses a gap or an
+          overlap, and the loader checks the file against the registered
+          hash); the engine does not check again.
         - Investigated 2026-11-19 (read-only; two reading passes, the points
           below then read in the code by hand). Branch
           `research/package-b-engine-timeline`, off `main` at `7e02d071e`. Own PR:
@@ -2667,8 +2684,9 @@ behind a fixture flag; default stays `alpaca`.
                 - Warmup bars are left as they were: they trade nothing and may
                   lie before the timeline's first list.
                 - A new result frame, `universe_exit_log` (one row per exit
-                  ordered: name, bar, shares, the list that dropped it). Not
-                  stored yet; piece 3.
+                  ordered: name, bar, shares, the list that dropped it). Its
+                  row count is recorded per run (piece 3); the rows themselves
+                  are not stored.
                 Tests: `tests/research/simulation/test_universe_timeline_engine.py`,
                 20. The one the rest leans on: a timeline of one list in force on
                 every bar gives every result frame identical to the run with no
@@ -2678,8 +2696,9 @@ behind a fixture flag; default stays `alpaca`.
                 names that are members during its own dates. Cut in two
                 (2026-11-19): the first part changes nothing until the second
                 gives a run a timeline. Both parts built 2026-11-19.
-            - [x] 2a, request, runner and stages (built 2026-11-19, not
-                  committed; full unit suite 5,717 passed, 5 skipped, 0 failed).
+            - [x] 2a, request, runner and stages (built 2026-11-19, committed
+                  locally `7339aeaa6`; full unit suite 5,717 passed, 5 skipped, 0
+                  failed).
                   A request names the timeline by its dataset version
                   id (`SimulationRunRequest.universe_timeline_version`), beside
                   its symbols; the five stage configs and the gate window carry
@@ -2728,9 +2747,11 @@ behind a fixture flag; default stays `alpaca`.
                     rotated.
                   - **Must not merge without piece 3:** the cache key does not hold
                     the timeline yet, so a run on a timeline and one without, on
-                    the same names and dates, would share a key.
-            - [x] 2b, the hook (built 2026-11-19, not committed; full unit suite
-                  5,741 passed, 5 skipped, 0 failed). A research tick
+                    the same names and dates, would share a key. Closed by piece
+                    3, which is in the same PR.
+            - [x] 2b, the hook (built 2026-11-19, committed locally
+                  `02b5d3982`; full unit suite 5,741 passed, 5 skipped, 0
+                  failed). A research tick
                   is told its timeline by one research option,
                   `universe_timeline: <dataset version id>`, beside `profile` and
                   `lookback_days`; never "the newest". With it
@@ -2778,10 +2799,101 @@ behind a fixture flag; default stays `alpaca`.
                     universe tables for the number the sizer is built with. On a
                     timeline the engine does not use that number (it takes the
                     count from the list in force).
-          - [ ] Piece 3, records: the timeline's version id in the run row, the
-                manifest, the cache key and the run id, where `"v1"` is today;
-                the exit log stored.
-          - [ ] Piece 4, measured before and after on the 24-month dataset.
+          - [x] Piece 3, records (built 2026-11-19, not committed; full unit
+                suite 5,759 passed, 5 skipped, 0 failed). A run's universe was
+                recorded as the constant `"v1"` everywhere, so two runs on the
+                same names and dates under different universes had one identity.
+                One rule now (`universe_version_for` in `simulation_runner.py`):
+                a run's universe is its timeline's id when it has one, `"v1"`
+                when it has none. Used for:
+                - the cache key (`simulation_request_cache_key`) and the
+                  checkpoint identity a job resumes by
+                  (`simulation_request_checkpoint_identity`; a universe named by
+                  the caller still wins);
+                - the run row (`universe_version`, and
+                  `execution_config.universe_timeline_version`), the run manifest
+                  and the identity the result files are stored under;
+                - the run id, which gains the timeline's id only when there is
+                  one (the way a cost multiplier other than 1 is added).
+                Without a timeline every one of these is what it was: run ids,
+                cache entries and checkpoints written before this stay valid. A
+                test builds the run id the old way and compares.
+                - **Decided 2026-11-19 (the user, asked with "count per run",
+                  "full log as a stored file" and "count now, full log later" as
+                  the choices): count per run.** A run on a timeline records how
+                  many sales were ordered because the name left the universe
+                  (`SimulationRunResult.universe_exit_count`; `result_summary` in
+                  the run row and the manifest's summary, beside the trade
+                  count). Zero is recorded as zero; a run on a fixed list has no
+                  count. The rows themselves are not stored: the runner stores
+                  five result frames and drops the engine's dividend and
+                  corporate-action logs the same way, and each forced sale is in
+                  the trade log as an ordinary sell. Known cost: afterwards the
+                  forced sells cannot be told apart from the others.
+                - Tests: 18 added (`test_simulation_runner_universe_timeline.py`,
+                  `tests/research/checkpoints/test_research_checkpoint_service.py`),
+                  among them: a cached or completed fixed-list run does not
+                  answer for the run on a timeline, nor one timeline for another.
+                  Checked that they can fail: with the old rule put back in
+                  memory, 8 fail.
+                - Not changed: `ExperimentConfig.universe_version` (the YAML
+                  path's own `"v1"` default) and the experiment plan's universe
+                  version, which the hook already sets to the timeline's id (2b).
+          - [x] Piece 4, measured before and after, 2026-11-19, identical bars
+                (laptop copy of `raw_bars_20261118T234501Z_043e50ad` and of the
+                timeline, content hash equal to B's; the hook's 30 candidates,
+                one simulation each over the selection piece, 2024-11-18 to
+                2025-08-17, 183 sessions, judged by the hook's stage 1 filter;
+                three runs side by side in three processes, pieces 1 to 3 as
+                built). The window holds 7 lists: 6 rotations, 8 names out, 7
+                names new to the window, 27 names in all.
+                - **Fixed list** (before): the window-start 20 names held
+                  throughout. Identical on Sharpe, return, drawdown, trade count
+                  and verdict, 30 of 30, to the R17 "after" run of the same
+                  window made before this branch existed: without a timeline the
+                  branch changes nothing, at real scale.
+                - **Control**: a timeline holding that one list throughout.
+                  Every equity curve identical to the fixed run, bar for bar, 30
+                  of 30; no forced exit. So what differs below comes from the
+                  rotations, not from the new code path.
+                - **The real timeline** (after), against the fixed list:
+
+                  | | Fixed list to timeline |
+                  |---|---|
+                  | Candidates whose equity curve changed | 28 of 30 (the other two never trade) |
+                  | First bar that differs | 2025-02-03 14:30 UTC for 19 of the 28, the first bar after the first rotation; none earlier |
+                  | Pass / fail flips at stage 1 | 0 (the same 8 pass) |
+                  | Change in Sharpe, absolute | median 0.075, mean 0.10, largest 0.47 |
+                  | Change in Sharpe, signed | median +0.01; 17 up, 11 down |
+                  | Change in return | median +0.13 points, largest 1.48 |
+                  | Change in trades | median 164 fewer, largest 1,524 |
+                  | Forced exits per candidate | median 4, largest 8 (every name that left), 132 in all; at most 0.39% of a candidate's trades |
+                  | Names traded | up to 20, then up to 27 |
+                  | Sharpe ranking | rank correlation 0.942; 18 change rank, by up to 9 places; the same six on top, fifth and sixth swap |
+                  | Run time | 2,054 s / 2,073 s, side by side (three runs sharing the machine) |
+
+                - Read on one candidate with 8 forced exits, fill by fill: each
+                  name that left has exactly one fill while it is out, a sell at
+                  the next session's first bar (13:30 or 14:30 UTC; 13:35 on two
+                  days, not traced). Over all 30 candidates: no fill in a name
+                  before it entered, and every entering name is traded by some
+                  candidate at its first session's open, so its history from
+                  before its first month is there.
+                - Reading: on this window the change is the size of the R17 fix
+                  over four weeks, not a different picture. No verdict moves and
+                  the six leaders are the same six; 7 of the 30 candidates move
+                  by more than 0.15 of a Sharpe point either way. By
+                  strategy type the mean change is between -0.13 (moving
+                  average, 2 candidates) and +0.14 (momentum, 4): too few of
+                  each to say a type gains or loses.
+                - Not measured: the whole 24 months (14 rotations), the
+                  evaluation folds' 63-session length, memory at 27 to 31 names
+                  (the three runs here held 1.7 to 1.9 GB each at nine months),
+                  the stages after stage 1 on a timeline with real bars.
+                - Harness and outputs (session scratchpad, may be cleared):
+                  `test_zz_engine_timeline.py`, `run_engine_timeline.sh`,
+                  `compare_engine_timeline.py`, `out_engine/` in the 677269d4
+                  scratchpad.
       - [x] Dataset: backfill the union of the names in the timeline, not 20. Done
             2026-11-18 on B: 31 names, 26 monthly backfill versions, merged into
             `raw_bars_20261118T234501Z_043e50ad` (532 sessions, two IEX holes left out
