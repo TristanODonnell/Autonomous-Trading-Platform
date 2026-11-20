@@ -59,7 +59,9 @@ def _trading_days(start: date, end: date) -> list[date]:
     return days
 
 
-def _seed_bar_parquet(data_root: Path, symbol: str, bars: list[dict]) -> None:
+def _seed_bar_parquet(
+    data_root: Path, symbol: str, bars: list[dict], dataset_version: str = _DATASET_VERSION_ID
+) -> None:
     """Write a single data.parquet file for one symbol/year/month partition."""
     by_month: dict[tuple[str, str], list[dict]] = {}
     for bar in bars:
@@ -70,7 +72,7 @@ def _seed_bar_parquet(data_root: Path, symbol: str, bars: list[dict]) -> None:
         file_path = partition_file_path(
             base_path=data_root,
             dataset=RAW_BARS_DATASET,
-            dataset_version=_DATASET_VERSION_ID,
+            dataset_version=dataset_version,
             partitions={"symbol": symbol, "year": year, "month": month},
         )
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -80,7 +82,7 @@ def _seed_bar_parquet(data_root: Path, symbol: str, bars: list[dict]) -> None:
 
         metadata_dict = build_metadata(
             dataset=RAW_BARS_DATASET,
-            dataset_version=_DATASET_VERSION_ID,
+            dataset_version=dataset_version,
             ingestion_timestamp=_TICK_TS.isoformat(),
             checksum="smoke_test_checksum",
         )
@@ -408,6 +410,8 @@ def _run_on_timeline(
     timeline=None,
     options: dict | None = None,
     forbid_universe_tables: bool = True,
+    backtest_dataset_id: str | None = _DATASET_VERSION_ID,
+    timestamp: datetime = _TICK_TS,
 ) -> _TimelineRun:
     import autonomous_trading_platform.application.services.platform_replay.research_hooks as rh_mod
     from autonomous_trading_platform.research.simulation.services.simulation_execution_engine import (
@@ -469,9 +473,9 @@ def _run_on_timeline(
 
     run.result = rh_mod.run_scheduled_research_at_timestamp(
         session=db_session,
-        timestamp=_TICK_TS,
+        timestamp=timestamp,
         replay_context=replay_context,
-        dataset_version_id=_DATASET_VERSION_ID,
+        dataset_version_id=backtest_dataset_id,
         research_options=options if options is not None else {"universe_timeline": _TIMELINE_ID},
     )
     return run
@@ -594,4 +598,307 @@ def test_research_hook_rejects_a_timeline_option_that_is_not_an_id(db_session, r
             timestamp=_TICK_TS,
             replay_context=replay_context,
             research_options={"universe_timeline": bad},
+        )
+
+
+# ---------------------------------------------------------------------------
+# A dataset the job names (research.options.dataset_version)
+# ---------------------------------------------------------------------------
+
+_WINDOW_DATASET_ID = "research_window_smoke"
+_REPLAY_DATASET_WITH_NO_BARS = "replay_dataset_with_no_bars"
+# 45 days back from the last bar day (2023-03-03) is 2023-01-17, inside the bars.
+_NAMED = {"dataset_version": _WINDOW_DATASET_ID, "lookback_days": 45}
+
+
+def _register_window_dataset(
+    db_session,
+    data_root: Path,
+    *,
+    symbols: list[str] | None = None,
+    first: date = _START_DATE,
+    last: date = _END_DATE,
+    **row_overrides: Any,
+) -> None:
+    """A research-window dataset as ``atp datasets build-window`` registers one, with
+    its bars under its own version id."""
+    from autonomous_trading_platform.contracts.runtime.research_window_dataset import (
+        RESEARCH_WINDOW_LIFECYCLE,
+        RESEARCH_WINDOW_SOURCE,
+    )
+
+    names = list(symbols if symbols is not None else _SYMBOLS)
+    for symbol in names:
+        _seed_bar_parquet(
+            data_root,
+            symbol,
+            _make_bars(symbol, _trading_days(first, last)),
+            dataset_version=_WINDOW_DATASET_ID,
+        )
+    fields: dict[str, Any] = dict(
+        dataset_version_id=_WINDOW_DATASET_ID,
+        dataset_name="raw_bars",
+        created_at=_TICK_TS,
+        source=RESEARCH_WINDOW_SOURCE,
+        price_basis=PriceBasis.RAW,
+        interval=BarInterval.ONE_DAY,
+        schema_version=RAW_BARS_DATASET.schema_version,
+        symbol_coverage=len(names),
+        date_coverage_start=first,
+        date_coverage_end=last,
+        validation_status="validated",
+        checksum="smoke_test_checksum",
+        source_manifest={"pipeline": RESEARCH_WINDOW_SOURCE, "symbols": names},
+        metadata_json={"dataset_lifecycle": RESEARCH_WINDOW_LIFECYCLE, "excluded_sessions": []},
+    )
+    fields.update(row_overrides)
+    db_session.add(DatasetVersions(**fields))
+    db_session.flush()
+
+
+def _run_named(db_session, replay_context, monkeypatch, **kwargs: Any) -> _TimelineRun:
+    kwargs.setdefault("options", _NAMED)
+    kwargs.setdefault("forbid_universe_tables", False)
+    return _run_on_timeline(db_session, replay_context, monkeypatch, **kwargs)
+
+
+def test_research_hook_reads_the_dataset_the_job_names(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """The replay hands over a dataset that has no bars at all, so a run that trades
+    can only have read the named one."""
+    _register_window_dataset(db_session, research_smoke_data_root)
+
+    run = _run_named(
+        db_session, replay_context, monkeypatch, backtest_dataset_id=_REPLAY_DATASET_WITH_NO_BARS
+    )
+
+    assert run.result.status == "ok", run.result.errors
+    assert run.result.summary["dataset_version"] == _WINDOW_DATASET_ID
+    assert run.result.summary["window_start"] == "2023-01-17"
+    assert run.result.summary["window_end"] == "2023-03-03"
+    (experiment,) = run.experiments
+    assert experiment.dataset_version == _WINDOW_DATASET_ID
+    assert (experiment.start_date, experiment.end_date) == (date(2023, 1, 17), date(2023, 3, 3))
+    assert run.engine_calls
+    assert not run.signals.empty
+
+
+def test_research_hook_without_the_option_reads_the_replays_own_dataset(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """A window dataset that is registered but not named is not picked up."""
+    _register_window_dataset(db_session, research_smoke_data_root)
+
+    run = _run_named(db_session, replay_context, monkeypatch, options={})
+
+    assert run.result.status == "ok", run.result.errors
+    assert run.result.summary["dataset_version"] == _DATASET_VERSION_ID
+    (experiment,) = run.experiments
+    assert experiment.dataset_version == _DATASET_VERSION_ID
+    # The replay's dataset is clamped to, as before: 90 days back is before its first day.
+    assert experiment.start_date == _START_DATE
+
+
+def test_research_hook_on_a_named_dataset_trades_the_names_it_holds(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """Without a timeline the list is cut to the names that have bars. On a named
+    dataset those are its names, not the ones the replay ingested."""
+    _register_window_dataset(db_session, research_smoke_data_root, symbols=["AAPL", "MSFT"])
+
+    run = _run_named(db_session, replay_context, monkeypatch)
+
+    assert run.result.status == "ok", run.result.errors
+    (experiment,) = run.experiments
+    assert experiment.symbols == ["AAPL", "MSFT"]
+    assert {tuple(call["symbols"]) for call in run.engine_calls} == {("AAPL", "MSFT")}
+
+
+def test_research_hook_on_a_named_dataset_is_not_cut_to_what_the_replay_ingested(
+    research_smoke_data_root, db_session, monkeypatch
+):
+    _register_window_dataset(db_session, research_smoke_data_root)
+    one_of_three = PlatformReplayContext.create(
+        symbols=["AAPL"], actor="smoke_test", timestamp=_TICK_TS
+    )
+
+    run = _run_named(db_session, one_of_three, monkeypatch)
+
+    assert run.result.status == "ok", run.result.errors
+    (experiment,) = run.experiments
+    assert experiment.symbols == ["AAPL", "MSFT", "SPY"]
+
+
+def test_research_hook_refuses_a_timeline_naming_symbols_the_named_dataset_does_not_hold(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    _register_window_dataset(db_session, research_smoke_data_root, symbols=["AAPL", "MSFT"])
+
+    run = _run_named(
+        db_session,
+        replay_context,
+        monkeypatch,
+        timeline=_smoke_timeline(),
+        options={**_NAMED, "universe_timeline": _TIMELINE_ID},
+        forbid_universe_tables=True,
+    )
+
+    assert run.result.status == "failed"
+    assert "survivorship_guard" in run.result.errors[0]
+    assert f"dataset {_WINDOW_DATASET_ID} does not hold: ['SPY']" in run.result.errors[0]
+    assert run.engine_calls == []
+
+
+def test_research_hook_on_a_named_dataset_ends_the_window_on_its_last_day(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """The tick is a week after the dataset's last day: the window ends where the bars
+    do, and is still the number of days asked for."""
+    _register_window_dataset(db_session, research_smoke_data_root)
+
+    run = _run_named(
+        db_session, replay_context, monkeypatch, timestamp=datetime(2023, 3, 10, 21, 0, tzinfo=UTC)
+    )
+
+    assert run.result.status == "ok", run.result.errors
+    (experiment,) = run.experiments
+    assert (experiment.start_date, experiment.end_date) == (date(2023, 1, 17), date(2023, 3, 3))
+    assert {(cfg.start_date, cfg.end_date) for cfg in _stage_configs(experiment)} == {
+        (date(2023, 1, 17), date(2023, 3, 3))
+    }
+
+
+def test_research_hook_on_a_named_dataset_ends_every_stage_on_its_last_day(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """A window long enough for all six stages (what the hook builds is checked here,
+    not what the stages then find in these bars)."""
+    _register_window_dataset(
+        db_session, research_smoke_data_root, first=date(2022, 11, 1), last=_END_DATE
+    )
+    timeline = _smoke_timeline(first_list_from=datetime(2022, 11, 1, tzinfo=UTC))
+
+    run = _run_named(
+        db_session,
+        replay_context,
+        monkeypatch,
+        timeline=timeline,
+        options={"dataset_version": _WINDOW_DATASET_ID, "universe_timeline": _TIMELINE_ID},
+        forbid_universe_tables=True,
+        timestamp=datetime(2023, 3, 10, 21, 0, tzinfo=UTC),
+    )
+
+    (experiment,) = run.experiments
+    start, end = date(2022, 12, 3), date(2023, 3, 3)  # 90 days, ending on the last bar day
+    assert (experiment.start_date, experiment.end_date) == (start, end)
+    stage_configs = _stage_configs(experiment)
+    assert [cfg.name for cfg in stage_configs] == [
+        "initial_quality_filter",
+        "walk_forward_robustness",
+        "monte_carlo_structural_robustness",
+        "regime_robustness",
+        "stress_robustness",
+    ]
+    assert {cfg.start_date for cfg in stage_configs} == {start}
+    # Stage 1 stops before the first test fold; every later stage ends with the bars.
+    assert stage_configs[0].end_date < end
+    assert {cfg.end_date for cfg in stage_configs[1:]} == {end}
+
+
+def test_research_hook_refuses_a_window_the_named_dataset_cannot_hold(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """The replay's own dataset is clamped to. A named one is not: 90 days were asked
+    for and it holds 59, so the step fails and says so."""
+    _register_window_dataset(db_session, research_smoke_data_root)
+
+    run = _run_named(
+        db_session, replay_context, monkeypatch, options={"dataset_version": _WINDOW_DATASET_ID}
+    )
+
+    assert run.result.status == "failed"
+    assert run.result.errors[0].startswith("research_window:")
+    assert "a window of 90 days ending 2023-03-03 starts on 2022-12-03" in run.result.errors[0]
+    assert (
+        f"before the first day of dataset {_WINDOW_DATASET_ID} (2023-01-03)"
+        in (run.result.errors[0])
+    )
+    assert run.experiments == []
+    assert run.engine_calls == []
+
+
+def test_research_hook_refuses_a_research_date_before_the_named_dataset(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    _register_window_dataset(db_session, research_smoke_data_root)
+
+    run = _run_named(
+        db_session, replay_context, monkeypatch, timestamp=datetime(2022, 12, 30, 21, 0, tzinfo=UTC)
+    )
+
+    assert run.result.status == "failed"
+    assert run.result.errors[0].startswith("research_window:")
+    assert "the research date 2022-12-30 is before the first day" in run.result.errors[0]
+    assert run.engine_calls == []
+
+
+def test_research_hook_refuses_a_window_too_short_to_judge_on_a_named_dataset(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """On the replay's own dataset a short window is a skipped step; a job that names
+    its bars and asks for ten days is told."""
+    _register_window_dataset(db_session, research_smoke_data_root)
+
+    run = _run_named(
+        db_session,
+        replay_context,
+        monkeypatch,
+        options={"dataset_version": _WINDOW_DATASET_ID, "lookback_days": 10},
+    )
+
+    assert run.result.status == "failed"
+    assert "a window of 10 days is under the 15 a research run needs" in run.result.errors[0]
+
+
+def test_research_hook_fails_on_a_named_dataset_that_is_not_registered(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    run = _run_named(db_session, replay_context, monkeypatch)
+
+    assert run.result.status == "failed"
+    assert run.result.errors[0].startswith("dataset_version:")
+    assert f"{_WINDOW_DATASET_ID} is not registered" in run.result.errors[0]
+    assert run.experiments == []
+
+
+def test_research_hook_fails_on_a_named_dataset_that_is_not_a_research_window(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """The smoke dataset is validated raw bars, but nobody checked its sessions."""
+    run = _run_named(
+        db_session,
+        replay_context,
+        monkeypatch,
+        options={"dataset_version": _DATASET_VERSION_ID, "lookback_days": 45},
+    )
+
+    assert run.result.status == "failed"
+    assert run.result.errors[0].startswith("dataset_version:")
+    assert "is not a research-window dataset" in run.result.errors[0]
+    assert run.experiments == []
+
+
+@pytest.mark.parametrize("bad", ["", "   ", 7, ["research_window_smoke"]])
+def test_research_hook_rejects_a_dataset_option_that_is_not_an_id(db_session, replay_context, bad):
+    from autonomous_trading_platform.application.services.platform_replay.research_hooks import (
+        run_scheduled_research_at_timestamp,
+    )
+
+    with pytest.raises(ValueError, match="research.options.dataset_version"):
+        run_scheduled_research_at_timestamp(
+            session=db_session,
+            timestamp=_TICK_TS,
+            replay_context=replay_context,
+            research_options={"dataset_version": bad},
         )

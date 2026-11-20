@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 RESEARCH_WINDOW_LIFECYCLE = "research_window"
 RESEARCH_WINDOW_SOURCE = "research_window_raw_bars"
@@ -35,6 +35,21 @@ class PriceJump(BaseModel):
     previous_close: float
     close: float
     change: float
+
+
+class ResearchWindowDataset(BaseModel):
+    """A registered research-window dataset, as a research run reads it: where its
+    bars begin and end, the names it holds, and the sessions left out of it by name.
+    Read from the registration written at build time, not from the bar files."""
+
+    model_config = ConfigDict(frozen=True)
+
+    dataset_version_id: str
+    # First and last day that have bars; both are read.
+    first_day: date
+    last_day: date
+    symbols: tuple[str, ...]
+    excluded_sessions: tuple[date, ...] = ()
 
 
 class ResearchWindowDatasetResult(BaseModel):

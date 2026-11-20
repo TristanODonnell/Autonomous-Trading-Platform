@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 
@@ -18,6 +17,9 @@ from autonomous_trading_platform.contracts.runtime.platform_replay import (
     PlatformReplayContext,
     ResearchReplayResult,
     ResearchSummary,
+)
+from autonomous_trading_platform.contracts.runtime.research_window_dataset import (
+    ResearchWindowDataset,
 )
 from autonomous_trading_platform.contracts.runtime.universe_timeline import UniverseTimeline
 from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
@@ -34,6 +36,15 @@ RESEARCH_MAX_DAILY_TURNOVER = 10.0
 # Calendar days of history a research tick reads (about 64 sessions). Override
 # per replay with research.options.lookback_days. Walk-forward needs 75.
 DEFAULT_RESEARCH_LOOKBACK_DAYS = 90
+
+# Fewer calendar days than this and stage 1 has too little to judge.
+MIN_RESEARCH_WINDOW_DAYS = 15
+
+
+class ResearchWindowError(ValueError):
+    """The window a research job asked for cannot be laid on the dataset it named.
+    The research step fails with the reason; the window is not shortened to fit.
+    """
 
 
 def run_research_at_timestamp(
@@ -120,10 +131,18 @@ def run_scheduled_research_at_timestamp(
                the timeline month by month, as on the trading platform, and the
                universe tables are not read. Without it the universe is the
                list active on the window's first day, for the whole window.
+      dataset_version: dataset version id of a research-window dataset
+               (``atp datasets build-window``). With it research reads those
+               bars in place of the dataset the replay hands it: the window
+               ends on the tick's date or the dataset's last day, whichever
+               is earlier, names are checked against the names the dataset
+               holds, and a window that would start before its first day is
+               a failed step, not a shorter window.
     """
     profile = _resolve_research_profile(research_options)
     lookback_days = _resolve_lookback_days(research_options)
     universe_timeline_id = _resolve_universe_timeline_option(research_options)
+    research_dataset_id = _resolve_dataset_version_option(research_options)
     base = dict(
         domain="research",
         timestamp=timestamp,
@@ -155,6 +174,19 @@ def run_scheduled_research_at_timestamp(
                 **base, status="failed", errors=[f"universe_timeline: {exc}"]
             )
 
+    # A dataset the job named is looked up before anything is built: what it is,
+    # where its bars begin and end, and the names it holds.
+    research_dataset: ResearchWindowDataset | None = None
+    if research_dataset_id is not None:
+        from autonomous_trading_platform.application.services.research_window_dataset_loader import (
+            load_research_window_dataset,
+        )
+
+        try:
+            research_dataset = load_research_window_dataset(session, research_dataset_id)
+        except Exception as exc:
+            return ResearchReplayResult(**base, status="failed", errors=[f"dataset_version: {exc}"])
+
     try:
         from autonomous_trading_platform.research.simulation.contexts.build_simulation_context import (
             build_simulation_context,
@@ -182,9 +214,12 @@ def run_scheduled_research_at_timestamp(
             profile=profile,
             lookback_days=lookback_days,
             universe_timeline=universe_timeline,
+            research_dataset=research_dataset,
         )
     except SurvivorshipBiasError as exc:
         return ResearchReplayResult(**base, status="failed", errors=[f"survivorship_guard: {exc}"])
+    except ResearchWindowError as exc:
+        return ResearchReplayResult(**base, status="failed", errors=[f"research_window: {exc}"])
     if experiment_def is None:
         return ResearchReplayResult(
             **base,
@@ -393,6 +428,9 @@ def run_scheduled_research_at_timestamp(
             "stage_funnel": stage_funnel,
             "research_profile": profile,
             "universe_timeline_version": universe_timeline_id,
+            "dataset_version": experiment_def.dataset_version,
+            "window_start": experiment_def.start_date.isoformat(),
+            "window_end": experiment_def.end_date.isoformat(),
             "intelligence_analyzed": len(intelligence_summaries),
             "deployable_seeded": len(deployable),
             "spam_cluster_excluded": len(spam_excluded),
@@ -446,6 +484,7 @@ def _build_replay_experiment_definition(
     profile: str = "full",
     lookback_days: int = DEFAULT_RESEARCH_LOOKBACK_DAYS,
     universe_timeline: UniverseTimeline | None = None,
+    research_dataset: ResearchWindowDataset | None = None,
 ):
     """Build an ExperimentDefinition with the staged pipeline for the monthly research tick.
 
@@ -454,7 +493,13 @@ def _build_replay_experiment_definition(
     stage 1 selects on the days before the first walk-forward test fold only;
     the later stages still run on the whole window.
 
-    Returns None if no validated dataset is available.
+    The bars come from, in this order: the dataset the job named
+    (``research_dataset``), the replay's own cumulative dataset
+    (``dataset_version_id_override``), the latest validated raw bars.
+
+    Returns None if no validated dataset is available, or the replay's dataset
+    holds under 15 days. Raises ResearchWindowError when the window does not fit
+    a dataset the job named.
     """
     from autonomous_trading_platform.common.annualisation import BARS_PER_DAY
     from autonomous_trading_platform.contracts.common.enums import PriceBasis
@@ -504,9 +549,13 @@ def _build_replay_experiment_definition(
     smoke = profile == "smoke"
     tick_date = timestamp.date()
 
+    if research_dataset is not None:
+        # The job named its bars (research.options.dataset_version).
+        dataset_version = research_dataset.dataset_version_id
+        price_basis = PriceBasis.RAW
     # When running inside a platform backtest, use the pre-created cumulative version
     # directly to avoid picking up stale validated versions from prior runs.
-    if dataset_version_id_override is not None:
+    elif dataset_version_id_override is not None:
         dataset_version = dataset_version_id_override
         price_basis = PriceBasis.RAW
     else:
@@ -525,11 +574,34 @@ def _build_replay_experiment_definition(
         dataset_version = dataset_row.dataset_version_id
         price_basis = PriceBasis.RAW
 
-    lookback_start = tick_date - timedelta(days=lookback_days)
+    # The window's last day: the tick's date, or the last day of a named dataset
+    # that ends before it.
+    end_date = tick_date
+    if research_dataset is not None:
+        if tick_date < research_dataset.first_day:
+            raise ResearchWindowError(
+                f"the research date {tick_date} is before the first day of dataset "
+                f"{research_dataset.dataset_version_id} ({research_dataset.first_day})"
+            )
+        end_date = min(tick_date, research_dataset.last_day)
+    lookback_start = end_date - timedelta(days=lookback_days)
     # Clamp to the dataset's coverage start so walk-forward folds don't request
     # data before the replay began (cumulative dataset has no pre-replay bars).
+    # A named dataset is not clamped to: a window it cannot hold is refused.
     replay_start: date | None = None
-    if dataset_version_id_override is not None:
+    if research_dataset is not None:
+        if lookback_start < research_dataset.first_day:
+            raise ResearchWindowError(
+                f"a window of {lookback_days} days ending {end_date} starts on "
+                f"{lookback_start}, before the first day of dataset "
+                f"{research_dataset.dataset_version_id} ({research_dataset.first_day})"
+            )
+        if lookback_days < MIN_RESEARCH_WINDOW_DAYS:
+            raise ResearchWindowError(
+                f"a window of {lookback_days} days is under the "
+                f"{MIN_RESEARCH_WINDOW_DAYS} a research run needs"
+            )
+    elif dataset_version_id_override is not None:
         try:
             from autonomous_trading_platform.storage.sor.models.dataset_versions import (
                 DatasetVersions,
@@ -546,12 +618,20 @@ def _build_replay_experiment_definition(
             pass
     start_date = max(lookback_start, replay_start) if replay_start else lookback_start
 
-    available_days = (tick_date - start_date).days
+    available_days = (end_date - start_date).days
 
     # Need at least 15 calendar days for stage 1 to be meaningful.
     # Guards against monthly cadence firing on day 1 (last=None → True).
-    if available_days < 15:
+    if available_days < MIN_RESEARCH_WINDOW_DAYS:
         return None
+
+    # The names that have bars: the named dataset's, else (in a backtest) the ones
+    # the replay ingested. None when neither is known.
+    held_symbols: set[str] | None = None
+    if research_dataset is not None:
+        held_symbols = set(research_dataset.symbols)
+    elif dataset_version_id_override is not None:
+        held_symbols = set(replay_context.symbols)
 
     # Survivorship-safe research universe: members active at the START of the
     # research window, not at tick_date. A tick-date universe silently drops
@@ -564,38 +644,44 @@ def _build_replay_experiment_definition(
         # 2026-11-18): the timeline is the point-in-time universe. The stages are
         # handed every name of the window; each run loads the names of its own
         # dates, and the engine trades the list in force on each bar.
-        scope = _timeline_universe_scope(universe_timeline, start_date, tick_date)
+        scope = _timeline_universe_scope(universe_timeline, start_date, end_date)
         universe_timeline_version = universe_timeline.dataset_version_id
         universe_version = universe_timeline_version
-        symbols = universe_timeline.symbols_on_dates(start_date, tick_date)
+        symbols = universe_timeline.symbols_on_dates(start_date, end_date)
         # Market regimes are labelled from the list in force on the window's first
         # day, as without a timeline (decided 2026-11-19): a name picked later
         # does not shape the labels of the months before it was picked.
         regime_label_symbols = sorted(scope.member_symbols)
-        if dataset_version_id_override is not None:
-            # Backtest mode: only symbols the replay ingested have Parquet bars.
-            # A timeline's names are not cut down to fit; the run is refused.
-            _not_ingested = sorted(set(symbols) - set(replay_context.symbols))
-            if _not_ingested:
+        if held_symbols is not None:
+            # Only the names the dataset holds (in a backtest, the ones the replay
+            # ingested) have Parquet bars. A timeline's names are not cut down to
+            # fit; the run is refused.
+            _not_held = sorted(set(symbols) - held_symbols)
+            if _not_held:
                 from autonomous_trading_platform.universe.services.survivorship_guard import (
                     SurvivorshipBiasError,
                 )
 
+                _lacking = (
+                    f"dataset {research_dataset.dataset_version_id} does not hold"
+                    if research_dataset is not None
+                    else "the replay did not ingest"
+                )
                 raise SurvivorshipBiasError(
-                    f"Universe timeline {universe_timeline_version} names symbols the "
-                    f"replay did not ingest: {_not_ingested}. Running on the rest "
+                    f"Universe timeline {universe_timeline_version} names symbols "
+                    f"{_lacking}: {_not_held}. Running on the rest "
                     "would not be the timeline's universe."
                 )
     else:
         scope = _resolve_research_universe_scope(
-            session=session, start_date=start_date, end_date=tick_date
+            session=session, start_date=start_date, end_date=end_date
         )
         universe_version = scope.universe_version_id or "v1"
         symbols = sorted(scope.member_symbols)
-        if dataset_version_id_override is not None:
-            # Backtest mode: only symbols the replay ingested have Parquet bars.
-            _ingested = set(replay_context.symbols)
-            symbols = [s for s in symbols if s in _ingested]
+        if held_symbols is not None:
+            # Only the names the dataset holds (in a backtest, the ones the replay
+            # ingested) have Parquet bars.
+            symbols = [s for s in symbols if s in held_symbols]
     if not symbols:
         from autonomous_trading_platform.universe.services.survivorship_guard import (
             SurvivorshipBiasError,
@@ -606,10 +692,6 @@ def _build_replay_experiment_definition(
             "ingested symbols — refusing to fall back to an unanchored symbol list."
         )
 
-    # Use half of available CPUs for parallel simulation (threads share the GIL
-    # but I/O — parquet reads — runs concurrently, giving real speedup there).
-    _cpu = os.cpu_count() or 1
-    _sim_workers = max(2, _cpu // 2)
     experiment_id = f"replay_research_{tick_date.strftime('%Y%m')}"
 
     default_weights = ScoringWeights()
@@ -634,7 +716,7 @@ def _build_replay_experiment_definition(
     # that had no say in the selection (plan R2). On its own it gets the whole
     # window.
     selection_end = (
-        start_date + timedelta(days=_wf_train_days - 1) if has_walk_forward else tick_date
+        start_date + timedelta(days=_wf_train_days - 1) if has_walk_forward else end_date
     )
 
     # Stage 1 — always runs (just needs start_date < end_date)
@@ -672,7 +754,7 @@ def _build_replay_experiment_definition(
                 symbols=symbols,
                 universe_timeline_version=universe_timeline_version,
                 start_date=start_date,
-                end_date=tick_date,
+                end_date=end_date,
                 train_days=_wf_train_days,
                 test_days=_wf_test_days,
                 step_days=15,
@@ -702,7 +784,7 @@ def _build_replay_experiment_definition(
                 symbols=symbols,
                 universe_timeline_version=universe_timeline_version,
                 start_date=start_date,
-                end_date=tick_date,
+                end_date=end_date,
                 n_runs=200 if smoke else 2000,
                 min_pass_rate=0.6,
                 filter_config=wf_mc_filter,
@@ -727,7 +809,7 @@ def _build_replay_experiment_definition(
                     universe_timeline_version=universe_timeline_version,
                     label_symbols=regime_label_symbols,
                     start_date=start_date,
-                    end_date=tick_date,
+                    end_date=end_date,
                     gate=RegimeGateConfig(
                         dimensions=("trend", "volatility"),
                         # Research sims run on 5-min bars: a regime needs ~5
@@ -756,7 +838,7 @@ def _build_replay_experiment_definition(
                     symbols=symbols,
                     universe_timeline_version=universe_timeline_version,
                     start_date=start_date,
-                    end_date=tick_date,
+                    end_date=end_date,
                     gate=StressGateConfig(
                         min_shock_sharpe=0.0,
                         max_shock_drawdown=-0.40,
@@ -800,7 +882,7 @@ def _build_replay_experiment_definition(
         price_basis=price_basis,
         symbols=symbols,
         start_date=start_date,
-        end_date=tick_date,
+        end_date=end_date,
         random_seed=int(tick_date.strftime("%Y%m")),
         parameter_space={},
         staged_pipeline_config=StagedPipelineConfig(stages=stages),
@@ -878,6 +960,18 @@ def _resolve_universe_timeline_option(research_options: dict | None) -> str | No
         raise ValueError(
             "research.options.universe_timeline must be the dataset version id of an "
             f"exported universe timeline, got {raw!r}"
+        )
+    return raw.strip()
+
+
+def _resolve_dataset_version_option(research_options: dict | None) -> str | None:
+    raw: object = (research_options or {}).get("dataset_version")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError(
+            "research.options.dataset_version must be the dataset version id of a "
+            f"research-window dataset, got {raw!r}"
         )
     return raw.strip()
 
