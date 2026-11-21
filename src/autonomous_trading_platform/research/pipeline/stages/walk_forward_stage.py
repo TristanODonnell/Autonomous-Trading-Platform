@@ -409,6 +409,8 @@ class WalkForwardStage(BaseStage):
             stage_name=cfg.name,
             kind="walk_forward",
             first_test_start=cfg.first_test_start,
+            # A fold's test window is the last thing it reads.
+            last_day_read=max((fold[3] for fold in cfg.fold_windows()), default=None),
             filters=(
                 ("train_filter_config", cfg.train_filter_config),
                 ("test_filter_config", cfg.test_filter_config),

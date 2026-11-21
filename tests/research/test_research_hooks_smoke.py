@@ -1347,7 +1347,10 @@ def test_research_hook_without_the_layout_option_rolls_its_folds_as_before(
     assert run.result.status == "ok", run.result.errors
     assert run.result.summary["window_layout"] is None
     assert run.result.summary["admission_window"] is None
+    # No holdout is set aside in this layout: none is checked and none is reported.
+    assert run.result.summary["holdout_report"] is None
     (experiment,) = run.experiments
+    assert experiment.staged_pipeline_config.holdout_start is None
     start, end = date(2022, 12, 3), date(2023, 3, 3)
     by_name = {cfg.name: cfg for cfg in _stage_configs(experiment)}
     assert list(by_name) == _STAGE_NAMES
@@ -1395,3 +1398,141 @@ def test_admission_layout_in_force_is_the_one_written_in_the_plan(
     ]
     assert reported["holdout_start"] == "2026-05-18"
     assert reported["holdout"]["first"] == "2026-05-18"
+
+
+# --------------------------------------------------------------------------------------
+# The holdout (hook layout piece 4): checked by the validator, reported for the survivors
+# --------------------------------------------------------------------------------------
+
+
+def test_admission_layout_hands_the_validator_the_holdout_date(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    run = _run_admission(db_session, replay_context, monkeypatch, research_smoke_data_root)
+
+    (experiment,) = run.experiments
+    assert experiment.staged_pipeline_config.holdout_start == HOLDOUT_START
+
+
+def test_admission_layout_reports_the_holdout_in_the_summary(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """The one candidate of this tick does not pass every stage, so there is nobody to
+    run over the holdout: the report names the holdout's sessions and says so."""
+    layout = _expected_layout()
+    assert layout.holdout is not None
+
+    run = _run_admission(db_session, replay_context, monkeypatch, research_smoke_data_root)
+
+    assert run.result.status == "ok", run.result.errors
+    assert run.result.passed_filters == 0
+    assert run.result.summary["holdout_report"] == {
+        **_span(layout.holdout),
+        "scored": 0,
+        "candidates": [],
+        "not_scored": "no strategy passed every stage",
+    }
+
+
+def test_a_holdout_run_through_the_real_runner_leaves_no_row(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """The tick's candidate, run over the holdout by the hook's own report function with
+    the real runner, engine and bars: numbers come back and the database is as it was.
+    The same request with ``record_run`` on writes its rows, so the count can move."""
+    from dataclasses import replace
+
+    import autonomous_trading_platform.application.services.platform_replay.research_hooks as rh_mod
+    from autonomous_trading_platform.application.services.research_window_dataset_loader import (
+        load_research_window_dataset,
+    )
+    from autonomous_trading_platform.research.simulation.contexts.build_simulation_context import (
+        build_simulation_context,
+    )
+    from autonomous_trading_platform.storage.sor.models.metrics_summary import MetricsSummary
+    from autonomous_trading_platform.storage.sor.models.run_manifests import RunManifestRow
+    from autonomous_trading_platform.storage.sor.models.simulation_runs import SimulationRuns
+
+    layout = _expected_layout()
+    holdout = layout.holdout
+    assert holdout is not None
+    timeline = _admission_timeline()
+    run = _run_admission(db_session, replay_context, monkeypatch, research_smoke_data_root)
+    (experiment,) = run.experiments
+    context = build_simulation_context(
+        session=db_session, universe_timeline_source=lambda _version_id: timeline
+    )
+    (candidate,) = context.experiment_orchestration_service._expand_strategy_configs(experiment)
+
+    class _Recording:
+        def __init__(self, inner) -> None:
+            self.inner = inner
+            self.requests: list = []
+
+        def run(self, request):
+            self.requests.append(request)
+            return self.inner.run(request)
+
+        def reuse_loaded_bars(self):
+            return self.inner.reuse_loaded_bars()
+
+    def rows() -> tuple[int, int, int]:
+        db_session.expire_all()
+        return (
+            db_session.query(SimulationRuns).count(),
+            db_session.query(MetricsSummary).count(),
+            db_session.query(RunManifestRow).count(),
+        )
+
+    before = rows()
+    assert before[0] > 0 and before[1] > 0
+    calls_before = len(run.engine_calls)
+    runner = _Recording(context.simulation_runner)
+
+    report = rh_mod._report_holdout(
+        simulation_runner=runner,
+        layout=layout,
+        survivors=[candidate],
+        experiment_def=experiment,
+        universe_timeline=timeline,
+        research_dataset=load_research_window_dataset(db_session, _WINDOW_DATASET_ID),
+    )
+
+    assert report["not_scored"] is None, report
+    assert report["scored"] == 1
+    (scored,) = report["candidates"]
+    assert scored["strategy_id"] == candidate.strategy_id
+    assert set(scored) == {"strategy_id", "sharpe", "total_return", "max_drawdown", "trade_count"}
+    assert (report["first"], report["last"]) == (
+        holdout.first.isoformat(),
+        holdout.last.isoformat(),
+    )
+    # One simulation, over the holdout's days and its list (the one in force since the
+    # rotation), on the timeline.
+    (call,) = run.engine_calls[calls_before:]
+    assert call["dates"] == (holdout.first, holdout.last)
+    assert call["symbols"] == ["MSFT", "SPY"]
+    assert call["universe_timeline"] is timeline
+    # No run, metrics or manifest row was written, and no run in the table reads a
+    # holdout day.
+    assert rows() == before
+    assert (
+        db_session.query(SimulationRuns).filter(SimulationRuns.end_date >= HOLDOUT_START).all()
+        == []
+    )
+
+    # The control: the same request, recorded, is a row.
+    (request,) = runner.requests
+    assert request.record_run is False
+    context.simulation_runner.run(replace(request, record_run=True))
+    after = rows()
+    assert (after[0], after[1]) == (before[0] + 1, before[1] + 1)
+    (holdout_row,) = (
+        db_session.query(SimulationRuns).filter(SimulationRuns.end_date >= HOLDOUT_START).all()
+    )
+    assert holdout_row.window_role == "holdout"
+
+    # A run's id follows from its inputs, so the unrecorded request now finds that
+    # row under its own id. It still writes nothing: no second metrics row.
+    context.simulation_runner.run(request)
+    assert rows() == after

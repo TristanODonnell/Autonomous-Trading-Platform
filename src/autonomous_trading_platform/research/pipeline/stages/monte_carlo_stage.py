@@ -311,6 +311,7 @@ class MonteCarloStage(BaseStage):
     def validation_facts(self) -> StageWindowFacts:
         return StageWindowFacts(
             stage_name=self._cfg.name,
+            last_day_read=self._cfg.end_date,
             filters=(("filter_config", self._cfg.filter_config),),
         )
 

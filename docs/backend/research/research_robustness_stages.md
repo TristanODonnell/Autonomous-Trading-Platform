@@ -142,6 +142,7 @@ validate-config` reports them.
 |---|---|---|
 | A walk-forward stage's first test fold starts after every earlier simulation (selection) stage has stopped reading | `StagedPipelineConfig` → `research/pipeline/pipeline_validation.py` | `smoke: true` on the pipeline |
 | No filter with `min_sharpe <= 0` and `min_trades == 0` (it asks for no evidence) | same | `smoke: true` on the pipeline |
+| Given a holdout date, no stage reads that day or a later one. The date is `research/pipeline/holdout.py`'s and is not a YAML key: every experiment YAML is checked against it, and so is the replay hook's admission layout. The hook's 90-day layout sets no holdout aside and is not checked | same | `smoke: true` on the pipeline |
 | `step_days >= test_days`, so no day is in two test folds | `WalkForwardStageConfig` | `allow_overlapping_test_folds: true` on the stage |
 | `min_folds_passed` no larger than the number of folds the window holds (when `require_all_folds` is false) | `WalkForwardStageConfig` | none |
 

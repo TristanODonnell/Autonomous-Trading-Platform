@@ -4,6 +4,7 @@ import logging
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from datetime import date
 
 from autonomous_trading_platform.observability.enums import SpanTimespan
 from autonomous_trading_platform.observability.lifecycle import (
@@ -45,15 +46,20 @@ class StagedPipelineConfig:
     the CLI or the scheduler cycle, the replay hook in Python), so the
     cross-stage rules in pipeline_validation.py are checked here. smoke=True
     waives them for plumbing checks; YAML key ``staged_pipeline_config.smoke``.
+
+    holdout_start is the first day no stage may read. It is not a YAML key: the
+    loaders pass ``research/pipeline/holdout.py``'s date, the one place it is
+    declared. None = no holdout is set aside and none is checked.
     """
 
     stages: Sequence[BaseStage] = field(default_factory=list)
     smoke: bool = False
+    holdout_start: date | None = None
 
     def __post_init__(self) -> None:
         if not self.stages:
             raise ValueError("StagedPipelineConfig requires at least one stage.")
-        validate_pipeline(self.stages, smoke=self.smoke)
+        validate_pipeline(self.stages, smoke=self.smoke, holdout_start=self.holdout_start)
 
 
 @dataclass

@@ -106,6 +106,7 @@ class SimulationStage(BaseStage):
             stage_name=cfg.name,
             kind="selection",
             end_date=cfg.end_date,
+            last_day_read=cfg.end_date,
             filters=(("filter_config", cfg.filter_config),),
         )
 

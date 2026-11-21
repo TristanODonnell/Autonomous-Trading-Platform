@@ -198,10 +198,14 @@ def run_scheduled_research_at_timestamp(
                window being the selection piece, two of three to pass; Monte
                Carlo, regime and stress read the evaluation piece, and the
                one run over it must itself clear the walk-forward filter; no
-               gate reads the holdout. It needs ``universe_timeline`` and
-               ``dataset_version`` and refuses ``lookback_days``. A dataset
-               the layout cannot be laid on is a failed step. Any other value
-               is an error.
+               stage reads the holdout, and the pipeline is refused if one
+               would. The final survivors are then each run once over the
+               holdout sessions there are so far and the numbers reported in
+               the summary (``holdout_report``); nobody is eliminated by them
+               and the runs leave no row in the database. It needs
+               ``universe_timeline`` and ``dataset_version`` and refuses
+               ``lookback_days``. A dataset the layout cannot be laid on is a
+               failed step. Any other value is an error.
     """
     profile = _resolve_research_profile(research_options)
     lookback_days = _resolve_lookback_days(research_options)
@@ -493,6 +497,19 @@ def run_scheduled_research_at_timestamp(
         now_utc=timestamp,
     )
 
+    # The holdout report, last: the survivors are chosen and seeded before any
+    # holdout day is read, and nothing above is handed its numbers.
+    holdout_report: dict[str, Any] | None = None
+    if admission_layout is not None:
+        holdout_report = _report_holdout(
+            simulation_runner=simulation_context.simulation_runner,
+            layout=admission_layout,
+            survivors=final_survivors,
+            experiment_def=experiment_def,
+            universe_timeline=universe_timeline,
+            research_dataset=research_dataset,
+        )
+
     return ResearchReplayResult(
         **base,
         status="ok",
@@ -517,6 +534,7 @@ def run_scheduled_research_at_timestamp(
                 if admission_layout is not None
                 else None
             ),
+            "holdout_report": holdout_report,
             "intelligence_analyzed": len(intelligence_summaries),
             "deployable_seeded": len(deployable),
             "spam_cluster_excluded": len(spam_excluded),
@@ -953,7 +971,12 @@ def _build_replay_experiment_definition(
         end_date=end_date,
         random_seed=int(tick_date.strftime("%Y%m")),
         parameter_space={},
-        staged_pipeline_config=StagedPipelineConfig(stages=stages),
+        # In the admission layout the validator is told the holdout date and
+        # refuses a stage that reads it. The lookback layout sets no holdout aside.
+        staged_pipeline_config=StagedPipelineConfig(
+            stages=stages,
+            holdout_start=admission_layout.holdout_start if admission_layout is not None else None,
+        ),
     )
 
 
@@ -1107,6 +1130,71 @@ def _admission_research_window(layout: AdmissionWindowLayout) -> _ResearchWindow
         # The other half of the pass rule: the evaluation piece as one record.
         gate_run_clears_filter=True,
     )
+
+
+def _report_holdout(
+    *,
+    simulation_runner,
+    layout: AdmissionWindowLayout,
+    survivors,  # list[StrategyConfig]
+    experiment_def,  # ExperimentDefinition
+    universe_timeline: UniverseTimeline | None,
+    research_dataset: ResearchWindowDataset | None,
+) -> dict[str, Any]:
+    """Each final survivor run once over the holdout sessions there are so far
+    (``research/pipeline/holdout_report.py``). Report only: whatever goes wrong here is
+    written into the report and the research step's outcome is not changed.
+    """
+    from autonomous_trading_platform.research.pipeline.holdout_report import (
+        HoldoutRunSettings,
+        holdout_not_scored,
+        score_holdout,
+    )
+
+    span = layout.holdout
+    if span is None:
+        return holdout_not_scored(None, "the dataset holds no holdout session yet")
+    if not survivors:
+        return holdout_not_scored(span, "no strategy passed every stage")
+    if universe_timeline is None or research_dataset is None:
+        # Not reachable through the options: the layout is refused without either.
+        return holdout_not_scored(span, "the layout was run without a timeline or a dataset")
+    try:
+        # The names of the lists in force during the holdout; as for the stages, a
+        # timeline's names are not cut down to the ones the dataset holds.
+        symbols = universe_timeline.symbols_on_dates(span.first, span.last)
+        if not symbols:
+            return holdout_not_scored(
+                span,
+                f"universe timeline {universe_timeline.dataset_version_id} has no list in "
+                "force during the holdout",
+            )
+        not_held = sorted(set(symbols) - set(research_dataset.symbols))
+        if not_held:
+            return holdout_not_scored(
+                span,
+                f"dataset {research_dataset.dataset_version_id} does not hold the universe's "
+                f"names for the holdout: {not_held}",
+            )
+        with simulation_runner.reuse_loaded_bars():
+            return score_holdout(
+                simulation_runner=simulation_runner,
+                survivors=survivors,
+                span=span,
+                settings=HoldoutRunSettings(
+                    experiment_id=experiment_def.experiment_id,
+                    dataset_version=experiment_def.dataset_version,
+                    random_seed=experiment_def.random_seed,
+                    price_basis=experiment_def.price_basis,
+                    initial_cash=experiment_def.initial_cash,
+                    resample_to_daily=experiment_def.resample_to_daily,
+                    symbols=symbols,
+                    universe_timeline_version=universe_timeline.dataset_version_id,
+                ),
+            )
+    except Exception as exc:
+        logger.warning("holdout_report: not scored", exc_info=True)
+        return holdout_not_scored(span, f"failed: {exc}")
 
 
 def _admission_window_summary(layout: AdmissionWindowLayout) -> dict[str, Any]:

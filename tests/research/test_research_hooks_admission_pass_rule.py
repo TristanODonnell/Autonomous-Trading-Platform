@@ -24,6 +24,8 @@ selection piece.
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager, nullcontext
+from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
 
 import pytest
@@ -52,6 +54,9 @@ from autonomous_trading_platform.research.pipeline.holdout import HOLDOUT_START
 from autonomous_trading_platform.research.pipeline.pipeline_runner import (
     PipelineRunner,
     PipelineRunResult,
+)
+from autonomous_trading_platform.research.pipeline.pipeline_validation import (
+    pipeline_issues,
 )
 from autonomous_trading_platform.research.simulation.simulation_runner import (
     SimulationRunRequest,
@@ -86,6 +91,9 @@ class _TimelineStampingRunner(ScriptedRunner):
         result = super().run(request)
         result.universe_timeline_version = request.universe_timeline_version
         return result
+
+    def reuse_loaded_bars(self) -> AbstractContextManager[None]:
+        return nullcontext()
 
 
 def _dataset() -> ResearchWindowDataset:
@@ -280,3 +288,175 @@ def test_no_simulation_reads_a_holdout_day(run: _Run) -> None:
     assert run.runner.requests
     assert all(r.end_date < HOLDOUT_START for r in run.runner.requests)
     assert all(r.start_date >= run.layout.selection.first for r in run.runner.requests)
+
+
+# --------------------------------------------------------------------------------------
+# The holdout: read by no stage, reported for the final survivors (hook layout piece 4)
+# --------------------------------------------------------------------------------------
+
+
+def test_the_pipeline_is_handed_the_holdout_date_and_no_stage_reaches_it(run: _Run) -> None:
+    config = run.experiment.staged_pipeline_config
+    assert config.holdout_start == HOLDOUT_START
+
+    last_day = {
+        name: facts.last_day_read if facts is not None else None
+        for name, facts in ((name, stage.validation_facts()) for name, stage in run.stages.items())
+    }
+    selection, evaluation = run.layout.selection, run.layout.evaluation
+    assert last_day == {
+        "initial_quality_filter": selection.last,
+        "walk_forward_robustness": evaluation.last,
+        MONTE_CARLO: evaluation.last,
+        "regime_robustness": evaluation.last,
+        "stress_robustness": evaluation.last,
+        # Runs no simulation: it reads the evidence of the stages before it.
+        "overfitting_gate": None,
+    }
+    assert evaluation.last < HOLDOUT_START
+    assert pipeline_issues(config.stages, holdout_start=HOLDOUT_START) == []
+
+
+def test_each_stage_answers_to_the_holdout_rule(run: _Run) -> None:
+    """The same stages, with the date moved back onto the days they read: every stage
+    that runs a simulation is named, each for its own last day."""
+    stages = run.experiment.staged_pipeline_config.stages
+
+    def named(holdout_start: date) -> list[str]:
+        issues = pipeline_issues(stages, holdout_start=holdout_start)
+        return [issue.split("'")[1] for issue in issues if "the holdout starts on" in issue]
+
+    gates = ["walk_forward_robustness", MONTE_CARLO, "regime_robustness", "stress_robustness"]
+    assert named(run.layout.evaluation.last) == gates
+    assert named(run.layout.evaluation.last + timedelta(days=1)) == []
+    assert named(run.layout.selection.last) == ["initial_quality_filter", *gates]
+
+
+def _holdout_report(run: _Run, survivors: list, **overrides) -> tuple[dict, ScriptedRunner]:
+    runner = _TimelineStampingRunner(_script(run.layout))
+    arguments = {
+        "simulation_runner": runner,
+        "layout": run.layout,
+        "survivors": survivors,
+        "experiment_def": run.experiment,
+        "universe_timeline": _timeline(),
+        "research_dataset": _dataset(),
+        **overrides,
+    }
+    return rh._report_holdout(**arguments), runner
+
+
+def test_the_final_survivors_are_each_run_once_over_the_holdout(run: _Run) -> None:
+    holdout = run.layout.holdout
+    assert holdout is not None and holdout.first == HOLDOUT_START
+    assert [c.strategy_id for c in run.result.final_survivors] == ["steady", "small_loss"]
+
+    report, runner = _holdout_report(run, run.result.final_survivors)
+
+    assert [(r.strategy_id, r.start_date, r.end_date) for r in runner.requests] == [
+        ("steady", holdout.first, holdout.last),
+        ("small_loss", holdout.first, holdout.last),
+    ]
+    for request in runner.requests:
+        assert request.window_role == "holdout"
+        assert request.record_run is False
+        # The pipeline's own settings and the timeline it ran on.
+        assert request.experiment_id == run.experiment.experiment_id
+        assert request.dataset_version == run.experiment.dataset_version
+        assert request.universe_timeline_version == "timeline"
+        assert sorted(request.symbols) == sorted(SYMBOLS)
+    assert [c["strategy_id"] for c in report["candidates"]] == ["steady", "small_loss"]
+    assert (report["first"], report["last"], report["sessions"]) == (
+        holdout.first.isoformat(),
+        holdout.last.isoformat(),
+        holdout.sessions,
+    )
+    assert report["scored"] == 2 and report["not_scored"] is None
+    # Both gain on days outside the test folds, by the script.
+    assert all(c["total_return"] > 0 and c["trade_count"] == 40 for c in report["candidates"])
+
+
+def test_only_the_holdout_runs_leave_no_row(run: _Run) -> None:
+    """Every run of the six stages is recorded as before; the holdout runs are not."""
+    assert run.runner.requests
+    assert all(request.record_run for request in run.runner.requests)
+    assert all(request.window_role != "holdout" for request in run.runner.requests)
+
+
+def test_a_tick_with_no_survivor_runs_nothing_over_the_holdout(run: _Run) -> None:
+    report, runner = _holdout_report(run, [])
+
+    assert runner.requests == []
+    assert report["not_scored"] == "no strategy passed every stage"
+    assert report["sessions"] == run.layout.holdout.sessions  # type: ignore[union-attr]
+
+
+def test_a_dataset_that_ends_with_the_evaluation_piece_has_no_holdout_to_report(
+    run: _Run,
+) -> None:
+    layout = replace(run.layout, holdout=None)
+
+    report, runner = _holdout_report(run, run.result.final_survivors, layout=layout)
+
+    assert runner.requests == []
+    assert report["not_scored"] == "the dataset holds no holdout session yet"
+    assert (report["first"], report["last"], report["sessions"]) == (None, None, 0)
+
+
+def test_a_holdout_name_the_dataset_does_not_hold_is_not_cut_out(run: _Run) -> None:
+    """As for the stages: the universe of the holdout's dates is run whole or not at all."""
+    short = ResearchWindowDataset(
+        dataset_version_id="window_dataset",
+        first_day=BARS_FIRST,
+        last_day=BARS_LAST,
+        symbols=("AAA",),
+    )
+
+    report, runner = _holdout_report(run, run.result.final_survivors, research_dataset=short)
+
+    assert runner.requests == []
+    assert report["not_scored"] == (
+        "dataset window_dataset does not hold the universe's names for the holdout: ['BBB']"
+    )
+
+
+def test_a_timeline_that_stops_before_the_holdout_is_not_run_on_no_names(run: _Run) -> None:
+    stops_early = UniverseTimeline(
+        dataset_version_id="timeline",
+        window_start=BARS_FIRST,
+        content_hash="not-checked-here",
+        periods=[
+            UniverseTimelinePeriod(
+                universe_version_id="only_list",
+                effective_from=datetime.combine(BARS_FIRST, time.min, tzinfo=UTC),
+                effective_to=datetime.combine(HOLDOUT_START, time.min, tzinfo=UTC),
+                members=[UniverseTimelineMember(symbol=s) for s in SYMBOLS],
+            )
+        ],
+    )
+
+    report, runner = _holdout_report(run, run.result.final_survivors, universe_timeline=stops_early)
+
+    assert runner.requests == []
+    assert report["not_scored"] == (
+        "universe timeline timeline has no list in force during the holdout"
+    )
+
+
+def test_a_holdout_that_cannot_be_run_does_not_fail_the_step(run: _Run) -> None:
+    """Whatever goes wrong, the report says so and nothing is raised: it decides
+    nothing, so it cannot fail the research step either."""
+
+    class _Unreadable:
+        dataset_version_id = "timeline"
+
+        def symbols_on_dates(self, first: date, last: date) -> list[str]:
+            raise OSError("timeline file is gone")
+
+    report, runner = _holdout_report(
+        run, run.result.final_survivors, universe_timeline=_Unreadable()
+    )
+
+    assert runner.requests == []
+    assert report["not_scored"] == "failed: timeline file is gone"
+    assert report["scored"] == 0

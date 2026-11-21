@@ -161,6 +161,13 @@ class SimulationRunRequest:
     # ``symbols`` must cover those names. None = ``symbols`` is the universe for
     # the whole run.
     universe_timeline_version: str | None = None
+    # False = the run leaves no row behind: no simulation_runs, metrics_summary or
+    # run-manifest row, and no experiment or strategy-config row made for it. Its
+    # Parquet artifacts are written as usual. For a run whose numbers must not be
+    # read as the strategy's research record: promotion, demotion, allocation and
+    # the catalog take the newest run or metrics row of a strategy (the holdout
+    # report, plan R2).
+    record_run: bool = True
 
 
 # The universe label of a run whose symbols are its universe for the whole run.
@@ -336,14 +343,15 @@ class SimulationRunner:
             feature_requests = []
             resolved_feature_dataset_ids = {}
 
-        self._record_run_started(
-            run_id=run_id,
-            request=request,
-            experiment_id=experiment_id,
-            resolved_dataset_metadata=resolved_dataset.metadata,
-            resolved_feature_dataset_ids=resolved_feature_dataset_ids,
-        )
-        self._commit_metadata()
+        if request.record_run:
+            self._record_run_started(
+                run_id=run_id,
+                request=request,
+                experiment_id=experiment_id,
+                resolved_dataset_metadata=resolved_dataset.metadata,
+                resolved_feature_dataset_ids=resolved_feature_dataset_ids,
+            )
+            self._commit_metadata()
 
         try:
             universe_timeline, load_symbols = self._resolve_universe_timeline(request)
@@ -427,21 +435,22 @@ class SimulationRunner:
             tm = compute_trade_metrics(trade_logs, live_equity_curve)
             sm = compute_stability_metrics(live_equity_curve)
 
-            self._record_run_completed(
-                run_id=run_id,
-                artifact_identity=artifact_identity,
-                trade_count=tm.total_trades,
-                equity_points=len(live_equity_curve),
-                per_bar_metric_points=len(per_bar_metrics),
-                total_return=rm.total_return,
-                sharpe_ratio=risk.sharpe_ratio,
-                max_drawdown=risk.max_drawdown,
-                volatility=risk.volatility,
-                win_rate=tm.win_rate,
-                consistency_score=sm.consistency_score,
-                universe_exit_count=universe_exit_count,
-            )
-            self._commit_metadata()
+            if request.record_run:
+                self._record_run_completed(
+                    run_id=run_id,
+                    artifact_identity=artifact_identity,
+                    trade_count=tm.total_trades,
+                    equity_points=len(live_equity_curve),
+                    per_bar_metric_points=len(per_bar_metrics),
+                    total_return=rm.total_return,
+                    sharpe_ratio=risk.sharpe_ratio,
+                    max_drawdown=risk.max_drawdown,
+                    volatility=risk.volatility,
+                    win_rate=tm.win_rate,
+                    consistency_score=sm.consistency_score,
+                    universe_exit_count=universe_exit_count,
+                )
+                self._commit_metadata()
 
             return SimulationRunResult(
                 run_id=run_id,
@@ -468,8 +477,9 @@ class SimulationRunner:
             )
 
         except Exception as exc:
-            self._record_run_failed(run_id=run_id, error_message=str(exc))
-            self._commit_metadata()
+            if request.record_run:
+                self._record_run_failed(run_id=run_id, error_message=str(exc))
+                self._commit_metadata()
             raise
 
     def _resolve_universe_timeline(
