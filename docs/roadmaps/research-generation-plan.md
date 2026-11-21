@@ -111,15 +111,21 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > the 9 / 9 / 6 layout worked out from it in one function; piece 2, the
 > walk-forward stage takes folds given by date and refuses a train window on
 > any fold's test days; piece 3a, a research job can name the dataset it reads
-> (the pipeline was only ever handed its backtest's own); piece 3b (built, not
-> committed), the option `window_layout: admission` that switches the layout
-> on. **No run changes yet:** no job sets the option, and without it the hook
+> (the pipeline was only ever handed its backtest's own); piece 3b, the option
+> `window_layout: admission` that switches the layout on; piece 4 (built, not
+> committed), the holdout: the validator refuses a pipeline in which a stage
+> reads the holdout date or later, and the final survivors are each run once
+> over the holdout, report only. **No run changes yet:** no job sets the option, and without it the hook
 > builds the 90-day layout as before. A layout job names its timeline and its
 > dataset or is refused. Found while testing the pass rule: Monte Carlo did not
 > hold the nine-month record itself to the filter (a record with a -47%
 > drawdown passed on its reshuffled paths); decided the same day, the record
-> is checked too, in this layout. Next: piece 4 (holdout check and report-only
-> score), then piece 5 (rehearsal on B, the first run on real bars).
+> is checked too, in this layout. Found before building piece 4: demotion,
+> allocation and promotion read a strategy's newest saved run, so a holdout
+> run saved like any other would have been read as the strategy's record;
+> decided the same day, the holdout run leaves no row and its numbers go in
+> the research step's summary only. Next: piece 5 (rehearsal on B, the first
+> run on real bars), which needs the branch pushed, merged and deployed.
 > Open decisions: none waiting.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
@@ -137,7 +143,7 @@ section 3: done, then still open.
 
 | Item | What it is | Status | Boxes | What is left | When |
 |---|---|---|---|---|---|
-| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 12 done, 8 open (the hook layout's own piece boxes not counted) | Built 2026-11-20 on `research/r2-hook-layout`, not merged, for a job that names the admission layout: the selection / evaluation split, folds in sessions, fold geometry, and the two-part pass rule (2 of 3 folds, and the nine-month record held to the filter). Still open there: the holdout (piece 4) and the rehearsal on B (piece 5). Code only, still open: daily resample, the walk-forward "entered" count (found 2026-11-15), a minimum test span in the walk-forward config, fold count from the history available. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Now. Pieces 4 and 5 of the hook layout are the current work; the code-only boxes can be done at any time |
+| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 13 done, 7 open (the hook layout's own piece boxes not counted) | Built 2026-11-20 on `research/r2-hook-layout`, not merged, for a job that names the admission layout: the selection / evaluation split, folds in sessions, fold geometry, the two-part pass rule (2 of 3 folds, and the nine-month record held to the filter), and the holdout (read by no stage, which the validator checks; the final survivors reported on it in the step's summary). Still open there: the rehearsal on B (piece 5). Code only, still open: daily resample, the walk-forward "entered" count (found 2026-11-15), a minimum test span in the walk-forward config, fold count from the history available. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Now. Piece 5 of the hook layout is the current work; the code-only boxes can be done at any time |
 | 🔴 R7 | Test hardening per stage | Not started as its own item. Realistic-curve tests now exist at gate level for Monte Carlo, stress and regime | 0 done, 2 open | A real-runner test per stage, the cross-process checksum test. R4's "Verify" (a real-runner test per stage where the gate fails) is this work too | Rides along with package B (package D) |
 | 🔴 R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 done, 5 open | All of the wiring | After package B, before Step 5 (package C). It saves time on long runs; it does not change any result |
 | 🔴 R13 | No parameter-stability check | Not decided. A decision, not work yet | 0 done, 2 open | Decide whether to build the neighbour check | The user's decision, asked once package B gives more survivors (package F) |
@@ -158,7 +164,7 @@ work. Its note stays in section 3.
 | 🟢 R1 | Monte Carlo resamples for real | **Done.** Merged PR #181, deployed to A and B | 4 done, 0 open | Nothing |
 | 🟢 R4 | Audit of the remaining gates | **Audit done** 2026-11-15: notes for stress, overfitting, parameter stability, regime; the problems it found are R11 to R15 | 1 done, 1 open | The 12% drawdown kill on the backtest path (parked below, package E). Its "Verify" is R7's work |
 | 🟢 R5 | Composite score hides missing evidence | **Done.** Merged PR #184, deployed 2026-11-16. No score without walk-forward and Monte Carlo; report-only measures carry weight 0 | 2 done, 0 open | Nothing |
-| 🟢 R6 | Experiment-config and holdout validator | **Validator shipped.** Merged PR #184, deployed 2026-11-16 | 1 done, 1 open | Repo-level holdout date (package B) |
+| 🟢 R6 | Experiment-config and holdout validator | **Validator shipped.** Merged PR #184, deployed 2026-11-16. Holdout rule built 2026-11-20 on `research/r2-hook-layout`, not merged | 2 done, 0 open | Nothing open; the holdout rule ships with the hook layout |
 | 🟢 R10 | Stale marks when a bar is missing | **Done.** Merged PR #182, deployed to A and B | 6 done, 2 open | The re-sim vs platform correlation was not re-measured; more sparse-bar fixtures (R7) |
 | 🟢 R11 | Stress gate: shocks report-only, costs decide | **Done.** Merged PR #183, deployed 2026-11-16. Rerun done: funnel 30 → 30 → 4 → 2 → 2 → 2, the first run with final survivors | 5 done, 0 open | Nothing. "Verify" met by the all-30 audit pass: 7 pass, 23 fail, for causes that differ. Stress at the new cost is R12's box |
 | 🟢 R12 | Research trading cost: 1 basis point per trade | **Done except two boxes.** Merged PR #183, deployed 2026-11-16. Measured on real bars (funnel 30 → 30 → 2 → 2 → 2 → 2, stress passes 3 of 30) and on B's bench re-sim (order unchanged; momentum -1.8% → -7.8%) | 4 done, 3 open | Slippage written to fill rows. Two midpoint guards wait for a `LIMIT` / `TWAP` policy |
@@ -200,7 +206,7 @@ Package A is merged and deployed. Nothing is running.
 | # | Package | Boxes it closes | Waits on | Size |
 |---|---|---|---|---|
 | 🟢 A | **Validators and evidence** (done: merged PR #184, deployed 2026-11-16) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | Nothing | One PR, no new data (#184) |
-| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (done: merged as PR #193, on A and B 2026-11-20; no job uses it yet), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule (started 2026-11-20 on `research/r2-hook-layout`: pieces 1, 2, 3a and 3b built, 3b not committed; the layout is switched on by a research option that no job sets yet; left are the holdout check and the rehearsal on B), memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
+| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (done: merged as PR #193, on A and B 2026-11-20; no job uses it yet), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule (started 2026-11-20 on `research/r2-hook-layout`: pieces 1, 2, 3a, 3b and 4 built, 4 not committed; the layout is switched on by a research option that no job sets yet; left is the rehearsal on B), memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
 | 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
 | 🔴 D | **Test hardening (R7)** | R7 both boxes, and the R7 boxes under R10, R14, R15 | Nothing | Can ride along with A and B |
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R12's slippage in fill rows, D2. R8 left this package 2026-11-16: deferred until random fills are switched on | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
@@ -676,7 +682,7 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
       nine-month record (Step 5, "Universe over the long window"). Decided
       2026-11-19 (the user): a train-failed fold's test period is in the pooled
       record. Built 2026-11-20 in the six-stage hook's admission layout (hook
-      layout piece 3b, not committed): 2 of 3 folds in the walk-forward stage,
+      layout piece 3b, committed `f0b2befda`): 2 of 3 folds in the walk-forward stage,
       and the nine-month record held to the filter as Monte Carlo's base run
       (`base_run_clears_filter`, decided the same day after the paths alone were
       measured passing a record with a -47% drawdown). The walk-forward stage
@@ -697,7 +703,7 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
         2026-11-20: the admission layout counts its folds in sessions (hook
         layout piece 1), the walk-forward stage takes folds by date and refuses a
         shared boundary day (piece 2), and the hook hands the stage those folds
-        (piece 3b, built, not committed). The sessions are the NYSE calendar's
+        (piece 3b, committed `f0b2befda`). The sessions are the NYSE calendar's
         less the ones the dataset left out by name. Rolling folds, in the 90-day
         layout and the YAML pipelines, are still calendar days.
   - [ ] A minimum test span per fold, validated in the config. (2026-11-20: the
@@ -949,7 +955,7 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
               long-window candidate is handed on to is the hand-off's question
               (section on the monthly worker job), looked at with the
               rehearsal.
-      - [x] Piece 3b, the hook (built 2026-11-20, not committed; full unit suite
+      - [x] Piece 3b, the hook (built 2026-11-20, committed `f0b2befda`; full unit suite
             5,964 passed, 5 skipped, 0 failed, which is piece 3a's 5,926 and
             the 38 new tests): research option
             `window_layout: admission` switches the layout on. Without it the
@@ -1042,8 +1048,83 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
               real bars (piece 5, the rehearsal on B); `base_run_clears_filter`
               as a YAML key; the walk-forward stage's train run repeating stage
               1's (the "later saving" box above).
-      - [ ] Piece 4, holdout: a check that no gate reads the holdout date or
-            later; the holdout scored once for the final survivors, report only.
+      - [x] Piece 4, holdout (built 2026-11-20, not committed): a check that no
+            gate reads the holdout date or later; the holdout scored once for the
+            final survivors, report only.
+            - The check. Each stage that runs a simulation tells the validator
+              the last day it reads (`StageWindowFacts.last_day_read`: stage 1
+              its end date, walk-forward its last test day, Monte Carlo, regime
+              and stress their end date; the overfitting stage runs none). Given
+              a holdout date, `StagedPipelineConfig` refuses a pipeline in which
+              any of them reads that day or a later one, naming each stage and
+              its last day. Rule 3 in `pipeline_validation.py`.
+            - Who is given the date. The hook in the admission layout (the
+              layout's own `holdout_start`). Both loaders of an experiment file
+              (`atp research` and the scheduler cycle), always, with
+              `holdout.py`'s date: it is not a YAML key, so a file cannot name
+              its own. Both files in the repo end before it (2025-03-31 and
+              2024-06-30). Not given it: the hook's 90-day layout, which reads
+              up to the research date and sets no holdout aside. `smoke: true`
+              waives this rule with the other two.
+            - The report. `research/pipeline/holdout_report.py`, called by the
+              hook after the survivors are chosen and seeded to governance. It
+              is not a stage: a stage's output is the next stage's survivor
+              list, and code outside that chain cannot remove anyone. Each final
+              survivor is run once from the holdout date to the research date
+              (or the dataset's last day if earlier), on the timeline's lists
+              for those days, with the pipeline's own settings. Reported per
+              survivor: Sharpe, total return, drawdown, trade count; a number
+              that is not finite is reported as none.
+            - Where the numbers go: the research step's summary
+              (`holdout_report`: the holdout's first and last session and
+              count, how many were scored, one entry per survivor, and the
+              reason when nobody was scored), which the backtest keeps in the
+              job's result file, and the log. Not the database (decided
+              2026-11-20, Step 5): the runs are made with the new
+              `SimulationRunRequest.record_run=False`, which writes no
+              `simulation_runs`, `metrics_summary` or run-manifest row. The
+              run's Parquet artifacts are written as usual, under
+              `stage_name=holdout_report`, `window_role=holdout`.
+            - It cannot fail the step or change its outcome. Not scored, with
+              the reason in the report: no holdout session in the dataset yet;
+              no strategy passed every stage; the timeline has no list in force
+              during the holdout; the timeline names a symbol the dataset does
+              not hold (the universe is not cut down, as for the stages);
+              anything else that raises. One survivor's run failing is that
+              survivor's `error`, and the others are still run.
+            - Tests, 30 new; full unit suite 5,994 passed, 5 skipped, 0 failed
+              (piece 3b's 5,964 and the 30). `test_pipeline_validation.py`, 9:
+              the rule on stages built from dicts, and both file loaders on
+              the repo's experiment file, on a copy that reads the holdout
+              date and on that copy marked smoke. `test_holdout_report.py`
+              (new), 9: the report on scripted runs.
+              `test_research_hooks_admission_pass_rule.py`, 9: each of the
+              hook's six stages answers to the rule for its own last day, and
+              the hook's report function on scripted runs (every case that is
+              not scored). `test_research_hooks_smoke.py`, 3: the hook hands
+              the validator the date, the summary carries the report, and one
+              holdout run through the real runner, engine and bars leaves the
+              three tables as they were, where the same request recorded adds
+              its rows.
+            - Checked that they can fail: 24 bugs put into the source one at a
+              time, 23 caught at first. Not caught: the runner writing the
+              metrics row whatever the request says. It changed nothing,
+              because that row is only written when the run's own row is
+              found, and the start of the run (still guarded) had not written
+              one. It matters when a row with the same id is already there: a
+              run's id follows from its inputs, so the same run recorded
+              earlier is found. A test for that case was added (recorded, then
+              repeated unrecorded: nothing more is written) and the bug is now
+              caught, a second metrics row. 24 of 24.
+            - Found by a test: a timeline with no list in force during the
+              holdout handed the runs an empty list of names. Now not scored,
+              with the reason.
+            - Not done here: a run on real bars (piece 5); the holdout as a
+              pass / fail (section 4, to reassess); a table for the scores (to
+              build if that review needs one; until then the review reads
+              result files); "scored once" across months (each monthly run
+              after the holdout date scores the survivors again on a holdout
+              one month longer, which is R2's open "Repeated attempts" box).
       - [ ] Piece 5, rehearsal on B with memory recorded: a job that names the
             layout and the exported timeline (first written as "the timeline
             option switched on for this layout"; since the 2026-11-20 decision
@@ -1091,6 +1172,8 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
         free-form column, and the tick's summary holds no per-strategy fields. A
         holdout simulation is itself stored as a run with its metrics; where the
         holdout report lives is piece 4's question.
+        Answered in piece 4 (2026-11-20): in the tick's summary, and the holdout
+        simulation is not stored as a run (Step 5, the decision of that day).
       - Seen on the way, not part of this work: `SimulationStage.from_dict` and
         `WalkForwardStage.from_dict` do not pass `universe_timeline_version` on
         (the YAML path, left unthreaded on purpose in the engine PR);
@@ -1101,7 +1184,7 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
     - [x] Window layout in one place in `_build_replay_experiment_definition`: selection
           days, evaluation days, holdout days, derived from the sessions available, with a
           minimum length for each and a logged reason when the window is too short.
-          Built 2026-11-20 (hook layout pieces 1 and 3b, not committed), for a job
+          Built 2026-11-20 (hook layout pieces 1 and 3b, committed `f0b2befda`), for a job
           that sets `window_layout: admission`: the pieces come from the holdout
           date, and a window that cannot hold them is a failed step with the
           reason. The 90-day layout is unchanged for a job without the option.
@@ -1110,15 +1193,23 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
           run the whole window, selection days included, so the run Monte Carlo resamples
           is flattered by the days the strategy was picked on.
           The governance source run becomes the evaluation-window run.
-          Built 2026-11-20 (hook layout piece 3b, not committed), in the admission
+          Built 2026-11-20 (hook layout piece 3b, committed `f0b2befda`), in the admission
           layout: walk-forward tests on the evaluation piece (its train window is
           the selection piece), the other three read the evaluation piece only,
           and the governance source run is Monte Carlo's base run over it. In the
           90-day layout they still read the whole window.
-    - [ ] Holdout: the last N sessions, read by no gate, scored once for the final
+    - [x] Holdout: the last N sessions, read by no gate, scored once for the final
           survivors and stored with the candidate. Decided 2026-11-15: report only, it
           eliminates nobody. Whether it becomes a final pass/fail is a question to come
           back to (section 4, "Holdout as a gate").
+          Built 2026-11-20 (hook layout piece 4, not committed), in the admission
+          layout, with two differences from the text above. The holdout is not
+          "the last N sessions": it is every session from the fixed holdout date
+          on (decided 2026-11-16). It is not "stored with the candidate": its
+          numbers are in the research step's summary and nowhere in the database
+          (decided 2026-11-20, after finding that demotion, allocation and
+          promotion read a strategy's newest saved run). The 90-day layout has no
+          holdout.
     - [x] Fold geometry in the hook: test folds that do not overlap (`step_days >=
           test_days`), no train window covering another fold's test days, and a pooled or
           median pass rule in place of "any one fold" (`min_folds_passed=1`).
@@ -1438,7 +1529,13 @@ suite `v1` rule "holdout never tuned on" (`pre-launch-deployment-plan.md` §5) e
       Decided 2026-11-16: the date is 2026-05-18, moved forward six months at a time on a
       schedule (see Step 5, "Universe over the long window"). The declaration is
       written 2026-11-20 (`research/pipeline/holdout.py`, hook layout piece 1); the
-      check against it is piece 4 of the hook layout. Not checked yet.
+      check against it is piece 4 of the hook layout.
+      Checked since piece 4 (built 2026-11-20, not committed): both loaders of an
+      experiment file hand `StagedPipelineConfig` the date, and a stage that reads
+      that day or a later one is refused. Tests: `test_pipeline_validation.py`,
+      `TestHoldoutRule` and `TestExperimentFilesAgainstTheHoldoutDate` (the repo's
+      file loads through both loaders; a copy whose Monte Carlo stage ends on the
+      holdout date is refused by both; the same copy marked smoke loads).
 
 **R7 — Test hardening per stage (not started).** Every stage audited so far is tested with
 `MagicMock` results and permissive filters, so gating logic is never exercised.
@@ -3623,7 +3720,7 @@ behind a fixture flag; default stays `alpaca`.
         train-failed folds stands but should have nothing to apply to; fold 3's
         train window ends six months before its test starts; the overfitting
         report's train-against-test drop compares a nine-month Sharpe with
-        three-month ones. Built 2026-11-20 (piece 3b, not committed). "Stricter on
+        three-month ones. Built 2026-11-20 (piece 3b, committed `f0b2befda`). "Stricter on
         every line" is now held by a test on the hook's own filters.
       - Decided 2026-11-20 (the user, asked with "required" and "optional" as the
         choices): **a job that switches the admission layout on must name its
@@ -3635,7 +3732,7 @@ behind a fixture flag; default stays `alpaca`.
         dataset, when long enough) has no use while the holdout date is
         2026-05-18, because the layout refuses any run dated before it, so a
         historical replay cannot use the layout either way. Built 2026-11-20
-        (hook layout pieces 3a, committed, and 3b, not committed).
+        (hook layout pieces 3a, committed, and 3b, committed `f0b2befda`).
       - Decided 2026-11-20 (the user, asked with "refuse it" and "allow it" as
         the choices): **the admission layout requires a universe timeline.** A
         research job that names the layout and no timeline is refused with the
@@ -3645,7 +3742,7 @@ behind a fixture flag; default stays `alpaca`.
         could happen by leaving one option out. A fixed-list comparison stays
         possible through a timeline that holds one list (it reproduced the
         fixed-list run exactly in the engine measurement). Built 2026-11-20
-        (hook layout piece 3b, not committed).
+        (hook layout piece 3b, committed `f0b2befda`).
       - Decided 2026-11-20 (the user, asked with "evaluation's first day" and
         "selection's first day" as the choices): **in the admission layout the
         regime labels are built from the list in force on the evaluation piece's
@@ -3654,7 +3751,7 @@ behind a fixture flag; default stays `alpaca`.
         the rule is applied to the days it reads. The selection piece's first-day
         list would be nine months and six rotations old when those days begin.
         The stage is report only either way. Built 2026-11-20 (hook layout piece
-        3b, not committed), as one rule for both layouts: the list in force on
+        3b, committed `f0b2befda`), as one rule for both layouts: the list in force on
         the first day the regime stage reads.
       - Decided 2026-11-20 (the user, asked with "one continuous run", "joined
         folds" and "measure both first" as the choices): **the pooled nine-month
@@ -3703,12 +3800,46 @@ behind a fixture flag; default stays `alpaca`.
         real drawdown between -35% and -40% unguarded and is a different rule.
         Scripted returns, not our bars: this shows the mechanism, not how often a
         real candidate falls in the gap.
-        Built the same day (hook layout piece 3b, not committed):
+        Built the same day (hook layout piece 3b, committed `f0b2befda`):
         `MonteCarloStageConfig.base_run_clears_filter`, off by default, set by the
         hook for the admission layout only, not a YAML key. With it the base run
         is filtered on all of `filter_config` and a failed record's reason reads
         like `base run: max_drawdown -0.272 < threshold -0.2`. The 90-day layout
         and the YAML pipelines judge the base run as before.
+      - Decided 2026-11-20 (the user, asked twice): **the holdout score is kept in
+        the research step's summary, and the holdout run leaves no row in the
+        database.** Asked first with "existing tables", "pointer on the candidate"
+        and "new report table" as the choices, and "existing tables" was chosen:
+        the run saved like any other with `window_role = "holdout"`. I had
+        described that as costing nothing. That was wrong (my mistake, found by
+        reading before anything was built): about ten lookups in five services
+        take the newest run or metrics row of a strategy without asking what
+        kind of run it is. `auto_demotion_service._latest_metrics_for_strategy`
+        and `quality_based_reallocation_service._latest_metrics` take it as the
+        strategy's latest performance (the second leaves out bench re-simulation
+        runs and nothing else); `auto_promotion_service` and
+        `strategy_governance_service` fall back to it for a candidate with no
+        source run; `strategy_catalog_service` shows it. A holdout run is
+        written last, so it would have been that row, and a bad holdout would
+        have demoted a strategy or cut its allocation: the holdout as a gate by
+        the back door, against the 2026-11-15 decision. Asked again with that
+        said, with "result file only", "own table, no run row" and "existing
+        tables + filters" as the choices. Chosen: result file only. Known cost:
+        comparing holdout scores across months means reading result files, not
+        one query; a table can be built when the "holdout as a gate" review is
+        planned. Built the same day (hook layout piece 4, not committed).
+      - Found 2026-11-20, read from the code, not measured, not changed: **those
+        lookups already read a run that is not the candidate's record.** After a
+        six-stage research run the last simulation written for a survivor is the
+        stress stage's re-run at a multiple of costs (two times, then three in
+        the full profile), not its evaluation run. Promotion and governance
+        read the candidate's source run first and reach the newest row only
+        without one; demotion and allocation quality take the newest row. Not
+        traced: how often those two are reached for a research-born strategy
+        before it has live performance snapshots of its own, and whether a
+        cost-stressed row there has changed any decision. It belongs to the
+        portfolio plan, not this sprint; recorded here because this is where it
+        was seen.
       - Decided 2026-11-16 (the user, asked with "fixed, moved on a schedule", "rolling
         monthly" and "fixed now, decide later" as the choices): **the holdout date is
         fixed at 2026-05-18 and moves on a schedule.** One date in one place, checked
@@ -4158,7 +4289,7 @@ behind a fixture flag; default stays `alpaca`.
           shorter than asked; delete the unused `_sim_workers`.
           2026-11-20: built in hook layout piece 3a (the dataset option; a window
           a named dataset cannot hold is a failed step; `_sim_workers` deleted),
-          committed `38be9d0c7`. Piece 3b (built 2026-11-20, not committed) adds
+          committed `38be9d0c7`. Piece 3b (built 2026-11-20, committed `f0b2befda`) adds
           the same for the 9 / 9 / 6 layout: a dataset the layout cannot be laid
           on is a failed step. Ticked when both are merged.
     - *Decision, 2026-11-16 (user: "yes lets do it your way", after asking whether to
@@ -4236,6 +4367,9 @@ every candidate with a recorded reason.
   longer history is loaded and the holdout is its own period: how long it is, how many
   candidates have been scored on it, and whether the reported holdout scores separated
   the strategies that later held up on the bench from the ones that did not.
+  Since hook layout piece 4 (2026-11-20) the scores are in each research step's
+  summary (`holdout_report`), in the job's result file, not in the database: this
+  review reads those files, or builds a table for them first.
 
 ## 5. Results log
 
