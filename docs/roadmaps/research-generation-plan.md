@@ -150,8 +150,8 @@ section 3: done, then still open.
 
 | Item | What it is | Status | Boxes | What is left | When |
 |---|---|---|---|---|---|
-| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 19 done, 1 open (the hook layout's own piece boxes not counted) | Built 2026-11-20 on `research/r2-hook-layout`, merged as PR #194 (`9cf5582d6`) and on A and B 2026-11-23, for a job that names the admission layout: the selection / evaluation split, folds in sessions, fold geometry, the two-part pass rule (2 of 3 folds, and the nine-month record held to the filter), and the holdout (read by no stage, which the validator checks; the final survivors reported on it in the step's summary). The rehearsal on B (piece 5) ran 2026-11-23 (exit 0, 33 minutes, peak 1,850 MiB of 3,055); nothing of the hook layout is open. Built 2026-11-22 on `research/r2-code-boxes`, not committed: the walk-forward "entered" count, a minimum test span in the walk-forward config (twelve weeks, with a named exception), and the daily-resample mode refused. Closed 2026-11-22 by the user's decisions, no code: fold count from the history available (answered by the admission layout) and longer folds (delivered by the 24-month dataset). The one box left is a later saving on the train run, not needed for correctness. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Commit and merge the three code boxes. After that R2 has no work left but one optional saving |
-| 🔴 R7 | Test hardening per stage | Not started as its own item. Realistic-curve tests now exist at gate level for Monte Carlo, stress and regime | 0 done, 2 open | A real-runner test per stage, the cross-process checksum test. R4's "Verify" (a real-runner test per stage where the gate fails) is this work too | Rides along with package B (package D) |
+| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 19 done, 1 open (the hook layout's own piece boxes not counted) | Built 2026-11-20 on `research/r2-hook-layout`, merged as PR #194 (`9cf5582d6`) and on A and B 2026-11-23, for a job that names the admission layout: the selection / evaluation split, folds in sessions, fold geometry, the two-part pass rule (2 of 3 folds, and the nine-month record held to the filter), and the holdout (read by no stage, which the validator checks; the final survivors reported on it in the step's summary). The rehearsal on B (piece 5) ran 2026-11-23 (exit 0, 33 minutes, peak 1,850 MiB of 3,055); nothing of the hook layout is open. Built 2026-11-22 on `research/r2-code-boxes`, merged as PR #196 (`19a26dffa`), on A and B 2026-11-23 (checked: A's app and scheduler containers and B's worker image are built from it; B rebuilt once the baseline released the job lock): the walk-forward "entered" count, a minimum test span in the walk-forward config (twelve weeks, with a named exception), and the daily-resample mode refused. Closed 2026-11-22 by the user's decisions, no code: fold count from the history available (answered by the admission layout) and longer folds (delivered by the 24-month dataset). The one box left is a later saving on the train run, not needed for correctness. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Commit and merge the three code boxes. After that R2 has no work left but one optional saving |
+| 🟡 R7 | Test hardening per stage | **Built 2026-11-22** on `research/r7-test-hardening`. Full suite: 6,052 passed, 5 skipped, 1 xpassed | 2 done, 1 open | Done: a real-runner test per stage where the gate drops a strategy (which meets R4's "Verify" for the hook's six stages), and the cross-process checksum test, which passes. With them the R7 boxes under R10 and R15, and one production change for speed (the regime label join). Open: a finding, not a test: a fill's commission is recorded and never charged (inert at zero commission; package E) | Package D, one PR |
 | 🔴 R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 done, 5 open | All of the wiring | After package B, before Step 5 (package C). It saves time on long runs; it does not change any result |
 | 🔴 R13 | No parameter-stability check | Not decided. A decision, not work yet | 0 done, 2 open | Decide whether to build the neighbour check | The user's decision, asked once package B gives more survivors (package F) |
 
@@ -172,11 +172,11 @@ work. Its note stays in section 3.
 | 🟢 R4 | Audit of the remaining gates | **Audit done** 2026-11-15: notes for stress, overfitting, parameter stability, regime; the problems it found are R11 to R15 | 1 done, 1 open | The 12% drawdown kill on the backtest path (parked below, package E). Its "Verify" is R7's work |
 | 🟢 R5 | Composite score hides missing evidence | **Done.** Merged PR #184, deployed 2026-11-16. No score without walk-forward and Monte Carlo; report-only measures carry weight 0 | 2 done, 0 open | Nothing |
 | 🟢 R6 | Experiment-config and holdout validator | **Validator shipped.** Merged PR #184, deployed 2026-11-16. Holdout rule built 2026-11-20, merged as PR #194 (`9cf5582d6`), on A and B 2026-11-23 | 2 done, 0 open | Nothing open; the holdout rule shipped with the hook layout |
-| 🟢 R10 | Stale marks when a bar is missing | **Done.** Merged PR #182, deployed to A and B | 6 done, 2 open | The re-sim vs platform correlation was not re-measured; more sparse-bar fixtures (R7) |
+| 🟢 R10 | Stale marks when a bar is missing | **Done.** Merged PR #182, deployed to A and B | 7 done, 1 open | The re-sim vs platform correlation was not re-measured. The sparse-bar fixtures were built 2026-11-22 (R7) |
 | 🟢 R11 | Stress gate: shocks report-only, costs decide | **Done.** Merged PR #183, deployed 2026-11-16. Rerun done: funnel 30 → 30 → 4 → 2 → 2 → 2, the first run with final survivors | 5 done, 0 open | Nothing. "Verify" met by the all-30 audit pass: 7 pass, 23 fail, for causes that differ. Stress at the new cost is R12's box |
 | 🟢 R12 | Research trading cost: 1 basis point per trade | **Done except two boxes.** Merged PR #183, deployed 2026-11-16. Measured on real bars (funnel 30 → 30 → 2 → 2 → 2 → 2, stress passes 3 of 30) and on B's bench re-sim (order unchanged; momentum -1.8% → -7.8%) | 4 done, 3 open | Slippage written to fill rows. Two midpoint guards wait for a `LIMIT` / `TWAP` policy |
 | 🟢 R14 | Overfitting gate never exercised | **Report-only shipped.** Merged PR #184, deployed 2026-11-16 (agreed 2026-11-15). Measured first: on all 30 strategies it passed 26, including 16 of 20 losing ones, and changed no outcome | 3 done, 1 open | The prerequisites before `enforce` is switched on; they wait on longer history |
-| 🟢 R15 | Regime gate report-only on a short window | **Report-only shipped.** Merged PR #183, deployed 2026-11-16 | 1 done, 4 open | The four prerequisites before `enforce` is switched on; all wait on longer history |
+| 🟢 R15 | Regime gate report-only on a short window | **Report-only shipped.** Merged PR #183, deployed 2026-11-16 | 2 done, 3 open | Three prerequisites before `enforce` is switched on. The R7 tests were built 2026-11-22; the per-label analysis is now fast, which the shuffled-labels box was waiting on |
 | 🟢 R16 | The deployable decision rests on the three report-only measures | **Decided and shipped.** Merged PR #184, deployed 2026-11-16 (user: "Trusted evidence only"). Deployable is now the average of walk-forward and Monte Carlo. Measured first: nothing was flagged deployable, the regime input was always 0.5, shocks near-constant | 2 done, 2 open | Calibrate the 0.55 threshold (needs longer history); pass the regime profile to the scoring request so the reported regime fields are real |
 | 🟢 R17 | Short warmups got no bars at a Monday start, after a holiday, or for a thinly traded name (23% to 68% of starts by warmup size on the 24-month dataset) | **Done.** Merged PR #191, deployed to A and B 2026-11-19. The loader counts each name's own bars before the window. Before / after on identical bars: 0 pass / fail flips and Sharpe moves of up to 0.04 over nine months; 1 flip and up to 0.62 over four weeks | 2 done, 0 open | A name with less history than its warmup is recorded on the run's result and logged (the user's decision 2026-11-18), but nothing reads it yet: showing it in the funnel rides with R2's layout change. Not measured: a 63-session window. Seen, not examined: the same sessions-times-7/5 estimate in four other files |
 
@@ -200,9 +200,9 @@ work. Its note stays in section 3.
 | ⚪ D1 | One feed everywhere (IEX now, SIP at go-live) | Rule and trigger agreed. The free-tier probe has not been run; deferred by the user 2026-11-15 until the other updates are done | 0 / 13 | Nothing now. The probe and the rest come with the switch |
 | 🔴 D2 | Parquet integrity for research reads | Not started (the four defects re-confirmed in the code 2026-11-15) | 0 / 4 | Compaction deleting unread fragments comes first |
 
-🟡 **Steps 1 to 5 (generator and plumbing): Step 1 started 2026-11-22, the rest not.** Step 1 baseline 3 / 5 (rewritten for the long window; first job decided, fixture on B, both conditions decided; the run started 2026-11-23 04:22 UTC, no result yet), Step 1b generation system review 0 / 7 (added 2026-11-15), Step 2
+🟡 **Steps 1 to 5 (generator and plumbing): Step 1 started 2026-11-22, the rest not.** Step 1 baseline 3 / 5 (rewritten for the long window; first job decided, fixture on B, both conditions decided; the run finished 2026-11-23 06:06 UTC, exit 0: 30 candidates in, 8 through every stage, all 8 negative on the holdout; open: the composite-grid baseline), Step 1b generation system review 0 / 7 (added 2026-11-15), Step 2
 evolutionary search 0 / 3, Step 3 hand-off to A's bench 0 / 3, Step 4 no boxes, Step 5
-monthly job 0 / 13. Section 5's results log is empty. Step 1 no longer waits on R2: the hook layout is done (2026-11-23) and what R2 has open is code only.
+monthly job 0 / 13. Section 5's results log has its first row (2026-11-23). Step 1 no longer waits on R2: the hook layout is done (2026-11-23) and what R2 has open is code only.
 
 **Work packages (the open boxes grouped by what gets done together)**
 
@@ -215,11 +215,11 @@ Package A is merged and deployed. Nothing is running.
 | 🟢 A | **Validators and evidence** (done: merged PR #184, deployed 2026-11-16) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | Nothing | One PR, no new data (#184) |
 | 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (done: merged as PR #193, on A and B 2026-11-20; no job uses it yet), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule (started 2026-11-20 on `research/r2-hook-layout`: pieces 1, 2, 3a, 3b and 4 merged as PR #194, `9cf5582d6`, on A and B 2026-11-23; the layout is switched on by a research option that only the rehearsal fixture sets; the rehearsal on B ran 2026-11-23, exit 0, 33 minutes, peak 1,850 MiB of 3,055; the hook layout is done), memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
 | 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
-| 🔴 D | **Test hardening (R7)** | R7 both boxes, and the R7 boxes under R10, R14, R15 | Nothing | Can ride along with A and B |
+| 🟡 D | **Test hardening (R7)** (built 2026-11-22 on `research/r7-test-hardening`) | R7 both boxes, and the R7 boxes under R10, R14 (done earlier, with R14's change) and R15: all built | Nothing | One PR: tests, and one production change for speed (the regime label join) |
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R12's slippage in fill rows, D2. R8 left this package 2026-11-16: deferred until random fills are switched on | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
 | 🔴 F | **R13** | Decide whether to build the neighbour check | The user | A decision, then maybe one PR |
 
-After these: Step 1 (baseline; started 2026-11-22, its first job is the hook's full profile on B), then Steps 2 to 5.
+After these: Step 1 (baseline; started 2026-11-22, its first job, the hook's full profile on B, ran 2026-11-23), then Steps 2 to 5.
 
 **Open questions for the user** (package A, investigated 2026-11-15; all four decisions
 and the score-composition answer implemented the same day, merged as PR #184; nothing is
@@ -685,7 +685,7 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
       this stage; `n_passed` is right. Shown in the hook's `stage_funnel`, the CLI and
       the stage metrics. Seen on real bars 2026-11-23 (the admission rehearsal on B):
       "entered 12" for the 3 strategies that entered.
-      **Fixed 2026-11-22** (branch `research/r2-code-boxes`, not committed). "Entered"
+      **Fixed 2026-11-22** (branch `research/r2-code-boxes`, merged as PR #196). "Entered"
       is a fact about what a stage is handed, and the pipeline runner is the one that
       hands it over: `PipelineRunner` now records the count on each stage's result
       (`StageResult.entered`), and `n_entered` reads it. A result built outside a
@@ -695,9 +695,10 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
       entrant (walk-forward has such a path, and it read "entered 0, failed negative").
       Tests, 6 (`tests/research/pipeline/test_stage_entered_count.py`), and the hook's
       real-run smoke test now checks that each stage enters what the one before it
-      passed. 6 mutations, all caught. The baseline started 2026-11-23 04:22 UTC runs
-      the image from before this fix, so its walk-forward "entered" reads wrong; its
-      "passed" is right and the true count is stage 1's "passed".
+      passed. 6 mutations, all caught. The baseline of 2026-11-23 ran
+      the image from before this fix, so its walk-forward "entered" reads wrong (32,
+      the stage's simulation count; the true count is 8, stage 1's "passed"); its
+      "passed" is right.
 - [x] Gate on a pooled or median test Sharpe across folds in addition to per-fold pass
       counts. Rule decided 2026-11-18 (the user): both, 2 of 3 folds and the pooled
       nine-month record (Step 5, "Universe over the long window"). Decided
@@ -720,7 +721,7 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
       **Decided 2026-11-22 (the user): the mode is refused, not repaired.** Both defects
       were confirmed still in the code that day, and nothing uses the mode: no source
       file, experiment YAML, fixture or test sets `resample_to_daily`. Built (branch
-      `research/r2-code-boxes`, not committed): `SimulationRunRequest` refuses the flag
+      `research/r2-code-boxes`, merged as PR #196): `SimulationRunRequest` refuses the flag
       (every simulation is described by one, so no path runs daily bars), and
       `PipelineRunner.run` refuses a pipeline that asks for it before its first stage
       (`DailyResampleRefusedError`, a `ValueError`; the message gives both reasons). The
@@ -748,7 +749,7 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
         roughly 5 (√(252/10)), so short folds are near coin flips and the pooled gate
         above is the one that carries weight.
         **Decided 2026-11-22 (the user): refuse, with a named exception.** Built (branch
-        `research/r2-code-boxes`, not committed): `WalkForwardStageConfig` refuses a
+        `research/r2-code-boxes`, merged as PR #196): `WalkForwardStageConfig` refuses a
         test fold under twelve weeks unless the config sets `allow_short_test_folds`,
         the same shape as the overlap exception. Twelve weeks is `test_days >= 84` for
         rolling folds and 82 days from first day to last for a fold given by date: sixty
@@ -959,7 +960,8 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
                   (about nine minutes of a full run at the laptop's measured 68
                   seconds per nine-month simulation and 8 survivors). Reusing
                   stage 1's run needs stage 1 to keep it where the reuse lookup
-                  reads.
+                  reads. Measured on B in the baseline of 2026-11-23: 635 seconds
+                  for the 8 train runs, 10% of the job.
       - Found 2026-11-20 while reading for piece 3, and missed when the pieces
         were first cut (the open box under Step 5, "Hook: take the dataset
         version explicitly", already said it): the six-stage pipeline has one
@@ -1626,7 +1628,10 @@ feed, look for fail-open branches and `None`-coercion.
       really come from, what the tests prove, fail-open paths); each confirmed problem
       becomes its own R-number with a fix list. Done 2026-11-15: stress (R11, R12),
       overfitting (R14), parameter stability (R13), regime (R15). The "Verify" line
-      below is not met: no stage has a test on a real runner where the gate fails (R7).
+      below was not met then: no stage had a test on a real runner where the gate fails
+      (R7). Met 2026-11-22 for the six stages of the hook's pipeline, by
+      `tests/research/test_stage_gates_on_real_runs.py`; the parameter-stability stage is
+      not in that pipeline and has none (R13).
 - [ ] First confirmed gap to carry in: nothing on the backtest trading path reads the 12%
       `max_drawdown_limit`, so a research run never experiences the kill that the live
       path would apply at the same drawdown **[9.8 #5]**. Research scores therefore
@@ -1702,15 +1707,83 @@ suite `v1` rule "holdout never tuned on" (`pre-launch-deployment-plan.md` §5) e
       file loads through both loaders; a copy whose Monte Carlo stage ends on the
       holdout date is refused by both; the same copy marked smoke loads).
 
-**R7 — Test hardening per stage (not started).** Every stage audited so far is tested with
+**R7 — Test hardening per stage (built 2026-11-22, branch
+`research/r7-test-hardening`).** Every stage audited so far is tested with
 `MagicMock` results and permissive filters, so gating logic is never exercised.
-- [ ] One integration test per stage on synthetic bars with a real `SimulationRunner` and
+- [x] One integration test per stage on synthetic bars with a real `SimulationRunner` and
       realistic thresholds, asserting the gate can fail and that survivors change when the
       inputs change. These are the regression net for every other item in this sprint.
-- [ ] A cross-process replay test: the same experiment run twice in separate processes
+      **Built 2026-11-22.** Inventory first: two files ran the stages on a real runner
+      (`test_research_stages_smoke.py`, `test_research_hooks_smoke.py`), every threshold
+      in them passed everything, and no real-runner test showed a gate dropping a
+      strategy; stage 1 had no failing-gate test even on a fake runner.
+      `tests/research/test_stage_gates_on_real_runs.py`, six tests, one per stage. The
+      stage under test is the hook's own stage object, thresholds included; the stages
+      before it, where it needs any, pass everything, so the verdict is that stage's
+      alone. Three strategies (one draw each of momentum, mean reversion, moving-average
+      crossover) on three price paths of daily bars in `tests/research/real_run_support.py`
+      (rises then falls, falls then rises, turns late). Each test shows a strategy
+      dropped for a reason that is true of its real run, and different survivors on
+      different bars: stage 1 keeps 1 of 3 on falling prices and 2 of 3 on rising;
+      walk-forward 0 and 1; Monte Carlo 0 and 2, with one strategy out on the paths and
+      one out on the base run although 84% of its paths cleared; stress 1 and 2, and
+      the last one too at 200x costs; overfitting drops the strategy that did well in
+      the train windows and badly in the test windows (probability 0.70 against 0.60)
+      and keeps it on rising prices. Two stages are not quite as the hook has them and
+      the tests say so: regime and overfitting are report-only in the hook, so the
+      tests run them enforced as well (report-only: findings recorded, nobody dropped),
+      and the regime gate's minimum of bars per regime is sized for five-minute bars.
+      Not taken: tuning the bars until a fixed threshold happens to fail, or thresholds
+      of the tests' own. Known limit: the bars are daily and the platform annualises
+      with the five-minute count, so a Sharpe here is several times too large; the
+      tests lean on its sign only. 11 mutations, all caught, among them the real runner
+      dropping the cost multiplier, which no earlier test could see. About 50 seconds.
+- [x] A cross-process replay test: the same experiment run twice in separate processes
       produces artifacts with identical checksums **[7.4]**. This is the determinism
       guarantee R8 and the cache work depend on; without it "same seed, same result" is
       a hope.
+      **Built 2026-11-22, and it passes: the guarantee holds today.**
+      `tests/research/test_real_run_across_processes.py` starts
+      `tests/research/real_run_child.py` twice, each with a different `PYTHONHASHSEED`,
+      so anything that leans on the order of a set or on `hash()` of a string comes out
+      differently in each. The child runs the hook's six-stage experiment (validated, not
+      smoke) on the same synthetic bars with the real runner. Compared: who entered and
+      survived each stage, every simulation's run id and numbers, the Monte Carlo and
+      overfitting numbers, and a checksum of the rows of every output file under its
+      path (the path holds the run id). The rows, not the bytes: a Parquet file also
+      carries writer metadata. Not taken: comparing in one process (the existing tests
+      do, on in-memory results), or raw file bytes. 4 mutations, all caught: seeds from
+      `hash()`, a run id that depends on the process, a commission that does, a
+      positions file written in an order that does. About 25 seconds.
+- Found while building R7 (2026-11-22); the first two are not fixed, the third is:
+  - [ ] The research simulator records a fill's commission and never charges it. The
+        cost model computes it, `SimulatedExecutionService` puts it on the fill as
+        `fees`, and `SimulationExecutionEngine` reads `fill.fees` in one place, the
+        trade-log row. Cash is never reduced by it. Inert today: commission is zero in
+        the research cost model (costs are in the fill price). It turns live the day a
+        commission is configured, and the stress stage's cost multiplier is documented
+        as scaling it. Found by a mutation that changed a commission and moved no
+        number. Same family as R12's fill-row box; belongs with package E.
+  - The real-runner smoke tests write every run's output files into the repo's own
+    `data/simulations/` (the simulation repository's base path is the relative `data`):
+    2,881 files on the laptop, ignored by git, overwritten by path. The new tests write
+    under a temporary folder. That folder has to have a short path
+    (`short_data_root`): a run's output path is about 190 characters below its root,
+    and Windows without long-path support stops at 260, which pytest's `tmp_path`
+    alone uses 95 of. The two older smoke files were left as they are.
+  - Changed, for speed alone: `RegimeJoinService.join_equity_curve`, the one change
+    to production code in R7. To put a regime label on each row of an equity curve it
+    took the most common label at each timestamp, with a Python function called once
+    for every timestamp and column. One regime-stage run on a 60-session five-minute
+    curve took 13.2 seconds, nearly all of it there, which made R15's realistic-curve
+    tests too slow to write. When no timestamp repeats in the labels there is nothing
+    to vote on, and the join now takes the labels as they are: 0.6 seconds, the same
+    verdict. Labels with repeated timestamps go the old way, unchanged. Nine tests
+    (`tests/research/regimes/test_regime_join_one_row_per_timestamp.py`) hold the two
+    ways to the same answer, a missing label and a row with no timestamp included; 5
+    mutations, all caught, one of them seen from the regime stage's tests. Not taken:
+    leaving the join alone and testing on fewer sessions, which is not what R15's box
+    asks for.
 
 **R8 — Simulator RNG is positional, not keyed (deferred 2026-11-16: inert until random
 fills are switched on; checked in the code that day, nothing sets one).** The fill model draws from
@@ -1919,9 +1992,20 @@ Line numbers below are the engine before the fix.**
       service has to keep such an order open the way the platform broker does.
       The same run repeated the first post-fix run exactly (all 30 strategies: verdict,
       Sharpe, trades, pass rate, spread, return, drawdown; same funnel).
-- [ ] R7: more sparse-bars fixtures (the new test file is the first). The synthetic bars
+- [x] R7: more sparse-bars fixtures (the new test file is the first). The synthetic bars
       of the R1 harness have a bar for every symbol at every timestamp, so they could not
       show this; whether any other simulator test has a gap was not checked.
+      **Built 2026-11-22** (branch `research/r7-test-hardening`):
+      `tests/research/test_sparse_bars_on_real_runs.py`, five tests. The first file pins
+      the engine on a hand-built eight-bar timeline; this one asks the same of the whole
+      path (bars on disk, window loader, real runner, engine, recorded files).
+      `seed_dataset(..., no_bar_on=...)` leaves a symbol's bar out on chosen days: two of
+      three symbols each lack one day in five. One momentum strategy holds positions
+      across the gaps, and every position row it records is checked against the bars:
+      marked at the symbol's latest close, value and unrealized P&L to match, the same
+      mark as the day before on a gap, equity equal to cash plus the marked positions,
+      and no fill on a day its symbol has no bar. 4 mutations in `_mark_positions`, all
+      caught, the R10 bug put back among them.
 
 **Verify (met 2026-11-15 on the laptop run above):** on the 30-strategy run, sum of
 squared session sums / sum of squared bar returns is between 0.85 and 1.35 for every
@@ -2357,10 +2441,32 @@ that.
 - [ ] A label needs a minimum number of sessions stated in sessions (about 100), and the
       verdict says how many sessions each judged label had.
 - [ ] The -20% drawdown rule: drop it or restate it against the window's size.
-- [ ] R7: tests on five-minute curves over 60 sessions with Sharpe between -2 and 3,
+- [x] R7: tests on five-minute curves over 60 sessions with Sharpe between -2 and 3,
       including one where random labels are the input.
+      **Built 2026-11-22** (branch `research/r7-test-hardening`):
+      `tests/research/pipeline/test_regime_stage_on_realistic_curves.py`, six tests on
+      the real `RegimeStage` with the hook's thresholds, enforced. Six curves at Sharpe
+      -2.0, -0.5, 0.5, 1.5, 2.3 and 3.0 over 60 sessions of 78 five-minute bars. The
+      labels are dealt at random, twenty sessions to each of three trend labels and
+      three volatility labels, so a finding against a good curve is chance and
+      nothing else. What the tests hold: the same six curves keep two strategies under
+      one deal and none under another; the two losing curves are found out under
+      every one of ten deals; a Sharpe-2.3 curve draws a finding more often than not;
+      report-only records the finding and keeps the strategy; asking 100 sessions of
+      each label leaves nothing judged on 60 (the first box above). Measured: five
+      curves at 2.3 under twenty deals each drew a finding in 70 of 100 judgments,
+      between 10 and 17 of 20 for a single curve. The audit's 48 in 100 was one
+      curve; the number moves with the curve and the conclusion does not: on 60
+      sessions this gate cannot tell a good strategy from an unlucky label. 5
+      mutations in `regime_gate.py`, all caught, the last only after a test was added
+      for it: every losing curve trips the Sharpe floor first, so the
+      profitable-regimes rule was never the one speaking, and the sixth test moves
+      the floor away to hear it. Possible only once the label join was fast (R7,
+      "Found while building R7"). About 10 seconds.
 - [ ] Option (b), judging against shuffled labels, once the per-label analysis is fast
-      enough.
+      enough. 2026-11-22: it is, since the join change under R7 (13.2 seconds a run
+      to 0.6 on 60 sessions; a hundred shuffles is about a minute a strategy). Not
+      designed.
 
 **Verify:** on the 30-strategy run, a strategy's verdict under the real labels differs
 from its verdict under shuffled labels more often than chance, or the gate does not
@@ -2791,7 +2897,7 @@ ways it can hand them the wrong rows while every registry row still says `valida
 compaction; a fixture with `data.parquet` plus a later fragment returns both; the same
 table written in two chunk layouts hashes identically.
 
-### Step 1 — Baseline measurement (started 2026-11-22; first job running on B since 2026-11-23 04:22 UTC)
+### Step 1 — Baseline measurement (started 2026-11-22; first job ran on B 2026-11-23, exit 0, numbers in section 5)
 
 Note, 2026-11-16 (not a decision): this section was written 2026-11-06, before package B.
 Its window (about 54 sessions, a 14-session holdout), its 22-symbol list and its pinned
@@ -2858,16 +2964,22 @@ What changed under Step 1 since it was written:
         out by name), not the rolling window. Finding 27 stays open in the deployment
         plan for the rolling window, which the weekly bench re-sims read. Not taken:
         query the seven named sessions first, wait for the re-pull.
-- [ ] The run on B through `worker_job.sh worker run`, memory sampled as in the
+- [x] The run on B through `worker_job.sh worker run`, memory sampled as in the
       rehearsal, on the user's go-ahead. Estimated 1.5 to 2.5 hours and a peak at 80 to
       85% of the ceiling; exit 137 means the ceiling was reached and is itself the
       result. **Started 2026-11-23 04:22:05 UTC** on the user's go-ahead, image
       `e7f4ea8d2`, ceiling 3,055 MB; files in
       `~/rehearsals/research_admission_baseline_20261123T042205Z/` on B. The job's
       reset wiped the rehearsal's 27 rows (their numbers are in hook layout piece 5).
-      **Not finished when this was written; no result yet.** Record in section 5: candidates entered, survivors per stage, clusters,
-      the holdout report beside the evaluation numbers of the same survivors,
-      wall-clock, peak memory and memory per kept candidate.
+      **Finished 06:06:54 UTC, exit 0:** 6,289 seconds (1 hour 45 minutes), peak
+      2,493 MiB (82% of the ceiling) at 05:58:35, the end of the stress stage; nothing
+      at error level in the log; the result uploaded under
+      `artifacts/worker/research_admission_baseline/20261123T042212Z/`. Both estimates
+      held. 30 candidates entered, 8 passed stage 1, no later stage dropped any of
+      the 8, and all 8 lost money on the holdout. Recorded in section 5, "The first
+      baseline": candidates entered, survivors per stage, clusters, the holdout report
+      beside the evaluation numbers of the same survivors, wall-clock, peak memory
+      and memory per kept candidate.
 - [ ] The composite-grid baseline (the 2026-11-06 boxes: all 652 skeletons by `grid`,
       and `random` with `n_samples: 50`), designed from the run's measured numbers.
       Needs, as read today: a way for the hook to take a candidate set, results not kept
@@ -4616,6 +4728,100 @@ every candidate with a recorded reason.
 
 | Date | Dataset version | Method | Generated / accepted | Survivors (gates) | Clusters | WF best / median | Holdout top-10 Sharpe median | Holdout drawdown median | Off-pool share | Wall-clock |
 |---|---|---|---|---|---|---|---|---|---|---|
+| 2026-11-23 | `raw_bars_20261118T234501Z_043e50ad`, `feed=iex` | hook, full profile, admission layout (random draws over five families) | 36 drawn / 30 distinct entered | 8 after stage 1, 8 after each of the other five | 4 | no walk-forward score kept; evaluation Sharpe 2.26 / 2.03 | -1.60 (8 survivors, all negative) | -8.8% | not measured | 1 h 45 min, peak 2,493 MiB |
 | | | grid | | | | | | | 0% | |
 | | | random n=50 | | | | | | | 0% | |
 | | | evolutionary | | | | | | | | |
+
+### The first baseline (2026-11-23, `feed=iex`)
+
+The hook's full profile on the 24-month dataset, admission layout, the pipeline as it
+stood at `e7f4ea8d2`. Run `86de9c27-77b3-4c12-8f44-ef0fc82a0326`, research month
+2026-11, timeline `universe_timeline_20261119T220329Z_54a0ff84`. Read 2026-11-23 from
+the job's result file, the worker's database and the memory log on B; the research
+summary is saved beside the logs as `research_summary.json`. One run of 36 random
+draws: a first "before", not the composite grid.
+
+Windows: selection 2024-11-18 to 2025-08-15 (183 sessions); evaluation 2025-08-18 to
+2026-05-15 (188 sessions), in three test folds of 63, 63 and 62; holdout 2026-05-18 to
+2026-11-16 (127 sessions).
+
+Candidates: 36 drawn (momentum 6, mean reversion 6, moving-average crossover 6, factor
+8, composite 10); 30 distinct entered stage 1 (momentum 4, crossover 2, the other
+families whole). Why six draws were not distinct was not read. Two factor strategies
+never traded. Two of the composites that survived have different ids and the same
+numbers in every run, and so do two factor strategies that were dropped.
+
+| Stage | Entered | Passed |
+|---|---|---|
+| 1 Initial quality filter (selection window) | 30 | 8 |
+| 2 Walk-forward (three test folds, and the nine-month record) | 8 | 8 |
+| 3 Monte Carlo | 8 | 8 |
+| 4 Regime (report-only) | 8 | 8 |
+| 5 Stress (costs at 2x and 3x) | 8 | 8 |
+| 6 Overfitting (report-only) | 8 | 8 |
+
+The file's own "entered" for walk-forward reads 32: the image predates the fix of
+2026-11-22 (R2).
+
+The eight survivors. Sharpe in every column; return and drawdown where named.
+
+| Strategy | Selection | Fold 1 / 2 / 3 | Evaluation (return, drawdown) | Costs 2x / 3x | Holdout (return, drawdown) | Trades, evaluation |
+|---|---|---|---|---|---|---|
+| composite `93a0` | 1.10 | 2.72 / 1.09 / 2.70 | 2.03 (+18.5%, -8.8%) | 1.77 / 1.50 | -1.60 (-9.0%, -10.9%) | 30,657 |
+| composite `ce0a` | 1.10 | 2.72 / 1.09 / 2.70 | 2.03 (+18.5%, -8.8%) | 1.77 / 1.50 | -1.60 (-9.0%, -10.9%) | 30,657 |
+| composite `bf32` | 1.02 | 2.62 / 1.22 / 2.61 | 1.98 (+17.8%, -8.7%) | 1.68 / 1.38 | -1.80 (-9.9%, -11.8%) | 52,308 |
+| factor `e7d4` | 1.08 | 2.69 / 1.11 / 2.60 | 1.98 (+17.9%, -8.7%) | 1.67 / 1.39 | -1.78 (-9.8%, -11.8%) | 44,391 |
+| mean reversion `8ac1` | 0.90 | 3.93 / 1.66 / 1.18 | 2.04 (+3.6%, -1.2%) | 2.01 / 1.98 | -0.94 (-1.0%, -1.7%) | 319 |
+| momentum `ab29` | 0.67 | 1.25 / 0.39 / 2.80 | 1.53 (+7.8%, -6.0%) | 0.51 / -0.47 | -1.77 (-5.9%, -6.6%) | 43,974 |
+| crossover `0cdb` | 1.16 | 1.27 / 0.00 / 4.88 | 2.14 (+9.5%, -3.8%) | 2.03 / 1.92 | -1.29 (-3.6%, -5.4%) | 788 |
+| crossover `bf6d` | 0.91 | 1.73 / -0.78 / 5.38 | 2.26 (+8.7%, -3.7%) | 2.05 / 1.86 | -0.01 (-0.1%, -2.9%) | 1,335 |
+
+Medians over the eight: evaluation Sharpe 2.03; holdout Sharpe -1.60, return -7.5%,
+drawdown -8.8%.
+
+What the numbers show, measured and not explained:
+
+- **Every survivor lost money on the holdout.** The same eight have a selection Sharpe
+  of 0.67 to 1.16, an evaluation Sharpe of 1.53 to 2.26, and a holdout Sharpe of -0.01
+  to -1.80. Nothing here separates what the market did in those months from what the
+  strategies do, so this says the pipeline as it stands did not find a strategy that
+  held up in the six months it had not seen; it does not say why.
+- **Stage 1 did all of the eliminating.** All 22 it dropped are under its 0.5 Sharpe
+  floor on the selection window (the best of them 0.45); the 8 it kept are at 0.67 and
+  above. No later stage dropped anyone. Two of the five report only. Walk-forward
+  passed two strategies with one fold under its floor, as its 2-of-3 rule allows (the
+  crossovers' second fold: 0.00 and -0.78). Stress passed momentum, which loses at 3x
+  costs, because surviving one of two cost levels is the half it asks for. Monte
+  Carlo's pass rates were not read.
+- **Four of the eight are one strategy four times.** The three composites and the
+  factor strategy sit within 0.1 Sharpe of each other in every window and trade 30,000
+  to 52,000 times in nine months. Clustering saw it: 4 clusters, 3 survivors excluded
+  as repeats, 5 seeded as deployable in B's own database. Nothing goes to A (Step 3 is
+  not built). Top by composite score: factor `e7d4`, 0.99. Regime diversity score 0.0.
+- **The holdout stayed a report.** 86 simulation rows, none ending after 2026-05-15;
+  the holdout scores are in the result file alone and changed nobody's admission.
+
+Time, 6,289 seconds (1 hour 45 minutes); simulations are 88% of it:
+
+| Piece | Simulations | Minutes |
+|---|---|---|
+| Stage 1, nine months each | 30 | 36.0 (72 s each) |
+| Walk-forward's train run, the 8 survivors again on the selection window | 8 | 10.6 |
+| Three test folds | 24 | 12.3 (31 s each) |
+| Monte Carlo's base run, nine months | 8 | 11.9, then 3.6 before stress starts |
+| Stress at 2x and 3x | 16 | 21.5 |
+| After the last recorded run: overfitting, clustering, the holdout scores | not recorded | 8.2 |
+
+Memory (ceiling 3,055 MB): 254 MiB at the start, 1,675 half-way through stage 1,
+2,082 at its end, 1,796 after the folds, 2,214 after Monte Carlo's base run, **peak
+2,493 (82%) at the end of the stress stage**, 2,348 at exit; 216 MB of swap in use at
+the end. The second half of stage 1 added 407 MiB over about 15.5 candidates, about 26
+MiB a candidate kept, in line with the rehearsal's 25. So the estimate in Step 1 for
+the 652-skeleton grid (about 16 GB) stands, and the full profile itself has about 550
+MiB to spare.
+
+Warnings: none at error level. 35 in the log (32 `dataset_pull.no_registry_row`, 3
+`trading_cycle.no_approved_strategy_found`), and two in the result file about the
+backtest's own universe candidates (`universe_candidate_dataset_version_unresolved`,
+`universe_candidate_empty`); the rehearsal's file has the same two. Not looked into.
