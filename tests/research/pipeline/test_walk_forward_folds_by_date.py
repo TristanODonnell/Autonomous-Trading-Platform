@@ -70,6 +70,8 @@ def _config(**overrides: Any) -> WalkForwardStageConfig:
         start_date=START,
         end_date=END,
         folds=SHARED_TRAIN,
+        # Test windows of two or three weeks, to keep the scripted runs small.
+        allow_short_test_folds=True,
         train_filter_config=MADE_MONEY,
         train_scoring_weights=ScoringWeights(),
         test_filter_config=MADE_MONEY,

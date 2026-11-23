@@ -108,12 +108,17 @@ class StageResult:
     stage_name          Human-readable label e.g. "cheap", "intermediate".
     simulation_results  Every raw SimulationRunResult produced in this stage.
                         A run reused from an earlier stage is not repeated here.
-    filter_outputs      Per-strategy filter verdict + score after aggregation.
-                        One entry per survivor that entered this stage.
+    filter_outputs      Filter verdicts + scores. Most stages write one per
+                        strategy that entered; walk-forward writes one per
+                        strategy per fold per window, and a stage may write
+                        none. Not a count of anything: see ``entered``.
     survivors           Strategies that passed this stage's filters, ready to
                         be passed into the next stage.
     diagnostics         Per-strategy evidence keyed by strategy_id (see
                         StageDiagnostics). Empty for stages that record none.
+    entered             How many strategies were handed to the stage. The
+                        pipeline runner sets it, being the one that hands them
+                        over. None on a result built outside a pipeline.
     """
 
     stage_name: str
@@ -121,10 +126,21 @@ class StageResult:
     filter_outputs: list[FilterScoreOutput] = field(default_factory=list)
     survivors: list[StrategyConfig] = field(default_factory=list)
     diagnostics: dict[str, StageDiagnostics] = field(default_factory=dict)
+    entered: int | None = None
 
     @property
     def n_entered(self) -> int:
-        return len(self.filter_outputs)
+        """Strategies that entered the stage.
+
+        The count the pipeline runner recorded. Without one (a stage run on its own),
+        the strategies this result names: those with a verdict and those that survived.
+        Never the number of verdicts, which walk-forward writes several of per strategy.
+        """
+        if self.entered is not None:
+            return self.entered
+        named = {output.strategy_id for output in self.filter_outputs}
+        named.update(config.strategy_id for config in self.survivors)
+        return len(named)
 
     @property
     def n_passed(self) -> int:

@@ -125,6 +125,28 @@ def corporate_actions_for_request(
     )
 
 
+class DailyResampleRefusedError(ValueError):
+    """A run asked for daily bars, a mode that is switched off (research plan R2)."""
+
+
+# Why ``resample_to_daily`` is refused. Both defects are silent: the run completes and
+# its numbers look like any other run's. Nothing in the repo used the mode when it was
+# switched off (2026-11-22). To switch it back on, fix both and delete the refusals.
+DAILY_RESAMPLE_REFUSED = (
+    "resample_to_daily is switched off: a daily run loads no bars from before its window, "
+    "so the strategy spends its first days warming up, and every annualised number "
+    "(Sharpe, Sortino, volatility, CAGR) is scaled with the five-minute bar count, 19,656 "
+    "a year where daily bars have 252, which reads a Sharpe about 8.8 times too high. "
+    "Run on five-minute bars (research plan R2, daily resample)."
+)
+
+
+def refuse_daily_resample(resample_to_daily: bool) -> None:
+    """Raise if a run or a pipeline asks for daily bars."""
+    if resample_to_daily:
+        raise DailyResampleRefusedError(DAILY_RESAMPLE_REFUSED)
+
+
 @dataclass(slots=True)
 class SimulationRunRequest:
     strategy_id: str
@@ -168,6 +190,10 @@ class SimulationRunRequest:
     # the catalog take the newest run or metrics row of a strategy (the holdout
     # report, plan R2).
     record_run: bool = True
+
+    def __post_init__(self) -> None:
+        # Every simulation is described by one of these, so no path runs daily bars.
+        refuse_daily_resample(self.resample_to_daily)
 
 
 # The universe label of a run whose symbols are its universe for the whole run.

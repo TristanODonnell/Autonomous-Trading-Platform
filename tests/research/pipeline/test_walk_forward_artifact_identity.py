@@ -107,6 +107,7 @@ def _make_walk_forward_stage(runner: CapturingSimulationRunner) -> WalkForwardSt
         end_date=date(2023, 7, 1),
         train_days=90,
         test_days=30,
+        allow_short_test_folds=True,
         step_days=90,
         train_filter_config=_liberal_filter_config(),
         train_scoring_weights=_liberal_scoring_weights(),

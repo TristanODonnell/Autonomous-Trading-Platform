@@ -59,6 +59,7 @@ def _stage(mode: ExecutionMode) -> WalkForwardStage:
         end_date=date(2023, 5, 1),
         train_days=60,
         test_days=20,
+        allow_short_test_folds=True,
         step_days=60,
         train_filter_config=_filter_config(),
         train_scoring_weights=ScoringWeights(),

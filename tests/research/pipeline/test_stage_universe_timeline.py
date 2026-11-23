@@ -88,6 +88,7 @@ def _pipeline(runner: ScriptedRunner, timeline: str | None) -> PipelineRunner:
                     name="wf",
                     train_days=30,
                     test_days=20,
+                    allow_short_test_folds=True,
                     step_days=20,
                     train_filter_config=PERMISSIVE,
                     train_scoring_weights=ScoringWeights(),

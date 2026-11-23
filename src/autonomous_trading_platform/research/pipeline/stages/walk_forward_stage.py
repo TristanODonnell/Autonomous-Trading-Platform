@@ -40,6 +40,12 @@ Rules the config enforces (plan items R2 and R6)
   one test period decide two folds. There is no exception to these.
 - min_folds_passed <= the number of folds the window produces (when
   require_all_folds is False), or no strategy could ever pass.
+- A test window spans at least twelve weeks: MIN_TEST_FOLD_DAYS for rolling
+  test_days, MIN_DATED_TEST_FOLD_DAYS from first day to last for a fold given
+  by date. How well a Sharpe ratio is known depends on the span it was
+  measured over, not on the number of bars: over ten sessions its standard
+  error is about 5 a year, and the fold's verdict is close to a coin toss. A
+  config that keeps shorter folds says so with allow_short_test_folds=True.
 The rule that test folds start after earlier selection stages end involves
 other stages and lives in pipeline_validation.py.
 
@@ -131,6 +137,17 @@ class FoldWindow:
     test_end: date
 
 
+# The shortest test window a fold may have, in calendar days: twelve weeks, which
+# is the 60 trading sessions the admission layout asks of a fold
+# (admission_window.MIN_TEST_FOLD_SESSIONS) before holidays are taken out. Calendar
+# days because this config holds no trading calendar.
+MIN_TEST_FOLD_DAYS = 84
+# The same twelve weeks for a window given by its first and last day: sixty sessions
+# from a Monday end on a Friday, 82 days later counting both. Holidays only widen it,
+# so a fold the admission layout accepts is never refused here.
+MIN_DATED_TEST_FOLD_DAYS = MIN_TEST_FOLD_DAYS - 2
+
+
 @dataclass(kw_only=True)
 class WalkForwardStageConfig:
     name: str
@@ -156,6 +173,9 @@ class WalkForwardStageConfig:
     # short to hold two separate test folds. Overlapping folds share days, so
     # two passes are less than two independent pieces of evidence.
     allow_overlapping_test_folds: bool = False
+    # A named exception to the MIN_TEST_FOLD_DAYS rule, for a window too short to
+    # hold folds that long. A short fold's pass or fail says little by itself.
+    allow_short_test_folds: bool = False
     # The exported universe timeline the folds trade on (a dataset version id).
     # Each fold then loads the names of the lists in force during its own dates.
     # None = the symbols above are the universe for every fold.
@@ -167,6 +187,8 @@ class WalkForwardStageConfig:
             self._check_folds_by_date(self.folds)
         else:
             self._check_rolling_folds()
+        if not self.allow_short_test_folds:
+            self._check_test_fold_spans()
         n_folds = len(self.fold_windows())
         if not self.require_all_folds and self.min_folds_passed > n_folds:
             raise ValueError(
@@ -221,6 +243,25 @@ class WalkForwardStageConfig:
                         f"window ({tested.test_start} to {tested.test_end}): one test period "
                         "would decide two folds"
                     )
+
+    def _check_test_fold_spans(self) -> None:
+        if self.folds is None:
+            if self.test_days < MIN_TEST_FOLD_DAYS:
+                raise ValueError(
+                    f"test_days ({self.test_days}) is under {MIN_TEST_FOLD_DAYS} calendar days: "
+                    "a fold that short is close to a coin toss. Use longer test folds, or set "
+                    "allow_short_test_folds=True to accept it knowingly."
+                )
+            return
+        for number, fold in enumerate(self.folds, 1):
+            days = (fold.test_end - fold.test_start).days + 1
+            if days < MIN_DATED_TEST_FOLD_DAYS:
+                raise ValueError(
+                    f"fold {number}'s test window ({fold.test_start} to {fold.test_end}) spans "
+                    f"{days} calendar days, under {MIN_DATED_TEST_FOLD_DAYS}: a fold that short "
+                    "is close to a coin toss. Use longer test windows, or set "
+                    "allow_short_test_folds=True to accept it knowingly."
+                )
 
     def _check_rolling_folds(self) -> None:
         if self.train_days <= 0:
@@ -389,6 +430,7 @@ class WalkForwardStage(BaseStage):
             require_all_folds=validated.require_all_folds,
             min_folds_passed=validated.min_folds_passed,
             allow_overlapping_test_folds=validated.allow_overlapping_test_folds,
+            allow_short_test_folds=validated.allow_short_test_folds,
             execution_mode=ExecutionMode(validated.execution_mode),
             max_workers=validated.max_workers,
             fail_fast=validated.fail_fast,

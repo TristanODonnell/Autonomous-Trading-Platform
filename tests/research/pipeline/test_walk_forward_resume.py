@@ -92,6 +92,7 @@ def test_walk_forward_completed_fold_units_skip_execution() -> None:
             end_date=date(2024, 2, 10),
             train_days=30,
             test_days=10,
+            allow_short_test_folds=True,
             step_days=30,
             train_filter_config=_filter(),
             train_scoring_weights=ScoringWeights(),

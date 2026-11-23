@@ -25,7 +25,10 @@ from autonomous_trading_platform.observability.tracing import start_span
 from autonomous_trading_platform.research.experiments.filtering.services.filter_score_service import (
     FilterScoreOutput,
 )
-from autonomous_trading_platform.research.simulation.simulation_runner import SimulationRunResult
+from autonomous_trading_platform.research.simulation.simulation_runner import (
+    SimulationRunResult,
+    refuse_daily_resample,
+)
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
 from ...contracts.common.enums import PriceBasis
@@ -99,6 +102,10 @@ class PipelineRunner:
         initial_cash: float,
         resample_to_daily: bool = False,
     ) -> PipelineRunResult:
+
+        # Refused here as well as on each run's request, so a pipeline stops before
+        # its first stage and not inside it.
+        refuse_daily_resample(resample_to_daily)
 
         result = PipelineRunResult()
         survivors = initial_configs
@@ -178,6 +185,9 @@ class PipelineRunner:
                 run_id=experiment_id,
                 duration_seconds=duration,
             )
+
+            # The stage was handed these strategies; its verdicts do not say how many.
+            stage_result.entered = len(survivors)
 
             env = observability_environment()
             stage_labels = {"environment": env, "stage_name": stage.stage_name}

@@ -67,6 +67,9 @@ _ROLLING_FOLD_LAYOUT: Mapping[str, Any] = {
     # 15 days, and a layout without overlap leaves one fold. The admission layout
     # has no such exception.
     "allow_overlapping_test_folds": True,
+    # Known exception as well: 30-day test folds are under the 84-day minimum, and a
+    # 90-day window cannot hold longer ones. The admission layout's folds clear it.
+    "allow_short_test_folds": True,
     "min_folds_passed": 1,
 }
 
