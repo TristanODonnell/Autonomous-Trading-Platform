@@ -200,9 +200,9 @@ work. Its note stays in section 3.
 | ⚪ D1 | One feed everywhere (IEX now, SIP at go-live) | Rule and trigger agreed. The free-tier probe has not been run; deferred by the user 2026-11-15 until the other updates are done | 0 / 13 | Nothing now. The probe and the rest come with the switch |
 | 🔴 D2 | Parquet integrity for research reads | Not started (the four defects re-confirmed in the code 2026-11-15) | 0 / 4 | Compaction deleting unread fragments comes first |
 
-🔴 **Steps 1 to 5 (generator and plumbing): none started.** Step 1 baseline 0 / 4, Step 1b generation system review 0 / 7 (added 2026-11-15), Step 2
+🟡 **Steps 1 to 5 (generator and plumbing): Step 1 started 2026-11-22, the rest not.** Step 1 baseline 1 / 5 (rewritten for the long window; first job decided, its fixture written, not run), Step 1b generation system review 0 / 7 (added 2026-11-15), Step 2
 evolutionary search 0 / 3, Step 3 hand-off to A's bench 0 / 3, Step 4 no boxes, Step 5
-monthly job 0 / 13. Section 5's results log is empty. Step 1 waits on R2.
+monthly job 0 / 13. Section 5's results log is empty. Step 1 no longer waits on R2: the hook layout is done (2026-11-23) and what R2 has open is code only.
 
 **Work packages (the open boxes grouped by what gets done together)**
 
@@ -219,7 +219,7 @@ Package A is merged and deployed. Nothing is running.
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R12's slippage in fill rows, D2. R8 left this package 2026-11-16: deferred until random fills are switched on | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
 | 🔴 F | **R13** | Decide whether to build the neighbour check | The user | A decision, then maybe one PR |
 
-After these: Step 1 (baseline, waits on R2), then Steps 2 to 5.
+After these: Step 1 (baseline; started 2026-11-22, its first job is the hook's full profile on B), then Steps 2 to 5.
 
 **Open questions for the user** (package A, investigated 2026-11-15; all four decisions
 and the score-composition answer implemented the same day, merged as PR #184; nothing is
@@ -2740,7 +2740,7 @@ ways it can hand them the wrong rows while every registry row still says `valida
 compaction; a fixture with `data.parquet` plus a later fragment returns both; the same
 table written in two chunk layouts hashes identically.
 
-### Step 1 — Baseline measurement (not started)
+### Step 1 — Baseline measurement (started 2026-11-22; nothing run yet)
 
 Note, 2026-11-16 (not a decision): this section was written 2026-11-06, before package B.
 Its window (about 54 sessions, a 14-session holdout), its 22-symbol list and its pinned
@@ -2764,12 +2764,59 @@ backfill chunk's last session, dropped by a midnight-UTC `--end`), 10/09 (an emp
 version) and runs thin on 10/12–10/14. Pin the baseline to the first rolling version
 built after those sessions are back.
 
-- [ ] Experiment YAML `experiments/research/baseline_composite_grid.yaml`: `composite_rule`
+**Rewritten for the long window, 2026-11-22** (the evening of the admission rehearsal;
+2026-11-23 UTC). The boxes of 2026-11-06 below this block are the short-window version
+and are kept for the record; the last box here carries what is still wanted from them.
+
+What changed under Step 1 since it was written:
+
+- The six-stage pipeline with the admission layout runs only from the hook, inside a
+  platform backtest. An experiment YAML cannot ask for that layout, and the hook's
+  candidates are fixed in code (`_replay_strategy_set`): 36 random draws over five
+  families in the full profile, seeded by the research month, so one research date
+  always draws the same candidates.
+- Cost, extrapolated from the rehearsal (9 candidates; piece 5 of the hook layout) and
+  **not measured**: 652 nine-month simulations are about 14 hours for stage 1 alone, and
+  at about 25 MiB of kept results a candidate about 16 GB, on a box whose job ceiling is
+  3 GB. The 652-skeleton grid cannot run on B as the pipeline stands.
+
+- [x] Which run is the baseline's first job. **Decided 2026-11-22 (the user): the full
+      profile first**, the pipeline exactly as it exists (the rehearsal's fixture with
+      `profile: full`, 36 candidates), no new pipeline code. The other two offered: build
+      the 652-skeleton grid first (several changes before a first number), or a sized
+      sample of the grid (one change, memory estimated over the ceiling at 50). The
+      full-profile run is also the "measure first" box of the monthly job (section on
+      the worker's month) and gives the measured numbers the grid run is sized from.
+- [ ] The fixture `fixtures/platform/replays/medium/research_admission_baseline.yaml`,
+      on B. Written 2026-11-22, **not merged**: the rehearsal's replay, differing in name
+      and profile alone (a test holds that, and the profile named in the file). Fixtures
+      are built into the worker image and `worker run` has no profile override, so it
+      ships by PR and deploy.
+- [ ] The two conditions this section names, settled by the user before the run (the
+      note at the top: "the user's call when Step 1 is reached"): the D1 check
+      (deferred by the user 2026-11-15) and the Finding 27 re-pull (it concerns the
+      rolling dataset; this run reads the 24-month dataset, built with every session
+      present but the two left out by name).
+- [ ] The run on B through `worker_job.sh worker run`, memory sampled as in the
+      rehearsal, on the user's go-ahead. Estimated 1.5 to 2.5 hours and a peak at 80 to
+      85% of the ceiling; exit 137 means the ceiling was reached and is itself the
+      result. Record in section 5: candidates entered, survivors per stage, clusters,
+      the holdout report beside the evaluation numbers of the same survivors,
+      wall-clock, peak memory and memory per kept candidate.
+- [ ] The composite-grid baseline (the 2026-11-06 boxes: all 652 skeletons by `grid`,
+      and `random` with `n_samples: 50`), designed from the run's measured numbers.
+      Needs, as read today: a way for the hook to take a candidate set, results not kept
+      for every candidate (or the grid split into jobs), and R3 for a job longer than a
+      night. Not started; its design goes to the user first.
+
+The 2026-11-06 version:
+
+- (superseded 2026-11-22, see above) Experiment YAML `experiments/research/baseline_composite_grid.yaml`: `composite_rule`
       via `grid` (all 652 skeletons), the 22-symbol A universe, dataset pinned to the rolling
       version B pulled (`raw_bars_20261107T005243Z_8097b17d` or newer), **search window**
       2026-08-03 → 2026-10-17 (~54 sessions), **holdout** 2026-10-20 → 2026-11-06
       (~14 sessions), `random_seed: 42`.
-- [ ] Run on B with `infra/ops/worker_job.sh research run-pipeline --config …` (one job at a
+- (superseded 2026-11-22, see above) Run on B with `infra/ops/worker_job.sh research run-pipeline --config …` (one job at a
       time, lock respected) or on a laptop after `atp datasets pull --version <id>`.
       (2026-11-14: the CLI command that exists is `atp research run-experiment --config`;
       there is no `run-pipeline`.)
@@ -2780,11 +2827,11 @@ built after those sessions are back.
   `universe_versions` table is empty at rest (the worker reset clears it before every
   run), which is fine here: a YAML with a `symbols` list resolves in CUSTOM mode and needs
   no universe version.
-- [ ] Record in section 5: candidates generated / accepted / rejected / duplicates
+- (superseded 2026-11-22, see above) Record in section 5: candidates generated / accepted / rejected / duplicates
       (`GenerationSummary`), survivors per gate, cluster count after dedup, best and
       median walk-forward score, best and median **holdout** Sharpe / return / drawdown of
       the top 10 by search score, wall-clock and peak memory.
-- [ ] Same run with `random` (`n_samples: 50`) so we know how much the pool alone buys.
+- (superseded 2026-11-22, see above) Same run with `random` (`n_samples: 50`) so we know how much the pool alone buys.
 
 **Verify:** the run completes end to end on B against pulled Parquet (no Alpaca call), the
 summary JSON lands under `artifacts/worker/`, and the numbers are in section 5.
