@@ -44,14 +44,38 @@ class RegimeJoinService:
         if not available:
             return equity_curve.copy()
 
-        regime_by_ts = (
-            regime_data[["timestamp"] + available]
-            .groupby("timestamp", sort=False)
+        labels = regime_data[["timestamp"] + available]
+        if labels["timestamp"].is_unique:
+            regime_by_ts = self._one_row_per_timestamp(labels, available)
+        else:
+            regime_by_ts = self._modal_by_timestamp(labels)
+
+        return equity_curve.merge(regime_by_ts, on="timestamp", how="left")
+
+    @staticmethod
+    def _modal_by_timestamp(labels: pd.DataFrame) -> pd.DataFrame:
+        """The most common label at each timestamp, None where every row lacks one."""
+        return (
+            labels.groupby("timestamp", sort=False)
             .agg(lambda x: x.mode().iloc[0] if len(x) > 0 and x.notna().any() else None)
             .reset_index()
         )
 
-        return equity_curve.merge(regime_by_ts, on="timestamp", how="left")
+    @staticmethod
+    def _one_row_per_timestamp(labels: pd.DataFrame, available: list[str]) -> pd.DataFrame:
+        """The same answer as _modal_by_timestamp when no timestamp repeats.
+
+        The most common label of a single row is that row's label, so nothing
+        has to be aggregated. The research pipeline always lands here: its
+        labels are built on the equity curve's own timestamps, one row each.
+        The aggregation calls a Python function per timestamp per column, which
+        took about 13 seconds for a 60-session five-minute curve (4,681 rows).
+        """
+        frame = labels[labels["timestamp"].notna()].reset_index(drop=True)
+        for column in available:
+            values = frame[column].astype(object)
+            frame[column] = values.where(values.notna(), None)
+        return frame
 
     def join_symbol_frame(
         self,
