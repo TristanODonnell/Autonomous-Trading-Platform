@@ -318,6 +318,7 @@ def _permissive_stage_dicts(exp, *, selection_end: date | None = None) -> list[d
             "name": "wf",
             "train_days": 45,
             "test_days": 30,
+            "allow_short_test_folds": True,
             "step_days": 15,
             "allow_overlapping_test_folds": True,  # the hook's layout
             "require_all_folds": False,
@@ -449,6 +450,11 @@ def test_research_hook_runs_with_smoke_profile(
     # Funnel counts never increase from one stage to the next.
     passed = [c["passed"] for c in funnel.values()]
     assert passed == sorted(passed, reverse=True)
+    # Each stage is counted on what the stage before it passed on (walk-forward used to
+    # count its verdicts, several per strategy).
+    counts = list(funnel.values())
+    for earlier, later in zip(counts, counts[1:], strict=False):
+        assert later["entered"] == earlier["passed"]
 
 
 def test_governance_source_run_is_the_full_window_run(

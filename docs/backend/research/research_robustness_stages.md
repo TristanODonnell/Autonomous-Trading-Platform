@@ -145,6 +145,17 @@ validate-config` reports them.
 | Given a holdout date, no stage reads that day or a later one. The date is `research/pipeline/holdout.py`'s and is not a YAML key: every experiment YAML is checked against it, and so is the replay hook's admission layout. The hook's 90-day layout sets no holdout aside and is not checked | same | `smoke: true` on the pipeline |
 | `step_days >= test_days`, so no day is in two test folds | `WalkForwardStageConfig` | `allow_overlapping_test_folds: true` on the stage |
 | `min_folds_passed` no larger than the number of folds the window holds (when `require_all_folds` is false) | `WalkForwardStageConfig` | none |
+| A test fold spans at least twelve weeks, the admission layout's 60 sessions: `test_days >= 84` for rolling folds (`MIN_TEST_FOLD_DAYS`), 82 days from first day to last for a fold given by date (`MIN_DATED_TEST_FOLD_DAYS`; sixty sessions from a Monday end on a Friday). A Sharpe ratio measured over ten sessions has a standard error near 5 a year, so a short fold's verdict is close to a coin toss | `WalkForwardStageConfig` | `allow_short_test_folds: true` on the stage |
+
+One option is refused outright. `resample_to_daily` (one bar a day in place of
+five-minute bars) is switched off: `SimulationRunRequest` refuses it, and
+`PipelineRunner.run` refuses a pipeline that asks for it before the first stage runs
+(`DailyResampleRefusedError`). The mode has two silent defects: a daily run loads no
+bars from before its window, so a strategy spends its first days warming up; and every
+annualised number is scaled with the five-minute bar count (19,656 a year where daily
+bars have 252), which reads a Sharpe about 8.8 times too high. Nothing used the mode
+when it was switched off (2026-11-22). Switching it back on means fixing both: load
+daily warm-up bars, pass `bars_per_year=252` to the metrics, then delete the refusals.
 
 The two kinds of rule live in two places on purpose. A rule about one stage is
 checked by that stage's config class, which both the YAML loader and Python code
@@ -156,7 +167,9 @@ every loader builds. Rules written only into the YAML models
 plumbing only; its survivors are not evidence. The replay hook sets
 `allow_overlapping_test_folds=True`: on a 90-day window its two test folds share
 15 days, and a layout without overlap leaves one fold. That exception goes when
-the research window is long enough.
+the research window is long enough. The same layout sets
+`allow_short_test_folds=True` for its 30-day test folds. The admission layout sets
+neither: its folds share no day and are 60 sessions or more.
 
 The hook's window length is `research.options.lookback_days` in the replay
 fixture (default 90 calendar days).

@@ -238,6 +238,8 @@ class WalkForwardStageConfigModel(ParallelStageConfigMixin):
     # min_folds_passed <= number of folds, are enforced by WalkForwardStageConfig,
     # so they also cover stages built in Python.
     allow_overlapping_test_folds: bool = False
+    # Named exception to the minimum test span (WalkForwardStageConfig enforces it).
+    allow_short_test_folds: bool = False
 
     @field_validator("name")
     @classmethod

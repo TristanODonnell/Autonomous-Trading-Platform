@@ -78,6 +78,7 @@ def _wf_config(**overrides: Any) -> WalkForwardStageConfig:
         "end_date": date(2026, 11, 13),
         "train_days": 45,
         "test_days": 30,
+        "allow_short_test_folds": True,
         "step_days": 30,
         "train_filter_config": FilterConfig(),
         "train_scoring_weights": ScoringWeights(),
