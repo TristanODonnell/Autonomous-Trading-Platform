@@ -26,12 +26,12 @@ YAML block example
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.research.experiments.filtering.services.filter_score_service import (
     FilterScoreOutput,
 )
@@ -46,7 +46,7 @@ from autonomous_trading_platform.strategy.configs.strategy_config import Strateg
 from ._gate_stage_support import gate_filter_output
 from .base_stage import BaseStage, StageDiagnostics, StageResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

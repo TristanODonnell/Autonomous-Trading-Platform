@@ -8,13 +8,13 @@ Survivors are the strategies whose filter_result.passed == True.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.research.checkpoints.research_checkpoint import ResearchTaskType
 from autonomous_trading_platform.research.checkpoints.research_checkpoint_service import (
     ResearchCheckpointService,
@@ -46,7 +46,7 @@ from autonomous_trading_platform.strategy.configs.strategy_config import Strateg
 from ..pipeline_validation import StageWindowFacts
 from .base_stage import BaseStage, StageResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

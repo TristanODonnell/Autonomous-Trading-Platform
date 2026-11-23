@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -24,6 +23,7 @@ from autonomous_trading_platform.contracts.runtime.research_window_dataset impor
     ResearchWindowDataset,
 )
 from autonomous_trading_platform.contracts.runtime.universe_timeline import UniverseTimeline
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
 
 if TYPE_CHECKING:
@@ -32,7 +32,9 @@ if TYPE_CHECKING:
         SessionSpan,
     )
 
-logger = logging.getLogger(__name__)
+# ``get_logger``, as the simulation runner uses: a logger from ``logging.getLogger``
+# has no handler in a job's process and its INFO lines are dropped.
+logger = get_logger(__name__)
 
 
 # Research rejects candidates that trade more than this many times their capital per day

@@ -30,13 +30,13 @@ YAML block example
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.research.execution import ExecutionMode
 from autonomous_trading_platform.research.experiments.filtering.services.filter_score_service import (
     FilterScoreOutput,
@@ -67,7 +67,7 @@ from ._gate_stage_support import (
 )
 from .base_stage import BaseStage, StageDiagnostics, StageResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _BASELINE_ROLE = "stress_baseline"
 
