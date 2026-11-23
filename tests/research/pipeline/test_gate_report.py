@@ -23,6 +23,9 @@ from autonomous_trading_platform.research.pipeline.gate_report import (
     build_gate_report,
     gate_report_not_built,
 )
+from autonomous_trading_platform.research.pipeline.gates.overfitting_gate import (
+    OverfittingGateVerdict,
+)
 from autonomous_trading_platform.research.pipeline.gates.regime_gate import (
     RegimeDimensionCheck,
     RegimeGateVerdict,
@@ -33,6 +36,10 @@ from autonomous_trading_platform.research.pipeline.stages._gate_stage_support im
 from autonomous_trading_platform.research.pipeline.stages.base_stage import (
     StageDiagnostics,
     StageResult,
+)
+from autonomous_trading_platform.research.validation.overfitting_analysis import (
+    OverfittingAnalysisResult,
+    OverfittingIndicators,
 )
 from autonomous_trading_platform.research.validation.walk_forward_validation import (
     FoldValidationInput,
@@ -213,6 +220,55 @@ def test_a_report_only_gate_passes_the_strategy_and_its_findings_are_written_dow
             }
         ],
     }
+
+
+def _overfitting_verdict(
+    *, on_verdict: tuple[str, ...], on_analysis: list[str]
+) -> OverfittingGateVerdict:
+    return OverfittingGateVerdict(
+        strategy_id="a",
+        passed=True,
+        analysis=OverfittingAnalysisResult(
+            strategy_id="a",
+            overfitting_probability=0.2,
+            resistance_score=0.8,
+            indicators=OverfittingIndicators(
+                train_test_degradation=0.0,
+                fold_instability=0.7,
+                mc_instability=0.03,
+                regime_concentration=0.8,
+                low_trade_count_flag=False,
+                narrow_period_alpha=0.4,
+                parameter_fragility=None,
+            ),
+            most_suspicious=["fold_instability"],
+            warnings=on_analysis,
+        ),
+        n_core_indicators=4,
+        warnings=on_verdict,
+    )
+
+
+def test_an_overfitting_warning_is_written_once() -> None:
+    """Seen on the baseline rerun of 2026-11-23: the gate copies the analysis's
+    warnings onto its verdict, and the report listed both, so each came out twice.
+    Where the gate writes a warning of its own, the analysis's are still kept."""
+    swings = "Fold test-Sharpe CoV is 1.47: large fold-to-fold performance swings."
+    thin = "insufficient evidence: 1 core indicator(s)"
+
+    def warnings(verdict: OverfittingGateVerdict) -> list[str]:
+        stage = _stage(
+            "overfitting", {"a": []}, {"a": StageDiagnostics(overfitting_verdict=verdict)}
+        )
+        (record,) = build_gate_report([stage])["strategies"]
+        written: list[str] = record["stages"][0]["overfitting"]["warnings"]
+        return written
+
+    copied = _overfitting_verdict(on_verdict=(swings,), on_analysis=[swings])
+    its_own = _overfitting_verdict(on_verdict=(thin,), on_analysis=[swings])
+
+    assert warnings(copied) == [swings]
+    assert warnings(its_own) == [thin, swings]
 
 
 def test_the_report_can_be_written_as_json_whatever_the_numbers_are() -> None:

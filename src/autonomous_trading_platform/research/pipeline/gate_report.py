@@ -285,7 +285,9 @@ def _overfitting(verdict: OverfittingGateVerdict) -> dict[str, Any]:
         "most_suspicious": list(analysis.most_suspicious),
         "findings": list(verdict.findings),
         "failure_reasons": list(verdict.failure_reasons),
-        "warnings": [*verdict.warnings, *analysis.warnings],
+        # The verdict's and the analysis's, each once: the gate copies the analysis's
+        # warnings onto its verdict, except where it writes one of its own instead.
+        "warnings": list(dict.fromkeys([*verdict.warnings, *analysis.warnings])),
     }
 
 

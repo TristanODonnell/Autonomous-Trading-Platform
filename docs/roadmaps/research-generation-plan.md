@@ -148,6 +148,14 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > summary, and the pipeline's log lines made to reach the log (Step 1's
 > boxes). Next: the PR, the deploy, then the baseline rerun on B on the
 > user's go-ahead.
+>
+> **Update 2026-11-23, later.** Merged as PR #198 (`869b21114`), on B; A was
+> still on PR #197's commit when checked at 21:29 UTC. **The rerun ran on B,
+> exit 0**, and is the same run as the first baseline, number for number. Its
+> gate report is read in section 5: Monte Carlo passed all eight survivors by
+> a wide margin; the regime gate had labels and raised nothing, with seven of
+> the eight losing on bear days; the overfitting gate raised nothing and its
+> parameter-fragility input is empty. Next: the R13 decision, with the user.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
 
@@ -215,9 +223,9 @@ work. Its note stays in section 3.
 | ⚪ D1 | One feed everywhere (IEX now, SIP at go-live) | Rule and trigger agreed. The free-tier probe has not been run; deferred by the user 2026-11-15 until the other updates are done | 0 / 13 | Nothing now. The probe and the rest come with the switch |
 | 🔴 D2 | Parquet integrity for research reads | Not started (the four defects re-confirmed in the code 2026-11-15) | 0 / 4 | Compaction deleting unread fragments comes first |
 
-🟡 **Steps 1 to 5 (generator and plumbing): Step 1 started 2026-11-22, the rest not.** Step 1 baseline 5 / 7 (rewritten for the long window; first job decided, fixture on B, both conditions decided; the run finished 2026-11-23 06:06 UTC, exit 0: 30 candidates in, 8 through every stage, all 8 negative on the holdout; found on reading it: the job kept no stage's verdict on any strategy, so a gate report was built 2026-11-23 on `research/gate-report`, not merged; open: the baseline rerun with that report, and the composite-grid baseline), Step 1b generation system review 0 / 7 (added 2026-11-15), Step 2
+🟡 **Steps 1 to 5 (generator and plumbing): Step 1 started 2026-11-22, the rest not.** Step 1 baseline 6 / 7 (rewritten for the long window; first job decided, fixture on B, both conditions decided; the run finished 2026-11-23 06:06 UTC, exit 0: 30 candidates in, 8 through every stage, all 8 negative on the holdout; found on reading it: the job kept no stage's verdict on any strategy, so a gate report was built and merged as PR #198, and the baseline rerun with it on B 2026-11-23, exit 0: the same run, its gates' evidence now readable; open: the composite-grid baseline), Step 1b generation system review 0 / 7 (added 2026-11-15), Step 2
 evolutionary search 0 / 3, Step 3 hand-off to A's bench 0 / 3, Step 4 no boxes, Step 5
-monthly job 0 / 13. Section 5's results log has its first row (2026-11-23). Step 1 no longer waits on R2: the hook layout is done (2026-11-23) and what R2 has open is code only.
+monthly job 0 / 13. Section 5's results log has its first two rows (2026-11-23: the baseline and its rerun). Step 1 no longer waits on R2: the hook layout is done (2026-11-23) and what R2 has open is code only.
 
 **Work packages (the open boxes grouped by what gets done together)**
 
@@ -3030,10 +3038,17 @@ What changed under Step 1 since it was written:
       - Not built: the runner's own lines (`step_started` and the like) carry their
         numbers as structured fields, which the log exporter keeps and the console
         line does not show.
-- [ ] The baseline rerun on B with the gate report: after the PR is merged and
-      deployed, on the user's go-ahead (about 1 hour 45 minutes). Then read what
-      Monte Carlo and the two report-only gates said about the survivors, record it
-      in section 5, and take the R13 decision to the user.
+- [x] The baseline rerun on B with the gate report. Merged as PR #198 (`869b21114`);
+      B's checkout and worker image on it, checked 2026-11-23 21:29 UTC (A was still
+      on `fce347f3b`, PR #197; the rerun does not touch A). **Started 21:30:15 UTC on
+      the user's go-ahead, finished 23:12:16, exit 0:** 6,121 seconds, peak 2,567 MiB
+      (84% of the ceiling), nothing at error level. It is the same run as the first:
+      21 of the summary's 22 fields are equal, the holdout numbers among them, and the
+      22nd is walk-forward's "entered" count (8, where the older image wrote 32). The
+      log has 44 lines from the pipeline and the hook where the first run's had none.
+      What Monte Carlo, the regime gate, the shocks and the overfitting gate said about
+      the eight survivors is in section 5, "The baseline rerun with the gate report".
+      Still to do from this box: take the R13 decision to the user.
 - [ ] The composite-grid baseline (the 2026-11-06 boxes: all 652 skeletons by `grid`,
       and `random` with `n_samples: 50`), designed from the run's measured numbers.
       Needs, as read today: a way for the hook to take a candidate set, results not kept
@@ -4783,6 +4798,7 @@ every candidate with a recorded reason.
 | Date | Dataset version | Method | Generated / accepted | Survivors (gates) | Clusters | WF best / median | Holdout top-10 Sharpe median | Holdout drawdown median | Off-pool share | Wall-clock |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 2026-11-23 | `raw_bars_20261118T234501Z_043e50ad`, `feed=iex` | hook, full profile, admission layout (random draws over five families) | 36 drawn / 30 distinct entered | 8 after stage 1, 8 after each of the other five | 4 | no walk-forward score kept; evaluation Sharpe 2.26 / 2.03 | -1.60 (8 survivors, all negative) | -8.8% | not measured | 1 h 45 min, peak 2,493 MiB |
+| 2026-11-23, rerun | the same | the same, on `869b21114`, with the gate report | the same | the same; walk-forward's "entered" now reads 8 | 4 | the same | -1.60 (the same eight, the same numbers) | -8.8% | not measured | 1 h 42 min, peak 2,567 MiB |
 | | | grid | | | | | | | 0% | |
 | | | random n=50 | | | | | | | 0% | |
 | | | evolutionary | | | | | | | | |
@@ -4879,3 +4895,85 @@ Warnings: none at error level. 35 in the log (32 `dataset_pull.no_registry_row`,
 `trading_cycle.no_approved_strategy_found`), and two in the result file about the
 backtest's own universe candidates (`universe_candidate_dataset_version_unresolved`,
 `universe_candidate_empty`); the rehearsal's file has the same two. Not looked into.
+
+### The baseline rerun with the gate report (2026-11-23, `feed=iex`)
+
+The same fixture again on B, on `869b21114` (PR #198: the gate report, and the
+pipeline's log lines made to reach the log). Started 21:30:15 UTC on the user's
+go-ahead, finished 23:12:16, **exit 0**: 6,121 seconds (1 hour 42 minutes), peak
+2,567 MiB (84% of the ceiling) at 23:04:02, the end of the stress stage; no line at
+error level, the same 35 warnings. Files in
+`~/rehearsals/research_admission_baseline_20261123T213015Z/` on B, the research summary
+beside them as `research_summary.json` (79 KB with the gate report; 4 KB without).
+
+**It is the same run.** The first run's research summary has 22 fields. 21 are equal
+in the rerun's, every holdout number among them. The one that differs is walk-forward's
+"entered": 8, where the older image wrote 32 (R2's fix). The rerun adds `gate_report`.
+So the block above stands, and what follows is about the same eight survivors.
+
+**The log.** 44 of the job's 1,522 lines come from the pipeline and the hook; the first
+run's 1,478 had none. Each stage gives its window and its counts, walk-forward a line
+per fold, the gate report a line per survivor.
+
+What each gate said about the eight, read from the gate report. None of it could be
+read before.
+
+| Strategy | Folds passed | Monte Carlo paths passing (60% asked) | P(Sharpe > 0) | Path Sharpe p05 / median / p95 | Worst trend regime, Sharpe | Worst volatility regime, Sharpe | Shocks survived, of 7 | Overfitting probability (limit 0.6) | Holdout Sharpe |
+|---|---|---|---|---|---|---|---|---|---|
+| momentum `ab29` | 3 of 3 | 84.4% | 0.90 | -0.39 / 1.57 / 3.47 | bear, -0.62 | high, -0.71 | 3 | 0.16 | -1.77 |
+| mean reversion `8ac1` | 3 of 3 | 93.6% | 0.96 | 0.13 / 2.03 / 3.91 | bear, 0.81 | high, 1.03 | 2 | 0.10 | -0.94 |
+| crossover `bf6d` | 2 of 3 | 95.4% | 0.97 | 0.35 / 2.25 / 4.34 | bear, -0.91 | high, 0.72 | 3 | 0.21 | -0.01 |
+| crossover `0cdb` | 2 of 3 | 95.1% | 0.97 | 0.32 / 2.15 / 3.95 | bear, -0.30 | high, 0.39 | 3 | 0.18 | -1.29 |
+| factor `e7d4` | 3 of 3 | 94.2% | 0.97 | 0.23 / 2.04 / 3.82 | bear, -0.85 | high, -0.32 | 4 | 0.11 | -1.78 |
+| composite `ce0a` | 3 of 3 | 93.8% | 0.96 | 0.16 / 2.06 / 3.95 | bear, -0.76 | high, -0.29 | 4 | 0.11 | -1.60 |
+| composite `93a0` | 3 of 3 | 94.8% | 0.97 | 0.25 / 2.10 / 3.93 | bear, -0.76 | high, -0.29 | 4 | 0.11 | -1.60 |
+| composite `bf32` | 3 of 3 | 93.0% | 0.96 | 0.11 / 2.00 / 3.85 | bear, -0.76 | high, -0.51 | 4 | 0.11 | -1.80 |
+
+What the numbers show, measured and not explained:
+
+- **Monte Carlo passed all eight by a wide margin, and all eight then lost on the
+  holdout.** 84% to 95% of 2,000 paths cleared the filter where 60% is asked, and
+  P(Sharpe > 0) is 0.90 to 0.97. The median path's Sharpe is within 0.07 of the
+  record's own Sharpe for every one of the eight. The paths are the nine-month record's
+  own sessions drawn again; no session from outside those nine months is in them. The
+  one Monte Carlo was least sure of (momentum, 0.90) has a holdout Sharpe of -1.77; the
+  seven at 0.96 and 0.97 run from -0.01 to -1.80. Among these eight the Monte Carlo
+  numbers do not put the holdout results in order. Eight strategies and one holdout
+  period: an observation, not a measurement of the gate.
+- **The regime gate had labels and raised nothing.** 188 labelled days, the whole
+  evaluation piece; both dimensions evaluated for all eight, two labels in each (bear
+  and bull; high and normal volatility). Seven of the eight have a negative Sharpe on
+  bear days, -0.30 to -0.91; mean reversion alone is positive on both (0.81). Five
+  (momentum, the factor strategy, the three composites) are negative on high-volatility
+  days too. No finding, because the hook's thresholds are a worst-regime Sharpe under
+  -1.0 and profit in fewer than half the regimes, and one regime of two is half. Not
+  measured: how many of the holdout's 127 sessions are bear days. The labels were
+  worked out for the evaluation piece alone, so whether "loses on bear days" is what
+  happened on the holdout is not known.
+- **The overfitting gate: 0.10 to 0.21 against a limit of 0.6, no finding.** Three
+  things in its inputs. `train_test_degradation` is 0.000 for all eight: each did
+  better on its test folds than on its train window (selection Sharpe 0.67 to 1.16,
+  evaluation 1.53 to 2.26), and the indicator has no reading for that side.
+  `narrow_period_alpha` is 0.407 to 0.427 for all eight, a spread of 0.02 over five
+  families; why it barely moves was not read. `parameter_fragility` is empty for all
+  eight: nothing computes it, which is R13's question. The two crossovers carry the
+  one warning (test Sharpe swings from fold to fold, a coefficient of variation of
+  1.47 and 1.23).
+- **Shocks: no survivor got through more than 4 of 7, and three scenarios failed all
+  eight** (`drawdown_amplification`, `trend_reversal`, `liquidity_collapse`; the last
+  gives every strategy a Sharpe between -843 and -4,181 and a drawdown of -100%). As
+  R11 found on the short window, a scenario everybody fails does not tell strategies
+  apart. The cost runs are as recorded for the first run.
+- **Stage 1's 22**, by the reasons it gave (a strategy can have several): Sharpe under
+  the floor 22, profit factor 11, total return 8, consistency 5, too few trades 2,
+  turnover over the cap 2.
+
+Not a measurement, a reading of the layout (2026-11-23): Monte Carlo, the regime gate,
+the stress runs and the overfitting gate's inputs all read the same nine months, the
+evaluation piece. They can agree with one another about those months without any of
+them being tested against other months. The holdout is the only number here from
+outside them, and it is a report.
+
+Found while reading it: the gate report listed an overfitting warning twice (the gate
+copies the analysis's warnings onto its verdict, and the report listed both). Fixed on
+`research/baseline-rerun-results`, with a test; the rerun's file has the repeat.
