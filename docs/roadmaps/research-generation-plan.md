@@ -112,10 +112,10 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > walk-forward stage takes folds given by date and refuses a train window on
 > any fold's test days; piece 3a, a research job can name the dataset it reads
 > (the pipeline was only ever handed its backtest's own); piece 3b, the option
-> `window_layout: admission` that switches the layout on; piece 4 (built, not
-> committed), the holdout: the validator refuses a pipeline in which a stage
-> reads the holdout date or later, and the final survivors are each run once
-> over the holdout, report only. **No run changes yet:** no job sets the option, and without it the hook
+> `window_layout: admission` that switches the layout on; piece 4, the
+> holdout: the validator refuses a pipeline in which a stage reads the holdout
+> date or later, and the final survivors are each run once over the holdout,
+> report only. **No run changes yet:** no job sets the option, and without it the hook
 > builds the 90-day layout as before. A layout job names its timeline and its
 > dataset or is refused. Found while testing the pass rule: Monte Carlo did not
 > hold the nine-month record itself to the filter (a record with a -47%
@@ -124,8 +124,10 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > allocation and promotion read a strategy's newest saved run, so a holdout
 > run saved like any other would have been read as the strategy's record;
 > decided the same day, the holdout run leaves no row and its numbers go in
-> the research step's summary only. Next: piece 5 (rehearsal on B, the first
-> run on real bars), which needs the branch pushed, merged and deployed.
+> the research step's summary only. Piece 5 (rehearsal on B, the first run on
+> real bars): its fixture is written (2026-11-22,
+> `fixtures/platform/replays/medium/research_admission_rehearsal.yaml`) and
+> **not run**; the run needs the branch pushed, merged and deployed to B.
 > Open decisions: none waiting.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
@@ -206,7 +208,7 @@ Package A is merged and deployed. Nothing is running.
 | # | Package | Boxes it closes | Waits on | Size |
 |---|---|---|---|---|
 | 🟢 A | **Validators and evidence** (done: merged PR #184, deployed 2026-11-16) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | Nothing | One PR, no new data (#184) |
-| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (done: merged as PR #193, on A and B 2026-11-20; no job uses it yet), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule (started 2026-11-20 on `research/r2-hook-layout`: pieces 1, 2, 3a, 3b and 4 built, 4 not committed; the layout is switched on by a research option that no job sets yet; left is the rehearsal on B), memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
+| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (done: merged as PR #193, on A and B 2026-11-20; no job uses it yet), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule (started 2026-11-20 on `research/r2-hook-layout`: pieces 1, 2, 3a, 3b and 4 built and committed; the layout is switched on by a research option that only the rehearsal fixture sets; left is the rehearsal on B, its fixture written 2026-11-22, not run), memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
 | 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
 | 🔴 D | **Test hardening (R7)** | R7 both boxes, and the R7 boxes under R10, R14, R15 | Nothing | Can ride along with A and B |
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R12's slippage in fill rows, D2. R8 left this package 2026-11-16: deferred until random fills are switched on | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
@@ -1048,7 +1050,7 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
               real bars (piece 5, the rehearsal on B); `base_run_clears_filter`
               as a YAML key; the walk-forward stage's train run repeating stage
               1's (the "later saving" box above).
-      - [x] Piece 4, holdout (built 2026-11-20, not committed): a check that no
+      - [x] Piece 4, holdout (built 2026-11-20, committed `c612d0a9d`): a check that no
             gate reads the holdout date or later; the holdout scored once for the
             final survivors, report only.
             - The check. Each stage that runs a simulation tells the validator
@@ -1129,6 +1131,48 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
             layout and the exported timeline (first written as "the timeline
             option switched on for this layout"; since the 2026-11-20 decision
             the layout cannot run without one, so there is no separate switch).
+            - Prepared 2026-11-22, **not run**: the fixture
+              `fixtures/platform/replays/medium/research_admission_rehearsal.yaml`.
+              Research runs only inside a platform backtest, monthly, and a
+              monthly job fires on a replay's first tick, so the replay is three
+              days (2026-11-16 to 2026-11-18) and research runs once, dated
+              2026-11-16. The research options name the layout, the 24-month
+              dataset and the exported timeline. Profile smoke (10 candidates):
+              the cheapest run that goes through every stage. The other jobs are
+              those of `short/smoke_minimal.yaml` (one symbol; ingestion,
+              features, trading cycle), a job set already run on B.
+            - Why that date. It is the dataset's last day, so the holdout report
+              covers all the holdout there is (2026-05-18 to 2026-11-16).
+            - Checked on B, read only, 2026-11-22: both datasets are registered
+              and validated under the ids the fixture names
+              (`raw_bars_20261118T234501Z_043e50ad`, 2024-10-01 to 2026-11-16,
+              the two sessions left out; `universe_timeline_20261119T220329Z_54a0ff84`).
+              The timeline's registered end, 2026-10-30, is its last rotation:
+              the last list has no end and is in force through the dataset's
+              last day (`universe_timeline_export_service.py`, `period_at`). B is
+              on `495434d6b`, 2.9 GB available, 4 GB swap unused.
+            - Read from the code for this: every backtest retires the active
+              universe version and runs the universe screener at start-up,
+              whatever jobs the fixture switches off. On B that costs nothing: a
+              worker reset already empties the universe tables and keeps the two
+              built datasets. On a timeline the engine sizes positions from the
+              list in force on each bar, so the replay's own one-symbol list does
+              not reach the research simulations.
+            - Tests, 3 (`tests/research/test_research_admission_rehearsal_fixture.py`):
+              the fixture loads; its research options are all ones the hook
+              reads and accepts (the hook ignores a key it does not know, so a
+              misspelt `window_layout` would run the 90-day layout and report
+              success); research fires on a trading day on or after the holdout
+              date. Five ways of breaking the fixture, each caught.
+            - The run, to do after the deploy: through `worker_job.sh worker
+              run`, the path a scheduled job will take (pull, reset, backtest,
+              upload), with the job container's memory sampled every few seconds
+              into `~/rehearsals/` on B. To record here: exit code, wall-clock,
+              peak memory and how it grew simulation by simulation (kept results
+              add to it, so a 36-candidate run is estimated from this one), the
+              `admission_window` pieces against the dates above, the stage
+              funnel, the holdout report, and that no `simulation_runs` row ends
+              on or after 2026-05-18.
       What the reading found:
       - Sessions. `RealMarketCalendar` (`runtime/clock.py`, the NYSE schedule from
         the `exchange_calendars` library) lists trading days between two dates and
@@ -1202,7 +1246,7 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
           survivors and stored with the candidate. Decided 2026-11-15: report only, it
           eliminates nobody. Whether it becomes a final pass/fail is a question to come
           back to (section 4, "Holdout as a gate").
-          Built 2026-11-20 (hook layout piece 4, not committed), in the admission
+          Built 2026-11-20 (hook layout piece 4, committed `c612d0a9d`), in the admission
           layout, with two differences from the text above. The holdout is not
           "the last N sessions": it is every session from the fixed holdout date
           on (decided 2026-11-16). It is not "stored with the candidate": its
@@ -1530,7 +1574,7 @@ suite `v1` rule "holdout never tuned on" (`pre-launch-deployment-plan.md` §5) e
       schedule (see Step 5, "Universe over the long window"). The declaration is
       written 2026-11-20 (`research/pipeline/holdout.py`, hook layout piece 1); the
       check against it is piece 4 of the hook layout.
-      Checked since piece 4 (built 2026-11-20, not committed): both loaders of an
+      Checked since piece 4 (built 2026-11-20, committed `c612d0a9d`): both loaders of an
       experiment file hand `StagedPipelineConfig` the date, and a stage that reads
       that day or a later one is refused. Tests: `test_pipeline_validation.py`,
       `TestHoldoutRule` and `TestExperimentFilesAgainstTheHoldoutDate` (the repo's
@@ -3827,7 +3871,7 @@ behind a fixture flag; default stays `alpaca`.
         tables + filters" as the choices. Chosen: result file only. Known cost:
         comparing holdout scores across months means reading result files, not
         one query; a table can be built when the "holdout as a gate" review is
-        planned. Built the same day (hook layout piece 4, not committed).
+        planned. Built the same day (hook layout piece 4, committed `c612d0a9d`).
       - Found 2026-11-20, read from the code, not measured, not changed: **those
         lookups already read a run that is not the candidate's record.** After a
         six-stage research run the last simulation written for a survivor is the
