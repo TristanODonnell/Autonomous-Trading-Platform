@@ -95,6 +95,7 @@ Each config tests one event category in isolation and is sized to answer:
 | `medium/two_month_healthy.yaml` | 2024-01-02 → 2024-02-29 | 43 | 0 | integration |
 | `medium/two_month_with_events.yaml` | 2024-01-02 → 2024-02-29 | 43 | 8 | integration |
 | `medium/research_stages_smoke.yaml` | 2024-01-02 → 2024-04-05 | ~66 | 0 | research stage verification — one full 6-stage research tick (Apr 1), `research.options.profile: smoke` |
+| `medium/research_admission_rehearsal.yaml` | 2026-11-16 → 2026-11-18 | 3 | 0 | worker box only: one research tick in the admission layout (`research.options.window_layout: admission`) on the 24-month dataset and the exported universe timeline, smoke profile; the two datasets it names exist on Box B |
 
 ### Long
 

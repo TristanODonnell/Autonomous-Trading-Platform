@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,8 +20,17 @@ from autonomous_trading_platform.contracts.runtime.platform_replay import (
     ResearchReplayResult,
     ResearchSummary,
 )
+from autonomous_trading_platform.contracts.runtime.research_window_dataset import (
+    ResearchWindowDataset,
+)
 from autonomous_trading_platform.contracts.runtime.universe_timeline import UniverseTimeline
 from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
+
+if TYPE_CHECKING:
+    from autonomous_trading_platform.research.pipeline.admission_window import (
+        AdmissionWindowLayout,
+        SessionSpan,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +44,60 @@ RESEARCH_MAX_DAILY_TURNOVER = 10.0
 # Calendar days of history a research tick reads (about 64 sessions). Override
 # per replay with research.options.lookback_days. Walk-forward needs 75.
 DEFAULT_RESEARCH_LOOKBACK_DAYS = 90
+
+# Fewer calendar days than this and stage 1 has too little to judge.
+MIN_RESEARCH_WINDOW_DAYS = 15
+
+# research.options.window_layout. Left out, the window is ``lookback_days`` long and
+# walk-forward rolls its folds through it. "admission" lays the window out from the
+# holdout date instead: selection, evaluation and holdout
+# (research/pipeline/admission_window.py).
+WINDOW_LAYOUT_ADMISSION = "admission"
+_WINDOW_LAYOUTS = frozenset({WINDOW_LAYOUT_ADMISSION})
+
+# The lookback window's walk-forward folds, in calendar days: it needs train + test
+# (75 days) of window, and the stages after it are built only with it.
+_ROLLING_TRAIN_DAYS = 45
+_ROLLING_TEST_DAYS = 30
+_ROLLING_FOLD_LAYOUT: Mapping[str, Any] = {
+    "train_days": _ROLLING_TRAIN_DAYS,
+    "test_days": _ROLLING_TEST_DAYS,
+    "step_days": 15,
+    # Known exception (plan R2 / R6): on a 90-day window the two test folds share
+    # 15 days, and a layout without overlap leaves one fold. The admission layout
+    # has no such exception.
+    "allow_overlapping_test_folds": True,
+    "min_folds_passed": 1,
+}
+
+
+class ResearchWindowError(ValueError):
+    """The window a research job asked for cannot be laid on the dataset it named.
+    The research step fails with the reason; the window is not shortened to fit.
+    """
+
+
+@dataclass(frozen=True)
+class _ResearchWindow:
+    """Which days each stage of one research tick reads. Every date named is read.
+
+    start_date, end_date   the experiment's window; walk-forward's folds lie inside it
+    selection_end          stage 1 reads start_date to selection_end
+    gates_start            Monte Carlo, regime and stress read gates_start to end_date
+    fold_layout            how walk-forward lays out its folds, as arguments of
+                           WalkForwardStageConfig; None when the window is too short
+                           for walk-forward, and stage 1 is then the only stage
+    gate_run_clears_filter True = the one run over gates_start to end_date (Monte
+                           Carlo's base run) must itself clear the walk-forward
+                           filter, besides its resampled paths
+    """
+
+    start_date: date
+    end_date: date
+    selection_end: date
+    gates_start: date
+    fold_layout: Mapping[str, Any] | None
+    gate_run_clears_filter: bool = False
 
 
 def run_research_at_timestamp(
@@ -120,10 +184,34 @@ def run_scheduled_research_at_timestamp(
                the timeline month by month, as on the trading platform, and the
                universe tables are not read. Without it the universe is the
                list active on the window's first day, for the whole window.
+      dataset_version: dataset version id of a research-window dataset
+               (``atp datasets build-window``). With it research reads those
+               bars in place of the dataset the replay hands it: the window
+               ends on the tick's date or the dataset's last day, whichever
+               is earlier, names are checked against the names the dataset
+               holds, and a window that would start before its first day is
+               a failed step, not a shorter window.
+      window_layout: "admission" lays the window out from the holdout date
+               (``research/pipeline/holdout.py``) in place of ``lookback_days``:
+               stage 1 reads the selection piece; walk-forward tests on the
+               evaluation piece cut into three folds, every fold's train
+               window being the selection piece, two of three to pass; Monte
+               Carlo, regime and stress read the evaluation piece, and the
+               one run over it must itself clear the walk-forward filter; no
+               stage reads the holdout, and the pipeline is refused if one
+               would. The final survivors are then each run once over the
+               holdout sessions there are so far and the numbers reported in
+               the summary (``holdout_report``); nobody is eliminated by them
+               and the runs leave no row in the database. It needs
+               ``universe_timeline`` and ``dataset_version`` and refuses
+               ``lookback_days``. A dataset the layout cannot be laid on is a
+               failed step. Any other value is an error.
     """
     profile = _resolve_research_profile(research_options)
     lookback_days = _resolve_lookback_days(research_options)
     universe_timeline_id = _resolve_universe_timeline_option(research_options)
+    research_dataset_id = _resolve_dataset_version_option(research_options)
+    window_layout = _resolve_window_layout_option(research_options)
     base = dict(
         domain="research",
         timestamp=timestamp,
@@ -155,6 +243,33 @@ def run_scheduled_research_at_timestamp(
                 **base, status="failed", errors=[f"universe_timeline: {exc}"]
             )
 
+    # A dataset the job named is looked up before anything is built: what it is,
+    # where its bars begin and end, and the names it holds.
+    research_dataset: ResearchWindowDataset | None = None
+    if research_dataset_id is not None:
+        from autonomous_trading_platform.application.services.research_window_dataset_loader import (
+            load_research_window_dataset,
+        )
+
+        try:
+            research_dataset = load_research_window_dataset(session, research_dataset_id)
+        except Exception as exc:
+            return ResearchReplayResult(**base, status="failed", errors=[f"dataset_version: {exc}"])
+
+    # The admission layout is laid on the named dataset before anything is built: a
+    # dataset it does not fit fails the step here, with the reason.
+    admission_layout: AdmissionWindowLayout | None = None
+    if window_layout == WINDOW_LAYOUT_ADMISSION:
+        if research_dataset is None:
+            # Not reachable through the options: the layout is refused without a dataset.
+            raise ValueError("the admission layout was asked for without a dataset")
+        try:
+            admission_layout = _lay_out_admission_window(
+                tick_date=timestamp.date(), research_dataset=research_dataset
+            )
+        except ResearchWindowError as exc:
+            return ResearchReplayResult(**base, status="failed", errors=[f"research_window: {exc}"])
+
     try:
         from autonomous_trading_platform.research.simulation.contexts.build_simulation_context import (
             build_simulation_context,
@@ -182,9 +297,13 @@ def run_scheduled_research_at_timestamp(
             profile=profile,
             lookback_days=lookback_days,
             universe_timeline=universe_timeline,
+            research_dataset=research_dataset,
+            admission_layout=admission_layout,
         )
     except SurvivorshipBiasError as exc:
         return ResearchReplayResult(**base, status="failed", errors=[f"survivorship_guard: {exc}"])
+    except ResearchWindowError as exc:
+        return ResearchReplayResult(**base, status="failed", errors=[f"research_window: {exc}"])
     if experiment_def is None:
         return ResearchReplayResult(
             **base,
@@ -378,6 +497,19 @@ def run_scheduled_research_at_timestamp(
         now_utc=timestamp,
     )
 
+    # The holdout report, last: the survivors are chosen and seeded before any
+    # holdout day is read, and nothing above is handed its numbers.
+    holdout_report: dict[str, Any] | None = None
+    if admission_layout is not None:
+        holdout_report = _report_holdout(
+            simulation_runner=simulation_context.simulation_runner,
+            layout=admission_layout,
+            survivors=final_survivors,
+            experiment_def=experiment_def,
+            universe_timeline=universe_timeline,
+            research_dataset=research_dataset,
+        )
+
     return ResearchReplayResult(
         **base,
         status="ok",
@@ -393,6 +525,16 @@ def run_scheduled_research_at_timestamp(
             "stage_funnel": stage_funnel,
             "research_profile": profile,
             "universe_timeline_version": universe_timeline_id,
+            "dataset_version": experiment_def.dataset_version,
+            "window_start": experiment_def.start_date.isoformat(),
+            "window_end": experiment_def.end_date.isoformat(),
+            "window_layout": window_layout,
+            "admission_window": (
+                _admission_window_summary(admission_layout)
+                if admission_layout is not None
+                else None
+            ),
+            "holdout_report": holdout_report,
             "intelligence_analyzed": len(intelligence_summaries),
             "deployable_seeded": len(deployable),
             "spam_cluster_excluded": len(spam_excluded),
@@ -446,15 +588,33 @@ def _build_replay_experiment_definition(
     profile: str = "full",
     lookback_days: int = DEFAULT_RESEARCH_LOOKBACK_DAYS,
     universe_timeline: UniverseTimeline | None = None,
+    research_dataset: ResearchWindowDataset | None = None,
+    admission_layout: AdmissionWindowLayout | None = None,
 ):
     """Build an ExperimentDefinition with the staged pipeline for the monthly research tick.
 
-    Stage 1 always runs. Walk-forward and everything after it (Monte Carlo,
-    regime, stress, overfitting) need >= 75 days of data. When they are built,
-    stage 1 selects on the days before the first walk-forward test fold only;
-    the later stages still run on the whole window.
+    Which days each stage reads is decided first, in one of two ways, and the
+    stages are then built from that (``_ResearchWindow``):
 
-    Returns None if no validated dataset is available.
+    The lookback window (no ``admission_layout``). Stage 1 always runs.
+    Walk-forward and everything after it (Monte Carlo, regime, stress,
+    overfitting) need >= 75 days of data. When they are built, stage 1 selects
+    on the days before the first walk-forward test fold only; the later stages
+    still run on the whole window.
+
+    The admission layout. Stage 1 selects on the selection piece; walk-forward
+    tests on the evaluation piece's three folds, every fold's train window being
+    the selection piece; Monte Carlo, regime and stress read the evaluation
+    piece. The experiment runs from the selection piece's first day to the last
+    day a gate may read.
+
+    The bars come from, in this order: the dataset the job named
+    (``research_dataset``), the replay's own cumulative dataset
+    (``dataset_version_id_override``), the latest validated raw bars.
+
+    Returns None if no validated dataset is available, or the replay's dataset
+    holds under 15 days. Raises ResearchWindowError when the window does not fit
+    a dataset the job named.
     """
     from autonomous_trading_platform.common.annualisation import BARS_PER_DAY
     from autonomous_trading_platform.contracts.common.enums import PriceBasis
@@ -504,9 +664,13 @@ def _build_replay_experiment_definition(
     smoke = profile == "smoke"
     tick_date = timestamp.date()
 
+    if research_dataset is not None:
+        # The job named its bars (research.options.dataset_version).
+        dataset_version = research_dataset.dataset_version_id
+        price_basis = PriceBasis.RAW
     # When running inside a platform backtest, use the pre-created cumulative version
     # directly to avoid picking up stale validated versions from prior runs.
-    if dataset_version_id_override is not None:
+    elif dataset_version_id_override is not None:
         dataset_version = dataset_version_id_override
         price_basis = PriceBasis.RAW
     else:
@@ -525,33 +689,32 @@ def _build_replay_experiment_definition(
         dataset_version = dataset_row.dataset_version_id
         price_basis = PriceBasis.RAW
 
-    lookback_start = tick_date - timedelta(days=lookback_days)
-    # Clamp to the dataset's coverage start so walk-forward folds don't request
-    # data before the replay began (cumulative dataset has no pre-replay bars).
-    replay_start: date | None = None
-    if dataset_version_id_override is not None:
-        try:
-            from autonomous_trading_platform.storage.sor.models.dataset_versions import (
-                DatasetVersions,
-            )
+    # Which days each stage reads.
+    if admission_layout is not None:
+        if research_dataset is None or universe_timeline is None:
+            # Not reachable through the options: both are required with the layout.
+            raise ValueError("the admission layout needs a named dataset and a universe timeline")
+        window = _admission_research_window(admission_layout)
+    else:
+        lookback_window = _lookback_research_window(
+            session=session,
+            tick_date=tick_date,
+            lookback_days=lookback_days,
+            research_dataset=research_dataset,
+            dataset_version_id_override=dataset_version_id_override,
+        )
+        if lookback_window is None:
+            return None
+        window = lookback_window
+    start_date, end_date = window.start_date, window.end_date
 
-            dv_row = (
-                session.query(DatasetVersions)
-                .filter(DatasetVersions.dataset_version_id == dataset_version_id_override)
-                .first()
-            )
-            if dv_row is not None:
-                replay_start = dv_row.date_coverage_start
-        except Exception:
-            pass
-    start_date = max(lookback_start, replay_start) if replay_start else lookback_start
-
-    available_days = (tick_date - start_date).days
-
-    # Need at least 15 calendar days for stage 1 to be meaningful.
-    # Guards against monthly cadence firing on day 1 (last=None → True).
-    if available_days < 15:
-        return None
+    # The names that have bars: the named dataset's, else (in a backtest) the ones
+    # the replay ingested. None when neither is known.
+    held_symbols: set[str] | None = None
+    if research_dataset is not None:
+        held_symbols = set(research_dataset.symbols)
+    elif dataset_version_id_override is not None:
+        held_symbols = set(replay_context.symbols)
 
     # Survivorship-safe research universe: members active at the START of the
     # research window, not at tick_date. A tick-date universe silently drops
@@ -564,38 +727,51 @@ def _build_replay_experiment_definition(
         # 2026-11-18): the timeline is the point-in-time universe. The stages are
         # handed every name of the window; each run loads the names of its own
         # dates, and the engine trades the list in force on each bar.
-        scope = _timeline_universe_scope(universe_timeline, start_date, tick_date)
+        scope = _timeline_universe_scope(universe_timeline, start_date, end_date)
         universe_timeline_version = universe_timeline.dataset_version_id
         universe_version = universe_timeline_version
-        symbols = universe_timeline.symbols_on_dates(start_date, tick_date)
-        # Market regimes are labelled from the list in force on the window's first
-        # day, as without a timeline (decided 2026-11-19): a name picked later
-        # does not shape the labels of the months before it was picked.
-        regime_label_symbols = sorted(scope.member_symbols)
-        if dataset_version_id_override is not None:
-            # Backtest mode: only symbols the replay ingested have Parquet bars.
-            # A timeline's names are not cut down to fit; the run is refused.
-            _not_ingested = sorted(set(symbols) - set(replay_context.symbols))
-            if _not_ingested:
+        symbols = universe_timeline.symbols_on_dates(start_date, end_date)
+        # Market regimes are labelled from the list in force on the first day the
+        # regime stage reads: a name picked later does not shape the labels of
+        # the months before it was picked. That day is the window's first day
+        # (decided 2026-11-19), and in the admission layout the evaluation
+        # piece's first day (decided 2026-11-20).
+        label_scope = (
+            scope
+            if window.gates_start == start_date
+            else _timeline_universe_scope(universe_timeline, window.gates_start, end_date)
+        )
+        regime_label_symbols = sorted(label_scope.member_symbols)
+        if held_symbols is not None:
+            # Only the names the dataset holds (in a backtest, the ones the replay
+            # ingested) have Parquet bars. A timeline's names are not cut down to
+            # fit; the run is refused.
+            _not_held = sorted(set(symbols) - held_symbols)
+            if _not_held:
                 from autonomous_trading_platform.universe.services.survivorship_guard import (
                     SurvivorshipBiasError,
                 )
 
+                _lacking = (
+                    f"dataset {research_dataset.dataset_version_id} does not hold"
+                    if research_dataset is not None
+                    else "the replay did not ingest"
+                )
                 raise SurvivorshipBiasError(
-                    f"Universe timeline {universe_timeline_version} names symbols the "
-                    f"replay did not ingest: {_not_ingested}. Running on the rest "
+                    f"Universe timeline {universe_timeline_version} names symbols "
+                    f"{_lacking}: {_not_held}. Running on the rest "
                     "would not be the timeline's universe."
                 )
     else:
         scope = _resolve_research_universe_scope(
-            session=session, start_date=start_date, end_date=tick_date
+            session=session, start_date=start_date, end_date=end_date
         )
         universe_version = scope.universe_version_id or "v1"
         symbols = sorted(scope.member_symbols)
-        if dataset_version_id_override is not None:
-            # Backtest mode: only symbols the replay ingested have Parquet bars.
-            _ingested = set(replay_context.symbols)
-            symbols = [s for s in symbols if s in _ingested]
+        if held_symbols is not None:
+            # Only the names the dataset holds (in a backtest, the ones the replay
+            # ingested) have Parquet bars.
+            symbols = [s for s in symbols if s in held_symbols]
     if not symbols:
         from autonomous_trading_platform.universe.services.survivorship_guard import (
             SurvivorshipBiasError,
@@ -606,10 +782,6 @@ def _build_replay_experiment_definition(
             "ingested symbols — refusing to fall back to an unanchored symbol list."
         )
 
-    # Use half of available CPUs for parallel simulation (threads share the GIL
-    # but I/O — parquet reads — runs concurrently, giving real speedup there).
-    _cpu = os.cpu_count() or 1
-    _sim_workers = max(2, _cpu // 2)
     experiment_id = f"replay_research_{tick_date.strftime('%Y%m')}"
 
     default_weights = ScoringWeights()
@@ -624,25 +796,16 @@ def _build_replay_experiment_definition(
         max_daily_turnover=RESEARCH_MAX_DAILY_TURNOVER,
     )
 
-    # Walk-forward needs train_days + test_days of data (75 days); the stages
-    # after it (Monte Carlo, regime, stress, overfitting) are built only with it.
-    _wf_train_days, _wf_test_days = 45, 30
-    has_walk_forward = available_days >= _wf_train_days + _wf_test_days
-
     # Stage 1 picks the candidates. When walk-forward follows, stage 1 sees only
     # the days before the first test fold starts, so every test fold is data
     # that had no say in the selection (plan R2). On its own it gets the whole
     # window.
-    selection_end = (
-        start_date + timedelta(days=_wf_train_days - 1) if has_walk_forward else tick_date
-    )
-
     # Stage 1 — always runs (just needs start_date < end_date)
     stage1 = SimulationStage(
         stage_config=SimulationStageConfig(
             name="initial_quality_filter",
             start_date=start_date,
-            end_date=selection_end,
+            end_date=window.selection_end,
             symbols=symbols,
             universe_timeline_version=universe_timeline_version,
             filter_config=FilterConfig(
@@ -661,33 +824,27 @@ def _build_replay_experiment_definition(
 
     stages: list = [stage1]
 
-    # Stage 2 — WalkForwardStage: the same fixed config evaluated on rolling
-    # train/test sub-periods. Its first test fold starts the day after stage 1's
-    # selection window ends. Survivors of stage 1 are already filtered, so the
-    # fold simulations are cheap.
-    if has_walk_forward:
+    # Stage 2 — WalkForwardStage: the same fixed config evaluated on train/test
+    # sub-periods, laid out as the window says (rolling folds in the lookback
+    # window; in the admission layout the three test folds, each with the
+    # selection piece as its train window). Its first test fold starts the day
+    # after stage 1's selection window ends. Survivors of stage 1 are already
+    # filtered, so the fold simulations are cheap.
+    if window.fold_layout is not None:
         stage2 = WalkForwardStage(
             stage_config=WalkForwardStageConfig(
                 name="walk_forward_robustness",
                 symbols=symbols,
                 universe_timeline_version=universe_timeline_version,
                 start_date=start_date,
-                end_date=tick_date,
-                train_days=_wf_train_days,
-                test_days=_wf_test_days,
-                step_days=15,
-                # Known exception (plan R2 / R6): on a 90-day window the two test
-                # folds share 15 days, and a layout without overlap leaves one
-                # fold. Remove this when the lookback is long enough for
-                # step_days >= test_days (plan package B).
-                allow_overlapping_test_folds=True,
+                end_date=end_date,
                 train_filter_config=wf_mc_filter,
                 train_scoring_weights=default_weights,
                 test_filter_config=wf_mc_filter,
                 test_scoring_weights=default_weights,
                 require_all_folds=False,
-                min_folds_passed=1,
                 max_workers=1,
+                **window.fold_layout,
             ),
             simulation_runner=simulation_runner,
         )
@@ -696,13 +853,20 @@ def _build_replay_experiment_definition(
         # Stage 3 — MonteCarloStage: only survivors of walk-forward enter (typically 2-5).
         # One simulation per survivor; n_runs is the number of resampled paths of
         # its equity curve, which cost milliseconds, so smoke only trims it a little.
+        # In the admission layout that one simulation is a continuous run over
+        # the evaluation piece, the three test periods as one record, and it
+        # must itself clear wf_mc_filter: the pooled half of the pass rule
+        # (decided 2026-11-18 and 2026-11-20). The resampled paths do not check
+        # that for it: reshuffling scatters a losing streak, so a record with a
+        # deep drawdown has mostly shallow paths (measured 2026-11-20).
         stage3 = MonteCarloStage(
             stage_config=MonteCarloStageConfig(
                 name="monte_carlo_structural_robustness",
                 symbols=symbols,
                 universe_timeline_version=universe_timeline_version,
-                start_date=start_date,
-                end_date=tick_date,
+                base_run_clears_filter=window.gate_run_clears_filter,
+                start_date=window.gates_start,
+                end_date=end_date,
                 n_runs=200 if smoke else 2000,
                 min_pass_rate=0.6,
                 filter_config=wf_mc_filter,
@@ -716,9 +880,11 @@ def _build_replay_experiment_definition(
         # Stage 4 — regime robustness on auto-classified daily regimes. Reuses
         # the Monte Carlo base run (same window), so it adds no
         # simulations: one bar read + classification per research tick.
-        # Report only (enforce=False): on this ~60-session window a regime
-        # holds 18-19 sessions, too few for the thresholds below to tell a
-        # strategy from chance. The findings are recorded; nobody is eliminated.
+        # Report only (enforce=False): on the ~60-session lookback window a
+        # regime holds 18-19 sessions, too few for the thresholds below to tell
+        # a strategy from chance. The findings are recorded; nobody is
+        # eliminated. Not re-judged for the admission layout's longer window:
+        # report only there too.
         stages.append(
             RegimeStage(
                 stage_config=RegimeStageConfig(
@@ -726,8 +892,8 @@ def _build_replay_experiment_definition(
                     symbols=symbols,
                     universe_timeline_version=universe_timeline_version,
                     label_symbols=regime_label_symbols,
-                    start_date=start_date,
-                    end_date=tick_date,
+                    start_date=window.gates_start,
+                    end_date=end_date,
                     gate=RegimeGateConfig(
                         dimensions=("trend", "volatility"),
                         # Research sims run on 5-min bars: a regime needs ~5
@@ -755,8 +921,8 @@ def _build_replay_experiment_definition(
                     name="stress_robustness",
                     symbols=symbols,
                     universe_timeline_version=universe_timeline_version,
-                    start_date=start_date,
-                    end_date=tick_date,
+                    start_date=window.gates_start,
+                    end_date=end_date,
                     gate=StressGateConfig(
                         min_shock_sharpe=0.0,
                         max_shock_drawdown=-0.40,
@@ -771,9 +937,11 @@ def _build_replay_experiment_definition(
         )
 
         # Stage 6 — overfitting: no simulations; combines WF/MC/regime evidence.
-        # Report only (enforce=False): on this window the walk-forward evidence
-        # is two folds at most, and on real bars the gate changed no outcome.
-        # The score and findings are recorded; nobody is eliminated.
+        # Report only (enforce=False): on the lookback window the walk-forward
+        # evidence is two folds at most, and on real bars the gate changed no
+        # outcome. The score and findings are recorded; nobody is eliminated.
+        # Not re-judged for the admission layout's three folds: report only
+        # there too.
         stages.append(
             OverfittingStage(
                 stage_config=OverfittingStageConfig(
@@ -800,11 +968,253 @@ def _build_replay_experiment_definition(
         price_basis=price_basis,
         symbols=symbols,
         start_date=start_date,
-        end_date=tick_date,
+        end_date=end_date,
         random_seed=int(tick_date.strftime("%Y%m")),
         parameter_space={},
-        staged_pipeline_config=StagedPipelineConfig(stages=stages),
+        # In the admission layout the validator is told the holdout date and
+        # refuses a stage that reads it. The lookback layout sets no holdout aside.
+        staged_pipeline_config=StagedPipelineConfig(
+            stages=stages,
+            holdout_start=admission_layout.holdout_start if admission_layout is not None else None,
+        ),
     )
+
+
+def _lookback_research_window(
+    *,
+    session: Session,
+    tick_date: date,
+    lookback_days: int,
+    research_dataset: ResearchWindowDataset | None,
+    dataset_version_id_override: str | None,
+) -> _ResearchWindow | None:
+    """The window ``lookback_days`` long, ending on the tick's date or on the last day
+    of a named dataset that ends before it.
+
+    None when the replay's dataset holds under 15 days. Raises ResearchWindowError when
+    the window does not fit a dataset the job named.
+    """
+    end_date = tick_date
+    if research_dataset is not None:
+        if tick_date < research_dataset.first_day:
+            raise ResearchWindowError(
+                f"the research date {tick_date} is before the first day of dataset "
+                f"{research_dataset.dataset_version_id} ({research_dataset.first_day})"
+            )
+        end_date = min(tick_date, research_dataset.last_day)
+    lookback_start = end_date - timedelta(days=lookback_days)
+    # Clamp to the dataset's coverage start so walk-forward folds don't request
+    # data before the replay began (cumulative dataset has no pre-replay bars).
+    # A named dataset is not clamped to: a window it cannot hold is refused.
+    replay_start: date | None = None
+    if research_dataset is not None:
+        if lookback_start < research_dataset.first_day:
+            raise ResearchWindowError(
+                f"a window of {lookback_days} days ending {end_date} starts on "
+                f"{lookback_start}, before the first day of dataset "
+                f"{research_dataset.dataset_version_id} ({research_dataset.first_day})"
+            )
+        if lookback_days < MIN_RESEARCH_WINDOW_DAYS:
+            raise ResearchWindowError(
+                f"a window of {lookback_days} days is under the "
+                f"{MIN_RESEARCH_WINDOW_DAYS} a research run needs"
+            )
+    elif dataset_version_id_override is not None:
+        try:
+            from autonomous_trading_platform.storage.sor.models.dataset_versions import (
+                DatasetVersions,
+            )
+
+            dv_row = (
+                session.query(DatasetVersions)
+                .filter(DatasetVersions.dataset_version_id == dataset_version_id_override)
+                .first()
+            )
+            if dv_row is not None:
+                replay_start = dv_row.date_coverage_start
+        except Exception:
+            pass
+    start_date = max(lookback_start, replay_start) if replay_start else lookback_start
+
+    available_days = (end_date - start_date).days
+
+    # Need at least 15 calendar days for stage 1 to be meaningful.
+    # Guards against monthly cadence firing on day 1 (last=None → True).
+    if available_days < MIN_RESEARCH_WINDOW_DAYS:
+        return None
+
+    # Walk-forward needs train_days + test_days of data (75 days); the stages
+    # after it (Monte Carlo, regime, stress, overfitting) are built only with it.
+    has_walk_forward = available_days >= _ROLLING_TRAIN_DAYS + _ROLLING_TEST_DAYS
+    return _ResearchWindow(
+        start_date=start_date,
+        end_date=end_date,
+        # With walk-forward, stage 1 stops the day before the first test fold starts.
+        selection_end=(
+            start_date + timedelta(days=_ROLLING_TRAIN_DAYS - 1) if has_walk_forward else end_date
+        ),
+        # The gates after walk-forward read the whole window.
+        gates_start=start_date,
+        fold_layout=_ROLLING_FOLD_LAYOUT if has_walk_forward else None,
+    )
+
+
+def _lay_out_admission_window(
+    *, tick_date: date, research_dataset: ResearchWindowDataset
+) -> AdmissionWindowLayout:
+    """The admission layout on a named dataset, as of the tick's date.
+
+    Sessions are the NYSE calendar's, less the sessions the dataset left out by name:
+    a day with no bars is no session of a piece or a fold.
+
+    Raises ResearchWindowError when the dataset cannot hold the layout, or the research
+    runs before the holdout date.
+    """
+    from autonomous_trading_platform.research.pipeline.admission_window import (
+        AdmissionWindowError,
+        admission_window_layout,
+    )
+    from autonomous_trading_platform.research.pipeline.holdout import HOLDOUT_START
+    from autonomous_trading_platform.runtime.clock import RealMarketCalendar
+
+    calendar = RealMarketCalendar()
+    left_out = frozenset(research_dataset.excluded_sessions)
+
+    def sessions(first: date, last: date) -> list[date]:
+        return [day for day in calendar.trading_days(first, last) if day not in left_out]
+
+    try:
+        return admission_window_layout(
+            holdout_start=HOLDOUT_START,
+            as_of=tick_date,
+            data_first=research_dataset.first_day,
+            data_last=research_dataset.last_day,
+            trading_days=sessions,
+        )
+    except AdmissionWindowError as exc:
+        raise ResearchWindowError(
+            f"the admission layout cannot be laid on dataset "
+            f"{research_dataset.dataset_version_id}: {exc}"
+        ) from exc
+
+
+def _admission_research_window(layout: AdmissionWindowLayout) -> _ResearchWindow:
+    """Which days each stage reads in the admission layout.
+
+    Every fold's train window is the selection piece (decided 2026-11-20): with train
+    windows that roll, fold 2 would train on fold 1's test days.
+    """
+    from autonomous_trading_platform.research.pipeline.admission_window import (
+        MIN_TEST_FOLDS_PASSED,
+    )
+    from autonomous_trading_platform.research.pipeline.stages.walk_forward_stage import (
+        FoldWindow,
+    )
+
+    selection = layout.selection
+    folds = tuple(
+        FoldWindow(
+            train_start=selection.first,
+            train_end=selection.last,
+            test_start=fold.first,
+            test_end=fold.last,
+        )
+        for fold in layout.test_folds
+    )
+    return _ResearchWindow(
+        start_date=layout.start,
+        end_date=layout.last_gate_day,
+        selection_end=selection.last,
+        gates_start=layout.evaluation.first,
+        fold_layout={"folds": folds, "min_folds_passed": MIN_TEST_FOLDS_PASSED},
+        # The other half of the pass rule: the evaluation piece as one record.
+        gate_run_clears_filter=True,
+    )
+
+
+def _report_holdout(
+    *,
+    simulation_runner,
+    layout: AdmissionWindowLayout,
+    survivors,  # list[StrategyConfig]
+    experiment_def,  # ExperimentDefinition
+    universe_timeline: UniverseTimeline | None,
+    research_dataset: ResearchWindowDataset | None,
+) -> dict[str, Any]:
+    """Each final survivor run once over the holdout sessions there are so far
+    (``research/pipeline/holdout_report.py``). Report only: whatever goes wrong here is
+    written into the report and the research step's outcome is not changed.
+    """
+    from autonomous_trading_platform.research.pipeline.holdout_report import (
+        HoldoutRunSettings,
+        holdout_not_scored,
+        score_holdout,
+    )
+
+    span = layout.holdout
+    if span is None:
+        return holdout_not_scored(None, "the dataset holds no holdout session yet")
+    if not survivors:
+        return holdout_not_scored(span, "no strategy passed every stage")
+    if universe_timeline is None or research_dataset is None:
+        # Not reachable through the options: the layout is refused without either.
+        return holdout_not_scored(span, "the layout was run without a timeline or a dataset")
+    try:
+        # The names of the lists in force during the holdout; as for the stages, a
+        # timeline's names are not cut down to the ones the dataset holds.
+        symbols = universe_timeline.symbols_on_dates(span.first, span.last)
+        if not symbols:
+            return holdout_not_scored(
+                span,
+                f"universe timeline {universe_timeline.dataset_version_id} has no list in "
+                "force during the holdout",
+            )
+        not_held = sorted(set(symbols) - set(research_dataset.symbols))
+        if not_held:
+            return holdout_not_scored(
+                span,
+                f"dataset {research_dataset.dataset_version_id} does not hold the universe's "
+                f"names for the holdout: {not_held}",
+            )
+        with simulation_runner.reuse_loaded_bars():
+            return score_holdout(
+                simulation_runner=simulation_runner,
+                survivors=survivors,
+                span=span,
+                settings=HoldoutRunSettings(
+                    experiment_id=experiment_def.experiment_id,
+                    dataset_version=experiment_def.dataset_version,
+                    random_seed=experiment_def.random_seed,
+                    price_basis=experiment_def.price_basis,
+                    initial_cash=experiment_def.initial_cash,
+                    resample_to_daily=experiment_def.resample_to_daily,
+                    symbols=symbols,
+                    universe_timeline_version=universe_timeline.dataset_version_id,
+                ),
+            )
+    except Exception as exc:
+        logger.warning("holdout_report: not scored", exc_info=True)
+        return holdout_not_scored(span, f"failed: {exc}")
+
+
+def _admission_window_summary(layout: AdmissionWindowLayout) -> dict[str, Any]:
+    """The layout as a research step reports it: each piece's first and last session
+    and how many it holds. The holdout is listed, not read."""
+
+    def span(piece: SessionSpan) -> dict[str, Any]:
+        return {
+            "first": piece.first.isoformat(),
+            "last": piece.last.isoformat(),
+            "sessions": piece.sessions,
+        }
+
+    return {
+        "selection": span(layout.selection),
+        "evaluation": span(layout.evaluation),
+        "test_folds": [span(fold) for fold in layout.test_folds],
+        "holdout_start": layout.holdout_start.isoformat(),
+        "holdout": span(layout.holdout) if layout.holdout is not None else None,
+    }
 
 
 def _resolve_research_universe_scope(*, session: Session, start_date: date, end_date: date):
@@ -880,6 +1290,52 @@ def _resolve_universe_timeline_option(research_options: dict | None) -> str | No
             f"exported universe timeline, got {raw!r}"
         )
     return raw.strip()
+
+
+def _resolve_dataset_version_option(research_options: dict | None) -> str | None:
+    raw: object = (research_options or {}).get("dataset_version")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError(
+            "research.options.dataset_version must be the dataset version id of a "
+            f"research-window dataset, got {raw!r}"
+        )
+    return raw.strip()
+
+
+def _resolve_window_layout_option(research_options: dict | None) -> str | None:
+    """The layout a job asked for, or None for the lookback window.
+
+    A value that is not a known layout is an error, never the lookback window: the run
+    would look valid and be a different experiment. So is the admission layout without
+    the two things it is defined on, or together with a window length.
+    """
+    options = research_options or {}
+    raw: object = options.get("window_layout")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or raw not in _WINDOW_LAYOUTS:
+        raise ValueError(
+            f"research.options.window_layout must be one of {sorted(_WINDOW_LAYOUTS)}, or "
+            f"left out for the lookback_days window, got {raw!r}"
+        )
+    if options.get("universe_timeline") is None:
+        raise ValueError(
+            f"research.options.window_layout {raw!r} needs research.options.universe_timeline: "
+            "the layout runs on a universe timeline, not on one list for the whole window"
+        )
+    if options.get("dataset_version") is None:
+        raise ValueError(
+            f"research.options.window_layout {raw!r} needs research.options.dataset_version: "
+            "the layout runs on a research-window dataset the job names"
+        )
+    if "lookback_days" in options:
+        raise ValueError(
+            f"research.options.lookback_days does not apply with window_layout {raw!r}: "
+            "the layout's length follows from the holdout date; leave lookback_days out"
+        )
+    return raw
 
 
 _RESEARCH_PROFILES = frozenset({"full", "smoke"})

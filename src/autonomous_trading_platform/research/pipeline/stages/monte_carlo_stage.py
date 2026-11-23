@@ -57,6 +57,15 @@ filter_config (trades, consistency, profit factor, win rate, turnover, ...)
 describes how the strategy traded, which only the base run records, so those
 are checked once, on the base run, and any failure eliminates the strategy.
 
+The base run's own Sharpe, total return and drawdown are not checked unless
+base_run_clears_filter is set. The paths do not stand in for that check on
+drawdown: resampling keeps a run's daily returns and discards their order, so
+a losing streak is scattered and most paths show a shallower drawdown than
+the run itself had. With base_run_clears_filter the base run must clear all
+of filter_config, and the paths are checked as before. The research hook's
+admission layout sets it: there the base run is the nine-month record of the
+evaluation piece, which the pass rule holds to the folds' filter.
+
 Failure reasons
 ---------------
 A failed strategy's filter result carries this gate's reasons: the base-run
@@ -188,6 +197,9 @@ class MonteCarloStageConfig:
     # The exported universe timeline the runs trade on (a dataset version id).
     # None = the symbols above are the universe for the whole window.
     universe_timeline_version: str | None = None
+    # True = the base run itself must also clear min_sharpe, min_total_return and
+    # max_drawdown, not only the resampled paths (see "Two kinds of threshold").
+    base_run_clears_filter: bool = False
 
     def __post_init__(self) -> None:
         if self.n_runs < 2:
@@ -212,7 +224,8 @@ class MonteCarloStage(BaseStage):
          window matches, otherwise simulated once.
       2. Resample its equity curve in whole sessions, n_runs paths.
       3. Strategy survives iff pass_rate >= min_pass_rate and the base run
-         clears every threshold a path cannot measure (see MonteCarloAggregator).
+         clears every threshold a path cannot measure (see MonteCarloAggregator);
+         with base_run_clears_filter, every threshold of filter_config.
 
     Only base runs simulated here go into StageResult.simulation_results; a
     reused run was already reported by the stage that produced it.
@@ -249,9 +262,14 @@ class MonteCarloStage(BaseStage):
         # The single-run filter with the per-path thresholds switched off: it
         # applies to the base run every threshold a resampled path cannot
         # measure, and scores the base run so the score is comparable with
-        # upstream stages.
+        # upstream stages. With base_run_clears_filter the per-path thresholds
+        # stay on, so the base run answers for all of filter_config.
         self._base_run_service = FilterScoreService(
-            filter_config=base_run_filter_config(stage_config.filter_config),
+            filter_config=(
+                stage_config.filter_config
+                if stage_config.base_run_clears_filter
+                else base_run_filter_config(stage_config.filter_config)
+            ),
             scoring_weights=stage_config.scoring_weights,
         )
         self._prior_results: list[StageResult] = []
@@ -293,6 +311,7 @@ class MonteCarloStage(BaseStage):
     def validation_facts(self) -> StageWindowFacts:
         return StageWindowFacts(
             stage_name=self._cfg.name,
+            last_day_read=self._cfg.end_date,
             filters=(("filter_config", self._cfg.filter_config),),
         )
 

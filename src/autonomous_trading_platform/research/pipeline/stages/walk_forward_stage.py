@@ -17,13 +17,27 @@ on dates that fold covers. The stage cannot check that; the pipeline that
 builds it has to arrange it (research_hooks.py ends stage 1's window the day
 before the first test fold starts).
 
-Fold boundaries are calendar days, and train_end and test_start are the same
-date.
+Two ways to say where the folds are
+-----------------------------------
+Rolling (train_days, test_days, step_days): the stage lays the folds out
+itself. Fold boundaries are calendar days, and train_end and test_start are
+the same date.
+
+By date (folds): the pipeline hands the stage its folds, each a train window
+and a test window given by first and last day, both read. This is how a
+layout counted in trading sessions reaches the stage, and how every fold can
+share one train window. A train window that several folds share is simulated
+once.
 
 Rules the config enforces (plan items R2 and R6)
 ------------------------------------------------
-- step_days >= test_days, so no day is in two test folds. A config that
-  cannot meet this yet says so with allow_overlapping_test_folds=True.
+- Rolling: step_days >= test_days, so no day is in two test folds. A config
+  that cannot meet this yet says so with allow_overlapping_test_folds=True.
+- By date: a fold's train window ends before its test window starts; test
+  windows are in order and share no day; no train window covers a day of any
+  fold's test window. A fold passes only when its train run and its test run
+  both pass, so a train window lying on another fold's test days would make
+  one test period decide two folds. There is no exception to these.
 - min_folds_passed <= the number of folds the window produces (when
   require_all_folds is False), or no strategy could ever pass.
 The rule that test folds start after earlier selection stages end involves
@@ -107,15 +121,28 @@ def _parse_scoring_weights(sw: dict[str, Any]) -> ScoringWeights:
     )
 
 
-@dataclass
+@dataclass(frozen=True)
+class FoldWindow:
+    """One fold given by date. All four days are read."""
+
+    train_start: date
+    train_end: date
+    test_start: date
+    test_end: date
+
+
+@dataclass(kw_only=True)
 class WalkForwardStageConfig:
     name: str
     symbols: list[str]
     start_date: date
     end_date: date
-    train_days: int
-    test_days: int
-    step_days: int
+    # Rolling folds: all three given, and ``folds`` left out.
+    train_days: int = 0
+    test_days: int = 0
+    step_days: int = 0
+    # Folds by date: given, and the three counts above left out.
+    folds: tuple[FoldWindow, ...] | None = None
     train_filter_config: FilterConfig
     train_scoring_weights: ScoringWeights
     test_filter_config: FilterConfig
@@ -135,6 +162,67 @@ class WalkForwardStageConfig:
     universe_timeline_version: str | None = None
 
     def __post_init__(self) -> None:
+        if self.folds is not None:
+            self.folds = tuple(self.folds)
+            self._check_folds_by_date(self.folds)
+        else:
+            self._check_rolling_folds()
+        n_folds = len(self.fold_windows())
+        if not self.require_all_folds and self.min_folds_passed > n_folds:
+            raise ValueError(
+                f"min_folds_passed ({self.min_folds_passed}) > the {n_folds} fold(s) this window "
+                "produces: no strategy could pass."
+            )
+
+    def _check_folds_by_date(self, folds: tuple[FoldWindow, ...]) -> None:
+        if self.start_date >= self.end_date:
+            raise ValueError("start_date must be before end_date")
+        if not folds:
+            raise ValueError("folds is empty: give at least one fold, or leave folds out")
+        if self.train_days or self.test_days or self.step_days:
+            raise ValueError(
+                "folds are given by date: train_days, test_days and step_days do not apply "
+                "and must be left out"
+            )
+        if self.allow_overlapping_test_folds:
+            raise ValueError(
+                "allow_overlapping_test_folds has no meaning for folds given by date: their "
+                "test windows never share a day"
+            )
+        for number, fold in enumerate(folds, 1):
+            if fold.train_end < fold.train_start or fold.test_end < fold.test_start:
+                raise ValueError(f"fold {number}: a window ends before it starts")
+            if fold.train_end >= fold.test_start:
+                raise ValueError(
+                    f"fold {number}: the train window ends on {fold.train_end}, on or after "
+                    f"the test window's first day {fold.test_start}"
+                )
+            if fold.train_start < self.start_date or fold.test_end > self.end_date:
+                raise ValueError(
+                    f"fold {number} ({fold.train_start} to {fold.test_end}) lies outside the "
+                    f"stage's window {self.start_date} to {self.end_date}"
+                )
+        for number, (earlier, later) in enumerate(zip(folds, folds[1:], strict=False), 1):
+            if earlier.test_end >= later.test_start:
+                raise ValueError(
+                    f"fold {number} tests up to {earlier.test_end} and fold {number + 1} "
+                    f"tests from {later.test_start}: test windows must be in order and "
+                    "share no day"
+                )
+        for train_number, trained in enumerate(folds, 1):
+            for test_number, tested in enumerate(folds, 1):
+                if (
+                    trained.train_start <= tested.test_end
+                    and tested.test_start <= trained.train_end
+                ):
+                    raise ValueError(
+                        f"fold {train_number}'s train window ({trained.train_start} to "
+                        f"{trained.train_end}) covers days of fold {test_number}'s test "
+                        f"window ({tested.test_start} to {tested.test_end}): one test period "
+                        "would decide two folds"
+                    )
+
+    def _check_rolling_folds(self) -> None:
         if self.train_days <= 0:
             raise ValueError("train_days must be positive")
         if self.test_days <= 0:
@@ -156,19 +244,21 @@ class WalkForwardStageConfig:
                 f"folds would share {self.test_days - self.step_days} days. Use step_days >= "
                 "test_days, or set allow_overlapping_test_folds=True to accept it knowingly."
             )
-        n_folds = len(self.fold_windows())
-        if not self.require_all_folds and self.min_folds_passed > n_folds:
-            raise ValueError(
-                f"min_folds_passed ({self.min_folds_passed}) > the {n_folds} fold(s) this window "
-                "produces: no strategy could pass."
-            )
 
     @property
     def first_test_start(self) -> date:
+        if self.folds is not None:
+            return self.folds[0].test_start
         return self.start_date + timedelta(days=self.train_days)
 
     def fold_windows(self) -> list[tuple[date, date, date, date]]:
-        """(train_start, train_end, test_start, test_end) for every fold that fits."""
+        """(train_start, train_end, test_start, test_end) for every fold: the folds
+        given by date, or every rolling fold that fits."""
+        if self.folds is not None:
+            return [
+                (fold.train_start, fold.train_end, fold.test_start, fold.test_end)
+                for fold in self.folds
+            ]
         windows: list[tuple[date, date, date, date]] = []
         train_start = self.start_date
         while True:
@@ -319,6 +409,8 @@ class WalkForwardStage(BaseStage):
             stage_name=cfg.name,
             kind="walk_forward",
             first_test_start=cfg.first_test_start,
+            # A fold's test window is the last thing it reads.
+            last_day_read=max((fold[3] for fold in cfg.fold_windows()), default=None),
             filters=(
                 ("train_filter_config", cfg.train_filter_config),
                 ("test_filter_config", cfg.test_filter_config),
@@ -359,10 +451,15 @@ class WalkForwardStage(BaseStage):
         fold_inputs: dict[str, list[FoldValidationInput]] = {c.strategy_id: [] for c in survivors}
         all_sim_results: list[SimulationRunResult] = []
         all_filter_outputs: list[FilterScoreOutput] = []
+        # A train window is simulated once: folds that share one share its runs.
+        train_runs: dict[tuple[date, date], list[SimulationRunResult]] = {}
+        train_runs_recorded: set[int] = set()
 
         for fold in folds:
+            train_is_shared = (fold.train_start, fold.train_end) in train_runs
             fold_results = self._run_fold(
                 fold=fold,
+                train_runs=train_runs,
                 configs=survivors,
                 experiment_id=experiment_id,
                 dataset_version=dataset_version,
@@ -377,8 +474,11 @@ class WalkForwardStage(BaseStage):
             for fr in fold_results:
                 if not fr.train_filter_output.filter_result.passed:
                     failed_train += 1
-                all_sim_results.append(fr.train_sim_result)
-                all_filter_outputs.append(fr.train_filter_output)
+                # A shared train run is one simulation and one verdict in the results.
+                if id(fr.train_sim_result) not in train_runs_recorded:
+                    train_runs_recorded.add(id(fr.train_sim_result))
+                    all_sim_results.append(fr.train_sim_result)
+                    all_filter_outputs.append(fr.train_filter_output)
                 if fr.test_sim_result is not None:
                     all_sim_results.append(fr.test_sim_result)
                 if fr.test_filter_output is not None:
@@ -391,11 +491,12 @@ class WalkForwardStage(BaseStage):
                     passed_fold += 1
 
             logger.info(
-                "  Fold %d | train %s->%s | test %s->%s | %d/%d passed both"
+                "  Fold %d | train %s->%s%s | test %s->%s | %d/%d passed both"
                 " | %d failed train (test run kept as evidence only)",
                 fold.index,
                 fold.train_start,
                 fold.train_end,
+                " (runs shared with an earlier fold)" if train_is_shared else "",
                 fold.test_start,
                 fold.test_end,
                 passed_fold,
@@ -468,6 +569,7 @@ class WalkForwardStage(BaseStage):
         self,
         *,
         fold: _Fold,
+        train_runs: dict[tuple[date, date], list[SimulationRunResult]],
         configs: list[StrategyConfig],
         experiment_id: str,
         dataset_version: str,
@@ -481,8 +583,11 @@ class WalkForwardStage(BaseStage):
         window_role_test = f"fold_{fold.index}_test"
 
         # ---- train simulations -------------------------------------------
+        # Simulated by the first fold that has this train window (and so under
+        # that fold's name and seed); later folds with the same window reuse it.
+        train_window = (fold.train_start, fold.train_end)
         train_units: list[ExecutionUnit[SimulationRunResult | None]] = []
-        for index, config in enumerate(configs):
+        for index, config in enumerate(configs if train_window not in train_runs else []):
             seed = self._seed_service.derive_seed(
                 DeterministicSeedInputs(
                     base_seed=random_seed,
@@ -524,8 +629,12 @@ class WalkForwardStage(BaseStage):
                     },
                 )
             )
-        maybe_train_sim_results = self._execution_service.values(train_units)
-        train_sim_results = [result for result in maybe_train_sim_results if result is not None]
+        if train_window not in train_runs:
+            maybe_train_sim_results = self._execution_service.values(train_units)
+            train_runs[train_window] = [
+                result for result in maybe_train_sim_results if result is not None
+            ]
+        train_sim_results = train_runs[train_window]
 
         if not train_sim_results:
             return []

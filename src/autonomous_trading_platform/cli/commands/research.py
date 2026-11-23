@@ -59,6 +59,7 @@ from autonomous_trading_platform.research.experiments.models.experiment_plan imp
     ExperimentDefinition,
     ExperimentType,
 )
+from autonomous_trading_platform.research.pipeline.holdout import HOLDOUT_START
 from autonomous_trading_platform.research.pipeline.pipeline_runner import StagedPipelineConfig
 from autonomous_trading_platform.research.pipeline.stages.stage_registry import StageRegistry
 from autonomous_trading_platform.research.simulation.contexts.build_simulation_context import (
@@ -1911,8 +1912,12 @@ def _load_experiment_from_yaml(
             StageRegistry.load(stage_raw, simulation_context.simulation_runner)
             for stage_raw in stage_raws
         ]
+        # Every experiment file is checked against the one holdout date: a stage
+        # that reads that day or a later one is refused (smoke waives it).
         staged_pipeline_config = StagedPipelineConfig(
-            stages=stages, smoke=bool(pipeline_raw.get("smoke", False))
+            stages=stages,
+            smoke=bool(pipeline_raw.get("smoke", False)),
+            holdout_start=HOLDOUT_START,
         )
 
     # Validate all experiment-level fields through ExperimentConfig before

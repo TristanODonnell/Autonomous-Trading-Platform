@@ -18,6 +18,7 @@ from autonomous_trading_platform.research.experiments.filtering.config import (
     FilterConfig,
     ScoringWeights,
 )
+from autonomous_trading_platform.research.pipeline.holdout import HOLDOUT_START
 from autonomous_trading_platform.research.pipeline.pipeline_runner import StagedPipelineConfig
 from autonomous_trading_platform.research.pipeline.pipeline_validation import (
     PipelineConfigError,
@@ -200,3 +201,116 @@ class TestExperimentFiles:
         assert self._load("exp_mc_smoke_test.yaml").smoke is True
         with pytest.raises(PipelineConfigError, match="asks for no evidence"):
             self._load("exp_mc_smoke_test.yaml", smoke=False)
+
+
+class TestHoldoutRule:
+    """Given a holdout date, no stage reads that day or a later one."""
+
+    # The walk-forward stage of _wf(): 365 / 90 / 90 from 2022-01-01 to 2025-03-31 holds
+    # nine folds, and the last one tests up to 2025-03-21.
+    LAST_TEST_DAY = date(2025, 3, 21)
+
+    def test_a_stage_that_reads_the_holdout_date_is_rejected(self) -> None:
+        stages = _stages(_sim("select", "2022-01-01", "2022-12-31"))
+        with pytest.raises(PipelineConfigError) as err:
+            StagedPipelineConfig(stages=stages, holdout_start=date(2022, 12, 31))
+        assert err.value.issues == (
+            "stage 'select' reads up to 2022-12-31; the holdout starts on 2022-12-31 and no "
+            "stage may read that day or a later one",
+        )
+
+    def test_a_stage_that_stops_the_day_before_passes(self) -> None:
+        stages = _stages(_sim("select", "2022-01-01", "2022-12-31"))
+        config = StagedPipelineConfig(stages=stages, holdout_start=date(2023, 1, 1))
+        assert config.holdout_start == date(2023, 1, 1)
+
+    def test_walk_forward_is_judged_by_its_last_test_day(self) -> None:
+        """Not by the stage's end date: days after the last fold that fits are not read."""
+        stages = _stages(_wf())
+        facts = stages[0].validation_facts()
+        assert facts is not None and facts.last_day_read == self.LAST_TEST_DAY
+
+        issues = pipeline_issues(stages, holdout_start=self.LAST_TEST_DAY)
+        assert len(issues) == 1 and "'wf' reads up to 2025-03-21" in issues[0]
+        assert pipeline_issues(stages, holdout_start=date(2025, 3, 22)) == []
+
+    def test_every_stage_past_the_date_is_named(self) -> None:
+        stages = _stages(
+            _sim("early", "2022-01-01", "2022-06-30"),
+            _sim("late", "2022-01-01", "2022-12-31"),
+            _wf(),
+        )
+        issues = pipeline_issues(stages, holdout_start=date(2022, 12, 1))
+        # 'late' also reads into the first test fold, which is the range guard's finding.
+        holdout_issues = [issue for issue in issues if "the holdout starts on" in issue]
+        assert [issue.split("'")[1] for issue in holdout_issues] == ["late", "wf"]
+
+    def test_without_a_date_nothing_is_checked(self) -> None:
+        stages = _stages(_sim("select", "2022-01-01", "2022-12-31"), _wf())
+        assert pipeline_issues(stages) == []
+        assert StagedPipelineConfig(stages=stages).holdout_start is None
+
+    def test_smoke_waives_it(self) -> None:
+        stages = _stages(_sim("select", "2022-01-01", "2022-12-31"))
+        assert pipeline_issues(stages, holdout_start=date(2022, 6, 1)) != []
+        assert StagedPipelineConfig(stages=stages, smoke=True, holdout_start=date(2022, 6, 1)).smoke
+
+
+class TestExperimentFilesAgainstTheHoldoutDate:
+    """Both loaders of an experiment file check it against the one holdout date."""
+
+    SOURCE = REPO_ROOT / "experiments" / "staged" / "ma_sweep_staged.yaml"
+
+    @staticmethod
+    def _load_both(path: Path) -> list[StagedPipelineConfig]:
+        from autonomous_trading_platform.cli.commands.research import _load_experiment_from_yaml
+        from autonomous_trading_platform.scheduler.cycles.run_experiment_pipeline_cycle import (
+            _load_experiment_definition_from_yaml,
+        )
+
+        context = MagicMock()
+        context.simulation_runner = RUNNER
+        loaded = [
+            _load_experiment_from_yaml(str(path), context),
+            _load_experiment_definition_from_yaml(config_path=str(path), simulation_runner=RUNNER),
+        ]
+        configs = [definition.staged_pipeline_config for definition in loaded]
+        assert all(config is not None for config in configs)
+        return cast(list[StagedPipelineConfig], configs)
+
+    def _file_reading_the_holdout(self, tmp_path: Path, *, smoke: bool) -> Path:
+        raw = yaml.safe_load(self.SOURCE.read_text())
+        pipeline = raw["staged_pipeline_config"]
+        (monte_carlo,) = [s for s in pipeline["stages"] if s["type"] == "monte_carlo"]
+        monte_carlo["end_date"] = HOLDOUT_START.isoformat()
+        if smoke:
+            pipeline["smoke"] = True
+        path = tmp_path / "reads_the_holdout.yaml"
+        path.write_text(yaml.safe_dump(raw))
+        return path
+
+    def test_the_repo_file_stops_before_the_date_and_loads(self) -> None:
+        for config in self._load_both(self.SOURCE):
+            assert config.holdout_start == HOLDOUT_START
+            assert pipeline_issues(config.stages, holdout_start=HOLDOUT_START) == []
+
+    def test_a_file_whose_stage_reads_the_holdout_date_is_refused_by_both(
+        self, tmp_path: Path
+    ) -> None:
+        from autonomous_trading_platform.cli.commands.research import _load_experiment_from_yaml
+        from autonomous_trading_platform.scheduler.cycles.run_experiment_pipeline_cycle import (
+            _load_experiment_definition_from_yaml,
+        )
+
+        path = self._file_reading_the_holdout(tmp_path, smoke=False)
+        expected = f"'elite_monte_carlo' reads up to {HOLDOUT_START}; the holdout starts on"
+        context = MagicMock()
+        context.simulation_runner = RUNNER
+        with pytest.raises(PipelineConfigError, match=expected):
+            _load_experiment_from_yaml(str(path), context)
+        with pytest.raises(PipelineConfigError, match=expected):
+            _load_experiment_definition_from_yaml(config_path=str(path), simulation_runner=RUNNER)
+
+    def test_a_smoke_file_is_not_checked(self, tmp_path: Path) -> None:
+        path = self._file_reading_the_holdout(tmp_path, smoke=True)
+        assert [config.smoke for config in self._load_both(path)] == [True, True]

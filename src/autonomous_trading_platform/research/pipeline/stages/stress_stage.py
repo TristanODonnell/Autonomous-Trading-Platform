@@ -57,6 +57,7 @@ from autonomous_trading_platform.research.validation.stress_test_service import 
 )
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
+from ..pipeline_validation import StageWindowFacts
 from ._gate_stage_support import (
     GateSimulationRunner,
     GateWindow,
@@ -154,6 +155,10 @@ class StressStage(BaseStage):
     @property
     def stage_name(self) -> str:
         return self._cfg.name
+
+    def validation_facts(self) -> StageWindowFacts:
+        # The stage's own run, or the earlier run it reuses, covers its whole window.
+        return StageWindowFacts(stage_name=self._cfg.name, last_day_read=self._cfg.end_date)
 
     def bind_prior_results(self, prior_results: Sequence[StageResult]) -> None:
         self._prior_results = list(prior_results)
