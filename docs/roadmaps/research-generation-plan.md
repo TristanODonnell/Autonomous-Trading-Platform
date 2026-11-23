@@ -106,8 +106,8 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > by 0.075 at the median (largest 0.47), rank correlation 0.942. **Merged as
 > PR #193 (`495434d6b`), on A and B 2026-11-20, verified.** No job sets the
 > timeline option yet; (2) below is where it is first switched on.
-> Hook layout, 2026-11-20: on `research/r2-hook-layout` (not pushed, not on
-> either box), five pieces. Built: piece 1, the holdout date declared once and
+> Hook layout, 2026-11-20: on `research/r2-hook-layout`, five pieces. **Merged
+> as PR #194 (`9cf5582d6`), on A and B 2026-11-23 (UTC), verified.** Built: piece 1, the holdout date declared once and
 > the 9 / 9 / 6 layout worked out from it in one function; piece 2, the
 > walk-forward stage takes folds given by date and refuses a train window on
 > any fold's test days; piece 3a, a research job can name the dataset it reads
@@ -126,8 +126,13 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > decided the same day, the holdout run leaves no row and its numbers go in
 > the research step's summary only. Piece 5 (rehearsal on B, the first run on
 > real bars): its fixture is written (2026-11-22,
-> `fixtures/platform/replays/medium/research_admission_rehearsal.yaml`) and
-> **not run**; the run needs the branch pushed, merged and deployed to B.
+> `fixtures/platform/replays/medium/research_admission_rehearsal.yaml`);
+> **run on B 2026-11-23, exit 0, 33 minutes.** The windows are the planned
+> ones, 9 candidates in and 3 through all six stages (smoke profile), no row
+> reads the holdout and the three holdout runs left none, peak memory
+> 1,850 MiB of 3,055 (61%). All three survivors lost on the holdout (report
+> only; three smoke candidates are not evidence). **The hook layout is done.**
+> Full-profile memory is an estimate (80 to 85% of the ceiling), not measured.
 > Open decisions: none waiting.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
@@ -145,7 +150,7 @@ section 3: done, then still open.
 
 | Item | What it is | Status | Boxes | What is left | When |
 |---|---|---|---|---|---|
-| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 13 done, 7 open (the hook layout's own piece boxes not counted) | Built 2026-11-20 on `research/r2-hook-layout`, not merged, for a job that names the admission layout: the selection / evaluation split, folds in sessions, fold geometry, the two-part pass rule (2 of 3 folds, and the nine-month record held to the filter), and the holdout (read by no stage, which the validator checks; the final survivors reported on it in the step's summary). Still open there: the rehearsal on B (piece 5). Code only, still open: daily resample, the walk-forward "entered" count (found 2026-11-15), a minimum test span in the walk-forward config, fold count from the history available. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Now. Piece 5 of the hook layout is the current work; the code-only boxes can be done at any time |
+| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 13 done, 7 open (the hook layout's own piece boxes not counted) | Built 2026-11-20 on `research/r2-hook-layout`, merged as PR #194 (`9cf5582d6`) and on A and B 2026-11-23, for a job that names the admission layout: the selection / evaluation split, folds in sessions, fold geometry, the two-part pass rule (2 of 3 folds, and the nine-month record held to the filter), and the holdout (read by no stage, which the validator checks; the final survivors reported on it in the step's summary). The rehearsal on B (piece 5) ran 2026-11-23 (exit 0, 33 minutes, peak 1,850 MiB of 3,055); nothing of the hook layout is open. Code only, still open: daily resample, the walk-forward "entered" count (found 2026-11-15), a minimum test span in the walk-forward config, fold count from the history available. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | The hook layout is done (2026-11-23). The code-only boxes can be done at any time |
 | 🔴 R7 | Test hardening per stage | Not started as its own item. Realistic-curve tests now exist at gate level for Monte Carlo, stress and regime | 0 done, 2 open | A real-runner test per stage, the cross-process checksum test. R4's "Verify" (a real-runner test per stage where the gate fails) is this work too | Rides along with package B (package D) |
 | 🔴 R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 done, 5 open | All of the wiring | After package B, before Step 5 (package C). It saves time on long runs; it does not change any result |
 | 🔴 R13 | No parameter-stability check | Not decided. A decision, not work yet | 0 done, 2 open | Decide whether to build the neighbour check | The user's decision, asked once package B gives more survivors (package F) |
@@ -166,7 +171,7 @@ work. Its note stays in section 3.
 | 🟢 R1 | Monte Carlo resamples for real | **Done.** Merged PR #181, deployed to A and B | 4 done, 0 open | Nothing |
 | 🟢 R4 | Audit of the remaining gates | **Audit done** 2026-11-15: notes for stress, overfitting, parameter stability, regime; the problems it found are R11 to R15 | 1 done, 1 open | The 12% drawdown kill on the backtest path (parked below, package E). Its "Verify" is R7's work |
 | 🟢 R5 | Composite score hides missing evidence | **Done.** Merged PR #184, deployed 2026-11-16. No score without walk-forward and Monte Carlo; report-only measures carry weight 0 | 2 done, 0 open | Nothing |
-| 🟢 R6 | Experiment-config and holdout validator | **Validator shipped.** Merged PR #184, deployed 2026-11-16. Holdout rule built 2026-11-20 on `research/r2-hook-layout`, not merged | 2 done, 0 open | Nothing open; the holdout rule ships with the hook layout |
+| 🟢 R6 | Experiment-config and holdout validator | **Validator shipped.** Merged PR #184, deployed 2026-11-16. Holdout rule built 2026-11-20, merged as PR #194 (`9cf5582d6`), on A and B 2026-11-23 | 2 done, 0 open | Nothing open; the holdout rule shipped with the hook layout |
 | 🟢 R10 | Stale marks when a bar is missing | **Done.** Merged PR #182, deployed to A and B | 6 done, 2 open | The re-sim vs platform correlation was not re-measured; more sparse-bar fixtures (R7) |
 | 🟢 R11 | Stress gate: shocks report-only, costs decide | **Done.** Merged PR #183, deployed 2026-11-16. Rerun done: funnel 30 → 30 → 4 → 2 → 2 → 2, the first run with final survivors | 5 done, 0 open | Nothing. "Verify" met by the all-30 audit pass: 7 pass, 23 fail, for causes that differ. Stress at the new cost is R12's box |
 | 🟢 R12 | Research trading cost: 1 basis point per trade | **Done except two boxes.** Merged PR #183, deployed 2026-11-16. Measured on real bars (funnel 30 → 30 → 2 → 2 → 2 → 2, stress passes 3 of 30) and on B's bench re-sim (order unchanged; momentum -1.8% → -7.8%) | 4 done, 3 open | Slippage written to fill rows. Two midpoint guards wait for a `LIMIT` / `TWAP` policy |
@@ -208,7 +213,7 @@ Package A is merged and deployed. Nothing is running.
 | # | Package | Boxes it closes | Waits on | Size |
 |---|---|---|---|---|
 | 🟢 A | **Validators and evidence** (done: merged PR #184, deployed 2026-11-16) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | Nothing | One PR, no new data (#184) |
-| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (done: merged as PR #193, on A and B 2026-11-20; no job uses it yet), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule (started 2026-11-20 on `research/r2-hook-layout`: pieces 1, 2, 3a, 3b and 4 built and committed; the layout is switched on by a research option that only the rehearsal fixture sets; left is the rehearsal on B, its fixture written 2026-11-22, not run), memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
+| 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (done: merged as PR #193, on A and B 2026-11-20; no job uses it yet), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule (started 2026-11-20 on `research/r2-hook-layout`: pieces 1, 2, 3a, 3b and 4 merged as PR #194, `9cf5582d6`, on A and B 2026-11-23; the layout is switched on by a research option that only the rehearsal fixture sets; the rehearsal on B ran 2026-11-23, exit 0, 33 minutes, peak 1,850 MiB of 3,055; the hook layout is done), memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
 | 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
 | 🔴 D | **Test hardening (R7)** | R7 both boxes, and the R7 boxes under R10, R14, R15 | Nothing | Can ride along with A and B |
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R12's slippage in fill rows, D2. R8 left this package 2026-11-16: deferred until random fills are switched on | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
@@ -678,7 +683,8 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
       strategy per fold per window (now strategies x folds x 2), not the number of
       strategies that entered. `StageResult.n_entered` and `n_failed` are wrong for
       this stage; `n_passed` is right. Shown in the hook's `stage_funnel`, the CLI and
-      the stage metrics.
+      the stage metrics. Seen on real bars 2026-11-23 (the admission rehearsal on B):
+      "entered 12" for the 3 strategies that entered.
 - [x] Gate on a pooled or median test Sharpe across folds in addition to per-fold pass
       counts. Rule decided 2026-11-18 (the user): both, 2 of 3 folds and the pooled
       nine-month record (Step 5, "Universe over the long window"). Decided
@@ -812,7 +818,11 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
     - [x] Stage 1 selects on days walk-forward does not test (small set, above).
     - Hook layout, investigated 2026-11-20 (read-only; two reading passes, the
       points below then read in the code by hand). Branch `research/r2-hook-layout`,
-      off `main` at `495434d6b`. Own PR, five pieces, one commit each:
+      off `main` at `495434d6b`. Own PR, five pieces, one commit each.
+      **Merged as PR #194 (`9cf5582d6`, 12 commits), 2026-11-23.** Deploy checked
+      the same day, 02:46 UTC: A's and B's checkouts on `9cf5582d6`, A's app and
+      scheduler restarted and healthy, B's worker image built from that commit
+      (`GIT_SHA` inside the image) and holding the rehearsal fixture.
       - [x] Piece 1, the layout in one place (built 2026-11-20, `3deb8f1ce`; full
             unit suite 5,863 passed, 5 skipped, 0 failed). Two new modules that
             nothing calls yet, so
@@ -1127,17 +1137,17 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
               result files); "scored once" across months (each monthly run
               after the holdout date scores the survivors again on a holdout
               one month longer, which is R2's open "Repeated attempts" box).
-      - [ ] Piece 5, rehearsal on B with memory recorded: a job that names the
+      - [x] Piece 5, rehearsal on B with memory recorded (run 2026-11-23): a job that names the
             layout and the exported timeline (first written as "the timeline
             option switched on for this layout"; since the 2026-11-20 decision
             the layout cannot run without one, so there is no separate switch).
-            - Prepared 2026-11-22, **not run**: the fixture
+            - Prepared 2026-11-22: the fixture
               `fixtures/platform/replays/medium/research_admission_rehearsal.yaml`.
               Research runs only inside a platform backtest, monthly, and a
               monthly job fires on a replay's first tick, so the replay is three
               days (2026-11-16 to 2026-11-18) and research runs once, dated
               2026-11-16. The research options name the layout, the 24-month
-              dataset and the exported timeline. Profile smoke (10 candidates):
+              dataset and the exported timeline. Profile smoke (10 draws; 9 candidates ran, see below):
               the cheapest run that goes through every stage. The other jobs are
               those of `short/smoke_minimal.yaml` (one symbol; ingestion,
               features, trading cycle), a job set already run on B.
@@ -1164,15 +1174,75 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
               misspelt `window_layout` would run the 90-day layout and report
               success); research fires on a trading day on or after the holdout
               date. Five ways of breaking the fixture, each caught.
-            - The run, to do after the deploy: through `worker_job.sh worker
-              run`, the path a scheduled job will take (pull, reset, backtest,
-              upload), with the job container's memory sampled every few seconds
-              into `~/rehearsals/` on B. To record here: exit code, wall-clock,
-              peak memory and how it grew simulation by simulation (kept results
-              add to it, so a 36-candidate run is estimated from this one), the
-              `admission_window` pieces against the dates above, the stage
-              funnel, the holdout report, and that no `simulation_runs` row ends
-              on or after 2026-05-18.
+            - The run: through `worker_job.sh worker run`, the path a scheduled
+              job will take (pull, reset, backtest, upload), with the job
+              container's memory sampled every 5 seconds.
+            - **Ran on B 2026-11-23, 02:51:02 to 03:23:51 UTC: exit 0**, on the
+              user's go-ahead, image `9cf5582d6`, memory ceiling 3,055 MB. 1,969
+              seconds (32 min 49 s), 3 ticks of 3 ok, no error line, bundle and
+              summary uploaded. Files in `~/rehearsals/admission_20261123T025102Z/`
+              on B (`job.out`, `mem.log`, `before.txt`, `after.txt`, `exit_code`,
+              and `research_summary.json`, the first tick's research block cut
+              from the bundle). What follows is read from that summary, B's
+              database and `mem.log`.
+            - The windows are the planned ones. `window_layout: admission`, the
+              dataset and timeline named. Selection 2024-11-18 to 2025-08-15, 183
+              sessions; evaluation 2025-08-18 to 2026-05-15, 188; test folds
+              2025-08-18 to 2025-11-13 (63), 2025-11-14 to 2026-02-17 (63),
+              2026-02-18 to 2026-05-15 (62); holdout 2026-05-18 to 2026-11-16, 127.
+            - Funnel: stage 1, 9 entered, 3 passed; walk-forward 3 passed (its
+              "entered" reads 12, the wrong count already found 2026-11-15, see
+              that box); Monte Carlo 3 of 3; regime 3 of 3; stress 3 of 3;
+              overfitting gate 3 of 3. Three seeded. A smoke run of nine random
+              candidates: nothing about the strategies or the stages' strictness
+              is to be read from it.
+            - Nine candidates, not the ten written above. Smoke draws 2 per
+              family; the rows hold one distinct `moving_average_crossover` id and
+              two for each other family. Read from the rows; the cause is not
+              traced (the same parameters drawn twice is the likely one).
+            - Rows: 27 `simulation_runs`, 27 `metrics_summary`, equal to the
+              summary's `total_runs`. Selection 12 (9 stage 1, 3 walk-forward
+              train runs), 3 on each fold, 6 on the nine-month evaluation piece
+              (3 Monte Carlo records, 3 stress runs at 2x costs; regime adds
+              none). **Latest `end_date` 2026-05-15; rows ending on or after
+              2026-05-18: 0.** The three holdout runs left no row. Both built
+              datasets are still registered after the job's reset.
+            - Holdout report, 3 scored, report only (2026-05-18 to 2026-11-16):
+
+              | Survivor | Sharpe | Total return | Max drawdown | Trades |
+              |---|---|---|---|---|
+              | `momentum__ab294a9f…` | -1.77 | -5.9% | -6.6% | 23,343 |
+              | `moving_average_crossover__bf6d39da…` | -0.01 | -0.08% | -2.9% | 879 |
+              | `composite_rule__ce0af946…` | -1.60 | -9.0% | -10.9% | 17,677 |
+
+              All three that passed every stage lost on the holdout, and stages
+              3 to 6 removed nobody. Three smoke candidates are not evidence
+              either way; it is the comparison to look at first on Step 1's
+              baseline. Two of the three trade about 140 to 180 times a session.
+            - Memory: **peak 1,850 MiB at 03:17:40, 61% of the container's
+              3,055 MiB**; swap 35 MB at most. Stage 1 (nine nine-month
+              simulations): highs 1,460 to 1,735 MiB, lows rising from about
+              1,260 to about 1,470, then about 1,160 once the stage ended, so the
+              kept results of nine simulations held about 200 MiB (about 25 MiB
+              each, rough: 5-second samples). Three-month fold runs: about 1,200.
+              Nine-month evaluation and holdout runs: 1,640 to 1,850.
+            - Estimate for the full profile, **not measured**: if stage 1 grows
+              by the same 25 MiB a candidate, 36 candidates end near 2,450 to
+              2,600 MiB, 80 to 85% of the ceiling. It fits on that estimate with
+              little room. The first full run is sampled the same way before any
+              is trusted.
+            - Time: 30 simulations (27 recorded, 3 holdout) in about 32 minutes,
+              64 seconds each on average, the nine-month ones 75 to 90. A
+              36-candidate stage 1 is about 45 to 55 minutes at that pace
+              (estimate).
+            - Warnings, none new: 32 `dataset_pull.no_registry_row` (the same
+              line is in the 2026-11-12 bench re-sim dry run's log), 3
+              `trading_cycle.no_approved_strategy_found` (one a tick; the fixture
+              seeds a strategy and no approval), and the bundle's two universe
+              bootstrap warnings (500 candidates rejected for no market data in
+              a reset database, as the reading above expected). Not traced: the
+              bundle's top-level `research` block reports `passed_filters: 24`,
+              which is none of the funnel's numbers.
       What the reading found:
       - Sessions. `RealMarketCalendar` (`runtime/clock.py`, the NYSE schedule from
         the `exchange_calendars` library) lists trading days between two dates and
@@ -3502,8 +3572,12 @@ behind a fixture flag; default stays `alpaca`.
               `load_universe_timeline`: 15 lists, 31 names, the same hash, no
               names on 2024-11-15 and 20 on each date asked from 2024-11-18 on.
               Outputs in `~/rehearsals/timeline_export_20261119/` on B.
-      - [ ] Memory measured again at the union's size (it grows with the number of
-            names; a 12-month run at 22 names is about 1.7 GB of 3.0 GB).
+      - [x] Memory measured again at the union's size (it grows with the number of
+            names; a 12-month run at 22 names is about 1.7 GB of 3.0 GB). Measured
+            2026-11-23 by the admission rehearsal on B, on the timeline's names
+            for each window out of the 24-month dataset (31 names): nine-month
+            runs peak at 1,850 MiB of 3,055 with nine candidates' results kept.
+            The numbers are in hook layout piece 5.
       - Measured 2026-11-16 (five more dry runs on B through `worker_job.sh`, 89 to
         133 s each, all exit 0, outputs in `~/rehearsals/churn_20261116/` on B;
         nothing kept, five more candidate rows as audit records). Each run starts
@@ -4364,8 +4438,13 @@ behind a fixture flag; default stays `alpaca`.
           equity curves and trade logs identical; 65.2 s to 52.3 s; bar loading
           19.1 s to 7.7 s (two reads where there were five); peak 720 MB to 698 MB.
           Loading was about 30% of a run. It does not lower a run's peak.
-    - [ ] Rehearse on B with memory recorded before trusting a run (needs the
-          long dataset; sample the job container's memory during the run).
+    - [x] Rehearse on B with memory recorded before trusting a run (needs the
+          long dataset; sample the job container's memory during the run). Done
+          2026-11-23, smoke profile, nine-month windows: exit 0, peak 1,850 MiB
+          of 3,055 (61%), swap 35 MB. Hook layout piece 5 has the numbers. The
+          box below stays open: the windows are nine months now and fit at nine
+          candidates; a 36-candidate run is estimated at 80 to 85% of the
+          ceiling and not measured.
     - [ ] If 12-month runs do not fit: stop keeping trade logs for eliminated
           strategies, or hold bars as numeric arrays, or a larger instance. Decide on
           the rehearsal's numbers, not before.
