@@ -24,6 +24,7 @@ selection piece.
 
 from __future__ import annotations
 
+import json
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
@@ -460,3 +461,138 @@ def test_a_holdout_that_cannot_be_run_does_not_fail_the_step(run: _Run) -> None:
     assert runner.requests == []
     assert report["not_scored"] == "failed: timeline file is gone"
     assert report["scored"] == 0
+
+
+# --------------------------------------------------------------------------------------
+# The gate report: what each of the six stages said, written down for the summary
+# --------------------------------------------------------------------------------------
+
+STAGE_NAMES = [
+    "initial_quality_filter",
+    "walk_forward_robustness",
+    MONTE_CARLO,
+    "regime_robustness",
+    "stress_robustness",
+    "overfitting_gate",
+]
+
+
+@pytest.fixture(scope="module")
+def gate_report(run: _Run) -> dict:
+    return rh._report_gates(run.result.stage_results)
+
+
+def _entries(gate_report: dict, strategy_id: str) -> dict[str, dict]:
+    (record,) = (r for r in gate_report["strategies"] if r["strategy_id"] == strategy_id)
+    return {entry["stage"]: entry for entry in record["stages"]}
+
+
+def test_the_gate_report_says_how_far_each_strategy_got(gate_report: dict) -> None:
+    """The table at the top of this file, read back from the report."""
+    assert "not_built" not in gate_report
+    assert gate_report["stages"] == STAGE_NAMES
+    assert {
+        record["strategy_id"]: (record["passed_every_stage"], record["eliminated_at"])
+        for record in gate_report["strategies"]
+    } == {
+        "steady": (True, None),
+        "small_loss": (True, None),
+        "deep_drawdown": (False, MONTE_CARLO),
+        "net_loss": (False, MONTE_CARLO),
+        "one_good_fold": (False, "walk_forward_robustness"),
+    }
+    # A strategy is recorded at the stages it entered and no further.
+    assert list(_entries(gate_report, "steady")) == STAGE_NAMES
+    assert list(_entries(gate_report, "net_loss")) == STAGE_NAMES[:3]
+    assert list(_entries(gate_report, "one_good_fold")) == STAGE_NAMES[:2]
+
+
+def test_the_gate_report_counts_what_the_funnel_counts(run: _Run, gate_report: dict) -> None:
+    """Worked out separately from the same run: the stage's own counts, and the report's
+    entries for the stage."""
+    for stage_result in run.result.stage_results:
+        entries = [
+            entry
+            for record in gate_report["strategies"]
+            for entry in record["stages"]
+            if entry["stage"] == stage_result.stage_name
+        ]
+        assert len(entries) == stage_result.n_entered, stage_result.stage_name
+        assert sum(entry["passed"] for entry in entries) == stage_result.n_passed
+
+
+def test_the_gate_report_gives_the_folds_walk_forward_counted(gate_report: dict) -> None:
+    def folds(strategy_id: str) -> tuple[bool, int, list[bool]]:
+        entry = _entries(gate_report, strategy_id)["walk_forward_robustness"]
+        return entry["passed"], entry["folds_passed"], [f["passed"] for f in entry["folds"]]
+
+    assert folds("steady") == (True, 3, [True, True, True])
+    assert folds("small_loss") == (True, 2, [False, True, True])
+    assert folds("one_good_fold") == (False, 1, [False, False, True])
+
+
+def test_the_gate_report_says_why_the_record_failed_though_its_paths_all_passed(
+    run: _Run, gate_report: dict
+) -> None:
+    """``deep_drawdown`` again: the counts say Monte Carlo removed it, the paths say
+    nothing was wrong, and the reason is the nine-month record's own drawdown."""
+    entry = _entries(gate_report, "deep_drawdown")[MONTE_CARLO]
+    paths, record = entry["monte_carlo"], entry["reference_run"]
+    limit = run.stages[MONTE_CARLO]._cfg.filter_config.max_drawdown
+    evaluation = run.layout.evaluation
+
+    assert entry["passed"] is False and paths["passed"] is False
+    assert paths["paths_passed"] == paths["paths"] > 0
+    assert len(entry["failures"]) == 1 and entry["failures"][0].startswith("base run: ")
+    assert (record["first"], record["last"]) == (
+        evaluation.first.isoformat(),
+        evaluation.last.isoformat(),
+    )
+    assert record["total_return"] > 0.5 and record["max_drawdown"] < limit
+
+
+def test_the_gate_report_carries_the_gates_that_remove_nobody(run: _Run, gate_report: dict) -> None:
+    """Regime and overfitting are report-only, and the stress gate's shocks are too:
+    what they found shows in no count, so the report is the only place it is kept."""
+    for strategy_id in ("steady", "small_loss"):
+        entries = _entries(gate_report, strategy_id)
+        regime = entries["regime_robustness"]["regime"]
+        stress = entries["stress_robustness"]["stress"]
+        overfitting = entries["overfitting_gate"]["overfitting"]
+
+        assert regime["enforced"] is False and regime["passed"] is True
+        # These scripted runs have no regime labels, so the gate judged nothing. It
+        # passes the strategy all the same, and only the report says it judged nothing.
+        assert regime["dimensions"] == [] and regime["findings"] == []
+        assert regime["warnings"] == [
+            "insufficient regime coverage: no regime label provider configured"
+        ]
+        assert overfitting["enforced"] is False and overfitting["passed"] is True
+        assert 0.0 <= overfitting["overfitting_probability"] <= 1.0
+        # The pass rule's runs, at the stage's own cost multipliers.
+        assert [cost["cost_multiplier"] for cost in stress["costs"]] == list(
+            run.stages["stress_robustness"]._cfg.gate.cost_multipliers
+        )
+        assert stress["cost_survival_rate"] == 1.0
+        assert stress["shocks"] and stress["shock_survival_rate"] is not None
+
+
+def test_building_the_gate_report_runs_nothing_and_removes_nobody(run: _Run) -> None:
+    requests = len(run.runner.requests)
+
+    rh._report_gates(run.result.stage_results)
+
+    assert len(run.runner.requests) == requests
+    assert [c.strategy_id for c in run.result.final_survivors] == ["steady", "small_loss"]
+
+
+def test_the_gate_report_of_a_real_run_can_be_written_as_json(gate_report: dict) -> None:
+    assert json.loads(json.dumps(gate_report, allow_nan=False)) == gate_report
+
+
+def test_a_gate_report_that_cannot_be_built_does_not_fail_the_step() -> None:
+    """As for the holdout report: it decides nothing, so it cannot fail the step."""
+    report = rh._report_gates([object()])  # type: ignore[list-item]
+
+    assert report["strategies"] == []
+    assert report["not_built"].startswith("failed: ")

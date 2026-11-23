@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -31,6 +31,7 @@ if TYPE_CHECKING:
         AdmissionWindowLayout,
         SessionSpan,
     )
+    from autonomous_trading_platform.research.pipeline.stages.base_stage import StageResult
 
 # ``get_logger``, as the simulation runner uses: a logger from ``logging.getLogger``
 # has no handler in a job's process and its INFO lines are dropped.
@@ -211,6 +212,10 @@ def run_scheduled_research_at_timestamp(
                ``universe_timeline`` and ``dataset_version`` and refuses
                ``lookback_days``. A dataset the layout cannot be laid on is a
                failed step. Any other value is an error.
+
+    Under either layout the summary's ``gate_report`` holds what every stage said
+    about every strategy (``research/pipeline/gate_report.py``): the funnel gives the
+    counts, and a report-only gate's findings show in no count.
     """
     profile = _resolve_research_profile(research_options)
     lookback_days = _resolve_lookback_days(research_options)
@@ -335,6 +340,7 @@ def run_scheduled_research_at_timestamp(
     stage_funnel = {
         sr.stage_name: {"entered": sr.n_entered, "passed": sr.n_passed} for sr in stage_results
     }
+    gate_report = _report_gates(stage_results)
 
     final_survivors = pipeline_result.final_survivors
     config_by_id = {c.strategy_id: c for c in final_survivors}
@@ -528,6 +534,7 @@ def run_scheduled_research_at_timestamp(
             "stage_2_survivors": stage2_count,
             "stage_3_survivors": stage3_count,
             "stage_funnel": stage_funnel,
+            "gate_report": gate_report,
             "research_profile": profile,
             "universe_timeline_version": universe_timeline_id,
             "dataset_version": experiment_def.dataset_version,
@@ -1135,6 +1142,24 @@ def _admission_research_window(layout: AdmissionWindowLayout) -> _ResearchWindow
         # The other half of the pass rule: the evaluation piece as one record.
         gate_run_clears_filter=True,
     )
+
+
+def _report_gates(stage_results: Sequence[StageResult]) -> dict[str, Any]:
+    """What every stage said about every strategy
+    (``research/pipeline/gate_report.py``). Report only: the survivors are already
+    chosen, and a report that cannot be built is said so in its place and does not fail
+    the research step.
+    """
+    from autonomous_trading_platform.research.pipeline.gate_report import (
+        build_gate_report,
+        gate_report_not_built,
+    )
+
+    try:
+        return build_gate_report(stage_results)
+    except Exception as exc:
+        logger.warning("gate_report: not built", exc_info=True)
+        return gate_report_not_built(f"failed: {exc}")
 
 
 def _report_holdout(

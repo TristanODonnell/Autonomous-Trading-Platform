@@ -12,6 +12,7 @@ Run with:
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
@@ -1349,6 +1350,8 @@ def test_research_hook_without_the_layout_option_rolls_its_folds_as_before(
     assert run.result.summary["admission_window"] is None
     # No holdout is set aside in this layout: none is checked and none is reported.
     assert run.result.summary["holdout_report"] is None
+    # The gate report is not the admission layout's alone.
+    _assert_gate_report_counts_what_the_funnel_counts(run.result.summary)
     (experiment,) = run.experiments
     assert experiment.staged_pipeline_config.holdout_start is None
     start, end = date(2022, 12, 3), date(2023, 3, 3)
@@ -1432,6 +1435,48 @@ def test_admission_layout_reports_the_holdout_in_the_summary(
         "candidates": [],
         "not_scored": "no strategy passed every stage",
     }
+
+
+def _assert_gate_report_counts_what_the_funnel_counts(summary: dict[str, Any]) -> None:
+    """The funnel is the stages' own counts; the gate report is built from their
+    verdicts. For every stage that ran, they name the same number in and through."""
+    report = summary["gate_report"]
+    assert "not_built" not in report
+    assert report["stages"] == list(summary["stage_funnel"])
+    for stage, counts in summary["stage_funnel"].items():
+        entries = [
+            entry
+            for record in report["strategies"]
+            for entry in record["stages"]
+            if entry["stage"] == stage
+        ]
+        assert len(entries) == counts["entered"], stage
+        assert sum(entry["passed"] for entry in entries) == counts["passed"], stage
+    assert json.loads(json.dumps(report, allow_nan=False)) == report
+
+
+def test_admission_layout_reports_what_each_stage_said_in_the_summary(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """Through the hook, with the real runner, engine and bars. The tick's one candidate
+    does not pass every stage: the funnel gives the stage it stopped at as a count, and
+    the gate report names the candidate and gives that stage's reasons."""
+    run = _run_admission(db_session, replay_context, monkeypatch, research_smoke_data_root)
+
+    assert run.result.status == "ok", run.result.errors
+    summary = run.result.summary
+    _assert_gate_report_counts_what_the_funnel_counts(summary)
+
+    (record,) = summary["gate_report"]["strategies"]
+    stopped_at = next(
+        stage for stage, counts in summary["stage_funnel"].items() if counts["passed"] == 0
+    )
+    assert record["passed_every_stage"] is False
+    assert record["eliminated_at"] == stopped_at
+    last = record["stages"][-1]
+    assert last["stage"] == stopped_at and last["passed"] is False
+    # Said in the stage's own words: its list of reasons, or its folds for walk-forward.
+    assert last.get("failures") or last.get("folds")
 
 
 def test_a_holdout_run_through_the_real_runner_leaves_no_row(
