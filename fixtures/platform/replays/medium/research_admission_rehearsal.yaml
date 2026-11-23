@@ -1,0 +1,104 @@
+# scenario:
+#   name: research_admission_rehearsal
+#   purpose: >
+#     First run of the research hook's admission layout (selection 9 months,
+#     evaluation 9 months, holdout from the holdout date) on real bars, on the
+#     worker box, with memory recorded (research plan R2, hook layout piece 5).
+#     Not a strategy search: it checks that the layout runs end to end on the
+#     24-month dataset and measures what it costs.
+#   expected_behavior: >
+#     Three daily ticks. Research fires once, on the first tick (2026-11-16, the
+#     dataset's last day). Its summary carries `window_layout: admission`, the
+#     pieces in `admission_window` (selection 2024-11-18 to 2025-08-15, evaluation
+#     2025-08-18 to 2026-05-15, three test folds, holdout from 2026-05-18), the
+#     `stage_funnel`, and `holdout_report` for the final survivors (or the reason
+#     nobody was scored). No simulation_runs row ends on or after 2026-05-18.
+#   cost_notes: >
+#     Research profile "smoke": 2 candidates per strategy family (10 in all),
+#     200 Monte Carlo paths, one cost-stress multiplier. Stage 1 is 10
+#     simulations over nine months of five-minute bars for the timeline's names;
+#     memory is the open question this run answers. The replay itself is one
+#     symbol for three days, the job set of short/smoke_minimal.yaml.
+#   needs: >
+#     The two datasets named under research.options exist on Box B only
+#     (`atp datasets build-window`, `atp universe export-timeline`); a worker
+#     reset keeps both. Dates below must stay on or after the holdout date
+#     (research/pipeline/holdout.py) and on or before the dataset's last day.
+#   recommended_use: worker box rehearsal, by hand
+
+# Command (Box B):
+#   infra/ops/worker_job.sh worker run \
+#     --fixture fixtures/platform/replays/medium/research_admission_rehearsal.yaml \
+#     --name research_admission_rehearsal
+
+platform_replay:
+  name: research_admission_rehearsal
+  mode: historical_backtest
+
+  symbols: [SPY]
+
+  start: 2026-11-16
+  end: 2026-11-18
+  starting_cash: 50000
+  random_seed: 1
+
+initial_state:
+  settings: {}
+  controls: {}
+  strategies: [momentum_v1]
+  governance: []
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "1.00"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: false
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: false
+  governance:
+    cadence: daily
+    enabled: false
+  portfolio_snapshot:
+    cadence: daily
+    enabled: false
+  operations_health:
+    cadence: daily
+    enabled: false
+  universe:
+    cadence: monthly
+    enabled: false
+  research:
+    cadence: monthly
+    enabled: true
+    options:
+      profile: smoke
+      window_layout: admission
+      dataset_version: raw_bars_20261118T234501Z_043e50ad
+      universe_timeline: universe_timeline_20261119T220329Z_54a0ff84
+  dashboard_snapshot:
+    cadence: daily
+    enabled: false
+
+timeline_events: []
+
+outputs:
+  write_event_log: true
+  write_equity_curve: false
+  write_portfolio_snapshots: false
+  write_governance_audit: false
+  write_failure_report: false
+  write_dashboard_snapshot: false
