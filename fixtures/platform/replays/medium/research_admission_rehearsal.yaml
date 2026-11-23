@@ -14,11 +14,13 @@
 #     `stage_funnel`, and `holdout_report` for the final survivors (or the reason
 #     nobody was scored). No simulation_runs row ends on or after 2026-05-18.
 #   cost_notes: >
-#     Research profile "smoke": 2 candidates per strategy family (10 in all),
-#     200 Monte Carlo paths, one cost-stress multiplier. Stage 1 is 10
-#     simulations over nine months of five-minute bars for the timeline's names;
-#     memory is the open question this run answers. The replay itself is one
-#     symbol for three days, the job set of short/smoke_minimal.yaml.
+#     Research profile "smoke": 2 draws per strategy family (10 draws; two
+#     that land on the same parameters are one candidate), 200 Monte Carlo
+#     paths, one cost-stress multiplier. Stage 1 is one simulation a candidate
+#     over nine months of five-minute bars for the timeline's names. The replay
+#     itself is one symbol for three days, the job set of
+#     short/smoke_minimal.yaml. Run on B 2026-11-23: 9 candidates, 33 minutes,
+#     peak 1,850 MiB (research-generation-plan.md, hook layout piece 5).
 #   needs: >
 #     The two datasets named under research.options exist on Box B only
 #     (`atp datasets build-window`, `atp universe export-timeline`); a worker
