@@ -1,0 +1,105 @@
+# scenario:
+#   name: research_admission_baseline
+#   purpose: >
+#     The research pipeline as it stands, measured once on the long window:
+#     the hook's full profile in the admission layout (selection 9 months,
+#     evaluation 9 months, holdout from the holdout date), on the 24-month
+#     dataset and the exported universe timeline (research plan, Step 1, first
+#     job). It is the "before" for later changes to candidate generation, and
+#     the first full-size measurement of time and memory on the worker box.
+#   expected_behavior: >
+#     Three daily ticks. Research fires once, on the first tick (2026-11-16, the
+#     dataset's last day), with the same windows as
+#     research_admission_rehearsal.yaml. The candidates are the hook's full mix:
+#     36 random draws over five strategy families, seeded by the research month,
+#     so the same date draws the same candidates. The step's summary carries the
+#     `stage_funnel` and the `holdout_report`. No simulation_runs row ends on or
+#     after 2026-05-18.
+#   cost_notes: >
+#     Estimated from the rehearsal of 2026-11-23 (9 candidates, 33 minutes, peak
+#     1,850 MiB of 3,055), not measured: 1.5 to 2.5 hours, and a peak at 80 to
+#     85% of the job's memory ceiling. Sample the job container's memory while
+#     it runs; exit 137 means the ceiling was reached.
+#   needs: >
+#     The two datasets named under research.options exist on Box B only; a
+#     worker reset keeps both. Dates below must stay on or after the holdout
+#     date (research/pipeline/holdout.py) and on or before the dataset's last
+#     day. Changing the start date's month changes the candidates drawn.
+#   recommended_use: worker box, by hand; one job at a time
+
+# Command (Box B):
+#   infra/ops/worker_job.sh worker run \
+#     --fixture fixtures/platform/replays/medium/research_admission_baseline.yaml \
+#     --name research_admission_baseline
+
+platform_replay:
+  name: research_admission_baseline
+  mode: historical_backtest
+
+  symbols: [SPY]
+
+  start: 2026-11-16
+  end: 2026-11-18
+  starting_cash: 50000
+  random_seed: 1
+
+initial_state:
+  settings: {}
+  controls: {}
+  strategies: [momentum_v1]
+  governance: []
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "1.00"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: false
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: false
+  governance:
+    cadence: daily
+    enabled: false
+  portfolio_snapshot:
+    cadence: daily
+    enabled: false
+  operations_health:
+    cadence: daily
+    enabled: false
+  universe:
+    cadence: monthly
+    enabled: false
+  research:
+    cadence: monthly
+    enabled: true
+    options:
+      profile: full
+      window_layout: admission
+      dataset_version: raw_bars_20261118T234501Z_043e50ad
+      universe_timeline: universe_timeline_20261119T220329Z_54a0ff84
+  dashboard_snapshot:
+    cadence: daily
+    enabled: false
+
+timeline_events: []
+
+outputs:
+  write_event_log: true
+  write_equity_curve: false
+  write_portfolio_snapshots: false
+  write_governance_audit: false
+  write_failure_report: false
+  write_dashboard_snapshot: false
