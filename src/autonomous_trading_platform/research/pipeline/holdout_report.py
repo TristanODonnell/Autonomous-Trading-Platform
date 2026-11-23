@@ -17,12 +17,12 @@ code that is not in that chain cannot remove anyone from it.
 
 from __future__ import annotations
 
-import logging
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.research.execution import (
     DeterministicSeedInputs,
     DeterministicSeedService,
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
     from .admission_window import SessionSpan
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # What a holdout run is recorded under in its seed and its artifacts' path.
 HOLDOUT_STAGE_NAME = "holdout_report"

@@ -42,7 +42,6 @@ YAML block example
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
@@ -52,6 +51,7 @@ import pandas as pd
 
 from autonomous_trading_platform.common.annualisation import BARS_PER_YEAR, TRADING_DAYS_PER_YEAR
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.research.analysis.regimes.regime_analysis_service import (
     RegimeAnalysisRequest,
     RegimeAnalysisService,
@@ -93,7 +93,7 @@ from ._gate_stage_support import (
 )
 from .base_stage import BaseStage, StageDiagnostics, StageResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _REFERENCE_ROLE = "regime_reference"
 

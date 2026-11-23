@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -14,6 +13,7 @@ from autonomous_trading_platform.observability.lifecycle import (
     record_step_started,
 )
 from autonomous_trading_platform.observability.log_context import LogContext
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.observability.metric_labels import observability_environment
 from autonomous_trading_platform.observability.metrics import (
     research_stage_duration,
@@ -35,7 +35,7 @@ from ...contracts.common.enums import PriceBasis
 from .pipeline_validation import validate_pipeline
 from .stages.base_stage import BaseStage, StageResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _COMPONENT = "research.pipeline_runner"
 _STAGE_METRICS = StepMetricSet(runs=research_stage_runs, duration=research_stage_duration)

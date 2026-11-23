@@ -61,13 +61,13 @@ third.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.research.checkpoints.research_checkpoint import ResearchTaskType
 from autonomous_trading_platform.research.checkpoints.research_checkpoint_service import (
     ResearchCheckpointService,
@@ -103,7 +103,7 @@ from autonomous_trading_platform.strategy.configs.strategy_config import Strateg
 from ..pipeline_validation import StageWindowFacts
 from .base_stage import BaseStage, StageDiagnostics, StageResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _parse_filter_config(fc: dict[str, Any]) -> FilterConfig:

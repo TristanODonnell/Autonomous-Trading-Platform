@@ -100,13 +100,13 @@ YAML block example
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
+from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.research.checkpoints.research_checkpoint import ResearchTaskType
 from autonomous_trading_platform.research.checkpoints.research_checkpoint_service import (
     ResearchCheckpointService,
@@ -144,7 +144,7 @@ from ..pipeline_validation import StageWindowFacts
 from ._gate_stage_support import GateWindow, find_reusable_reference, gate_filter_output
 from .base_stage import BaseStage, StageDiagnostics, StageResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _BASE_ROLE = "mc_base"
 _BOOTSTRAP_ROLE = "mc_bootstrap"

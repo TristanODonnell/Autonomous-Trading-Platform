@@ -27,18 +27,19 @@ its survivors are not evidence about any strategy.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING, Literal
+
+from autonomous_trading_platform.observability.logging import get_logger
 
 if TYPE_CHECKING:
     from autonomous_trading_platform.research.experiments.filtering.config import FilterConfig
 
     from .stages.base_stage import BaseStage
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 StageKind = Literal["selection", "walk_forward", "other"]
 
