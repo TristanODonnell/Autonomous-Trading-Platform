@@ -134,6 +134,20 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > only; three smoke candidates are not evidence). **The hook layout is done.**
 > Full-profile memory is an estimate (80 to 85% of the ceiling), not measured.
 > Open decisions: none waiting.
+>
+> **Update 2026-11-23 (after the first baseline).** R7 is merged as PR #197
+> (`fce347f3b`) and on A and B. Step 0 was assessed with the user 2026-11-22
+> and the order agreed: read what Monte Carlo and the two report-only gates
+> said about the baseline's eight survivors; then the R13 decision; R3 is left
+> until the composite-grid baseline is designed; package E stays its own
+> track; then Step 1b. **Found on the first of those:** a worker job kept no
+> stage's verdict on any strategy. The result file had the funnel's counts,
+> the database nothing, and the job's log not one research line. Decided
+> 2026-11-22 (the user): "Fix it, then rerun". **Built 2026-11-23 on
+> `research/gate-report`, not merged:** a gate report in the research step's
+> summary, and the pipeline's log lines made to reach the log (Step 1's
+> boxes). Next: the PR, the deploy, then the baseline rerun on B on the
+> user's go-ahead.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
 
@@ -151,7 +165,6 @@ section 3: done, then still open.
 | Item | What it is | Status | Boxes | What is left | When |
 |---|---|---|---|---|---|
 | 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 19 done, 1 open (the hook layout's own piece boxes not counted) | Built 2026-11-20 on `research/r2-hook-layout`, merged as PR #194 (`9cf5582d6`) and on A and B 2026-11-23, for a job that names the admission layout: the selection / evaluation split, folds in sessions, fold geometry, the two-part pass rule (2 of 3 folds, and the nine-month record held to the filter), and the holdout (read by no stage, which the validator checks; the final survivors reported on it in the step's summary). The rehearsal on B (piece 5) ran 2026-11-23 (exit 0, 33 minutes, peak 1,850 MiB of 3,055); nothing of the hook layout is open. Built 2026-11-22 on `research/r2-code-boxes`, merged as PR #196 (`19a26dffa`), on A and B 2026-11-23 (checked: A's app and scheduler containers and B's worker image are built from it; B rebuilt once the baseline released the job lock): the walk-forward "entered" count, a minimum test span in the walk-forward config (twelve weeks, with a named exception), and the daily-resample mode refused. Closed 2026-11-22 by the user's decisions, no code: fold count from the history available (answered by the admission layout) and longer folds (delivered by the 24-month dataset). The one box left is a later saving on the train run, not needed for correctness. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Commit and merge the three code boxes. After that R2 has no work left but one optional saving |
-| 🟡 R7 | Test hardening per stage | **Built 2026-11-22** on `research/r7-test-hardening`. Full suite: 6,052 passed, 5 skipped, 1 xpassed | 2 done, 1 open | Done: a real-runner test per stage where the gate drops a strategy (which meets R4's "Verify" for the hook's six stages), and the cross-process checksum test, which passes. With them the R7 boxes under R10 and R15, and one production change for speed (the regime label join). Open: a finding, not a test: a fill's commission is recorded and never charged (inert at zero commission; package E) | Package D, one PR |
 | 🔴 R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 done, 5 open | All of the wiring | After package B, before Step 5 (package C). It saves time on long runs; it does not change any result |
 | 🔴 R13 | No parameter-stability check | Not decided. A decision, not work yet | 0 done, 2 open | Decide whether to build the neighbour check | The user's decision, asked once package B gives more survivors (package F) |
 
@@ -172,6 +185,7 @@ work. Its note stays in section 3.
 | 🟢 R4 | Audit of the remaining gates | **Audit done** 2026-11-15: notes for stress, overfitting, parameter stability, regime; the problems it found are R11 to R15 | 1 done, 1 open | The 12% drawdown kill on the backtest path (parked below, package E). Its "Verify" is R7's work |
 | 🟢 R5 | Composite score hides missing evidence | **Done.** Merged PR #184, deployed 2026-11-16. No score without walk-forward and Monte Carlo; report-only measures carry weight 0 | 2 done, 0 open | Nothing |
 | 🟢 R6 | Experiment-config and holdout validator | **Validator shipped.** Merged PR #184, deployed 2026-11-16. Holdout rule built 2026-11-20, merged as PR #194 (`9cf5582d6`), on A and B 2026-11-23 | 2 done, 0 open | Nothing open; the holdout rule shipped with the hook layout |
+| 🟢 R7 | Test hardening per stage | **Done.** Built 2026-11-22, merged as PR #197 (`fce347f3b`), on A and B 2026-11-23. A real-runner test per stage where the gate drops a strategy (which meets R4's "Verify" for the hook's six stages), the cross-process checksum test, the R7 boxes under R10 and R15, and one production change for speed (the regime label join). Full suite at the time: 6,052 passed, 5 skipped, 1 xpassed | 2 done, 1 open | A finding, not a test: a fill's commission is recorded and never charged (inert at zero commission; parked below, package E) |
 | 🟢 R10 | Stale marks when a bar is missing | **Done.** Merged PR #182, deployed to A and B | 7 done, 1 open | The re-sim vs platform correlation was not re-measured. The sparse-bar fixtures were built 2026-11-22 (R7) |
 | 🟢 R11 | Stress gate: shocks report-only, costs decide | **Done.** Merged PR #183, deployed 2026-11-16. Rerun done: funnel 30 → 30 → 4 → 2 → 2 → 2, the first run with final survivors | 5 done, 0 open | Nothing. "Verify" met by the all-30 audit pass: 7 pass, 23 fail, for causes that differ. Stress at the new cost is R12's box |
 | 🟢 R12 | Research trading cost: 1 basis point per trade | **Done except two boxes.** Merged PR #183, deployed 2026-11-16. Measured on real bars (funnel 30 → 30 → 2 → 2 → 2 → 2, stress passes 3 of 30) and on B's bench re-sim (order unchanged; momentum -1.8% → -7.8%) | 4 done, 3 open | Slippage written to fill rows. Two midpoint guards wait for a `LIMIT` / `TWAP` policy |
@@ -185,10 +199,11 @@ work. Its note stays in section 3.
 - R4: nothing on the backtest trading path reads the 12% drawdown kill (package E; goes
   through the safety doctrine and the rehearsal rule). The largest item in this list.
 - R6: the repo-level holdout date (package B).
-- R10: re-measure the re-sim vs platform correlation; more sparse-bar test fixtures (package D).
+- R7: a fill's commission is recorded and never charged (inert at zero commission; package E).
+- R10: re-measure the re-sim vs platform correlation. (The sparse-bar fixtures were built with R7, 2026-11-22.)
 - R12: write the charged slippage into the fill rows (package E); the two quote-midpoint guards, before any `LIMIT` / `TWAP` policy is switched on.
 - R14: the prerequisites before the overfitting gate's `enforce` is switched on (package B).
-- R15: the four prerequisites before the regime gate's `enforce` is switched on (package B).
+- R15: the three prerequisites before the regime gate's `enforce` is switched on (package B).
 - R16: calibrate the 0.55 deployable threshold (after package B gives more survivors); pass
   the regime profile to the scoring request so the reported regime fields are real (small,
   any time, must be done before the regime gate is switched on).
@@ -200,7 +215,7 @@ work. Its note stays in section 3.
 | ⚪ D1 | One feed everywhere (IEX now, SIP at go-live) | Rule and trigger agreed. The free-tier probe has not been run; deferred by the user 2026-11-15 until the other updates are done | 0 / 13 | Nothing now. The probe and the rest come with the switch |
 | 🔴 D2 | Parquet integrity for research reads | Not started (the four defects re-confirmed in the code 2026-11-15) | 0 / 4 | Compaction deleting unread fragments comes first |
 
-🟡 **Steps 1 to 5 (generator and plumbing): Step 1 started 2026-11-22, the rest not.** Step 1 baseline 3 / 5 (rewritten for the long window; first job decided, fixture on B, both conditions decided; the run finished 2026-11-23 06:06 UTC, exit 0: 30 candidates in, 8 through every stage, all 8 negative on the holdout; open: the composite-grid baseline), Step 1b generation system review 0 / 7 (added 2026-11-15), Step 2
+🟡 **Steps 1 to 5 (generator and plumbing): Step 1 started 2026-11-22, the rest not.** Step 1 baseline 5 / 7 (rewritten for the long window; first job decided, fixture on B, both conditions decided; the run finished 2026-11-23 06:06 UTC, exit 0: 30 candidates in, 8 through every stage, all 8 negative on the holdout; found on reading it: the job kept no stage's verdict on any strategy, so a gate report was built 2026-11-23 on `research/gate-report`, not merged; open: the baseline rerun with that report, and the composite-grid baseline), Step 1b generation system review 0 / 7 (added 2026-11-15), Step 2
 evolutionary search 0 / 3, Step 3 hand-off to A's bench 0 / 3, Step 4 no boxes, Step 5
 monthly job 0 / 13. Section 5's results log has its first row (2026-11-23). Step 1 no longer waits on R2: the hook layout is done (2026-11-23) and what R2 has open is code only.
 
@@ -215,7 +230,7 @@ Package A is merged and deployed. Nothing is running.
 | 🟢 A | **Validators and evidence** (done: merged PR #184, deployed 2026-11-16) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | Nothing | One PR, no new data (#184) |
 | 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (done: merged as PR #193, on A and B 2026-11-20; no job uses it yet), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule (started 2026-11-20 on `research/r2-hook-layout`: pieces 1, 2, 3a, 3b and 4 merged as PR #194, `9cf5582d6`, on A and B 2026-11-23; the layout is switched on by a research option that only the rehearsal fixture sets; the rehearsal on B ran 2026-11-23, exit 0, 33 minutes, peak 1,850 MiB of 3,055; the hook layout is done), memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
 | 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
-| 🟡 D | **Test hardening (R7)** (built 2026-11-22 on `research/r7-test-hardening`) | R7 both boxes, and the R7 boxes under R10, R14 (done earlier, with R14's change) and R15: all built | Nothing | One PR: tests, and one production change for speed (the regime label join) |
+| 🟢 D | **Test hardening (R7)** (done: merged as PR #197, `fce347f3b`, on A and B 2026-11-23) | R7 both boxes, and the R7 boxes under R10, R14 (done earlier, with R14's change) and R15: all built | Nothing | One PR: tests, and one production change for speed (the regime label join) |
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R12's slippage in fill rows, D2. R8 left this package 2026-11-16: deferred until random fills are switched on | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
 | 🔴 F | **R13** | Decide whether to build the neighbour check | The user | A decision, then maybe one PR |
 
@@ -2980,6 +2995,45 @@ What changed under Step 1 since it was written:
       baseline": candidates entered, survivors per stage, clusters, the holdout report
       beside the evaluation numbers of the same survivors, wall-clock, peak memory
       and memory per kept candidate.
+- [x] A job keeps what each stage said about each strategy. **Found 2026-11-22**, on
+      trying to read what Monte Carlo and the two report-only gates said about the
+      eight survivors: nothing had kept it. The result file had the funnel's counts.
+      The database has no row for a gate's verdict. The job's log had no research
+      line at all: the pipeline's modules took their logger from `logging.getLogger`,
+      which has no handler in a job's process (only
+      `observability/logging.py::get_logger` attaches one), so every INFO line was
+      dropped. A report-only gate removes nobody, so what it finds shows in no count
+      and reached no reader. **Decided 2026-11-22 (the user): "Fix it, then rerun".**
+      **Built 2026-11-23 on `research/gate-report`** (not merged):
+      - `research/pipeline/gate_report.py`: one record per strategy, from the stage
+        results the run already holds. How far the strategy got, and for each stage
+        it entered: the verdict and its reasons, the folds, the Monte Carlo paths
+        and the nine-month record they were drawn from, and the regime, stress and
+        overfitting verdicts with their findings and warnings. It reads and
+        reports: no simulation, no row, no effect on the survivors. It is in the
+        research step's summary as `gate_report`, beside `holdout_report`, under
+        either window layout. A report that cannot be built says so and does not
+        fail the step.
+      - The nine modules under `research/pipeline/` and the hook take their logger
+        from `get_logger`. Measured on the six-stage test pipeline run outside
+        pytest, the same script before and after: 0 lines from the stages and the
+        runner before, 33 after. The gate report adds one line per strategy that
+        got past the first stage.
+      - Seen in the tests' own run, and to be read on B: with no regime labels the
+        regime gate judges nothing and passes everyone, and says so only in a
+        warning that nothing kept. Whether the baseline's run had labels is one of
+        the things the rerun will show.
+      - Tests: the report's rules on stage results built by hand; the report of a
+        real six-stage scripted run checked against that run (its entries for a
+        stage count what the funnel counts); and through the hook with the real
+        runner under both layouts. Research and application suites pass.
+      - Not built: the runner's own lines (`step_started` and the like) carry their
+        numbers as structured fields, which the log exporter keeps and the console
+        line does not show.
+- [ ] The baseline rerun on B with the gate report: after the PR is merged and
+      deployed, on the user's go-ahead (about 1 hour 45 minutes). Then read what
+      Monte Carlo and the two report-only gates said about the survivors, record it
+      in section 5, and take the R13 decision to the user.
 - [ ] The composite-grid baseline (the 2026-11-06 boxes: all 652 skeletons by `grid`,
       and `random` with `n_samples: 50`), designed from the run's measured numbers.
       Needs, as read today: a way for the hook to take a candidate set, results not kept
