@@ -150,7 +150,7 @@ section 3: done, then still open.
 
 | Item | What it is | Status | Boxes | What is left | When |
 |---|---|---|---|---|---|
-| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 13 done, 7 open (the hook layout's own piece boxes not counted) | Built 2026-11-20 on `research/r2-hook-layout`, merged as PR #194 (`9cf5582d6`) and on A and B 2026-11-23, for a job that names the admission layout: the selection / evaluation split, folds in sessions, fold geometry, the two-part pass rule (2 of 3 folds, and the nine-month record held to the filter), and the holdout (read by no stage, which the validator checks; the final survivors reported on it in the step's summary). The rehearsal on B (piece 5) ran 2026-11-23 (exit 0, 33 minutes, peak 1,850 MiB of 3,055); nothing of the hook layout is open. Code only, still open: daily resample, the walk-forward "entered" count (found 2026-11-15), a minimum test span in the walk-forward config, fold count from the history available. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | The hook layout is done (2026-11-23). The code-only boxes can be done at any time |
+| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 19 done, 1 open (the hook layout's own piece boxes not counted) | Built 2026-11-20 on `research/r2-hook-layout`, merged as PR #194 (`9cf5582d6`) and on A and B 2026-11-23, for a job that names the admission layout: the selection / evaluation split, folds in sessions, fold geometry, the two-part pass rule (2 of 3 folds, and the nine-month record held to the filter), and the holdout (read by no stage, which the validator checks; the final survivors reported on it in the step's summary). The rehearsal on B (piece 5) ran 2026-11-23 (exit 0, 33 minutes, peak 1,850 MiB of 3,055); nothing of the hook layout is open. Built 2026-11-22 on `research/r2-code-boxes`, not committed: the walk-forward "entered" count, a minimum test span in the walk-forward config (twelve weeks, with a named exception), and the daily-resample mode refused. Closed 2026-11-22 by the user's decisions, no code: fold count from the history available (answered by the admission layout) and longer folds (delivered by the 24-month dataset). The one box left is a later saving on the train run, not needed for correctness. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Commit and merge the three code boxes. After that R2 has no work left but one optional saving |
 | 🔴 R7 | Test hardening per stage | Not started as its own item. Realistic-curve tests now exist at gate level for Monte Carlo, stress and regime | 0 done, 2 open | A real-runner test per stage, the cross-process checksum test. R4's "Verify" (a real-runner test per stage where the gate fails) is this work too | Rides along with package B (package D) |
 | 🔴 R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 done, 5 open | All of the wiring | After package B, before Step 5 (package C). It saves time on long runs; it does not change any result |
 | 🔴 R13 | No parameter-stability check | Not decided. A decision, not work yet | 0 done, 2 open | Decide whether to build the neighbour check | The user's decision, asked once package B gives more survivors (package F) |
@@ -200,7 +200,7 @@ work. Its note stays in section 3.
 | ⚪ D1 | One feed everywhere (IEX now, SIP at go-live) | Rule and trigger agreed. The free-tier probe has not been run; deferred by the user 2026-11-15 until the other updates are done | 0 / 13 | Nothing now. The probe and the rest come with the switch |
 | 🔴 D2 | Parquet integrity for research reads | Not started (the four defects re-confirmed in the code 2026-11-15) | 0 / 4 | Compaction deleting unread fragments comes first |
 
-🟡 **Steps 1 to 5 (generator and plumbing): Step 1 started 2026-11-22, the rest not.** Step 1 baseline 1 / 5 (rewritten for the long window; first job decided, its fixture written, not run), Step 1b generation system review 0 / 7 (added 2026-11-15), Step 2
+🟡 **Steps 1 to 5 (generator and plumbing): Step 1 started 2026-11-22, the rest not.** Step 1 baseline 3 / 5 (rewritten for the long window; first job decided, fixture on B, both conditions decided; the run started 2026-11-23 04:22 UTC, no result yet), Step 1b generation system review 0 / 7 (added 2026-11-15), Step 2
 evolutionary search 0 / 3, Step 3 hand-off to A's bench 0 / 3, Step 4 no boxes, Step 5
 monthly job 0 / 13. Section 5's results log is empty. Step 1 no longer waits on R2: the hook layout is done (2026-11-23) and what R2 has open is code only.
 
@@ -678,13 +678,26 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
       fold, so a strategy that failed train on one of two folds reads 0.5, not 1.0.
       Cost: one extra test-window run per train-failed strategy per fold. Tests:
       `TestWalkForwardTrainFailedFolds` in `tests/research/pipeline/test_robustness_stages.py`.
-- [ ] Found while doing the box above (2026-11-15), not fixed: a walk-forward stage's
+- [x] Found while doing the box above (2026-11-15): a walk-forward stage's
       "entered" count in the funnel is `len(filter_outputs)`, which is one verdict per
       strategy per fold per window (now strategies x folds x 2), not the number of
       strategies that entered. `StageResult.n_entered` and `n_failed` are wrong for
       this stage; `n_passed` is right. Shown in the hook's `stage_funnel`, the CLI and
       the stage metrics. Seen on real bars 2026-11-23 (the admission rehearsal on B):
       "entered 12" for the 3 strategies that entered.
+      **Fixed 2026-11-22** (branch `research/r2-code-boxes`, not committed). "Entered"
+      is a fact about what a stage is handed, and the pipeline runner is the one that
+      hands it over: `PipelineRunner` now records the count on each stage's result
+      (`StageResult.entered`), and `n_entered` reads it. A result built outside a
+      pipeline counts the strategies it names (those with a verdict and those that
+      survived), never the verdicts. Not taken: counting distinct strategy ids among
+      the verdicts alone, which stays wrong for a stage that writes no verdict for an
+      entrant (walk-forward has such a path, and it read "entered 0, failed negative").
+      Tests, 6 (`tests/research/pipeline/test_stage_entered_count.py`), and the hook's
+      real-run smoke test now checks that each stage enters what the one before it
+      passed. 6 mutations, all caught. The baseline started 2026-11-23 04:22 UTC runs
+      the image from before this fix, so its walk-forward "entered" reads wrong; its
+      "passed" is right and the true count is stage 1's "passed".
 - [x] Gate on a pooled or median test Sharpe across folds in addition to per-fold pass
       counts. Rule decided 2026-11-18 (the user): both, 2 of 3 folds and the pooled
       nine-month record (Step 5, "Universe over the long window"). Decided
@@ -703,8 +716,20 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
 - [x] Either implement EXPANDING/ANCHORED windows or delete `WindowType` and fix the docs
       (`docs/backend/research/advanced_validation_framework.md`).
       Done 2026-11-15 (package A, merged PR #184): deleted (nothing used it); the doc says folds are rolling only.
-- [ ] Daily resample: load daily warm-up bars and pass `bars_per_year=252`.
-- [ ] Fold geometry (added 2026-11-14, user's question: "more folds, maybe longer?"). The
+- [x] Daily resample: load daily warm-up bars and pass `bars_per_year=252`.
+      **Decided 2026-11-22 (the user): the mode is refused, not repaired.** Both defects
+      were confirmed still in the code that day, and nothing uses the mode: no source
+      file, experiment YAML, fixture or test sets `resample_to_daily`. Built (branch
+      `research/r2-code-boxes`, not committed): `SimulationRunRequest` refuses the flag
+      (every simulation is described by one, so no path runs daily bars), and
+      `PipelineRunner.run` refuses a pipeline that asks for it before its first stage
+      (`DailyResampleRefusedError`, a `ValueError`; the message gives both reasons). The
+      stages doc says how to switch it back on. Not taken: the repair (the runner, the
+      window loader and the metrics, for a mode with no user), or leaving the box open.
+      Tests, 7 (`tests/research/simulation/test_daily_resample_refused.py`); 6
+      mutations, all caught. The repair is in section 4, for when a daily-bar run is
+      wanted.
+- [x] Fold geometry (added 2026-11-14, user's question: "more folds, maybe longer?"; all four boxes closed 2026-11-22). The
       items above make folds honest; none sets how many there are or how long they run.
   - [x] Folds in sessions from the trading calendar, not calendar days (also removes the
         shared boundary day).
@@ -714,7 +739,7 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
         (piece 3b, committed `f0b2befda`). The sessions are the NYSE calendar's
         less the ones the dataset left out by name. Rolling folds, in the 90-day
         layout and the YAML pipelines, are still calendar days.
-  - [ ] A minimum test span per fold, validated in the config. (2026-11-20: the
+  - [x] A minimum test span per fold, validated in the config. (2026-11-20: the
         admission layout refuses a test fold under 60 sessions, hook layout piece
         1; the walk-forward config itself holds no minimum, so a rolling layout or
         hand-written folds can still be short.) A Sharpe estimate's
@@ -722,12 +747,38 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
         5-minute bars has 780 observations and an annualised-Sharpe standard error of
         roughly 5 (√(252/10)), so short folds are near coin flips and the pooled gate
         above is the one that carries weight.
-  - [ ] Fold count and length derived from the history available, with EXPANDING as the
+        **Decided 2026-11-22 (the user): refuse, with a named exception.** Built (branch
+        `research/r2-code-boxes`, not committed): `WalkForwardStageConfig` refuses a
+        test fold under twelve weeks unless the config sets `allow_short_test_folds`,
+        the same shape as the overlap exception. Twelve weeks is `test_days >= 84` for
+        rolling folds and 82 days from first day to last for a fold given by date: sixty
+        sessions from a Monday end on a Friday, so a flat 84 would have refused a fold
+        the admission layout accepts (found while writing it; a test now checks every
+        60-session stretch of the NYSE calendar from 2024 to 2026 clears 82). The hook's
+        90-day rolling layout sets the exception for its 30-day folds; the admission
+        layout does not, and `ma_sweep_staged.yaml` (90-day folds) needs none. Not
+        taken: an optional setting that is off unless asked for, or closing the box by
+        note. Tests, 12 (`tests/research/pipeline/test_walk_forward_min_test_span.py`);
+        12 mutations, all caught; nine older tests that build short folds on purpose
+        now say so.
+  - [x] Fold count and length derived from the history available, with EXPANDING as the
         way to get more test folds from a short history (ties to the `WindowType` item).
         On the 74-session rolling window with 15 held out, 20 train / 10 test / 10 step
         gives 3 folds; more folds and longer folds compete for the same sessions.
-  - [ ] Longer folds are blocked on more history: schedule with the SIP historical-bars
+        **Closed as answered, 2026-11-22 (the user).** The admission layout lays its
+        folds out by rule: the nine-month evaluation piece cut into three equal folds in
+        sessions, refused under 60 sessions a fold. Three folds on 9 / 9 / 6 is the
+        user's decision of 2026-11-16 and 2026-11-18, fixed in advance so the window is
+        not chosen after seeing results. EXPANDING windows were deleted in package A and
+        are not wanted. No code. Not taken: folds that adapt to the history available
+        (the count would change from month to month, and months would compare less
+        well). If the window is lengthened, the fold count is decided again then.
+  - [x] Longer folds are blocked on more history: schedule with the SIP historical-bars
         check in the data section below.
+        **Closed as delivered, 2026-11-22 (the user).** The history came from package
+        B's 24-month IEX dataset: test folds are 62 to 63 sessions, where they were 10
+        calendar days. The SIP historical-bars check is not part of this box any more;
+        it stays under D1, deferred. Not taken: keeping the box open until the probe.
 - R2 in the six-stage replay hook (2026-11-14, read-only investigation; the findings above
   were written against the four-stage YAML):
   - Selection leakage applies, and more broadly: `initial_quality_filter` and
@@ -2740,7 +2791,7 @@ ways it can hand them the wrong rows while every registry row still says `valida
 compaction; a fixture with `data.parquet` plus a later fragment returns both; the same
 table written in two chunk layouts hashes identically.
 
-### Step 1 — Baseline measurement (started 2026-11-22; nothing run yet)
+### Step 1 — Baseline measurement (started 2026-11-22; first job running on B since 2026-11-23 04:22 UTC)
 
 Note, 2026-11-16 (not a decision): this section was written 2026-11-06, before package B.
 Its window (about 54 sessions, a 14-session holdout), its 22-symbol list and its pinned
@@ -2787,20 +2838,34 @@ What changed under Step 1 since it was written:
       sample of the grid (one change, memory estimated over the ceiling at 50). The
       full-profile run is also the "measure first" box of the monthly job (section on
       the worker's month) and gives the measured numbers the grid run is sized from.
-- [ ] The fixture `fixtures/platform/replays/medium/research_admission_baseline.yaml`,
-      on B. Written 2026-11-22, **not merged**: the rehearsal's replay, differing in name
-      and profile alone (a test holds that, and the profile named in the file). Fixtures
-      are built into the worker image and `worker run` has no profile override, so it
-      ships by PR and deploy.
-- [ ] The two conditions this section names, settled by the user before the run (the
-      note at the top: "the user's call when Step 1 is reached"): the D1 check
-      (deferred by the user 2026-11-15) and the Finding 27 re-pull (it concerns the
-      rolling dataset; this run reads the 24-month dataset, built with every session
-      present but the two left out by name).
+- [x] The fixture `fixtures/platform/replays/medium/research_admission_baseline.yaml`,
+      on B. Written 2026-11-22: the rehearsal's replay, differing in name and profile
+      alone (a test holds that, and the profile named in the file). Fixtures are built
+      into the worker image and `worker run` has no profile override, so it ships by PR
+      and deploy. **Merged as PR #195 (`e7f4ea8d2`), on A and B 2026-11-23 04:20 UTC,
+      checked:** both checkouts on that commit, B's worker image built from it and
+      holding the fixture with `profile: full`.
+- [x] The two conditions this section names, settled by the user before the run (the
+      note at the top: "the user's call when Step 1 is reached"). Both **decided
+      2026-11-22 (the user)**, asked one at a time:
+      - The D1 check: **run on IEX now.** The baseline reads the 24-month IEX dataset
+        and its results-log row is marked `feed=iex`; the probe stays deferred, and
+        Step 1 is rerun at the SIP switch as the data section already says. Not taken:
+        run the probe first (a SIP dataset would then have to be built), hold the
+        baseline.
+      - The Finding 27 re-pull: **replaced by the long dataset** for Step 1. The
+        baseline reads the 24-month dataset (532 sessions, none missing but the two left
+        out by name), not the rolling window. Finding 27 stays open in the deployment
+        plan for the rolling window, which the weekly bench re-sims read. Not taken:
+        query the seven named sessions first, wait for the re-pull.
 - [ ] The run on B through `worker_job.sh worker run`, memory sampled as in the
       rehearsal, on the user's go-ahead. Estimated 1.5 to 2.5 hours and a peak at 80 to
       85% of the ceiling; exit 137 means the ceiling was reached and is itself the
-      result. Record in section 5: candidates entered, survivors per stage, clusters,
+      result. **Started 2026-11-23 04:22:05 UTC** on the user's go-ahead, image
+      `e7f4ea8d2`, ceiling 3,055 MB; files in
+      `~/rehearsals/research_admission_baseline_20261123T042205Z/` on B. The job's
+      reset wiped the rehearsal's 27 rows (their numbers are in hook layout piece 5).
+      **Not finished when this was written; no result yet.** Record in section 5: candidates entered, survivors per stage, clusters,
       the holdout report beside the evaluation numbers of the same survivors,
       wall-clock, peak memory and memory per kept candidate.
 - [ ] The composite-grid baseline (the 2026-11-06 boxes: all 652 skeletons by `grid`,
@@ -4529,6 +4594,12 @@ every candidate with a recorded reason.
   stages. Only after Step 2 shows the search finds things the pool cannot.
 - Suite `v1` historical windows (`pre-launch-deployment-plan.md` section 5) once D1 has
   answered the SIP question and R6's holdout declaration exists.
+- Daily-bar simulation (`resample_to_daily`), switched off 2026-11-22 (R2, "Daily
+  resample"). To switch it back on: load daily warm-up bars from before the window (the
+  runner sets `warmup_bars = 0` in this mode), pass `bars_per_year=252` to the return and
+  risk metrics and to every stage that annualises (Monte Carlo, regime), give the mode
+  tests of its own, then delete the two refusals (`refuse_daily_resample`). Only worth
+  doing when a daily-bar run is wanted.
 - Holdout as a gate (to reassess; user, 2026-11-15: report only for now). The holdout
   score is stored with each candidate and eliminates nobody (R2, "Tasks for the six-stage
   hook"). Reasons it is not a gate today: on about 15 sessions a Sharpe has a standard
