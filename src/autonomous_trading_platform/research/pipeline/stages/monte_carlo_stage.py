@@ -20,8 +20,10 @@ The current pipeline has six stages (research_hooks.py):
 
   initial_quality_filter → walk_forward → monte_carlo → regime → stress → overfitting
 
-so this stage sees walk-forward's survivors, and the regime and stress gates
-after it reuse its base run. The older four-stage layout
+and a seventh in the admission layout, the parameter neighbours, between
+stress and overfitting. So this stage sees walk-forward's survivors, and the
+regime, stress and neighbour stages after it reuse its base run. The older
+four-stage layout
 (experiments/staged/ma_sweep_staged.yaml) ends with this stage.
 
 Why resampling and not re-running with different seeds

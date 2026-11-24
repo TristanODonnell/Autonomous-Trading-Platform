@@ -1064,7 +1064,9 @@ def test_admission_layout_gives_each_stage_its_days(
     assert experiment.dataset_version == _WINDOW_DATASET_ID
     assert (experiment.start_date, experiment.end_date) == (selection.first, evaluation.last)
     by_name = {cfg.name: cfg for cfg in _stage_configs(experiment)}
-    assert list(by_name) == _STAGE_NAMES
+    # The admission layout adds the parameter neighbours after stress (plan R13).
+    admission_stages = [*_STAGE_NAMES, "parameter_neighbours"]
+    assert list(by_name) == admission_stages
 
     stage_1 = by_name["initial_quality_filter"]
     assert (stage_1.start_date, stage_1.end_date) == (selection.first, selection.last)
@@ -1083,9 +1085,11 @@ def test_admission_layout_gives_each_stage_its_days(
     assert walk_forward.allow_overlapping_test_folds is False
     assert (walk_forward.train_days, walk_forward.test_days, walk_forward.step_days) == (0, 0, 0)
 
-    for name in _STAGE_NAMES[2:]:
+    for name in admission_stages[2:]:
         gate = by_name[name]
         assert (gate.start_date, gate.end_date) == (evaluation.first, evaluation.last), name
+    # Report only, at the gate's own defaults.
+    assert by_name["parameter_neighbours"].gate.enforce is False
     # The run over the evaluation piece answers for the walk-forward filter itself.
     monte_carlo = by_name["monte_carlo_structural_robustness"]
     assert monte_carlo.base_run_clears_filter is True
@@ -1356,6 +1360,8 @@ def test_research_hook_without_the_layout_option_rolls_its_folds_as_before(
     assert experiment.staged_pipeline_config.holdout_start is None
     start, end = date(2022, 12, 3), date(2023, 3, 3)
     by_name = {cfg.name: cfg for cfg in _stage_configs(experiment)}
+    # No parameter neighbours in this layout: a job without the option runs what
+    # it ran before.
     assert list(by_name) == _STAGE_NAMES
     walk_forward = by_name["walk_forward_robustness"]
     assert walk_forward.folds is None

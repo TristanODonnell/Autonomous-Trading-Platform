@@ -23,6 +23,12 @@ from autonomous_trading_platform.research.pipeline.gate_report import (
     build_gate_report,
     gate_report_not_built,
 )
+from autonomous_trading_platform.research.pipeline.gates.neighbour_gate import (
+    NeighbourGateConfig,
+    NeighbourResult,
+    SkippedNeighbour,
+    evaluate_neighbour_gate,
+)
 from autonomous_trading_platform.research.pipeline.gates.overfitting_gate import (
     OverfittingGateVerdict,
 )
@@ -269,6 +275,108 @@ def test_an_overfitting_warning_is_written_once() -> None:
 
     assert warnings(copied) == [swings]
     assert warnings(its_own) == [thin, swings]
+
+
+def _neighbour(setting: str, direction: str, to: float, sharpe: float) -> NeighbourResult:
+    return NeighbourResult(
+        setting=setting,
+        direction=direction,
+        base_value=20,
+        value=to,
+        strategy_id=f"momentum__{setting}_{direction}",
+        sharpe=sharpe,
+        max_drawdown=-0.06,
+        total_return=0.03,
+        trade_count=40,
+    )
+
+
+def test_the_neighbours_of_a_strategy_are_written_down_run_by_run(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Report only: a fragile setting removes nobody and shows in no count, so the
+    report is where it is kept, with every neighbour's numbers beside it."""
+    verdict = evaluate_neighbour_gate(
+        strategy_id="a",
+        own_sharpe=1.6,
+        results=[
+            _neighbour("lookback", "down", 16, -0.3),
+            _neighbour("lookback", "up", 24, 0.1),
+            _neighbour("buy_above", "up", 0.02, 1.4),
+        ],
+        skipped=[
+            SkippedNeighbour(
+                setting="buy_above",
+                direction="down",
+                base_value=0.0,
+                value=-0.02,
+                reason="not a valid strategy: sell_below (0.0) must be less than or equal to "
+                "buy_above (-0.02)",
+            )
+        ],
+        config=NeighbourGateConfig(),
+    )
+    stage = _stage("neighbours", {"a": []}, {"a": StageDiagnostics(neighbour_verdict=verdict)})
+
+    with caplog.at_level(logging.INFO, logger=LOGGER):
+        (record,) = build_gate_report([_stage("first", {"a": []}), stage])["strategies"]
+    block = record["stages"][1]["neighbours"]
+
+    assert record["passed_every_stage"] is True
+    assert (block["passed"], block["enforced"]) == (True, False)
+    assert (block["own_sharpe"], block["sharpe_needed"]) == (1.6, 0.8)
+    assert (block["run"], block["holding"]) == (3, 1)
+    assert block["holding_fraction"] == pytest.approx(1 / 3)
+    assert (block["median_sharpe"], block["worst_sharpe"]) == (0.1, -0.3)
+    assert block["settings"] == [
+        {
+            "setting": "lookback",
+            "value": 20,
+            "neighbours_run": 2,
+            "neighbours_holding": 0,
+            "fragile": True,
+        },
+        {
+            "setting": "buy_above",
+            "value": 20,
+            "neighbours_run": 1,
+            "neighbours_holding": 1,
+            "fragile": False,
+        },
+    ]
+    assert block["neighbours"][0] == {
+        "setting": "lookback",
+        "direction": "down",
+        "from": 20,
+        "to": 16,
+        "strategy_id": "momentum__lookback_down",
+        "holds": False,
+        "sharpe": -0.3,
+        "total_return": 0.03,
+        "max_drawdown": -0.06,
+        "trade_count": 40,
+    }
+    assert [n["holds"] for n in block["neighbours"]] == [False, False, True]
+    assert block["not_built"] == [
+        {
+            "setting": "buy_above",
+            "direction": "down",
+            "from": 0.0,
+            "to": -0.02,
+            "reason": "not a valid strategy: sell_below (0.0) must be less than or equal to "
+            "buy_above (-0.02)",
+        }
+    ]
+    (finding,) = block["findings"]
+    assert finding.startswith("lookback = 20: neither neighbour holds")
+    assert block["failure_reasons"] == [] and block["warnings"] == []
+    assert json.loads(json.dumps(block, allow_nan=False)) == block
+
+    lines = [r.getMessage() for r in caplog.records if r.name == LOGGER]
+    assert lines[-1] == (
+        "gate_report | a | passed every stage | neighbours: passed "
+        "(neighbours holding 1/3, 1 not built, 1 finding(s), report only)"
+    )
 
 
 def test_the_report_can_be_written_as_json_whatever_the_numbers_are() -> None:

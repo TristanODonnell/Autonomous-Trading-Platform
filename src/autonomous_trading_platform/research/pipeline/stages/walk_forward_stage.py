@@ -55,6 +55,7 @@ Second of the six stages in the current pipeline (research_hooks.py):
 
   initial_quality_filter → walk_forward → monte_carlo → regime → stress → overfitting
 
+(seven in the admission layout: the parameter neighbours come after stress).
 The older four-stage layout (experiments/staged/ma_sweep_staged.yaml) has it
 third.
 """
