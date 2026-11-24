@@ -1,7 +1,8 @@
 """The composite templates' three repairs (research plan G5, Step 1b row 2).
 
 G5 measured the 652 grid skeletons on real bars and found 324 behaviours. Three causes,
-each repaired where the skeletons are made and each pinned here:
+each repaired where the skeletons are made and each pinned here (and, found by the
+re-measure, rules that are one rule by arithmetic; see the end of the file):
 
 - the regime filter read a price average against zero, which every price passes; it now
   reads price minus its average (`dist_50 > 0`);
@@ -39,10 +40,11 @@ def _direction(template: dict[str, Any], closes: list[float]) -> SignalDirection
 # -- the pool --------------------------------------------------------------------------
 
 
-def test_the_pool_has_437_skeletons_by_kind() -> None:
-    # The size of task 4's grid run; 652 before the repair (240 / 56 / 68 / 288).
+def test_the_pool_has_390_skeletons_by_kind() -> None:
+    # The size of task 4's grid run; 652 before the repair (240 / 56 / 68 / 288), 437
+    # after the three causes (87 / 28 / 34 / 288), 390 without the same-sign twins.
     kinds = Counter(name.split("_")[0] for name in _pool())
-    assert kinds == {"thresh": 87, "xover": 28, "cmp": 34, "logic": 288}
+    assert kinds == {"thresh": 78, "xover": 28, "cmp": 32, "logic": 252}
 
 
 def test_every_regime_filter_reads_price_minus_its_average() -> None:
@@ -139,3 +141,72 @@ def test_a_two_percent_fall_fires_rate_of_changes_mild_band() -> None:
     # A 1% fall is inside the mild band: no buy.
     small = [100.0] * 60 + [100 - 0.1 * (i + 1) for i in range(10)]
     assert _direction(pool["thresh_roc_10_v1_voti"], small) != SignalDirection.BUY
+
+
+# -- rules that are one rule by arithmetic ---------------------------------------------
+
+
+def _zero_rule_indicators(skeleton: dict[str, Any]) -> list[str]:
+    """Indicator ids that carry an at-zero threshold rule (buy above 0, sell below 0)."""
+    return [
+        rule["inputs"]["value"]["indicator_id"]
+        for rule in skeleton["entry_rules"]
+        if rule["component"] == "threshold"
+        and rule["parameters"].get("buy_above") == 0.0
+        and rule["parameters"].get("sell_below") == 0.0
+    ]
+
+
+def test_the_dollar_twin_of_a_scaled_indicator_has_no_at_zero_rule() -> None:
+    pool = _pool()
+    at_zero = {ind for s in pool.values() for ind in _zero_rule_indicators(s)}
+    # Dropped: one rule with roc_10 / roc_20 / z_20 at zero.
+    assert at_zero.isdisjoint({"mom_10", "mom_20", "dist_20"})
+    # Kept: the twins themselves, and dist_50, which has no z_50 to repeat it.
+    assert {"roc_10", "roc_20", "z_20", "z_10", "dist_50"} <= at_zero
+    # The dollar twins keep their other variants.
+    assert {"thresh_mom_10_v1_voti", "thresh_dist_20_v2_voti"} <= set(pool)
+
+
+def test_no_comparison_of_momentum_with_rate_of_change_of_one_lookback() -> None:
+    names = set(_pool())
+    assert not {"cmp_mom_10_vs_roc_10_voti", "cmp_mom_20_vs_roc_20_voti"} & names
+    assert "cmp_mom_10_vs_roc_20_voti" in names  # other lookbacks are other rules
+
+
+def test_the_twins_have_the_same_sign_on_any_positive_prices() -> None:
+    """The arithmetic the removal rests on, checked on the real indicator functions over
+    random walks of positive prices (including flat stretches, where z-score has no
+    value and distance is exactly zero: the strict threshold rule gives no signal on
+    either, so the two still agree)."""
+    import random
+
+    from autonomous_trading_platform.strategy.indicators.mean_reversion import (
+        distance_from_moving_average,
+        z_score,
+    )
+    from autonomous_trading_platform.strategy.indicators.momentum import (
+        momentum,
+        rate_of_change,
+    )
+
+    def sign(x: float | None) -> int:
+        return 0 if x is None or x == 0 else (1 if x > 0 else -1)
+
+    rng = random.Random(20261124)
+    for _ in range(300):
+        price = rng.uniform(1.5, 800.0)
+        closes = []
+        for _ in range(60):
+            if rng.random() > 0.2:  # one bar in five is flat
+                price = max(1.01, price * (1 + rng.gauss(0, 0.01)))
+            closes.append(round(price, 2))
+        for n in (10, 20):
+            assert sign(momentum(closes, n)) == sign(rate_of_change(closes, n))
+            # Comparison: momentum above rate of change exactly when price rose (p0 > $1).
+            mom, roc = momentum(closes, n), rate_of_change(closes, n)
+            assert mom is not None and roc is not None
+            assert sign(mom - roc) == sign(closes[-1] - closes[-1 - n])
+        assert sign(distance_from_moving_average(closes, 20)) == sign(z_score(closes, 20))
+    flat = [50.0] * 30
+    assert z_score(flat, 20) is None and distance_from_moving_average(flat, 20) == 0

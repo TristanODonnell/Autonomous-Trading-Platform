@@ -73,6 +73,42 @@ _ROC_MEAN_REVERSION_BANDS: dict[int, tuple[float, float]] = {
 }
 
 
+# At threshold zero some rules are one rule by arithmetic, on any bars (plan G5, found by
+# the re-measure): momentum and rate of change of one lookback have the same sign (a
+# price is positive, so p - p0 > 0 exactly when p / p0 - 1 > 0), and so do distance
+# from the average and z-score of one window (z is that distance over a positive std).
+# The at-zero rule is kept for the indicator in its own scale (rate of change, z-score)
+# and not built for its dollar twin; the twin's +-1.5 / +-2.0 variants are other rules
+# and stay. The research simulator sizes without the signal's confidence, so equal
+# direction on every bar is equal trading.
+_SAME_SIGN_TWIN: dict[str, tuple[str, str]] = {
+    "momentum": ("rate_of_change", "lookback"),
+    "distance_from_moving_average": ("z_score", "window"),
+}
+
+
+def _zero_rule_has_a_twin(component: str, params: dict[str, Any]) -> bool:
+    """True when the pool holds the twin that makes this indicator's at-zero rule."""
+    if component not in _SAME_SIGN_TWIN:
+        return False
+    twin_component, key = _SAME_SIGN_TWIN[component]
+    return any(
+        comp == twin_component and twin_params.get(key) == params.get(key)
+        for _, comp, twin_params in _ZERO_CENTERED
+    )
+
+
+def _is_same_sign_comparison(
+    a: tuple[str, str, dict[str, Any]], b: tuple[str, str, dict[str, Any]]
+) -> bool:
+    """Momentum against rate of change of one lookback compares dollars with a fraction:
+    (p - p0) > (p / p0 - 1) exactly when p > p0, for any p0 above one dollar, so it is
+    the at-zero rule again. Every name the platform trades is above a dollar."""
+    return {a[1], b[1]} == {"momentum", "rate_of_change"} and a[2].get("lookback") == b[2].get(
+        "lookback"
+    )
+
+
 def _threshold_variants_for(component: str, params: dict[str, Any]) -> list[dict[str, Any]]:
     """The zero-centered variants in the indicator's own units: v0 (at zero) is the same
     for all; for rate_of_change v1 / v2 take the measured bands above."""
@@ -317,15 +353,17 @@ def _build_skeletons() -> list[dict[str, Any]]:
     compatibility is encoded in _INDICATOR_DOMAIN and the instance lists above.
 
     Pattern counts after the research floor (tests pin them; 652 before plan G5's repair):
-      threshold  :  87  (8 zero_centered × 3 variants × 3 filter options (none,
+      threshold  :  78  (8 zero_centered × 3 variants × 3 filter options (none,
                          regime, volatility), less dist_50 gated by itself (3),
+                         less the at-zero rule of mom_10, mom_20, dist_20 (9),
                          + 3 ratio × 2 variants × 3 filter options)
       crossover  :  28  (14 same-family pairs × with/without volume confirmation)
-      comparison :  34  (28 zero_centered pairs + 3 ratio pairs + 3 SMA-vs-EMA pairs)
-      two-rule   : 288  (8 zero_centered × 3 variants × 3 ratio × 2 vol-variants
-                         × AND / OR)
+      comparison :  32  (28 zero_centered pairs less mom_N vs roc_N (2)
+                         + 3 ratio pairs + 3 SMA-vs-EMA pairs)
+      two-rule   : 252  (8 zero_centered × 3 variants, less the 3 at-zero twins,
+                         × 3 ratio × 2 vol-variants × AND / OR)
       ─────────────────
-      total pool : 437 skeletons
+      total pool : 390 skeletons
     """
     out: list[dict[str, Any]] = []
     out.extend(_threshold_skeletons())
@@ -354,6 +392,12 @@ def _threshold_skeletons() -> list[dict[str, Any]]:
                 else _THRESHOLD_VARIANTS[domain]
             )
             for vi, variant in enumerate(variants):
+                if (
+                    domain == "zero_centered"
+                    and vi == 0
+                    and _zero_rule_has_a_twin(ind_comp, ind_params)
+                ):
+                    continue
                 for agg in _SINGLE_RULE_AGGS:
                     agg_tag = "voti" if agg["component"] == "voting" else "weig"
                     for ftag, finstance in filter_opts:
@@ -427,7 +471,10 @@ def _comparison_skeletons() -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
 
     # Zero-centered × zero-centered — all C(10, 2) pairs
-    for (a_id, a_comp, a_p), (b_id, b_comp, b_p) in combinations(_ZERO_CENTERED, 2):
+    for a, b in combinations(_ZERO_CENTERED, 2):
+        if _is_same_sign_comparison(a, b):
+            continue
+        (a_id, a_comp, a_p), (b_id, b_comp, b_p) = a, b
         for agg in _SINGLE_RULE_AGGS:
             agg_tag = "voti" if agg["component"] == "voting" else "weig"
             out.append(
@@ -477,6 +524,8 @@ def _two_rule_skeletons() -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for pri_id, pri_comp, pri_p in _ZERO_CENTERED:
         for vi, variant in enumerate(_threshold_variants_for(pri_comp, pri_p)):
+            if vi == 0 and _zero_rule_has_a_twin(pri_comp, pri_p):
+                continue
             for vol_id, vol_comp, vol_p in _RATIO:
                 for vol_variant in _THRESHOLD_VARIANTS["ratio"]:
                     for agg in _MULTI_RULE_AGGS:

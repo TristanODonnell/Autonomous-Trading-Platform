@@ -229,9 +229,9 @@ def test_a_composite_neighbour_differs_in_the_one_number_and_keeps_its_wiring() 
 
 
 def test_a_composites_line_at_zero_has_no_scale_and_is_not_moved() -> None:
-    by = _by(build_neighbours(_composite("thresh_mom_10_v0_voti")))
+    by = _by(build_neighbours(_composite("thresh_roc_10_v0_voti")))
 
-    assert by[("indicators.mom_10.lookback", DOWN)].value == 8
+    assert by[("indicators.roc_10.lookback", DOWN)].value == 8
     for direction in (DOWN, UP):
         at_zero = by[("entry_rules.entry.buy_above", direction)]
         assert at_zero.config is None and at_zero.value is None
@@ -262,7 +262,7 @@ def test_every_number_in_every_template_is_a_setting_or_is_named_as_wiring() -> 
     """A number added to a template later must be put on one list or the other: it is
     not left unchecked without anybody having decided so."""
     configs, _summary = generate_composite_rule_configs(method="grid")
-    assert len(configs) > 400  # 437 since plan G5
+    assert len(configs) > 350  # 390 since plan G5
 
     unaccounted: set[str] = set()
     settings: set[str] = set()
