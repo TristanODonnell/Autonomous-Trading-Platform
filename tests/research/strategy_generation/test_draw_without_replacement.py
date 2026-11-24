@@ -108,7 +108,7 @@ def test_composite_draw_larger_than_the_pool_returns_the_pool_and_says_so() -> N
 
 def test_composite_draw_is_the_first_n_of_the_shuffled_pool_when_nothing_is_rejected() -> None:
     # Taking the whole shuffled pool and stopping at n gives the same skeletons the old
-    # slice of the first n gave, as long as none fails validation (all 652 pass today).
+    # slice of the first n gave, as long as none fails validation (all 437 pass today).
     ten = _draw("composite_rule", 10, seed=7)
     twenty = _draw("composite_rule", 20, seed=7)
 

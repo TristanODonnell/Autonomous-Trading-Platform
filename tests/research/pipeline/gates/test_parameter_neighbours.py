@@ -240,11 +240,17 @@ def test_a_composites_line_at_zero_has_no_scale_and_is_not_moved() -> None:
 
 def test_the_aggregators_thresholds_are_wiring_and_are_not_moved() -> None:
     """They sit just under the rules' fixed confidences: moved up by a fifth the
-    aggregator can no longer be reached, and the strategy never trades."""
-    configs, _summary = generate_composite_rule_configs(method="grid")
-    weighted = next(
-        c for c in configs if c.parameters["aggregator"]["component"] == "weighted_score"
-    )
+    aggregator can no longer be reached, and the strategy never trades.
+
+    The generated pool has no weighted_score composite since plan G5 (one aggregator
+    for one-rule skeletons), but stored and hand-written ones can, so one is made here
+    from a pool template with the aggregator the pool used to give it."""
+    template = dict(_composite("thresh_z_20_v1_voti").parameters)
+    template["aggregator"] = {
+        "component": "weighted_score",
+        "parameters": {"buy_threshold": 0.55, "sell_threshold": -0.55},
+    }
+    weighted = make_config("composite_rule", template)
 
     assert not any(n.setting.startswith("aggregator") for n in build_neighbours(weighted))
     for neighbour in build_neighbours(weighted):
@@ -256,7 +262,7 @@ def test_every_number_in_every_template_is_a_setting_or_is_named_as_wiring() -> 
     """A number added to a template later must be put on one list or the other: it is
     not left unchecked without anybody having decided so."""
     configs, _summary = generate_composite_rule_configs(method="grid")
-    assert len(configs) > 500
+    assert len(configs) > 400  # 437 since plan G5
 
     unaccounted: set[str] = set()
     settings: set[str] = set()
