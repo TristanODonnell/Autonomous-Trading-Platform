@@ -24,6 +24,7 @@ from autonomous_trading_platform.research.simulation.simulation_runner import Si
 
 from .base_stage import BaseStage
 from .monte_carlo_stage import MonteCarloStage
+from .neighbour_stage import NeighbourStage
 from .overfitting_stage import OverfittingStage
 from .regime_stage import RegimeStage
 from .simulation_stage import SimulationStage
@@ -40,6 +41,7 @@ _REGISTRY: dict[str, type[BaseStage]] = {
     "monte_carlo": MonteCarloStage,
     "regime": RegimeStage,
     "stress": StressStage,
+    "neighbour": NeighbourStage,
     "overfitting": OverfittingStage,
 }
 

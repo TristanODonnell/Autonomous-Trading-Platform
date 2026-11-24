@@ -428,6 +428,86 @@ def test_every_new_stage_runs_on_real_simulations(
         assert analysis.indicators.regime_concentration is not None
 
 
+def test_the_neighbour_stage_runs_on_real_simulations_each_under_an_id_of_its_own(
+    smoke_data_root, pit_universe, db_session, replay_context
+) -> None:
+    """The real runner, engine and database (plan R13): a strategy with one setting moved
+    is a strategy the engine can run, and its run is stored under its own id. The
+    runner stores a run's config under the run's strategy id, so a neighbour run under
+    the id of the strategy it came from would overwrite that strategy's settings."""
+    from sqlalchemy import select
+
+    from autonomous_trading_platform.research.pipeline.pipeline_runner import (
+        StagedPipelineConfig,
+    )
+    from autonomous_trading_platform.research.pipeline.stages.stage_registry import StageRegistry
+    from autonomous_trading_platform.storage.sor.models.simulation_runs import SimulationRuns
+    from autonomous_trading_platform.storage.sor.models.strategy_configs import StrategyConfigs
+
+    ctx = _build_context(db_session)
+    exp = _replay_experiment(db_session, replay_context, ctx.simulation_runner)
+    raw_stages = _permissive_stage_dicts(exp)
+    neighbours_raw = {
+        "type": "neighbour",
+        "name": "neighbours",
+        "symbols": list(exp.symbols),
+        "start_date": exp.start_date.isoformat(),
+        "end_date": exp.end_date.isoformat(),
+    }
+    raw_stages.insert(len(raw_stages) - 1, neighbours_raw)
+    stages = [StageRegistry.load(raw, ctx.simulation_runner) for raw in raw_stages]
+    exp = replace(
+        exp,
+        strategy_set=_MINIMAL_STRATEGY_SET,
+        staged_pipeline_config=StagedPipelineConfig(stages=stages, smoke=True),
+    )
+
+    result = ctx.experiment_orchestration_service.run_staged_experiment(exp)
+    by_name = {sr.stage_name: sr for sr in result.stage_results}
+
+    assert list(by_name) == ["sim", "wf", "mc", "regime", "stress", "neighbours", "overfit"]
+    stage = by_name["neighbours"]
+    survivors = {c.strategy_id: c for c in by_name["stress"].survivors}
+    assert survivors, "permissive filters should let strategies reach the neighbour stage"
+    # Report only: whoever came in goes on, and nobody else does.
+    assert [c.strategy_id for c in stage.survivors] == list(survivors)
+    assert [c.strategy_id for c in result.final_survivors] == list(survivors)
+
+    neighbour_ids: set[str] = set()
+    for sid, config in survivors.items():
+        verdict = stage.diagnostics[sid].neighbour_verdict
+        assert verdict is not None and verdict.enforced is False
+        # Judged against the strategy's own run over the window, Monte Carlo's, reused.
+        assert (
+            stage.diagnostics[sid].reference_result
+            is by_name["mc"].diagnostics[sid].reference_result
+        )
+        assert verdict.own_sharpe is not None and verdict.sharpe_needed is not None
+        # Every setting was moved each way, and each move was run or says why not.
+        settings = len(config.parameters)
+        assert len(verdict.results) + len(verdict.skipped) == 2 * settings
+        assert verdict.results, sid
+        assert all(result.holds is not None for result in verdict.results)
+        neighbour_ids |= {result.strategy_id for result in verdict.results}
+    assert neighbour_ids.isdisjoint(survivors)
+    assert {r.strategy_id for r in stage.simulation_results} == neighbour_ids
+
+    # In the database: each survivor's stored settings are still its own...
+    for sid, config in survivors.items():
+        stored = db_session.get(StrategyConfigs, sid)
+        assert stored is not None
+        assert stored.config_json["parameters"] == config.parameters, sid
+    # ...and the neighbours' runs are rows of their own, under their own ids.
+    rows = db_session.scalars(
+        select(SimulationRuns).where(SimulationRuns.window_role == "neighbour")
+    ).all()
+    assert {row.strategy_id for row in rows} == neighbour_ids
+    assert {row.status for row in rows} == {"COMPLETED"}
+    for neighbour_id in neighbour_ids:
+        stored = db_session.get(StrategyConfigs, neighbour_id)
+        assert stored is not None and stored.strategy_id == neighbour_id
+
+
 def test_research_hook_runs_with_smoke_profile(
     smoke_data_root, pit_universe, db_session, replay_context, monkeypatch
 ) -> None:
