@@ -209,7 +209,7 @@ proposed").
 | # | Item | What it is | Decision | Boxes | What is left | When |
 |---|---|---|---|---|---|---|
 | 1 | 🟡 G1 + G2 (built 2026-11-24 on `research/generation-repairs`, not committed; 33 a month, November and December share 9; see G2's box) | The draw: the same 30 candidates every month (the month seed never reaches generation); a draw that breaks a family's rule is thrown away, not replaced | Pass the month seed to generation; draw again until the family has the number asked for or no valid setting is left, and say which in the summary. The 2026-11-23 baseline is reproduced by commit `38a9b2c63`, not by seed | 0 done, 2 open | Build; correct the baseline fixture's header | First: every other row changes what a draw holds |
-| 2 | 🔴 G5 | Composite templates: 324 of 652 skeletons behave differently (measured on 21,316 bars) | Repair where the skeletons are made: regime filter compares price with its average; rate-of-change thresholds sized as fractions; one aggregator for single-rule skeletons | 0 done, 1 open | Build; measure the repaired pool again with `g5_measure.py` (B's `~/rehearsals/g5/`) | Before task 4: it sets the grid run's size |
+| 2 | 🟡 G5 (built 2026-11-24 on `research/generation-repairs`, not committed; pool 437, 384 distinct, measured again; see G5's box) | Composite templates: 324 of 652 skeletons behave differently (measured on 21,316 bars) | Repair where the skeletons are made: regime filter compares price with its average; rate-of-change thresholds sized as fractions; one aggregator for single-rule skeletons | 0 done, 1 open | Build; measure the repaired pool again with `g5_measure.py` (B's `~/rehearsals/g5/`) | Before task 4: it sets the grid run's size |
 | 3 | 🔴 G3 | Momentum's thresholds are in dollars | New setting `measure` (`price` default, `return` for the research draw); the neighbour check treats it as a choice | 0 done, 1 open | Build; size the return thresholds from the dataset | With row 2 (same unit problem) |
 | 4 | 🔴 G4 + G8 (factor) | Factor configs that can never buy; factor configs that are one behaviour under two ids | A rule of the draw (buy threshold above the reachable score is invalid, redrawn under G2); a canonical form before hashing (zero-weight windows to default, thresholds to the reachable score level) | 0 done, 2 open (G4, G8's second part) | Build; confirm the two zero-trade ids fail the rule and `4fa1` / `8919` get one id | After row 1 (uses its redraw) |
 | 5 | 🔴 G9 | No gate compares a candidate with buy and hold of the same names | Report-only: buy and hold of the run's universe per window; excess return and information ratio per candidate in the gate report | 0 done, 1 open | Build; settle corporate-action jumps (use the split source, not a 30% rule) | Any time; needed before task 5 (Step 2's fitness) |
@@ -3643,7 +3643,47 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       take one aggregator. Task 4's grid run is sized from the repaired pool, which is
       measured again with the same script before it. Asked against a behaviour check
       before simulating (sample-based, a pass each run; G6's ground) and against
-      recording only. Not built.
+      recording only.
+      **Decided by the user 2026-11-24, building it:** the regime gate is one filter,
+      `dist_50 > 0` (price minus its 50-bar SMA; a filter compares one indicator with a
+      constant and there is no price-minus-EMA indicator, so the EMA variant is
+      dropped); rate-of-change's two mean-reversion variants are 1.5 and 2 standard
+      deviations of rate-of-change itself, per lookback, measured on the G5 bars
+      (5-minute, March-April 2026, 31 names, ~88k values each): lookback 10, std
+      0.0102, bands 0.015 / 0.020 (reached on 7.6% / 4.4% of bars); lookback 20, std
+      0.0144, bands 0.022 / 0.029 (8.9% / 4.9%); today's +-1.5 / +-2.0 on 0% of bars.
+      The per-name std runs 0.005 to 0.019 at lookback 10, so a fixed fraction is still
+      a higher bar for a quiet name. Asked against one pair for both lookbacks and
+      against dropping rate-of-change from mean reversion. **Recorded, left to Step 2
+      (the user's choice):** `mom_*` and `dist_*` thresholds of +-1.5 / +-2.0 are in
+      dollars (G3's problem in the composites), and the volatility filter
+      `roll_std_20 < 5.0` is in dollars and passes 98.1%.
+      **Built 2026-11-24 on `research/generation-repairs`, not committed.** In
+      `composite_generation.py`: `_ROC_MEAN_REVERSION_BANDS` and
+      `_threshold_variants_for` (a rate-of-change lookback with no measured band is
+      refused, not given the z-score variants), the regime list is `dist_50`, one-rule
+      skeletons take `voting` only, and a skeleton gated by its own rule indicator is
+      skipped. Pool **652 -> 437** (threshold 240 -> 87, crossover 56 -> 28, comparison
+      68 -> 34, two-rule 288 unchanged). **Measured again** (same script, bars, stride
+      2; 381 s): **384 distinct behaviours of 437** (386 with confidence), was 324 of
+      652; by kind threshold 87 -> 78, crossover 28 -> 26, comparison 34 -> 33, two-rule
+      288 -> 252; never signal 0 (was 56); regime gate passes 59.22% of 575,532 checks
+      (was 100.00%); the volatility filter still 98.10%; the baseline's equal pair
+      (`logic_or_roc_20_v1_vol_r_10_hi`, `_v2_`) now behaves differently. **Left
+      over, found by the measure, exact by arithmetic, not by the data:** at threshold
+      zero, momentum and rate-of-change of one lookback are one rule (a price is
+      positive, so `p - p0 > 0` exactly when `p / p0 - 1 > 0`), and so are `z_20` and
+      `dist_20` (z is distance over a positive std); `cmp_mom_N_vs_roc_N` compares
+      dollars with a fraction and acts as the same rule. These make most of the 53
+      repeats (largest group 3). Not repaired: outside the three decided causes. Tests:
+      `test_composite_template_repairs.py` (10: pool size by kind, every regime gate
+      reads price minus its average, no self-gating, one aggregator for one rule,
+      rate-of-change bands, a missing band refused, other indicators unchanged, and on
+      the real composite strategy: below its average the gate blocks a buy its ungated
+      twin makes, above it lets one through, a 2% fall fires the mild band and a 1%
+      fall does not); the neighbour test that needs a `weighted_score` composite builds
+      one from a pool template. Mutation checks: each of the four repairs undone alone
+      is caught (the regime one by its behaviour tests too).
 - [x] G6. Nothing rejects a candidate before its simulation except the schema and an
       equal id (the fourth audit box).
       **Closed by the user 2026-11-24 (task 3): covered by G3, G4 and G5.** The exact
