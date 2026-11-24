@@ -178,17 +178,59 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > is the checkpoint.** A simulation an earlier attempt completed is read
 > back from its row and its saved frames and not run again; nothing else is
 > stored, and every stage judges what it gets back again. Built on
-> `research/r3-checkpoint-and-reuse` (not merged) with R2's saving on the
-> train run: `worker run --resume` switches it on for the research step.
-> Not run on B. Next: one run on B for the lot (R13's first numbers, the
-> train-run saving measured), on the user's go-ahead.
+> `research/r3-checkpoint-and-reuse` with R2's saving on the train run:
+> `worker run --resume` switches it on for the research step. **Merged as
+> PR #201 (`38a9b2c63`), on A and B, checked 02:00 UTC 2026-11-24.**
+>
+> **Update 2026-11-24, after the merge. Package E deferred by the user**
+> ("can we move that into the deferred section"). Its items are rows in the
+> Deferred table below, each with its trigger: the drawdown kill before Step
+> 3, the two cost-bookkeeping items before the settings that make them
+> matter, D2 after a check of what it can reach. With that, Step 0's Open
+> table is R2, R3 and R13, and each of them waits only on the runs on B the
+> user gave the go-ahead for the same evening (a kill-and-resume of the
+> rehearsal job, then the baseline). Next after those: Step 1's task list.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
 
 Keep this board in step with the boxes: when a box changes in section 3, change its row.
 "Done / open" counts checkboxes.
 
-**Step 0, pipeline integrity (the current work)**
+**Step 1b, generation repairs (the current work)**
+
+Added 2026-11-24 (user: move the settled build tasks up here, as the R boxes were). Each
+row is a piece of work built together; the G boxes it closes are in section 3, Step 1b,
+with the measurements and the decision behind each. All decided by the user 2026-11-24
+(task 3); nothing built. Order and PR split below agreed by the user 2026-11-24 ("as
+proposed").
+
+*Open: will be built (in this order)*
+
+| # | Item | What it is | Decision | Boxes | What is left | When |
+|---|---|---|---|---|---|---|
+| 1 | 🔴 G1 + G2 | The draw: the same 30 candidates every month (the month seed never reaches generation); a draw that breaks a family's rule is thrown away, not replaced | Pass the month seed to generation; draw again until the family has the number asked for or no valid setting is left, and say which in the summary. The 2026-11-23 baseline is reproduced by commit `38a9b2c63`, not by seed | 0 done, 2 open | Build; correct the baseline fixture's header | First: every other row changes what a draw holds |
+| 2 | 🔴 G5 | Composite templates: 324 of 652 skeletons behave differently (measured on 21,316 bars) | Repair where the skeletons are made: regime filter compares price with its average; rate-of-change thresholds sized as fractions; one aggregator for single-rule skeletons | 0 done, 1 open | Build; measure the repaired pool again with `g5_measure.py` (B's `~/rehearsals/g5/`) | Before task 4: it sets the grid run's size |
+| 3 | 🔴 G3 | Momentum's thresholds are in dollars | New setting `measure` (`price` default, `return` for the research draw); the neighbour check treats it as a choice | 0 done, 1 open | Build; size the return thresholds from the dataset | With row 2 (same unit problem) |
+| 4 | 🔴 G4 + G8 (factor) | Factor configs that can never buy; factor configs that are one behaviour under two ids | A rule of the draw (buy threshold above the reachable score is invalid, redrawn under G2); a canonical form before hashing (zero-weight windows to default, thresholds to the reachable score level) | 0 done, 2 open (G4, G8's second part) | Build; confirm the two zero-trade ids fail the rule and `4fa1` / `8919` get one id | After row 1 (uses its redraw) |
+| 5 | 🔴 G9 | No gate compares a candidate with buy and hold of the same names | Report-only: buy and hold of the run's universe per window; excess return and information ratio per candidate in the gate report | 0 done, 1 open | Build; settle corporate-action jumps (use the split source, not a 30% rule) | Any time; needed before task 5 (Step 2's fitness) |
+| 6 | 🔴 G8 (turnover) | Turnover is computed by stage 1's filter and dropped; nothing shows return per dollar traded | Report-only: store daily turnover with the run's metrics; gate report shows it against the 10x cap and net return per dollar traded, beside the stress stage's 2x / 3x costs | 0 done, 1 open (G8's first part) | Build | With row 5 (both gate-report additions) |
+
+PR split (agreed 2026-11-24): rows 1 to 4 as one generation PR (they change the draw; measured
+before / after on the draw itself, no run needed to merge), rows 5 and 6 as one gate-report
+PR (report-only, no verdict changes). Then one run on B for both, then task 4 (the
+composite-grid baseline) and task 5 (revise Step 2).
+
+*Closed or moved, no build here*
+
+| Item | What happened |
+|---|---|
+| ⚪ G6 | Closed 2026-11-24: covered by G3, G4, G5. A turnover pre-pass is reconsidered in Step 2 |
+| ⚪ G7 | Folded into Step 2 2026-11-24: taken in task 5 with the fitness question; the generation cache is wired there |
+| ⚪ G10 | Open, decided later (user, 2026-11-24): which search algorithms to use (evolutionary, Bayesian, successive halving, local search, a mix), and so whether Step 2's evolutionary design stands; the code structure follows the choice (methods are hard-wired twice today). Decided after rows 1 to 6 are built, with G9's numbers in hand, before or with task 5 |
+
+**Step 0, pipeline integrity** (no run left to wait for since 2026-11-24: R3's resume
+passed on the rehearsal job and R13's first numbers came with the baseline; what is open
+is follow-ups and decisions)
 
 Regrouped 2026-11-16 (user: "can we do some cleanup here"): open items first, in the order
 they will be worked, then what is deferred, then what is done. "Boxes" counts checkboxes in
@@ -198,15 +240,18 @@ section 3: done, then still open.
 
 | Item | What it is | Status | Boxes | What is left | When |
 |---|---|---|---|---|---|
-| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 20 done, 0 open in this list since 2026-11-24 (the hook layout's own piece boxes not counted; the last of those, the saving on the train run, built 2026-11-24 on `research/r3-checkpoint-and-reuse`, not merged) | Built 2026-11-20 on `research/r2-hook-layout`, merged as PR #194 (`9cf5582d6`) and on A and B 2026-11-23, for a job that names the admission layout: the selection / evaluation split, folds in sessions, fold geometry, the two-part pass rule (2 of 3 folds, and the nine-month record held to the filter), and the holdout (read by no stage, which the validator checks; the final survivors reported on it in the step's summary). The rehearsal on B (piece 5) ran 2026-11-23 (exit 0, 33 minutes, peak 1,850 MiB of 3,055); nothing of the hook layout is open. Built 2026-11-22 on `research/r2-code-boxes`, merged as PR #196 (`19a26dffa`), on A and B 2026-11-23 (checked: A's app and scheduler containers and B's worker image are built from it; B rebuilt once the baseline released the job lock): the walk-forward "entered" count, a minimum test span in the walk-forward config (twelve weeks, with a named exception), and the daily-resample mode refused. Closed 2026-11-22 by the user's decisions, no code: fold count from the history available (answered by the admission layout) and longer folds (delivered by the 24-month dataset). The one box left is a later saving on the train run, not needed for correctness. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Commit and merge the three code boxes. After that R2 has no work left but one optional saving |
-| 🟡 R3 | Checkpoint and resume | **Decided 2026-11-24: the saved run is the checkpoint.** Built on `research/r3-checkpoint-and-reuse`, not merged: a completed simulation is read back, not run again, when a job is resumed | 7 done, 6 open | Merge; then a resume of a real job on B | The user's word to commit; a run on B, on the user's go-ahead. It saves time on long runs; it does not change any result |
-| 🟡 R13 | No parameter-stability check | **Decided 2026-11-23: build now, report only, every setting one at a time.** Merged as PR #200 (`30b143274`), on A and B 2026-11-24: a seventh stage in the admission layout | 4 done, 6 open | Its first numbers, on the next run on B | A run on B, on the user's go-ahead |
+| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 20 done, 0 open in this list since 2026-11-24 (the hook layout's own piece boxes not counted; the last of those, the saving on the train run, merged as PR #201, `38a9b2c63`, on A and B 2026-11-24) | Built 2026-11-20 on `research/r2-hook-layout`, merged as PR #194 (`9cf5582d6`) and on A and B 2026-11-23, for a job that names the admission layout: the selection / evaluation split, folds in sessions, fold geometry, the two-part pass rule (2 of 3 folds, and the nine-month record held to the filter), and the holdout (read by no stage, which the validator checks; the final survivors reported on it in the step's summary). The rehearsal on B (piece 5) ran 2026-11-23 (exit 0, 33 minutes, peak 1,850 MiB of 3,055); nothing of the hook layout is open. Built 2026-11-22 on `research/r2-code-boxes`, merged as PR #196 (`19a26dffa`), on A and B 2026-11-23 (checked: A's app and scheduler containers and B's worker image are built from it; B rebuilt once the baseline released the job lock): the walk-forward "entered" count, a minimum test span in the walk-forward config (twelve weeks, with a named exception), and the daily-resample mode refused. Closed 2026-11-22 by the user's decisions, no code: fold count from the history available (answered by the admission layout) and longer folds (delivered by the 24-month dataset). The one box left is a later saving on the train run, not needed for correctness. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Commit and merge the three code boxes. After that R2 has no work left but one optional saving |
+| 🟡 R3 | Checkpoint and resume | **Decided 2026-11-24: the saved run is the checkpoint.** Merged as PR #201 (`38a9b2c63`), on A and B 2026-11-24: a completed simulation is read back, not run again, when a job is resumed | 9 done, 5 open | **Resume run on B 2026-11-24: passed** (killed at 14 rows, resumed with `--resume`: 14 read back, none refused, 45 fields equal to the uninterrupted rehearsal, the 3 that differ from code merged since). Left: five follow-ups, one of them a decision (delete the unused checkpoint service or keep it) | No run needed; the follow-ups when the research CLI or the checkpoint service is next worked on |
+| 🟡 R13 | No parameter-stability check | **Decided 2026-11-23: build now, report only, every setting one at a time.** Merged as PR #200 (`30b143274`), on A and B 2026-11-24: a seventh stage in the admission layout | 5 done, 5 open | **First numbers 2026-11-24** (baseline on B): 54 neighbour runs, 75 minutes, 1 finding on 8 survivors (momentum `ab29`'s `lookback`); the stable seven also lose on the holdout. Left: thresholds before `enforce`, three decisions (90-day layout, catalogue, feeding the overfitting gate), the zero-valued composite line | The decisions with the user; none needs a run |
 
 *Deferred: nothing to do until its trigger*
 
 | Item | What it is | Why it can wait | Boxes | Trigger |
 |---|---|---|---|---|
 | ⚪ R8 | Simulator RNG keyed per decision | It only matters when fills are random. Checked in the code 2026-11-16: the three random-fill settings (`partial_fill_probability`, `fill_probability_on_touch`, `order_rejection_probability`) default to off and no config, fixture or experiment sets one; `settlement_days` is 0 everywhere | 0 done, 4 open | Before any random-fill setting or a non-zero `settlement_days` is switched on in research. Not enforced by code: the second box (raise when a probability is set without a seeded RNG) is the guard that would enforce it |
+| ⚪ R4 | The 12% drawdown kill is not read on the backtest trading path (was package E; deferred by the user 2026-11-24) | A research run trades on through a drawdown that would have halted it live, so its score overstates such a strategy. That matters when a research score decides what is deployed, which is the hand-off in Step 3, and not while the generator is being worked on (Steps 1 to 2). It touches the trading path: safety doctrine first, then the rehearsal rule | 0 done, 1 open | Before Step 3's hand-off (a box there says so). The observe-only half (record where the kill would have fired, change nothing) can come earlier |
+| ⚪ R12 / R7 | Cost bookkeeping in the fill rows: the slippage charged is not written to the row (R12); a commission is recorded and never charged (R7). Was package E; deferred by the user 2026-11-24 | Neither changes a result today: the slippage is inside the fill price already and the row's column says 0.0; commission is zero everywhere | 0 done, 2 open (and R12's two quote-midpoint guards) | Before a `LIMIT` / `TWAP` policy or a non-zero commission is switched on |
+| ⚪ D2 | Parquet integrity for research reads, four defects (was package E; deferred by the user 2026-11-24) | Read in the code 2026-11-24: the compaction that can delete fragments runs in a backtest on the replay's own ingestion dataset (`ingestion_hooks.py`), and the research step reads another dataset, the 24-month one a job names. So the first defect does not look able to reach the baseline's bars. **Not traced: the other three against the 24-month dataset** | 0 done, 4 open | First that trace (read-only, short); then either it stays here until the storage layer is next worked on, or it moves back to Open |
 
 R9 (the generator has no selection) has no row: it has no boxes of its own and is Step 2's
 work. Its note stays in section 3.
@@ -230,12 +275,12 @@ work. Its note stays in section 3.
 
 **Parked follow-ups on green items** (shipped, but these boxes are still open; none is forgotten)
 
-- R4: nothing on the backtest trading path reads the 12% drawdown kill (package E; goes
-  through the safety doctrine and the rehearsal rule). The largest item in this list.
+- R4: nothing on the backtest trading path reads the 12% drawdown kill (deferred
+  2026-11-24, a row in the Deferred table: before Step 3). The largest item in this list.
 - R6: the repo-level holdout date (package B).
-- R7: a fill's commission is recorded and never charged (inert at zero commission; package E).
+- R7: a fill's commission is recorded and never charged (inert at zero commission; deferred 2026-11-24, a row in the Deferred table).
 - R10: re-measure the re-sim vs platform correlation. (The sparse-bar fixtures were built with R7, 2026-11-22.)
-- R12: write the charged slippage into the fill rows (package E); the two quote-midpoint guards, before any `LIMIT` / `TWAP` policy is switched on.
+- R12: write the charged slippage into the fill rows (deferred 2026-11-24, a row in the Deferred table); the two quote-midpoint guards, before any `LIMIT` / `TWAP` policy is switched on.
 - R14: the prerequisites before the overfitting gate's `enforce` is switched on (package B).
 - R15: the three prerequisites before the regime gate's `enforce` is switched on (package B).
 - R16: calibrate the 0.55 deployable threshold (after package B gives more survivors); pass
@@ -247,10 +292,10 @@ work. Its note stays in section 3.
 | Item | What it is | Status | Done / open | What is left |
 |---|---|---|---|---|
 | ⚪ D1 | One feed everywhere (IEX now, SIP at go-live) | Rule and trigger agreed. The free-tier probe has not been run; deferred by the user 2026-11-15 until the other updates are done | 0 / 13 | Nothing now. The probe and the rest come with the switch |
-| 🔴 D2 | Parquet integrity for research reads | Not started (the four defects re-confirmed in the code 2026-11-15) | 0 / 4 | Compaction deleting unread fragments comes first |
+| ⚪ D2 | Parquet integrity for research reads | Not started (the four defects re-confirmed in the code 2026-11-15). **Deferred by the user 2026-11-24**, see the Deferred table above | 0 / 4 | A trace of what the defects can reach in the 24-month dataset; then compaction deleting unread fragments comes first |
 
-🟡 **Steps 1 to 5 (generator and plumbing): Step 1 started 2026-11-22, the rest not.** Step 1 baseline 6 / 7 (rewritten for the long window; first job decided, fixture on B, both conditions decided; the run finished 2026-11-23 06:06 UTC, exit 0: 30 candidates in, 8 through every stage, all 8 negative on the holdout; found on reading it: the job kept no stage's verdict on any strategy, so a gate report was built and merged as PR #198, and the baseline rerun with it on B 2026-11-23, exit 0: the same run, its gates' evidence now readable; open: the composite-grid baseline), Step 1b generation system review 0 / 7 (added 2026-11-15), Step 2
-evolutionary search 0 / 3, Step 3 hand-off to A's bench 0 / 3, Step 4 no boxes, Step 5
+🟡 **Steps 1 to 5 (generator and plumbing): Step 1 started 2026-11-22, the rest not.** Step 1 baseline 6 / 6 since 2026-11-24, when its last box, the composite-grid baseline, moved to Step 1b by the user's decision (Step 1b: 9 done, 11 open since 2026-11-24, task list at its top; the audit's six boxes read, task 1 and task 3 done, findings G1 to G9 each decided, their build rows on the Step 1b board above; G10, the kind of search, left open on purpose). Before that 6 / 7 (rewritten for the long window; first job decided, fixture on B, both conditions decided; the run finished 2026-11-23 06:06 UTC, exit 0: 30 candidates in, 8 through every stage, all 8 negative on the holdout; found on reading it: the job kept no stage's verdict on any strategy, so a gate report was built and merged as PR #198, and the baseline rerun with it on B 2026-11-23, exit 0: the same run, its gates' evidence now readable; open: the composite-grid baseline), Step 1b generation system review 0 / 7 (added 2026-11-15), Step 2
+evolutionary search 0 / 3, Step 3 hand-off to A's bench 0 / 4, Step 4 no boxes, Step 5
 monthly job 0 / 13. Section 5's results log has its first two rows (2026-11-23: the baseline and its rerun). Step 1 no longer waits on R2: the hook layout is done (2026-11-23) and what R2 has open is code only.
 
 **Work packages (the open boxes grouped by what gets done together)**
@@ -263,9 +308,9 @@ Package A is merged and deployed. Nothing is running.
 |---|---|---|---|---|
 | 🟢 A | **Validators and evidence** (done: merged PR #184, deployed 2026-11-16) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | Nothing | One PR, no new data (#184) |
 | 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (done: merged as PR #193, on A and B 2026-11-20; no job uses it yet), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule (started 2026-11-20 on `research/r2-hook-layout`: pieces 1, 2, 3a, 3b and 4 merged as PR #194, `9cf5582d6`, on A and B 2026-11-23; the layout is switched on by a research option that only the rehearsal fixture sets; the rehearsal on B ran 2026-11-23, exit 0, 33 minutes, peak 1,850 MiB of 3,055; the hook layout is done), memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
-| 🟡 C | **Checkpoint and resume (R3)** (decided 2026-11-24: the saved run is the checkpoint; built, not merged) | R3's five boxes and its scope box, and R2's saving on the train run; six follow-ups stay open under R3 | The user's word to commit | One PR |
+| 🟢 C | **Checkpoint and resume (R3)** (decided 2026-11-24: the saved run is the checkpoint; merged as PR #201, `38a9b2c63`, on A and B 2026-11-24) | R3's five boxes and its scope box, and R2's saving on the train run; six follow-ups stay open under R3 | A resume of a real job on B | One PR |
 | 🟢 D | **Test hardening (R7)** (done: merged as PR #197, `fce347f3b`, on A and B 2026-11-23) | R7 both boxes, and the R7 boxes under R10, R14 (done earlier, with R14's change) and R15: all built | Nothing | One PR: tests, and one production change for speed (the regime label join) |
-| 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R12's slippage in fill rows, D2. R8 left this package 2026-11-16: deferred until random fills are switched on | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
+| ⚪ E | **Parity and integrity** (deferred by the user 2026-11-24; nothing of it is started. Its items are rows in the Deferred table, each with its trigger, and this package is no longer a piece of work of its own) | R4's drawdown kill on the backtest path, R12's slippage in fill rows, D2. R8 left this package 2026-11-16: deferred until random fills are switched on | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
 | 🟢 F | **R13** (decided 2026-11-23: build now, report only; merged as PR #200, `30b143274`, on A and B 2026-11-24) | The decision and the build; six follow-ups stay open under R13 | A run on B for its first numbers | One PR |
 
 After these: Step 1 (baseline; started 2026-11-22, its first job, the hook's full profile on B, ran 2026-11-23), then Steps 2 to 5.
@@ -1011,8 +1056,8 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
                   stage 1's run needs stage 1 to keep it where the reuse lookup
                   reads. Measured on B in the baseline of 2026-11-23: 635 seconds
                   for the 8 train runs, 10% of the job.
-                  **Built 2026-11-24** on `research/r3-checkpoint-and-reuse` (not
-                  merged). Stage 1 keeps each run as the strategy's reference run
+                  **Built 2026-11-24**, merged as PR #201 (`38a9b2c63`), on A and
+                  B the same day. Stage 1 keeps each run as the strategy's reference run
                   over its window; walk-forward looks for an earlier run of the
                   strategy over a train window's very days, on the same universe,
                   takes it, and judges it with its own train filter. In the hook's
@@ -1502,8 +1547,8 @@ one train-failed fold shows it in the overfitting evidence; a daily-resampled fo
 matches a hand computation within rounding.
 
 **R3 — Research checkpointing is built but never instantiated (cost/convenience;
-decided 2026-11-24: the saved run is the checkpoint; built on
-`research/r3-checkpoint-and-reuse`, not merged).**
+decided 2026-11-24: the saved run is the checkpoint; merged as PR #201, `38a9b2c63`,
+on A and B 2026-11-24).**
 `ResearchCheckpointService` is complete and `SimulationStage`, `WalkForwardStage` and
 `MonteCarloStage` accept `checkpoint_service` and route through `run_simulation_unit` when
 set. No production path passes it: the three stage constructors in
@@ -1519,7 +1564,7 @@ stages treat a missing result as missing evidence (`_gate_stage_support.py:117`)
 resumed run would drop every already-completed strategy from the survivors. The identity
 hardcodes `universe_version="v1"` and omits the seed; `experiment_id` must be stable across
 restarts.
-- [ ] Rehydrate skipped units from `cached_run_id` / `metadata.run_id` (reload the
+- [x] Rehydrate skipped units from `cached_run_id` / `metadata.run_id` (reload the
       `SimulationRunResult` from the SoR) so a resumed stage keeps its survivors. Store
       the pass/fail verdict with the checkpoint as well, and re-filter on resume: resume
       is currently wrong in both directions (a strategy that failed before the crash can
@@ -1528,7 +1573,7 @@ restarts.
       its saved frames, so no stage is handed a missing result. No verdict is stored:
       each stage judges the run it gets back with the rule it applies to a new one, so
       neither wrong direction can happen.
-- [ ] Identity: thread the real `universe_version`, `random_seed` and `pipeline_id`, and
+- [x] Identity: thread the real `universe_version`, `random_seed` and `pipeline_id`, and
       include the `SimulationResultCache` key's `key_id` (today the identity lacks seed,
       symbols, date range and cost model) **[7.10 #4]**.
       Closed 2026-11-24 by the design below. The identity of a saved run is its run id
@@ -1537,7 +1582,7 @@ restarts.
       what the run id leaves out: the code version, the strategy's settings, cash, the
       cost and fill models, settlement, and corporate actions handed in with the
       request. The cache's `key_id` is not used: the cache is not wired.
-- [ ] Instantiate in `experiment_orchestration_service.py` (where
+- [x] Instantiate in `experiment_orchestration_service.py` (where
       `plan.staged_pipeline_config.stages` is built) with
       `persist_path=<artifacts>/research/<experiment_id>.checkpoints.json`, pass
       `checkpoint_service`, `resume_mode`, `force_rerun`, `dry_run` to the three stages;
@@ -1548,13 +1593,13 @@ restarts.
       `SimulationRunner.reuse_completed_runs()`, which the research hook sets when it is
       called with `reuse_completed_runs=True`; the platform backtest passes it from its
       inputs.
-- [ ] CLI: `--resume`, `--checkpoint-store`, `--force-rerun` on the full-pipeline command;
+- [x] CLI: `--resume`, `--checkpoint-store`, `--force-rerun` on the full-pipeline command;
       retire the deprecated `resume-experiment` alias.
       Done 2026-11-24 for the path real runs take: `atp worker run --resume` (which
       keeps the database) asks the research step to read back, and
       `atp platform backtest run` has `--reuse-research-runs`. Not done: the research
       CLI's own pipeline command and the alias (open box below).
-- [ ] End-to-end test: run, kill after the first stage, rerun with `--resume`, assert only
+- [x] End-to-end test: run, kill after the first stage, rerun with `--resume`, assert only
       the missing units execute and the final survivors match an uninterrupted run; plus
       the two directional cases from [7.10 #3] (failed-before-crash still fails, partial
       resume keeps earlier passes).
@@ -1571,7 +1616,7 @@ restarts.
       (4) and `test_worker_run_service.py`. Checked that they can fail: eight bugs put
       in one at a time, seven caught by the real-engine tests, the eighth (a run that
       is not COMPLETED read back) hidden behind a later rule and held by a unit test.
-- [ ] Scope, found 2026-11-23 while building R13: the stress and neighbour stages run
+- [x] Scope, found 2026-11-23 while building R13: the stress and neighbour stages run
       their simulations through `GateSimulationRunner` (`_gate_stage_support.py`), which
       takes no checkpoint service. In the baseline rerun stress was about 21 minutes of
       the job, and the neighbours are estimated at more than that (R13). Decide with the
@@ -1595,9 +1640,22 @@ restarts.
       the stored ones. Anything else is simulated again, which costs time and changes
       no result. Off unless asked for. The step's summary says how many runs were read
       back (`runs_reloaded`).
-- [ ] Not run on B. A resume of a real job, on the user's go-ahead: start the rehearsal
+- [x] Not run on B. A resume of a real job, on the user's go-ahead: start the rehearsal
       job, stop it partway, run it again with `--resume`, and compare its summary with
       the rehearsal's of 2026-11-23; record `runs_reloaded` and the time.
+      **Run on B 2026-11-24 on `38a9b2c63` (the user: "lets go with both").** Started
+      02:05:27 and killed at 14 completed rows (9 stage 1, 5 walk-forward; exit 137,
+      833 s; `~/rehearsals/research_admission_rehearsal_killed_20261124T020527Z`).
+      Resumed 02:19:39 with `--resume`: exit 0, 2,313 s, peak 2.04 GiB (69%),
+      `runs_reloaded` 14, none refused, no error line
+      (`..._resume_20261124T021939Z`, summary saved as `research_summary.json`).
+      Compared field by field with the uninterrupted rehearsal
+      (`~/rehearsals/compare_resume.py`): 45 fields equal, every holdout number
+      included; 3 differ, each from code merged after that rehearsal: the
+      `parameter_neighbours` stage (R13, 3 in / 3 through), walk-forward's "entered"
+      12 -> 3 (now strategies, not runs; PR #196), `total_runs` 27 -> 40 (27 + 16
+      neighbour runs - 3 train runs now taken from stage 1, R2). The resume changed no
+      result.
 - [ ] Decide: `ResearchCheckpointService`, the restart plan, `SimulationResultCache`,
       the three stages' checkpoint arguments and the CLI that reads a store nothing
       writes (`research inspect-checkpoints`, `plan-restart`, `resume-experiment`) are
@@ -2538,10 +2596,20 @@ tested for it anywhere.
       its own).
       Estimated, not measured: about 64 simulations for the baseline's eight
       survivors, about 75 minutes at the baseline's 72 seconds a simulation.
-- [ ] Its first numbers: the next run on B (on the user's go-ahead). Record each
+- [x] Its first numbers: the next run on B (on the user's go-ahead). Record each
       survivor's neighbours in section 5 beside its holdout Sharpe, and the stage's
       real time and memory. The neighbours read the evaluation piece like the other
       gates, so by themselves they say nothing about the holdout months.
+      **Read 2026-11-24 from the baseline run on B** (section 5, "The baseline with
+      the neighbour check"): 54 neighbour simulations, 16 not built, 75 minutes
+      (04:23 to 05:38 UTC, 1.39 minutes a simulation; the estimate was about 64 and 75
+      minutes), the job's peak memory 2.515 GiB (84.3%) inside the stage. One finding
+      on 8 survivors: momentum `ab29`'s `lookback` 60 -> 48 drops its Sharpe from
+      1.53 to 0.20. The other seven hold on every neighbour run. Every survivor is
+      negative on the holdout, the stable seven included, so on this run the check
+      does not separate what held up later from what did not. 12 of the 16 not built
+      sit at the edge of their declared range (the draws' short value lists put
+      settings on the bounds); 4 are a zero with no range (the box below).
 - [ ] Before `enforce`: the two thresholds (half the own Sharpe, a floor of 0.0) are
       the gate's defaults and have not been measured against anything. The regime
       gate's floor of -1.0 raised nothing on seven strategies that lose on bear days;
@@ -3267,11 +3335,14 @@ What changed under Step 1 since it was written:
       What Monte Carlo, the regime gate, the shocks and the overfitting gate said about
       the eight survivors is in section 5, "The baseline rerun with the gate report".
       The R13 decision was taken 2026-11-23 (build now, report only): see R13.
-- [ ] The composite-grid baseline (the 2026-11-06 boxes: all 652 skeletons by `grid`,
-      and `random` with `n_samples: 50`), designed from the run's measured numbers.
-      Needs, as read today: a way for the hook to take a candidate set, results not kept
-      for every candidate (or the grid split into jobs), and R3 for a job longer than a
-      night. Not started; its design goes to the user first.
+- **Moved to Step 1b (task 4) by the user, 2026-11-24:** the composite-grid baseline
+  (the 2026-11-06 boxes: all 652 skeletons by `grid`, and `random` with
+  `n_samples: 50`). Asked against running it here as written, and against dropping it.
+  Why: Step 1b's audit asks what decides the run's shape (which candidates can never
+  trade, what can be rejected without a simulation), and the run as written is about
+  14 hours of stage 1 alone on B (652 simulations at the 79 seconds measured for a
+  nine-month run; an estimate, not measured). With that, this step has no open box and
+  closes with the baseline run of 2026-11-24.
 
 The 2026-11-06 version:
 
@@ -3300,7 +3371,7 @@ The 2026-11-06 version:
 **Verify:** the run completes end to end on B against pulled Parquet (no Alpaca call), the
 summary JSON lands under `artifacts/worker/`, and the numbers are in section 5.
 
-### Step 1b — Generation system review (not started; added 2026-11-15)
+### Step 1b — Generation system review (started 2026-11-24: audit read, findings G1 to G8 open, decisions next; added 2026-11-15)
 
 User, 2026-11-15: "the strategy generation and structure of the generation system needs
 overhauling/update"; not urgent, later in this sprint. What the plan had before this
@@ -3316,29 +3387,358 @@ real bars): 2 of 30 never traded; 20 of 30 lost money at the old cost and 24 of 
 1 basis point; 2 survive the funnel. So most of the simulation budget goes on candidates
 that were never viable.
 
-Read-only audit first, then findings become boxes here, as in Step 0:
+**Task list (agreed with the user 2026-11-24).** In this order:
 
-- [ ] Map the system as built: `research/strategy_generation/` (engine, the three
+1. Read the baseline: why every survivor lost money on the holdout.
+2. The audit: the six read-only boxes below. Started 2026-11-24.
+3. Options for the user, in plain terms, one decision at a time, before any code. The
+   design decisions about the search (what is generated, what is rejected before a
+   simulation, what a run hands the next, which search method) are taken here.
+4. The composite-grid baseline, in the shape tasks 1 to 3 give it (came from Step 1).
+5. Revise Step 2's design or confirm it.
+
+- [x] Task 1. Read the baseline of 2026-11-23 from its saved result files, no new run:
+      30 entered, 8 passed stage 1, the five stages after it dropped none of the 8, and
+      all 8 lost money on the holdout (median Sharpe 2.03 on evaluation, -1.60 on the
+      holdout). Which of three readings holds: the holdout months were bad for
+      everything (buy and hold of the same names over the same three windows would
+      show it; no such number is in the results log); the 8 were the lucky ones of 30;
+      or the gates after stage 1 do not tell strategies apart. Each leads somewhere
+      else. Also: name the numbers Step 2 has to beat (for instance the median holdout
+      Sharpe of the survivors, survivors per 100 candidates, simulation time per
+      survivor).
+      **Read 2026-11-24.** Buy and hold of the dataset's 31 names (equal weight,
+      rebalanced daily, raw closes, no costs; `~/rehearsals/buy_and_hold.py` run in
+      the worker image on B, output `~/rehearsals/buy_and_hold_20261124.txt`):
+      selection 22.3% / Sharpe 1.20, evaluation 36.1% / 2.67 (folds 2.64, 0.71, 4.50),
+      holdout -1.8% / -0.10. Its 30% one-day rule takes three jumps as corporate
+      actions and counts them flat: NFLX 2025-11-17 -90.1% (the split), ORCL
+      2025-09-10 +35.9% (likely a real move, so the benchmark is if anything low),
+      MRVL 2026-06-02 +32.5% (not checked). The three readings: (a) the holdout was
+      bad for everything: partly, the market was flat (-0.10) but the survivors'
+      median is -1.60; (b) the 8 were the lucky ones of 30: supported, none of the 30
+      beat buy and hold on selection (best 10.1% against 22.3%) and the survivors'
+      median evaluation Sharpe 2.03 is below the market's 2.67; (c) the gates after
+      stage 1 do not tell strategies apart: supported, they dropped none of the 8,
+      and five of the 8 make under 0.35 bp a trade (G8). Opened from it: G9.
+      Numbers Step 2 has to beat (from the 2026-11-23 baseline): median holdout
+      Sharpe of the survivors -1.60, and buy and hold's -0.10; 8 survivors per 30
+      candidates, about 4 behaviours (G8); median survivor evaluation Sharpe 2.03
+      against buy and hold's 2.67. Simulation time per survivor: 20.8 minutes (the
+      2026-11-24 run, seven stages: 9,984 s for 8 survivors of 30, 132 simulations).
+
+Read-only audit first (task 2), then findings become boxes here, as in Step 0:
+
+How the audit was done (2026-11-24): the code was read by a reading agent against these
+six questions; then the claims that carry a finding were checked again by reading the
+lines and by running the hook's own draw on the laptop (nothing written). Below, "run"
+means that draw was run, "read" means the lines were read in the second pass, and
+"reported" means the first pass said it and it was not checked again.
+
+- [x] Map the system as built: `research/strategy_generation/` (engine, the three
       generators, `composite_generation.py`, the cache), who calls it (replay hook,
       `run-experiment`, the worker), and how many candidates each caller asks for and
       from which families.
-- [ ] How the replay hook picks its candidates (30 on the full profile, 10 on smoke): which
+      **Read 2026-11-24.** The engine (`strategy_generation_engine.py`) sends
+      `composite_rule` to `composite_generation.py` and every other family to a
+      generator (`generators/`: grid, random, evolutionary), and drops candidates with
+      the same config hash within one call. Callers: the replay hook
+      (`research_hooks.py`, `_replay_strategy_set`) asks by `random` for momentum 6,
+      mean reversion 6, moving-average crossover 6, factor 8, composite 10 (2 each on
+      smoke); the worker never calls generation, it runs a fixture that reaches the
+      hook. Reported: `run-experiment` passes one base strategy with no method, so it
+      falls back to grid, and only the `generate-strategies` CLI offers all three
+      methods.
+- [x] How the replay hook picks its candidates (30 on the full profile, 10 on smoke): which
       families, which parameters, whether the choice is fixed or varies run to run, and
       why two never trade.
-- [ ] Parameter ranges per family against the bar size and window actually used
+      **Run 2026-11-24: the draw is the same every month.** The hook hands generation
+      `{"n_samples": n}` and nothing else. The month seed
+      (`random_seed=int(tick_date.strftime("%Y%m"))`) goes to the experiment and the
+      simulations, not to the generator, whose own seed defaults to 42
+      (`GenerationOptions.seed`). Drawn twice on the laptop: the same 30 ids both
+      times, and they are the baseline's 30 ids one for one. With the month as the
+      seed (202612, by hand) the draw gives 26 candidates and shares 2 with it.
+      Why 36 draws give 30: a draw that breaks a rule of its family is thrown away and
+      not drawn again, and a draw equal to an earlier one is dropped. Momentum 6 drawn,
+      2 thrown away (`sell_below` above `buy_above`), 4 kept. Crossover 6 drawn, 3
+      thrown away (short window not below long), 1 equal, 2 kept. With seed 202612
+      crossover comes back with none of its 6.
+      The two that never trade are the factor draws `0a2d5aed` and `8c07c0ec`: both
+      have `buy_score_threshold` 1.0, the top of its range.
+- [x] Parameter ranges per family against the bar size and window actually used
       (5-minute bars, about 60 sessions): which settings cannot produce a trade or can
       only produce very high turnover.
-- [ ] What is known before simulating: can a cheap check (no trades possible, turnover
+      **Read 2026-11-24** (the ranges themselves are reported; the lines named were
+      read). Each family is drawn from two or three values a setting: momentum
+      `lookback` {10, 60} and two thresholds {-0.1, 0, 0.1}; mean reversion `window`
+      {10, 20, 100}, z thresholds {-4, -2, -0.5} and {0.5, 2, 4}; crossover `short`
+      {10, 50}, `long` {10, 30, 200}; factor four windows, two thresholds and four
+      weights {0, default, 1}. Windows are counted in 5-minute bars: 10 bars is 50
+      minutes, 200 bars about two and a half sessions.
+      - Momentum's thresholds are in dollars. `momentum()` is the price now less the
+        price `lookback` bars ago (`strategy/indicators/momentum.py`), and the
+        thresholds drawn are 10 cents either side of zero. The survivor is lookback
+        60, buy above +0.10, sell below -0.10, and trades 234 times a day.
+      - The factor family's scores are constants (momentum +1 or -1, mean reversion +1
+        or -1 only past a z of 2, volume 1 / 0 / -0.5, volatility always -0.25 when
+        there is any; `factor_based_strategy.py`). The settings drawn only weight
+        them, so a draw can ask for a score the constants cannot reach, or weight all
+        four at zero.
+      - Reported, by reasoning from the code, not measured: mean reversion at a z of 4
+        on a 10-bar window cannot be reached (the largest z ten values can give is
+        2.85); at 0.5 it trades almost every bar.
+- [x] What is known before simulating: can a cheap check (no trades possible, turnover
       above the research cap, duplicate of another candidate) reject a candidate without
       a simulation.
-- [ ] Feedback: what a run leaves behind that the next run could use (scores, clusters,
+      **Read 2026-11-24: nothing of the kind exists today.** Before a simulation a
+      candidate is checked against its family's schema and against the ids already
+      drawn in the same call. Zero trades and turnover above the cap are found by
+      stage 1, after the simulation. What a check could know without simulating, from
+      the findings here: a threshold the indicator cannot reach; a factor draw whose
+      weights cannot reach its threshold; two composites that differ only in a part
+      that never acts.
+- [x] Feedback: what a run leaves behind that the next run could use (scores, clusters,
       the bench's current members) and what uses it today (nothing, per section 1).
-- [ ] Structure: where a new family, a new operator or a new search method would plug in,
+      **Read 2026-11-24: nothing feeds back.** A run leaves scores, clusters and
+      governance rows; generation reads none of them. `StrategyGenerationCache` is
+      built into the simulation context and nothing calls it. Reported: the
+      evolutionary generator has no fitness and no selection (R9): each generation
+      copies every parent and redraws each setting with probability 0.25 from the same
+      short lists; a setting's `mutation_strategy` is declared and never read.
+- [x] Structure: where a new family, a new operator or a new search method would plug in,
       and what would have to change in three places to do it.
-- [ ] Options for the user from the above, in plain terms, before any code. Then revise
-      Step 2's design or confirm it.
+      **Reported 2026-11-24, not checked again.** A new family: its registration
+      with its settings, a schema, an implementation, and a count in the hook's
+      candidate mix; the generators pick it up from the registration. A new search
+      method: a generator class, a branch in the engine's method lookup, the CLI's
+      choices, a branch of its own for composites (they do not go through the
+      generators), and the hook's method name. A new mutation operator: one place in
+      the evolutionary generator, which has no result to work from today.
+
+Composites, read with the audit (2026-11-24). The 652 are counted again: 364 skeletons
+with one rule (182 by `voting`, 182 by `weighted_score`) and 288 with two rules (144
+`logical_and`, 144 `logical_or`). A skeleton is a whole config with nothing left to
+draw: `grid` gives all 652, `random` shuffles them with the same default seed and takes
+the first n. The baseline's three surviving composites are all "rule A or volume ratio
+high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
+`logic_or_z_20_v0_vol_r_30_hi`. The first two have the same numbers in every run.
+
+**Findings (2026-11-24), each a box; none is fixed and none is decided.**
+
+- [ ] G1. The candidates never change. The month seed does not reach generation, so
+      every month's job draws the baseline's 30 again. A monthly job as built would
+      test nothing new. The baseline fixture's header says the month changes the
+      candidates drawn; it does not. This also changes what R2's "repeated attempts"
+      box read (2026-11-24, "about 30 new candidates a month"): today it is the same
+      30 each time. To decide in task 3: what should vary from month to month.
+      **Decided by the user 2026-11-24 (task 3, with G2): repair it in this step,
+      before the grid baseline.** Pass the month seed to generation, so each month
+      draws a fresh set; the baseline of 2026-11-23 stays reproducible, its draw being
+      seed 42. Asked against keeping one fixed set until Step 2, and against leaving
+      both to Step 2. Not built; correct the fixture's header with it.
+      **Corrected by the user 2026-11-24: reproducible by commit, not by seed.** G2's
+      redraw, G4's rule and G5's template repair each change what seed 42 draws on new
+      code, so the 2026-11-23 baseline is reproduced by running the commit it ran on
+      (`38a9b2c63`, with its fixture, seed and dataset version), not by seed 42 on
+      later code. Asked against keeping a legacy draw option in the code.
+- [ ] G2. Draws that break a family's rule are thrown away and not replaced, so a family
+      returns fewer than asked: 4 of 6 momentum, 2 of 6 crossover, and with another
+      seed none of 6 crossover. Crossover has three settings that pass its rule in all.
+      **Decided by the user 2026-11-24 (with G1): repair it in this step, before the
+      grid baseline.** Draw again until the family has the number asked for or has no
+      setting left that passes its rule, and say in the summary which it was. Not built.
+- [ ] G3. Momentum's thresholds are in dollars and are documented as a return. Ten cents
+      is a different bar for a 20 dollar name and a 500 dollar one.
+      **Decided by the user 2026-11-24 (task 3): a new setting, `measure`.** The
+      momentum strategy takes `measure: price` (today's meaning, the default) or
+      `measure: return` (`rate_of_change`, a fraction); the research draw uses
+      `return`. Asked against switching the strategy to returns outright (existing ids
+      would change meaning and the 2026-11-23 baseline would not reproduce) and against
+      taking momentum out of the draw until Step 2. Read before asking: the change
+      belongs in the strategy, not in `momentum()`, because composites use `momentum`
+      and `rate_of_change` as two separate components (`mom_*`, `roc_*`); Box A's
+      active `momentum_v1` has `config_json` `{}`, so its thresholds are 0.0, where
+      price and return give the same signals, so it is unaffected. Open with it: the
+      return thresholds the draw uses, to be sized from the dataset (the spread of
+      `rate_of_change` at the drawn lookbacks on 5-minute bars), not picked by hand.
+      The neighbour check (R13) has to treat `measure` as a choice, not a number. Not
+      built.
+- [ ] G4. The factor family draws configs that cannot trade: both of the baseline's
+      zero-trade candidates. Each costs a simulation to find out.
+      **Decided by the user 2026-11-24 (task 3): a rule of the draw.** Read before
+      asking (`factor_based_strategy.py`): the score is momentum +1 / -1 (sign only),
+      mean reversion +1 at z <= -2 / -1 at z >= 2, volume +1 at ratio >= 1.5 / -0.5 at
+      <= 0.5, volatility -0.25 whenever it is above zero; so the highest score a bar
+      can give is `momentum_weight + mean_reversion_weight + volume_weight`, and a
+      config whose `buy_score_threshold` is above that can never buy. The research
+      draw treats that as breaking the family's rule, so under G2 it is drawn again.
+      Not in `FactorBasedParameters`: hand-written configs and stored rows are not
+      touched. Asked against a schema rule (stored rows that break it would fail to
+      load) and against leaving it to stage 1 (about 2.5 minutes a month, the family
+      returns 6 of 8). The check catches "can never buy" only; a reachable maximum
+      still needs all three parts at their top on one bar. To confirm when built: the
+      two zero-trade ids (`0a2d5aed`, `8c07c0ec`) fail it. Not built.
+- [ ] G5. Composites that behave the same are counted and simulated as different. The
+      template's name is part of the config, so of the id. Seen: two survivors with
+      the same numbers in every run. Reported, by reasoning, not measured: the rule
+      variants at 1.5 and 2.0 on a rate of change cannot fire (it is a fraction);
+      with one rule, `voting` and `weighted_score` decide alike; the two "regime"
+      filters (`sma_50 > 0`, `ema_50 > 0`) and the volatility filter (`< 5.0`, in
+      dollars) pass nearly always. If all of that holds, far fewer than 652 behave
+      differently. Measure it before task 4: it sets the size of the grid run.
+      **Measured 2026-11-24** (laptop, read-only; all 652 `grid` skeletons evaluated on
+      the same bars: every second 5-minute bar of April 2026, all 31 names, 21,316
+      bars, each with its 300 bars of history; composites keep no state between bars,
+      so bars can be sampled; script and output in B's `~/rehearsals/g5/`). Two
+      composites "behave the same" when their direction is equal on every bar:
+      - **324 distinct behaviours of 652** (326 with confidence counted too). By kind:
+        one-rule threshold 240 -> 47, crossover 56 -> 39, comparison 68 -> 33,
+        two-rule logic 288 -> 211. On 124 bars it was 291, so the count is near its
+        limit for this month; one month only.
+      - 56 never signal. The 80 with a rate-of-change rule at +-1.5 / +-2.0 act as 7
+        behaviours (a fraction cannot move 150% in ten bars).
+      - One-rule `voting` vs `weighted_score`: 78 pairs, all 78 identical.
+      - Regime filters (`sma_50 > 0`, `ema_50 > 0`) passed 100.00% of 2,557,920
+        checks (a price average is above zero); the volatility filter (`< 5.0`)
+        98.1% of 1,278,960.
+      - The baseline's two equal survivors (`logic_or_roc_20_v1_vol_r_10_hi`, `_v2_`)
+        are one behaviour.
+      - Seen with it: the threshold-at-zero momentum and z-score skeletons signal on
+        about 99.6% of bars.
+      **Decided by the user 2026-11-24 (task 3): repair the templates.** Fix the three
+      causes where the skeletons are made (`composite_generation.py`): the regime
+      filter compares price with its average, not the average with zero; the
+      rate-of-change thresholds are sized as fractions (as G3); single-rule skeletons
+      take one aggregator. Task 4's grid run is sized from the repaired pool, which is
+      measured again with the same script before it. Asked against a behaviour check
+      before simulating (sample-based, a pass each run; G6's ground) and against
+      recording only. Not built.
+- [x] G6. Nothing rejects a candidate before its simulation except the schema and an
+      equal id (the fourth audit box).
+      **Closed by the user 2026-11-24 (task 3): covered by G3, G4 and G5.** The exact
+      cases are fixed where they are made: thresholds an indicator cannot reach (G3,
+      G5's rate-of-change sizing), factor configs that cannot buy (G4, a rule of the
+      draw), composites that behave the same (G5, repaired templates). Left over:
+      predicting turnover above the cap from a signal pass on sampled bars; taken with
+      G8 (the high-turnover survivors passed the cap), and a signal pre-pass is to be
+      reconsidered in Step 2, where a search evaluates hundreds of candidates a run.
+      Asked against building the pre-pass now and against moving the box to Step 2
+      undecided.
+- [ ] G7. Nothing a run learns reaches the next draw; the generation cache is built and
+      never used (the fifth audit box, and R9).
+      **Decided by the user 2026-11-24 (task 3): folded into Step 2.** G1's month seed
+      ends the repetition; what is left is learning, which is Step 2's search. Taken in
+      task 5 with the fitness question (which waits for G9's benchmark numbers); the
+      cache is wired there (Step 2's "Bounds" line). Asked against wiring the cache now
+      (small saving with fresh seeds) and against closing it. The box closes when
+      task 5 has written it into Step 2.
+- [ ] G8. The baseline's eight survivors are about four behaviours: the factor survivor
+      and the three composites are within a hair of one another on every window
+      (evaluation return 17.8% to 18.5%), two of them equal. Five of the eight trade
+      139 to 278 times a day.
+      **Read 2026-11-24 from the 2026-11-24 baseline's stage 1 runs on B**
+      (`simulation_runs` + `metrics_summary`, selection window, 183 sessions; same 30
+      and same 8 as 2026-11-23). Return per trade = total return / trades (rough: no
+      compounding or size): the five fast survivors trade 181 to 311 times a day and
+      make 0.08 to 0.31 bp a trade after the 1 bp cost (composite `93a0` = `ce0a`
+      0.31, `bf32` 0.16, factor `e7d4` 0.21, momentum `ab29` 0.08); the three slow ones
+      trade 1.9 to 6.9 a day and make 2.9 to 7.7 bp (crossover `0cdb` 7.7, `bf6d` 2.9,
+      mean reversion `8ac1` 5.4). The 10x notional cap (`RESEARCH_MAX_DAILY_TURNOVER`)
+      does not see them: many small trades. Turnover itself is not stored; the filter
+      computes it and drops it. Also found: factor `4fa1` and `8919` are one behaviour
+      (only `mean_reversion_weight` 1.0, others 0; thresholds 1.0 / -1.0 and 0.5 /
+      -0.1 pick the same bars of a score that can only be -1, 0, 1).
+      **Corrected 2026-11-24, same session:** return per trade misleads here. Costs
+      are charged on the notional traded and these strategies make many small trades,
+      so dividing by the trade count makes the edge look thin. The 2026-11-23 gate
+      report's stress stage (evaluation window, costs at 2x and 3x) shows four of the
+      five fast survivors well positive at 3x (composites `ce0a` / `93a0` 13.3%,
+      `bf32` 11.9%, factor `e7d4` 12.1%); only momentum `ab29` turns negative (2.4% at
+      2x, -2.5% at 3x). Their weakness is G9 (18% to 19% against buy and hold's
+      36.1%), not costs. A first decision, "edge per trade, report-only", was taken on
+      my wrong reading and replaced.
+      **Decided by the user 2026-11-24 (task 3), two parts:**
+      - Store turnover and report net return per dollar traded, report-only: stage 1
+        keeps the daily turnover its filter already computes (today dropped after the
+        check) with the run's metrics, and the gate report shows each candidate's
+        turnover against the 10x cap and its net return per dollar traded, next to
+        the stress stage's 2x / 3x cost results. Nothing is eliminated by it. Asked
+        against withdrawing the part (the stress stage covers cost sensitivity) and
+        against keeping return per trade. Not built.
+      - G5's repair extended to factor: the factor draw puts a config in a canonical
+        form before hashing (a zero-weight part's window set to its default; buy and
+        sell thresholds moved to the score level the weights can reach that selects
+        the same bars), so one behaviour has one id and the engine's same-hash check
+        in a draw drops the repeat. Asked against leaving factor repeats. Not built.
+- [ ] G9. No gate compares a candidate with holding the same names (opened 2026-11-24
+      from task 1). Stage 1's bar is absolute (Sharpe >= 0.5, return >= 0), so in a
+      rising market a strategy that is long most of the time passes on market
+      exposure alone. None of the 30 beat buy and hold on the selection window.
+      **Decided by the user 2026-11-24 (task 3): report-only first.** Each run computes
+      buy and hold of its own universe per window (the dataset's names, the way
+      `buy_and_hold.py` does it, from the bars the run already loads), and the gate
+      report shows every candidate's excess return and information ratio on the
+      selection, evaluation and holdout windows. Enforced only after a run has shown
+      the numbers. Step 2's fitness question (task 5) is to be taken with this data.
+      (G10 below is the other question that waits for it.)
+      Asked against enforcing it in stage 1 now (all 30 would go) and against using
+      it only as Step 2's fitness. To settle when built: the corporate-action jumps
+      (the 30% rule flattens a real ORCL move; the split source the context builder
+      uses is the better input). Not built.
+- [ ] G10. Search methods are hard-wired in two places, and only one new search is
+      planned (opened 2026-11-24, from the user's question whether the generator should
+      be extended for other kinds of search). **Read 2026-11-24** (this checks the sixth
+      audit box, which was reported only): simple families go through generator classes
+      picked by an `if method == "grid" / "random" / "evolutionary"` chain
+      (`strategy_generation_engine.py`, `_generator_for_method`); composites never reach
+      them: `composite_generation.py` has its own method switch (`_selected_templates`).
+      A new search method is written twice, plus the CLI's choices and the hook's method
+      name. Step 2 plans one method (evolutionary, composites only), designed 2026-11-06
+      before the audit. Also: composites' `evolutionary` today flips `voting` and
+      `weighted_score`, which G5 measured as identical on one-rule skeletons (78 of 78),
+      so it mostly yields copies. **The open question (the user's meaning, clarified
+      2026-11-24): which search algorithms to use**, beyond the random sampling, grid
+      and in-name-only evolutionary methods of today, and so whether Step 2's
+      evolutionary design stands. Candidates named, none weighed against measurements
+      yet: evolutionary / genetic programming (structure: rules, filters, crossover;
+      needs many evaluations), Bayesian optimisation such as TPE (few expensive
+      evaluations of numeric settings; weak on structure), successive halving /
+      Hyperband as a budget wrapper (cheap short tests first, full simulations for the
+      promising; fits the staged pipeline), local search around survivors (the R13
+      neighbour builder already makes neighbours), or a combination. Constraints that
+      decide it: about 1.4 minutes per simulation on B; a mixed space (structure with
+      numbers inside); and that a stronger search on the selection window buys more
+      luck (R2's repeated attempts: the holdout and the count of attempts are the
+      guard). The code structure follows the choice: a method that learns needs a
+      propose, evaluate, propose loop, which today's two hard-wired switches cannot
+      give. **The user, 2026-11-24: not sure yet; decide after the Step 1b build rows
+      are done.** Not decided, nothing to build.
+- [x] Task 3. Options for the user from the above, in plain terms, before any code.
+      **Done 2026-11-24:** G1 to G9 each decided (G1's reproducibility wording
+      corrected; G8's first part replaced the same session after a wrong reading; G6
+      closed as covered; G7 folded into Step 2). To build before task 4: G1 + G2
+      (draw), G3 (momentum `measure`), G4 + G8 (factor rule, canonical form), G5
+      (composite templates, then measured again), G8 (turnover stored, return per
+      dollar traded), G9 (benchmark in the gate report). All report-only where they
+      touch the gates. **Not taken in task 3, although this list's item 3 names it:**
+      which search method, and where the generator is extended for other kinds of
+      search. Opened as G10 on 2026-11-24; the user chose to decide it later, after
+      the Step 1b build rows are done.
+- [ ] Task 4. The composite-grid baseline (from Step 1, 2026-11-24; the 2026-11-06
+      boxes: all 652 skeletons by `grid`, and `random` with `n_samples: 50`), designed
+      from the measured numbers and from tasks 1 to 3. Needs, as read 2026-11-22: a way
+      for the hook to take a candidate set, and results not kept for every candidate
+      (or the grid split into jobs). A job longer than a night can now be resumed (R3,
+      PR #201). To decide in task 3: all 652, a sample, or the set left after the
+      cheap rejections. Its numbers go in section 5 (the `grid` and `random n=50` rows).
+- [ ] Task 5. Revise Step 2's design or confirm it.
 
 ### Step 2 — A real evolutionary search for composites (not started)
+
+> **Under question since 2026-11-24 (G10, Step 1b):** whether the search should be
+> evolutionary at all, or another method or a mix. The design below is from 2026-11-06,
+> before the audit; it stands until G10 is decided.
 
 Replace the aggregator flip with a search that uses fitness (R9, **[7.10 #7]**). Branch
 `feat/composite-evolution`.
@@ -3386,6 +3786,11 @@ on operators, not on the gates.
 Copy the bench re-sim hand-off (`POST /api/v1/worker/...`, `worker` role, idempotent by
 `run_id`, dataset version + git SHA checked, A rejects stale or mismatched results).
 
+- [ ] Before the hand-off is switched on: the 12% drawdown kill on the backtest
+      trading path (R4's open box, deferred here by the user 2026-11-24). Until it is
+      there, the holdout numbers a batch carries are of runs that traded on through a
+      drawdown the live path would have halted. Observe-only first, then enforce;
+      safety doctrine and the rehearsal rule.
 - [ ] Contract `WorkerCandidateBatch`: run id, dataset version, git SHA, window, per
       candidate the `StrategyConfig`, search score, holdout metrics, lineage, cluster id.
 - [ ] Admission gate on A (the rotation plan's "novel or better"): correlation vs each
@@ -5026,6 +5431,7 @@ every candidate with a recorded reason.
 |---|---|---|---|---|---|---|---|---|---|---|
 | 2026-11-23 | `raw_bars_20261118T234501Z_043e50ad`, `feed=iex` | hook, full profile, admission layout (random draws over five families) | 36 drawn / 30 distinct entered | 8 after stage 1, 8 after each of the other five | 4 | no walk-forward score kept; evaluation Sharpe 2.26 / 2.03 | -1.60 (8 survivors, all negative) | -8.8% | not measured | 1 h 45 min, peak 2,493 MiB |
 | 2026-11-23, rerun | the same | the same, on `869b21114`, with the gate report | the same | the same; walk-forward's "entered" now reads 8 | 4 | the same | -1.60 (the same eight, the same numbers) | -8.8% | not measured | 1 h 42 min, peak 2,567 MiB |
+| 2026-11-24 | the same | the same, on `38a9b2c63`: seven stages (R13's neighbour check), train runs taken from stage 1 (R2) | the same | the same 8 after every stage, the neighbour check's included (report only; 1 finding) | 4 | the same | -1.60 (the same eight, the same numbers) | -8.8% | not measured | 2 h 46 min, peak 2,575 MiB (2.515 GiB), 132 simulations |
 | | | grid | | | | | | | 0% | |
 | | | random n=50 | | | | | | | 0% | |
 | | | evolutionary | | | | | | | | |
@@ -5204,3 +5610,41 @@ outside them, and it is a report.
 Found while reading it: the gate report listed an overfitting warning twice (the gate
 copies the analysis's warnings onto its verdict, and the report listed both). Fixed on
 `research/baseline-rerun-results`, with a test; the rerun's file has the repeat.
+
+### The baseline with the neighbour check (2026-11-24, `feed=iex`)
+
+The same fixture on `38a9b2c63` (PRs #200 and #201 in), started 03:00:02 UTC on the
+user's go-ahead, exit 0 at 05:46:26, 9,984 s. Dir
+`~/rehearsals/research_admission_baseline_20261124T030002Z/` on B, summary saved as
+`research_summary.json`. Compared field by field with the 2026-11-23 rerun
+(`~/rehearsals/compare_resume.py`): 71 fields equal, every holdout number included; 3
+differ, all from the new code: the gate report (a neighbour section), the
+`parameter_neighbours` stage (8 in / 8 through), `total_runs` 86 -> 132 (+54 neighbour
+runs, -8 train runs taken from stage 1).
+
+Stage times: stage 1 37 min (30 runs), walk-forward 12 min (was 23: "8 train runs taken
+from an earlier stage, not simulated"), Monte Carlo + regime 12 min, stress 22 min (16
+runs), **neighbours 75 min (54 runs)**, overfitting + holdout + wrap-up 8 min. The
+neighbour check is now the longest stage after stage 1.
+
+**The neighbour check, per survivor** (evaluation piece; a neighbour holds when it
+trades and its Sharpe is at least max(0, half the own)):
+
+| Survivor | Own Sharpe | Neighbours run / holding | Median / worst neighbour Sharpe | Fragile setting | Not built | Holdout Sharpe |
+|---|---|---|---|---|---|---|
+| momentum `ab29` | 1.53 | 3 / 2 | 1.51 / 0.20 | `lookback` (60 -> 48: 0.20) | 3 | -1.77 |
+| mean reversion `8ac1` | 2.04 | 3 / 3 | 1.80 / 1.43 | none | 3 | -0.94 |
+| crossover `bf6d` | 2.26 | 3 / 3 | 2.31 / 2.07 | none | 1 | -0.01 |
+| crossover `0cdb` | 2.14 | 2 / 2 | 2.02 / 1.98 | none | 2 | -1.29 |
+| factor `e7d4` | 1.98 | 17 / 17 | 1.98 / 1.69 | none | 3 | -1.78 |
+| composite `ce0a` | 2.03 | 10 / 10 | 2.03 / 1.95 | none | 0 | -1.60 |
+| composite `93a0` | 2.03 | 10 / 10 | 2.03 / 1.95 | none | 0 | -1.60 |
+| composite `bf32` | 1.98 | 6 / 6 | 1.99 / 1.97 | none | 4 | -1.80 |
+
+Read: seven of eight are smooth in their settings on the evaluation piece, and all
+eight lose on the holdout, so stability in the settings is not what failed here (the
+same evaluation months, read by one more gate; G9's market comparison is the reading
+that fits). Not built, 16: 12 a setting at the edge of its declared range (the draws'
+short value lists sit on the bounds, so half the neighbours fall outside), 4 a zero with
+no declared range. `ce0a` and `93a0` are one behaviour (G5) and so have the same
+neighbours' numbers.
