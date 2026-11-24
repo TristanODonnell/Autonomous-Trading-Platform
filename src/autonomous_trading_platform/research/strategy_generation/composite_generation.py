@@ -185,8 +185,16 @@ def generate_composite_rule_configs(
     summary = GenerationSummary()
     configs: list[StrategyConfig] = []
     seen: set[str] = set()
+    options = options or GenerationOptions()
+    # `random` takes the first n distinct valid skeletons of the shuffled pool (at
+    # least one, as before); grid and evolutionary take everything they are offered.
+    limit = max(1, options.n_samples) if method == "random" else None
+    if limit is not None:
+        summary.requested_count = limit
 
-    for template in _selected_templates(method=method, options=options or GenerationOptions()):
+    for template in _selected_templates(method=method, options=options):
+        if limit is not None and summary.accepted_count >= limit:
+            break
         summary.generated_count += 1
         try:
             _validate_template_components(template)
@@ -214,6 +222,8 @@ def generate_composite_rule_configs(
         summary.family_distribution["composite"] += 1
         configs.append(config)
 
+    if limit is not None and summary.accepted_count < limit:
+        summary.exhausted = True
     return configs, summary
 
 
@@ -226,10 +236,12 @@ def _selected_templates(
     if method == "random":
         import random
 
+        # The whole shuffled pool is offered; the caller stops at the number asked for,
+        # so a skeleton that fails validation is replaced by the next one (plan G2).
         rng = random.Random(options.seed)
         shuffled = list(templates)
         rng.shuffle(shuffled)
-        yield from shuffled[: max(1, min(options.n_samples, len(shuffled)))]
+        yield from shuffled
         return
     if method == "evolutionary":
         yield from templates

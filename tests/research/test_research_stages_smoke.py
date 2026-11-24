@@ -519,7 +519,7 @@ def test_research_hook_runs_with_smoke_profile(
 ) -> None:
     import autonomous_trading_platform.application.services.platform_replay.research_hooks as rh
 
-    monkeypatch.setattr(rh, "_replay_strategy_set", lambda *, smoke: _MINIMAL_STRATEGY_SET)
+    monkeypatch.setattr(rh, "_replay_strategy_set", lambda *, smoke, seed: _MINIMAL_STRATEGY_SET)
 
     result = rh.run_scheduled_research_at_timestamp(
         session=db_session,
@@ -553,7 +553,7 @@ def test_the_research_step_run_again_with_reuse_reads_its_runs_back(
     import autonomous_trading_platform.application.services.platform_replay.research_hooks as rh
     from autonomous_trading_platform.research.simulation import completed_run_reuse
 
-    monkeypatch.setattr(rh, "_replay_strategy_set", lambda *, smoke: _MINIMAL_STRATEGY_SET)
+    monkeypatch.setattr(rh, "_replay_strategy_set", lambda *, smoke, seed: _MINIMAL_STRATEGY_SET)
     monkeypatch.setenv("GIT_SHA", "3" * 40)
     completed_run_reuse.code_version.cache_clear()
 

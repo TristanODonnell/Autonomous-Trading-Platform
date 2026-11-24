@@ -28,6 +28,11 @@ class GenerationOptions:
 class GenerationSummary:
     generated_count: int = 0
     accepted_count: int = 0
+    # How many configs were asked for, and whether the generator ran out of distinct
+    # valid settings before reaching that number (plan G2). Set by the random
+    # generator and by the composite random draw; 0 / False where nothing was asked.
+    requested_count: int = 0
+    exhausted: bool = False
     duplicate_count: int = 0
     rejected_count: int = 0
     rejection_reasons: Counter[str] = field(default_factory=Counter)
@@ -81,6 +86,8 @@ class GenerationSummary:
         return {
             "generated_count": self.generated_count,
             "accepted_count": self.accepted_count,
+            "requested_count": self.requested_count,
+            "exhausted": self.exhausted,
             "duplicate_count": self.duplicate_count,
             "rejected_count": self.rejected_count,
             "rejection_reasons": dict(sorted(self.rejection_reasons.items())),
