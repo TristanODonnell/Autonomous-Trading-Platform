@@ -389,8 +389,14 @@ def test_every_new_stage_runs_on_real_simulations(
     assert [c.strategy_id for c in result.final_survivors] == survivors
 
     # Monte Carlo: one real simulation per strategy, resampled into a real distribution.
+    # In this pipeline stage 1 read these same days (smoke), so its run is the one
+    # resampled and Monte Carlo simulates none of its own.
     mc = by_name["mc"]
-    assert len(mc.simulation_results) == len(mc.filter_outputs)
+    assert mc.simulation_results == []
+    assert len(mc.filter_outputs) == len(survivors)
+    stage_1_run = {run.strategy_id: run for run in by_name["sim"].simulation_results}
+    for sid in survivors:
+        assert mc.diagnostics[sid].reference_result is stage_1_run[sid]
     for sid in survivors:
         aggregation = mc.diagnostics[sid].mc_aggregation
         assert aggregation is not None
@@ -535,6 +541,46 @@ def test_research_hook_runs_with_smoke_profile(
     counts = list(funnel.values())
     for earlier, later in zip(counts, counts[1:], strict=False):
         assert later["entered"] == earlier["passed"]
+
+
+def test_the_research_step_run_again_with_reuse_reads_its_runs_back(
+    smoke_data_root, pit_universe, db_session, replay_context, monkeypatch
+) -> None:
+    """The whole research step twice on one database, as a resumed job runs it (plan
+    R3): the second time every simulation of the pipeline is read back, and the step
+    reports what it reported the first time. Everything the step writes besides its
+    runs (the experiment, governance rows) is written a second time without harm."""
+    import autonomous_trading_platform.application.services.platform_replay.research_hooks as rh
+    from autonomous_trading_platform.research.simulation import completed_run_reuse
+
+    monkeypatch.setattr(rh, "_replay_strategy_set", lambda *, smoke: _MINIMAL_STRATEGY_SET)
+    monkeypatch.setenv("GIT_SHA", "3" * 40)
+    completed_run_reuse.code_version.cache_clear()
+
+    def step(**kwargs):
+        return rh.run_scheduled_research_at_timestamp(
+            session=db_session,
+            timestamp=_TICK_TS,
+            replay_context=replay_context,
+            dataset_version_id=_DATASET_VERSION_ID,
+            research_options={"profile": "smoke"},
+            **kwargs,
+        )
+
+    try:
+        first = step()
+        second = step(reuse_completed_runs=True)
+    finally:
+        completed_run_reuse.code_version.cache_clear()
+
+    assert first.status == "ok", first.errors
+    assert second.status == "ok", second.errors
+    assert first.summary["total_runs"] > 0
+    # Not asked for: the summary says so, and does not say "none were read back".
+    assert first.summary["runs_reloaded"] is None
+    assert second.summary["runs_reloaded"] == second.summary["total_runs"]
+    for key in ("total_runs", "stage_funnel", "gate_report", "top_strategy_id", "cluster_count"):
+        assert second.summary[key] == first.summary[key], key
 
 
 def test_governance_source_run_is_the_full_window_run(

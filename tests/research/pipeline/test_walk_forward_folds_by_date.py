@@ -111,6 +111,16 @@ def _dates(requests: list[SimulationRunRequest], role: str) -> list[tuple[date, 
     return [(r.start_date, r.end_date) for r in requests if r.window_role == role]
 
 
+def _roles(requests: list[SimulationRunRequest]) -> list[str]:
+    return [r.window_role or "" for r in requests]
+
+
+def _folds(result: StageResult, strategy_id: str) -> list[Any]:
+    folds = result.diagnostics[strategy_id].fold_inputs
+    assert folds is not None
+    return folds
+
+
 class TestTheStageUsesTheFoldsItIsGiven:
     def test_the_folds_are_the_ones_given(self) -> None:
         config = _config()
@@ -318,3 +328,148 @@ class TestThePipelineRuleSeesTheFirstTestDay:
     def test_selection_reaching_the_first_test_day_is_refused(self) -> None:
         with pytest.raises(PipelineConfigError, match="starts its first test fold on 2024-02-01"):
             StagedPipelineConfig(stages=self._stages(TEST_1[0]))
+
+
+class TestATrainWindowAnEarlierStageAlreadyRan:
+    """In the admission layout the train window is the window stage 1 selects on, so
+    stage 1 has already simulated every strategy that reaches walk-forward over those
+    very days. The stage takes that run and judges it with its own train filter (plan
+    R2, the saving on the train run)."""
+
+    @staticmethod
+    def _select(
+        runner: ScriptedRunner,
+        strategies: list[str],
+        *,
+        end: date = TRAIN[1],
+        symbols: list[str] | None = None,
+    ) -> StageResult:
+        stage = SimulationStage(
+            stage_config=SimulationStageConfig(
+                name="select",
+                start_date=START,
+                end_date=end,
+                symbols=symbols or SYMBOLS,
+                filter_config=PERMISSIVE,
+                scoring_weights=ScoringWeights(),
+                max_workers=1,
+            ),
+            simulation_runner=runner,  # type: ignore[arg-type]
+        )
+        return _run(stage, [_cfg(sid) for sid in strategies])
+
+    @staticmethod
+    def _walk_forward(
+        runner: ScriptedRunner,
+        earlier: list[StageResult],
+        strategies: list[str],
+        **config: Any,
+    ) -> tuple[StageResult, list[SimulationRunRequest]]:
+        """The stage's result and the simulations it asked for."""
+        stage = WalkForwardStage(
+            stage_config=_config(**config),
+            simulation_runner=runner,  # type: ignore[arg-type]
+        )
+        stage.bind_prior_results(earlier)
+        asked_before = len(runner.requests)
+        return _run(stage, [_cfg(sid) for sid in strategies]), runner.requests[asked_before:]
+
+    def test_the_earlier_run_is_the_train_run_and_none_is_simulated(self) -> None:
+        runner = ScriptedRunner(_script({}))
+        selected = self._select(runner, ["a", "b"])
+        own_run = {run.strategy_id: run for run in selected.simulation_results}
+
+        result, asked = self._walk_forward(runner, [selected], ["a", "b"])
+
+        assert sorted(set(_roles(asked))) == [
+            "fold_0_test",
+            "fold_1_test",
+            "fold_2_test",
+        ]
+        assert len(asked) == 6
+        for sid in ("a", "b"):
+            folds = _folds(result, sid)
+            assert len(folds) == 3
+            assert {fold.train_return for fold in folds} == {
+                float(own_run[sid].return_metrics.total_return)
+            }
+        # The earlier run is the earlier stage's simulation. Here it has a verdict,
+        # one for each strategy, beside the three test verdicts.
+        assert len(result.simulation_results) == 6
+        assert not any(run is own for run in result.simulation_results for own in own_run.values())
+        assert len(result.filter_outputs) == 2 * (1 + 3)
+        assert [c.strategy_id for c in result.survivors] == ["a", "b"]
+
+    def test_the_stage_says_what_it_says_when_it_simulates_the_train_run_itself(self) -> None:
+        losing = {"b": [TRAIN], "c": [TEST_1], "d": [TEST_1, TEST_2]}
+        strategies = ["a", "b", "c", "d"]
+        runner = ScriptedRunner(_script(losing))
+        selected = self._select(runner, strategies)
+
+        taken, asked = self._walk_forward(runner, [selected], strategies)
+        simulated, _ = _run_stage(losing, strategies)
+
+        assert not [role for role in _roles(asked) if role.endswith("_train")]
+        assert [c.strategy_id for c in taken.survivors] == ["a", "c"]
+        assert [c.strategy_id for c in simulated.survivors] == ["a", "c"]
+        assert taken.diagnostics.keys() == simulated.diagnostics.keys()
+        for sid in strategies:
+            assert _folds(taken, sid) == _folds(simulated, sid)
+        assert [(o.strategy_id, o.filter_result.passed) for o in taken.filter_outputs] == [
+            (o.strategy_id, o.filter_result.passed) for o in simulated.filter_outputs
+        ]
+
+    def test_the_stages_own_train_filter_judges_the_earlier_run(self) -> None:
+        """Stage 1 let it through; this stage's train filter does not."""
+        runner = ScriptedRunner(_script({"b": [TRAIN]}))
+        selected = self._select(runner, ["a", "b"])
+        assert [c.strategy_id for c in selected.survivors] == ["a", "b"]
+
+        result, asked = self._walk_forward(runner, [selected], ["a", "b"])
+
+        assert not [role for role in _roles(asked) if role.endswith("_train")]
+        assert [c.strategy_id for c in result.survivors] == ["a"]
+        assert not any(fold.train_passed for fold in _folds(result, "b"))
+
+    def test_only_a_strategy_with_an_earlier_run_is_spared_the_simulation(self) -> None:
+        runner = ScriptedRunner(_script({}))
+        selected = self._select(runner, ["a"])
+
+        result, asked = self._walk_forward(runner, [selected], ["b", "a"])
+
+        assert [
+            (r.strategy_id, r.window_role) for r in asked if "train" in (r.window_role or "")
+        ] == [("b", "fold_0_train")]
+        assert [c.strategy_id for c in result.survivors] == ["b", "a"]
+        assert all(len(_folds(result, sid)) == 3 for sid in ("a", "b"))
+        # The run simulated here is listed; the one taken is not.
+        assert len(result.simulation_results) == 1 + 6
+        # One taken and one simulated: the verdicts are the ones, in the order, of a
+        # stage that simulated both.
+        simulated, _ = _run_stage({}, ["b", "a"])
+        assert [(o.strategy_id, o.filter_result.passed) for o in result.filter_outputs] == [
+            (o.strategy_id, o.filter_result.passed) for o in simulated.filter_outputs
+        ]
+
+    @pytest.mark.parametrize(
+        ("selection", "walk_forward"),
+        [
+            pytest.param({"end": date(2024, 1, 30)}, {}, id="a day short of the train window"),
+            pytest.param({"symbols": SYMBOLS[:1]}, {}, id="other names"),
+            pytest.param({}, {"universe_timeline_version": "a_timeline"}, id="another universe"),
+        ],
+    )
+    def test_a_run_over_other_days_or_another_universe_is_not_taken(
+        self, selection: dict[str, Any], walk_forward: dict[str, Any]
+    ) -> None:
+        runner = ScriptedRunner(_script({}))
+        selected = self._select(runner, ["a"], **selection)
+
+        _, asked = self._walk_forward(runner, [selected], ["a"], **walk_forward)
+
+        assert _dates(asked, "fold_0_train") == [TRAIN]
+
+    def test_a_stage_with_nothing_before_it_simulates_its_train_run(self) -> None:
+        _, asked = self._walk_forward(ScriptedRunner(_script({})), [], ["a"])
+
+        assert _dates(asked, "fold_0_train") == [TRAIN]
