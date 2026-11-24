@@ -693,7 +693,9 @@ class TestRegistry:
         return cast(SimulationRunner, ScriptedRunner(_all_weather))
 
     def test_new_stage_types_registered(self) -> None:
-        assert {"regime", "stress", "overfitting"} <= set(StageRegistry.registered_types())
+        assert {"regime", "stress", "neighbour", "overfitting"} <= set(
+            StageRegistry.registered_types()
+        )
 
     def test_load_from_yaml_dicts(self) -> None:
         runner = self._runner()

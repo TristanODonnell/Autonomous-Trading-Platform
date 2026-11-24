@@ -96,6 +96,9 @@ class _ResearchWindow:
     gate_run_clears_filter True = the one run over gates_start to end_date (Monte
                            Carlo's base run) must itself clear the walk-forward
                            filter, besides its resampled paths
+    neighbour_check        True = after stress, each survivor is re-run with one
+                           setting moved a little, each way, over gates_start to
+                           end_date (plan R13; report only)
     """
 
     start_date: date
@@ -104,6 +107,7 @@ class _ResearchWindow:
     gates_start: date
     fold_layout: Mapping[str, Any] | None
     gate_run_clears_filter: bool = False
+    neighbour_check: bool = False
 
 
 def run_research_at_timestamp(
@@ -651,6 +655,10 @@ def _build_replay_experiment_definition(
         MonteCarloStage,
         MonteCarloStageConfig,
     )
+    from autonomous_trading_platform.research.pipeline.stages.neighbour_stage import (
+        NeighbourStage,
+        NeighbourStageConfig,
+    )
     from autonomous_trading_platform.research.pipeline.stages.overfitting_stage import (
         OverfittingStage,
         OverfittingStageConfig,
@@ -948,7 +956,29 @@ def _build_replay_experiment_definition(
             )
         )
 
-        # Stage 6 — overfitting: no simulations; combines WF/MC/regime evidence.
+        # Parameter neighbours (admission layout only): each survivor re-run with
+        # one setting moved a little, down and up, over the same days as the gates
+        # above. Report only: the thresholds are the gate's defaults and have not
+        # been measured against anything; every neighbour's numbers are recorded.
+        # Up to two simulations per setting per survivor, so it sits after the
+        # stages that eliminate. Its verdict is not handed to the overfitting
+        # stage below as parameter fragility: that would move a score other code
+        # reads.
+        if window.neighbour_check:
+            stages.append(
+                NeighbourStage(
+                    stage_config=NeighbourStageConfig(
+                        name="parameter_neighbours",
+                        symbols=symbols,
+                        universe_timeline_version=universe_timeline_version,
+                        start_date=window.gates_start,
+                        end_date=end_date,
+                    ),
+                    simulation_runner=simulation_runner,
+                )
+            )
+
+        # Last stage — overfitting: no simulations; combines WF/MC/regime evidence.
         # Report only (enforce=False): on the lookback window the walk-forward
         # evidence is two folds at most, and on real bars the gate changed no
         # outcome. The score and findings are recorded; nobody is eliminated.
@@ -1141,6 +1171,10 @@ def _admission_research_window(layout: AdmissionWindowLayout) -> _ResearchWindow
         fold_layout={"folds": folds, "min_folds_passed": MIN_TEST_FOLDS_PASSED},
         # The other half of the pass rule: the evaluation piece as one record.
         gate_run_clears_filter=True,
+        # Decided 2026-11-23: every setting, one at a time, report only. Not in the
+        # lookback layout, whose jobs run research every month of a long backtest:
+        # whether they should pay for it has not been asked.
+        neighbour_check=True,
     )
 
 

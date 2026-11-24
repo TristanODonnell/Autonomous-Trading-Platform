@@ -14,6 +14,8 @@ MonteCarloStage   — one run per survivor, its equity curve resampled N times
 RegimeStage       — one run per survivor, gated on per-regime performance
                     using the auto-classified regime labels
 StressStage       — equity-curve shock scenarios + cost-multiplier re-runs
+NeighbourStage    — re-runs each survivor with one setting moved a little,
+                    down and up, and records whether the result holds
 OverfittingStage  — no simulations; gates on evidence produced by earlier
                     stages (fold degradation, MC resampling, regime spread)
 
@@ -55,6 +57,9 @@ if TYPE_CHECKING:
     from autonomous_trading_platform.research.pipeline.aggregation.monte_carlo_aggregator import (
         MonteCarloAggregation,
     )
+    from autonomous_trading_platform.research.pipeline.gates.neighbour_gate import (
+        NeighbourGateVerdict,
+    )
     from autonomous_trading_platform.research.pipeline.gates.overfitting_gate import (
         OverfittingGateVerdict,
     )
@@ -84,6 +89,8 @@ class StageDiagnostics:
     regime_profile      Regime-conditioned performance profile.
     regime_verdict      RegimeStage gate decision and reasons.
     stress_verdict      StressStage gate decision and reasons.
+    neighbour_verdict   NeighbourStage gate decision: every neighbour's run, the
+                        ones not built, and the settings found fragile.
     overfitting_result  OverfittingStage analysis.
     overfitting_verdict OverfittingStage gate decision, findings and whether enforced.
     reference_result    Full-window run that best represents the strategy
@@ -95,6 +102,7 @@ class StageDiagnostics:
     regime_profile: StrategyRegimeProfile | None = None
     regime_verdict: RegimeGateVerdict | None = None
     stress_verdict: StressGateVerdict | None = None
+    neighbour_verdict: NeighbourGateVerdict | None = None
     overfitting_result: OverfittingAnalysisResult | None = None
     overfitting_verdict: OverfittingGateVerdict | None = None
     reference_result: SimulationRunResult | None = None

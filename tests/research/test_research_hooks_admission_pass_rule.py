@@ -73,6 +73,7 @@ TICK = HOLDOUT_START + timedelta(days=30)
 TICK_TS = datetime.combine(TICK, time(21, 0), tzinfo=UTC)
 
 MONTE_CARLO = "monte_carlo_structural_robustness"
+NEIGHBOURS = "parameter_neighbours"
 STRATEGIES = ["steady", "small_loss", "deep_drawdown", "net_loss", "one_good_fold"]
 GAIN, LARGE_GAIN, SMALL_LOSS, HEAVY_LOSS = 0.003, 0.010, -0.001, -0.010
 # The return per day in (fold 1, fold 2, fold 3); a strategy not named gains in all three.
@@ -194,6 +195,7 @@ def test_every_stage_ran_in_order(run: _Run) -> None:
         MONTE_CARLO,
         "regime_robustness",
         "stress_robustness",
+        NEIGHBOURS,
         "overfitting_gate",
     ]
     # All five gained on the selection piece, so all five reach walk-forward.
@@ -311,6 +313,7 @@ def test_the_pipeline_is_handed_the_holdout_date_and_no_stage_reaches_it(run: _R
         MONTE_CARLO: evaluation.last,
         "regime_robustness": evaluation.last,
         "stress_robustness": evaluation.last,
+        NEIGHBOURS: evaluation.last,
         # Runs no simulation: it reads the evidence of the stages before it.
         "overfitting_gate": None,
     }
@@ -327,7 +330,13 @@ def test_each_stage_answers_to_the_holdout_rule(run: _Run) -> None:
         issues = pipeline_issues(stages, holdout_start=holdout_start)
         return [issue.split("'")[1] for issue in issues if "the holdout starts on" in issue]
 
-    gates = ["walk_forward_robustness", MONTE_CARLO, "regime_robustness", "stress_robustness"]
+    gates = [
+        "walk_forward_robustness",
+        MONTE_CARLO,
+        "regime_robustness",
+        "stress_robustness",
+        NEIGHBOURS,
+    ]
     assert named(run.layout.evaluation.last) == gates
     assert named(run.layout.evaluation.last + timedelta(days=1)) == []
     assert named(run.layout.selection.last) == ["initial_quality_filter", *gates]
@@ -464,7 +473,7 @@ def test_a_holdout_that_cannot_be_run_does_not_fail_the_step(run: _Run) -> None:
 
 
 # --------------------------------------------------------------------------------------
-# The gate report: what each of the six stages said, written down for the summary
+# The gate report: what each of the stages said, written down for the summary
 # --------------------------------------------------------------------------------------
 
 STAGE_NAMES = [
@@ -473,6 +482,7 @@ STAGE_NAMES = [
     MONTE_CARLO,
     "regime_robustness",
     "stress_robustness",
+    NEIGHBOURS,
     "overfitting_gate",
 ]
 
@@ -575,6 +585,76 @@ def test_the_gate_report_carries_the_gates_that_remove_nobody(run: _Run, gate_re
         )
         assert stress["cost_survival_rate"] == 1.0
         assert stress["shocks"] and stress["shock_survival_rate"] is not None
+
+
+# --------------------------------------------------------------------------------------
+# The neighbours of the admitted (plan R13): each re-run with one setting moved a little
+# --------------------------------------------------------------------------------------
+
+
+def test_the_admitted_are_each_re_run_with_one_setting_moved(run: _Run) -> None:
+    """``steady`` and ``small_loss`` have the same settings here (5 and 20 bars), so
+    they have the same four neighbours, and each is run once."""
+    evaluation = run.layout.evaluation
+    asked = [r for r in run.runner.requests if r.window_role == "neighbour"]
+
+    assert sorted(
+        (
+            r.strategy_config["parameters"]["short_window"],
+            r.strategy_config["parameters"]["long_window"],
+        )
+        for r in asked
+    ) == [(4, 20), (5, 16), (5, 24), (6, 20)]
+    assert all((r.start_date, r.end_date) == (evaluation.first, evaluation.last) for r in asked)
+    assert all(r.stage_name == NEIGHBOURS for r in asked)
+    # Each survivor's own run over those days is Monte Carlo's, not simulated again.
+    assert "neighbour_base" not in {r.window_role for r in run.runner.requests}
+    # Nobody that was eliminated earlier has a neighbour run.
+    assert run.stage[NEIGHBOURS].n_entered == 2
+
+
+def test_no_run_under_a_strategys_id_has_settings_other_than_its_own(run: _Run) -> None:
+    """A run's config is stored under the run's strategy id: a neighbour run under the
+    id of the strategy it came from would overwrite that strategy's settings."""
+    own = [r for r in run.runner.requests if r.strategy_id in STRATEGIES]
+    others = [r for r in run.runner.requests if r.strategy_id not in STRATEGIES]
+
+    assert own and others
+    for request in own:
+        assert request.strategy_config["parameters"] == _cfg(request.strategy_id).parameters
+        assert request.window_role != "neighbour"
+    assert {r.window_role for r in others} == {"neighbour"}
+
+
+def test_a_neighbour_is_never_admitted_and_is_no_strategy_of_the_report(
+    run: _Run, gate_report: dict
+) -> None:
+    assert run.survivors(NEIGHBOURS) == ["steady", "small_loss"]
+    assert set(run.stage[NEIGHBOURS].diagnostics) == {"steady", "small_loss"}
+    assert [c.strategy_id for c in run.result.final_survivors] == ["steady", "small_loss"]
+    assert {record["strategy_id"] for record in gate_report["strategies"]} == set(STRATEGIES)
+
+
+def test_the_gate_report_carries_every_neighbours_run(gate_report: dict) -> None:
+    for strategy_id in ("steady", "small_loss"):
+        entries = _entries(gate_report, strategy_id)
+        block = entries[NEIGHBOURS]["neighbours"]
+
+        assert block["enforced"] is False and block["passed"] is True
+        assert [(n["setting"], n["from"], n["to"]) for n in block["neighbours"]] == [
+            ("short_window", 5, 4),
+            ("short_window", 5, 6),
+            ("long_window", 20, 16),
+            ("long_window", 20, 24),
+        ]
+        assert block["not_built"] == []
+        # Judged against the strategy's own nine-month run, the one Monte Carlo made.
+        assert block["own_sharpe"] == entries[MONTE_CARLO]["reference_run"]["sharpe"]
+        assert block["sharpe_needed"] == pytest.approx(block["own_sharpe"] * 0.5)
+        # The script gives a strategy it does not name a gain on every day, so every
+        # neighbour holds and no setting is fragile.
+        assert (block["run"], block["holding"], block["findings"]) == (4, 4, [])
+        assert all(n["strategy_id"] not in STRATEGIES for n in block["neighbours"])
 
 
 def test_building_the_gate_report_runs_nothing_and_removes_nobody(run: _Run) -> None:

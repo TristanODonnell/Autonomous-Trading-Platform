@@ -20,8 +20,9 @@ Shape::
 ``failures`` is the stage's own verdict on the strategy, given when the stage wrote
 exactly one (walk-forward writes one per fold and window: its ``folds`` say which
 passed). The evidence keys are ``reference_run``, ``folds`` and ``folds_passed``,
-``monte_carlo``, ``regime``, ``stress`` and ``overfitting``; a stage entry carries the
-ones its stage recorded. A report-only gate has ``passed: true`` and its ``findings``.
+``monte_carlo``, ``regime``, ``stress``, ``neighbours`` and ``overfitting``; a stage
+entry carries the ones its stage recorded. A report-only gate has ``passed: true`` and
+its ``findings``.
 """
 
 from __future__ import annotations
@@ -39,6 +40,9 @@ if TYPE_CHECKING:
     from autonomous_trading_platform.research.pipeline.aggregation.monte_carlo_aggregator import (
         MetricDistribution,
         MonteCarloAggregation,
+    )
+    from autonomous_trading_platform.research.pipeline.gates.neighbour_gate import (
+        NeighbourGateVerdict,
     )
     from autonomous_trading_platform.research.pipeline.gates.overfitting_gate import (
         OverfittingGateVerdict,
@@ -146,6 +150,8 @@ def _evidence(diagnostics: StageDiagnostics) -> dict[str, Any]:
         evidence["regime"] = _regime(diagnostics.regime_verdict)
     if diagnostics.stress_verdict is not None:
         evidence["stress"] = _stress(diagnostics.stress_verdict)
+    if diagnostics.neighbour_verdict is not None:
+        evidence["neighbours"] = _neighbours(diagnostics.neighbour_verdict)
     if diagnostics.overfitting_verdict is not None:
         evidence["overfitting"] = _overfitting(diagnostics.overfitting_verdict)
     return evidence
@@ -265,6 +271,61 @@ def _stress(verdict: StressGateVerdict) -> dict[str, Any]:
     }
 
 
+def _neighbours(verdict: NeighbourGateVerdict) -> dict[str, Any]:
+    """The strategy with one setting moved a little, each way: what each run made."""
+    return {
+        "passed": verdict.passed,
+        "enforced": verdict.enforced,
+        "own_sharpe": verdict.own_sharpe,
+        # What a neighbour's Sharpe has to reach to count as holding.
+        "sharpe_needed": verdict.sharpe_needed,
+        "run": len(verdict.results),
+        "holding": sum(1 for result in verdict.results if result.holds),
+        "holding_fraction": verdict.holding_fraction,
+        "median_sharpe": verdict.median_neighbour_sharpe,
+        "worst_sharpe": verdict.worst_neighbour_sharpe,
+        "settings": [
+            {
+                "setting": check.setting,
+                "value": check.base_value,
+                "neighbours_run": check.neighbours_run,
+                "neighbours_holding": check.neighbours_holding,
+                "fragile": check.fragile,
+            }
+            for check in verdict.settings
+        ],
+        "neighbours": [
+            {
+                "setting": result.setting,
+                "direction": result.direction,
+                "from": result.base_value,
+                "to": result.value,
+                "strategy_id": result.strategy_id,
+                "holds": result.holds,
+                "sharpe": result.sharpe,
+                "total_return": result.total_return,
+                "max_drawdown": result.max_drawdown,
+                "trade_count": result.trade_count,
+            }
+            for result in verdict.results
+        ],
+        # Not run, and why: not evidence either way.
+        "not_built": [
+            {
+                "setting": skipped.setting,
+                "direction": skipped.direction,
+                "from": skipped.base_value,
+                "to": skipped.value,
+                "reason": skipped.reason,
+            }
+            for skipped in verdict.skipped
+        ],
+        "findings": list(verdict.findings),
+        "failure_reasons": list(verdict.failure_reasons),
+        "warnings": list(verdict.warnings),
+    }
+
+
 def _overfitting(verdict: OverfittingGateVerdict) -> dict[str, Any]:
     analysis = verdict.analysis
     indicators = analysis.indicators
@@ -356,6 +417,12 @@ def _brief(entry: dict[str, Any]) -> str:
         said.append(
             f"cost runs survived {_shown(stress['cost_survival_rate'])}, "
             f"shocks survived {_shown(stress['shock_survival_rate'])} (shocks report only)"
+        )
+    if "neighbours" in entry:
+        neighbours = entry["neighbours"]
+        said.append(
+            f"neighbours holding {neighbours['holding']}/{neighbours['run']}, "
+            f"{len(neighbours['not_built'])} not built, {_findings(neighbours)}"
         )
     if "overfitting" in entry:
         overfitting = entry["overfitting"]

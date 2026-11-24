@@ -457,6 +457,36 @@ class StressStageConfigModel(_GateWindowConfigMixin):
         return data
 
 
+class NeighbourStageConfigModel(_GateWindowConfigMixin):
+    """Validated YAML input for NeighbourStage (plan item R13)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # A neighbour holds at this share of the strategy's own Sharpe and at least the floor.
+    min_share_of_own_sharpe: float = 0.5
+    min_neighbour_sharpe: float = 0.0
+    # False = report only: findings recorded, nobody eliminated.
+    enforce: bool = False
+    # How far a setting is moved (see gates/parameter_neighbours.py).
+    window_fraction: float = 0.20
+    range_fraction: float = 0.10
+    unranged_fraction: float = 0.20
+
+    @field_validator("min_share_of_own_sharpe")
+    @classmethod
+    def _share_valid(cls, v: float) -> float:
+        if not (0.0 <= v <= 1.0):
+            raise ValueError(f"min_share_of_own_sharpe must be in [0, 1], got {v}")
+        return v
+
+    @field_validator("window_fraction", "range_fraction", "unranged_fraction")
+    @classmethod
+    def _fraction_valid(cls, v: float) -> float:
+        if not (0.0 < v < 1.0):
+            raise ValueError(f"a nudge fraction must be in (0, 1), got {v}")
+        return v
+
+
 class OverfittingStageConfigModel(BaseModel):
     """Validated YAML input for OverfittingStage (runs no simulations)."""
 

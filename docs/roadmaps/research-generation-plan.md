@@ -156,6 +156,16 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > a wide margin; the regime gate had labels and raised nothing, with seven of
 > the eight losing on bear days; the overfitting gate raised nothing and its
 > parameter-fragility input is empty. Next: the R13 decision, with the user.
+>
+> **Update 2026-11-23, night.** The rerun's results merged as PR #199
+> (`a5d901162`), on A and B, checked 23:50 UTC. **R13 decided by the user:
+> build the neighbour check now, report only, every setting moved one at a
+> time.** Built on `research/r13-neighbour-check` (not merged): a seventh
+> stage in the admission layout, between stress and overfitting, and a
+> section for it in the gate report. It eliminates nobody, so the baseline
+> stands and no rerun is needed to merge it; its first real numbers come
+> with the next run on B. Still to ask the user: R2's repeated-attempts
+> box; then R3 with R2's train-run saving; then one run on B for the lot.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
 
@@ -174,7 +184,7 @@ section 3: done, then still open.
 |---|---|---|---|---|---|
 | 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 19 done, 1 open (the hook layout's own piece boxes not counted) | Built 2026-11-20 on `research/r2-hook-layout`, merged as PR #194 (`9cf5582d6`) and on A and B 2026-11-23, for a job that names the admission layout: the selection / evaluation split, folds in sessions, fold geometry, the two-part pass rule (2 of 3 folds, and the nine-month record held to the filter), and the holdout (read by no stage, which the validator checks; the final survivors reported on it in the step's summary). The rehearsal on B (piece 5) ran 2026-11-23 (exit 0, 33 minutes, peak 1,850 MiB of 3,055); nothing of the hook layout is open. Built 2026-11-22 on `research/r2-code-boxes`, merged as PR #196 (`19a26dffa`), on A and B 2026-11-23 (checked: A's app and scheduler containers and B's worker image are built from it; B rebuilt once the baseline released the job lock): the walk-forward "entered" count, a minimum test span in the walk-forward config (twelve weeks, with a named exception), and the daily-resample mode refused. Closed 2026-11-22 by the user's decisions, no code: fold count from the history available (answered by the admission layout) and longer folds (delivered by the 24-month dataset). The one box left is a later saving on the train run, not needed for correctness. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Commit and merge the three code boxes. After that R2 has no work left but one optional saving |
 | 🔴 R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 done, 5 open | All of the wiring | After package B, before Step 5 (package C). It saves time on long runs; it does not change any result |
-| 🔴 R13 | No parameter-stability check | Not decided. A decision, not work yet | 0 done, 2 open | Decide whether to build the neighbour check | The user's decision, asked once package B gives more survivors (package F) |
+| 🟡 R13 | No parameter-stability check | **Decided 2026-11-23: build now, report only, every setting one at a time.** Built on `research/r13-neighbour-check`, not merged: a seventh stage in the admission layout | 4 done, 6 open | Merge; then its first numbers on the next run on B | The user's word to commit; a run on B for the numbers |
 
 *Deferred: nothing to do until its trigger*
 
@@ -240,7 +250,7 @@ Package A is merged and deployed. Nothing is running.
 | 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
 | 🟢 D | **Test hardening (R7)** (done: merged as PR #197, `fce347f3b`, on A and B 2026-11-23) | R7 both boxes, and the R7 boxes under R10, R14 (done earlier, with R14's change) and R15: all built | Nothing | One PR: tests, and one production change for speed (the regime label join) |
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R12's slippage in fill rows, D2. R8 left this package 2026-11-16: deferred until random fills are switched on | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
-| 🔴 F | **R13** | Decide whether to build the neighbour check | The user | A decision, then maybe one PR |
+| 🟡 F | **R13** (decided 2026-11-23: build now, report only; built, not merged) | The decision and the build; six follow-ups stay open under R13 | The user's word to commit; a run on B for its first numbers | One PR |
 
 After these: Step 1 (baseline; started 2026-11-22, its first job, the hook's full profile on B, ran 2026-11-23), then Steps 2 to 5.
 
@@ -1463,6 +1473,11 @@ restarts.
       the missing units execute and the final survivors match an uninterrupted run; plus
       the two directional cases from [7.10 #3] (failed-before-crash still fails, partial
       resume keeps earlier passes).
+- [ ] Scope, found 2026-11-23 while building R13: the stress and neighbour stages run
+      their simulations through `GateSimulationRunner` (`_gate_stage_support.py`), which
+      takes no checkpoint service. In the baseline rerun stress was about 21 minutes of
+      the job, and the neighbours are estimated at more than that (R13). Decide with the
+      boxes above whether resume covers those runs too.
 - [x] Housekeeping while in the file: the replay hook's "42-day lookback" comment is
       stale, the lookback is 90 days **[7.10 #10]**. Already fixed in `e5bbab498` (the R2
       small set); ticked 2026-11-15: the comment at `research_hooks.py:487` now says 90
@@ -2332,16 +2347,74 @@ path: the spread estimate at `:64-75` is used only when a bar has no volume.
 closes, and the cost of the best strategy in the table is within the range the chosen
 assumption implies.
 
-**R13 — No stage checks parameter stability (found 2026-11-15 under R4, not decided).**
+**R13 — No stage checks parameter stability (found 2026-11-15 under R4; decided
+2026-11-23: build now, report only; built on `research/r13-neighbour-check`, not merged).**
 The analyzer exists and is unreachable from the funnel (R4 note). A strategy tuned to
 one exact setting, the commonest form of overfitting in a parameter sweep, is not
 tested for it anywhere.
-- [ ] Decide: a neighbour check in the funnel (re-simulate each survivor with each
+- [x] Decide: a neighbour check in the funnel (re-simulate each survivor with each
       parameter moved one step down and one step up, and require the result to hold),
       or leave it out and say so in the funnel's description. Cost of the first: two
       simulations per parameter per survivor, on survivors only.
-- [ ] If built: judge on the level of the neighbours' Sharpe against the strategy's own,
-      not on the analyzer's current score, which ignores the level.
+      **Decided by the user 2026-11-23: "Build now, report-only"**, and on what is
+      moved: **"Every setting, one at a time"**. What the baseline rerun added to the
+      question: the overfitting gate's parameter-fragility input was empty for all
+      eight survivors.
+- [x] If built: judge on the level of the neighbours' Sharpe against the strategy's own,
+      not on the analyzer's current score, which ignores the level. Built so: a
+      neighbour holds when it traded and its Sharpe is at least half the strategy's
+      own over the same days and at least 0.0; a setting is fragile when none of its
+      neighbours that were run holds (`gates/neighbour_gate.py`). The old analyzer is
+      not used and is still unreachable.
+- [x] The neighbours (`gates/parameter_neighbours.py`). Found on reading the generator:
+      the values research draws a setting from cannot be the step (a momentum lookback
+      is drawn from 10 or 60 bars), so the move has a rule of its own. A window or
+      lookback moves by 20% of its value, one bar at least; a number with a declared
+      range by 10% of the range (a threshold of 0.0 has no share of itself to move by);
+      a number with no declared range by 20% of its value. A neighbour that cannot be
+      built is kept with the reason and not run: outside the registry's range, refused
+      by the strategy's own validation, or no scale. The four plain families have 2 to
+      10 settings (factor-based 10). A composite declares none: its settings are its
+      indicators' parameters and the lines its rules and filters draw, 1 to 6 of them;
+      the aggregator's thresholds are wiring and are not moved (they sit just under the
+      rules' fixed confidences: moved up by a fifth, the strategy never trades). A test
+      holds every number of all 652 templates to be a setting or named as wiring.
+- [x] The stage (`stages/neighbour_stage.py`), the gate report's `neighbours` section,
+      and the hook: a seventh stage, `parameter_neighbours`, between stress and
+      overfitting, **in the admission layout only**, report only. Each survivor's own
+      run is Monte Carlo's, reused. A neighbour has its own content-hash id and is
+      never run under the id of the strategy it came from (the runner stores a run's
+      config under the run's strategy id and would overwrite it); it is never a
+      survivor and never reaches governance. Its verdict is not handed to the
+      overfitting gate as parameter fragility. Tests: 68 for the builder, the gate and
+      the stage on a scripted runner; one for the report's section; four on the hook's
+      admission pipeline; and one on the real runner, engine and database (each
+      neighbour's run stored under its own id, each survivor's stored settings still
+      its own).
+      Estimated, not measured: about 64 simulations for the baseline's eight
+      survivors, about 75 minutes at the baseline's 72 seconds a simulation.
+- [ ] Its first numbers: the next run on B (on the user's go-ahead). Record each
+      survivor's neighbours in section 5 beside its holdout Sharpe, and the stage's
+      real time and memory. The neighbours read the evaluation piece like the other
+      gates, so by themselves they say nothing about the holdout months.
+- [ ] Before `enforce`: the two thresholds (half the own Sharpe, a floor of 0.0) are
+      the gate's defaults and have not been measured against anything. The regime
+      gate's floor of -1.0 raised nothing on seven strategies that lose on bear days;
+      read the neighbours' numbers, not the count of findings.
+- [ ] Decide: the 90-day layout. It does not get the stage, so a job without the layout
+      option runs what it ran. Its jobs run research every month of a long backtest,
+      and what the stage would add to them was not worked out or asked.
+- [ ] Decide: the experiment catalogue (`strategy_catalog_service.py`) lists one row for
+      each strategy id with a run, so an experiment's strategies will include its
+      neighbours (their runs carry the window role `neighbour`). Filter them out of
+      that list, mark them, or leave them.
+- [ ] A composite's rule line at 0.0 (the trend-following threshold variant) is not
+      moved: no declared range and no scale. 880 neighbours across the pool's 652
+      templates are left out for it. The components' own parameter bounds could give
+      the scale; not read.
+- [ ] Decide after the first numbers: whether the verdict becomes the overfitting gate's
+      parameter-fragility input. It is kept out because that input moves a score the
+      intelligence layer reads.
 
 **R14 — Overfitting gate: read, never exercised (found 2026-11-15 under R4; measured,
 then made report-only, merged PR #184, deployed 2026-11-16).** Confirmed by reading: two overlapping folds at most on today's window,
@@ -3048,7 +3121,7 @@ What changed under Step 1 since it was written:
       log has 44 lines from the pipeline and the hook where the first run's had none.
       What Monte Carlo, the regime gate, the shocks and the overfitting gate said about
       the eight survivors is in section 5, "The baseline rerun with the gate report".
-      Still to do from this box: take the R13 decision to the user.
+      The R13 decision was taken 2026-11-23 (build now, report only): see R13.
 - [ ] The composite-grid baseline (the 2026-11-06 boxes: all 652 skeletons by `grid`,
       and `random` with `n_samples: 50`), designed from the run's measured numbers.
       Needs, as read today: a way for the hook to take a candidate set, results not kept
