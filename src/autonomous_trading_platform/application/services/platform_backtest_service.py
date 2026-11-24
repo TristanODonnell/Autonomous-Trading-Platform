@@ -135,6 +135,10 @@ class PlatformBacktestInputs:
     # Universe screener source for bootstrap + rotations: "alpaca_active"
     # (today's active assets) or "sp500_point_in_time" (survivorship-safe).
     universe_screener_source: str = "alpaca_active"
+    # A resumed job: the research step reads back the simulations an earlier attempt
+    # completed instead of running them again (research plan R3). Only on the
+    # database and the artifacts that attempt wrote to.
+    reuse_completed_research_runs: bool = False
 
 
 @dataclass
@@ -1048,6 +1052,7 @@ class PlatformBacktestRunner:
                         replay_context=tick_ctx,
                         dataset_version_id=backtest_dataset_version_id,
                         research_options=_job_options(inputs.scheduled_jobs_config, "research"),
+                        reuse_completed_runs=inputs.reuse_completed_research_runs,
                     )
                     tick.research = res_result.summary
                     if res_result.errors:

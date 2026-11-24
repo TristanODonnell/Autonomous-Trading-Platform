@@ -264,6 +264,9 @@ class WorkerRunService:
             inject_failures=request.inject_failures,
             output=bundle,
             no_progress=True,
+            # A resumed job keeps its database (resume implies no reset), so the
+            # research simulations its first attempt completed are there to read back.
+            reuse_research_runs=request.resume,
         )
         t0 = time.monotonic()
         try:

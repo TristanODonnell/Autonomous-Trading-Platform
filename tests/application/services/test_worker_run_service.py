@@ -87,6 +87,8 @@ def test_happy_path_runs_every_step_and_uploads_bundle_and_summary(tmp_path: Pat
     assert args.output == service.bundle_path("smoke")
     assert args.fixture == Path("fixtures/x.yaml")
     assert args.no_progress is True and args.dry_run is False
+    # A run from a clean state reads back no research simulation.
+    assert args.reuse_research_runs is False
     assert result.bundle_path is not None and result.bundle_path.exists()
 
     s = result.summary
@@ -143,6 +145,9 @@ def test_resume_keeps_checkpoint_and_skips_reset(tmp_path: Path) -> None:
     assert result.status == "ok"
     assert checkpoint.exists()
     assert reset_calls == []
+    # The database was kept, so the research step may read back the simulations the
+    # first attempt completed (research plan R3).
+    assert run.calls[0].reuse_research_runs is True
     assert result.summary["steps"]["checkpoint"] == {
         "status": "ok",
         "seconds": 0.0,
