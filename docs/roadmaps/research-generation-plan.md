@@ -208,7 +208,7 @@ proposed").
 
 | # | Item | What it is | Decision | Boxes | What is left | When |
 |---|---|---|---|---|---|---|
-| 1 | 🔴 G1 + G2 | The draw: the same 30 candidates every month (the month seed never reaches generation); a draw that breaks a family's rule is thrown away, not replaced | Pass the month seed to generation; draw again until the family has the number asked for or no valid setting is left, and say which in the summary. The 2026-11-23 baseline is reproduced by commit `38a9b2c63`, not by seed | 0 done, 2 open | Build; correct the baseline fixture's header | First: every other row changes what a draw holds |
+| 1 | 🟡 G1 + G2 (built 2026-11-24 on `research/generation-repairs`, not committed; 33 a month, November and December share 9; see G2's box) | The draw: the same 30 candidates every month (the month seed never reaches generation); a draw that breaks a family's rule is thrown away, not replaced | Pass the month seed to generation; draw again until the family has the number asked for or no valid setting is left, and say which in the summary. The 2026-11-23 baseline is reproduced by commit `38a9b2c63`, not by seed | 0 done, 2 open | Build; correct the baseline fixture's header | First: every other row changes what a draw holds |
 | 2 | 🔴 G5 | Composite templates: 324 of 652 skeletons behave differently (measured on 21,316 bars) | Repair where the skeletons are made: regime filter compares price with its average; rate-of-change thresholds sized as fractions; one aggregator for single-rule skeletons | 0 done, 1 open | Build; measure the repaired pool again with `g5_measure.py` (B's `~/rehearsals/g5/`) | Before task 4: it sets the grid run's size |
 | 3 | 🔴 G3 | Momentum's thresholds are in dollars | New setting `measure` (`price` default, `return` for the research draw); the neighbour check treats it as a choice | 0 done, 1 open | Build; size the return thresholds from the dataset | With row 2 (same unit problem) |
 | 4 | 🔴 G4 + G8 (factor) | Factor configs that can never buy; factor configs that are one behaviour under two ids | A rule of the draw (buy threshold above the reachable score is invalid, redrawn under G2); a canonical form before hashing (zero-weight windows to default, thresholds to the reachable score level) | 0 done, 2 open (G4, G8's second part) | Build; confirm the two zero-trade ids fail the rule and `4fa1` / `8919` get one id | After row 1 (uses its redraw) |
@@ -3548,6 +3548,36 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       **Decided by the user 2026-11-24 (with G1): repair it in this step, before the
       grid baseline.** Draw again until the family has the number asked for or has no
       setting left that passes its rule, and say in the summary which it was. Not built.
+      **G1 + G2 built 2026-11-24 on `research/generation-repairs` (off main
+      `4419c04cf`), not committed.** The hook hands every family the research month
+      as `seed` (`_replay_strategy_set(smoke, seed)`; the same `month_seed` the
+      simulations use). The random generator draws without replacement: every
+      combination listed once, shuffled by the seed, walked until `n_samples` distinct
+      valid configs or the list is used up (`GenerationSummary.requested_count`,
+      `exhausted`; the engine now also carries the generator's repeat count). The
+      composite random draw walks the whole shuffled pool and stops at n (the same
+      skeletons as the old slice while none is rejected). The orchestration service
+      keeps one line per family on `PipelineRunResult.generation` and logs it
+      (`Generation | <family> | asked | delivered | rejected | repeats | full count /
+      ran out of valid settings`); the research summary carries it as `generation`.
+      **Measured on the draw** (laptop, `draw_check.py`, months 2026-11 and 2026-12,
+      before / after): before, both months drew the 2026-11-23 baseline's 30 ids
+      exactly (momentum 4 of 6, crossover 2 of 6 with one repeat); after, 33 a month
+      (momentum 6, mean reversion 6, crossover 3 of 6 and `exhausted`, factor 8,
+      composites 10), November and December share 9 of 33 (crossover 3 of 3,
+      momentum 4 of 6, mean reversion 2 of 6, factor 0 of 8, composites 0 of 10), and
+      each shares 7 or 8 with the baseline. The small families cannot vary much
+      (crossover has 3 valid settings, momentum 12), so they meet the same configs
+      most months: worth knowing for R2's count of attempts. Tests: 16 new
+      (`test_draw_without_replacement.py`, `test_research_draw_by_month.py`), two
+      generation tests rewritten to the new contract, the two stub signatures in the
+      stage smoke test, and `test_stage_gates_on_real_runs.py`'s three strategies
+      pinned to the configs the old draw gave (gate tests should not move with the
+      draw; with them pinned all six pass with every expected value unchanged).
+      Mutation checks: seed not passed, caught (2 tests); no redraw, caught (3);
+      repeats not dropped, not caught: no space today has two settings that make one
+      config, so the generator's repeat check is unobservable until row 4's factor
+      canonical form; its test goes with row 4.
 - [ ] G3. Momentum's thresholds are in dollars and are documented as a return. Ten cents
       is a different bar for a 20 dollar name and a 500 dollar one.
       **Decided by the user 2026-11-24 (task 3): a new setting, `measure`.** The
