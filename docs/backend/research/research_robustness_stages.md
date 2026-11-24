@@ -15,6 +15,7 @@ initial_quality_filter → walk_forward → monte_carlo → regime → stress �
 |---|---|---|---|
 | `RegimeStage` | `regime` | Does it only work in one kind of market? | 0 when Monte Carlo ran on the same window (reuses its base run), else 1 |
 | `StressStage` | `stress` | Does it break under shocks or higher execution costs? | 1 per cost multiplier (+1 baseline if none reusable) |
+| `NeighbourStage` | `neighbour` | Is the result still there with one setting moved a little? Report only | up to 2 per setting (+1 own run if none reusable) |
 | `OverfittingStage` | `overfitting` | Do the combined fold / MC / regime signals say "curve-fit"? | 0 |
 
 The pass/fail rules are pure functions in `research/pipeline/gates/` (no simulation
@@ -95,6 +96,53 @@ Gate: every `cost_multipliers` entry produced a result **and** cost survival rat
 Sharpe `>= min_cost_sharpe` and drawdown `>= max_cost_drawdown`. A run with no
 trades does not survive (a flat curve has Sharpe 0.0), and a requested multiplier
 with no result fails the strategy. `cost_multipliers` must not be empty.
+
+### Parameter neighbours = each survivor re-run with one setting moved (plan R13)
+
+A strategy that earns at a lookback of 20 bars and loses at 16 and at 24 has found a
+coincidence in the bars. `NeighbourStage` re-runs each survivor with one setting moved
+down and with it moved up, every other setting left alone, over the stage's window.
+
+**The move** (`gates/parameter_neighbours.py`, `NudgeRule`). The values research draws
+a setting from are not steps: a momentum lookback is drawn from 10 or 60 bars. So:
+
+- a whole number (a window or a lookback) moves by 20% of its value, one bar at least;
+- a number with a declared range moves by 10% of the range (a threshold of 0.0 has no
+  share of itself to move by);
+- a number with no declared range (a composite's thresholds) moves by 20% of its
+  value, and is not moved at 0.0.
+
+A neighbour that cannot be built is not run and is kept on the verdict with the
+reason: outside the registry's declared range, refused by the strategy's own
+validation, or no scale. The research floor on windows (10 bars) is not a limit here.
+
+**What is a setting.** The plain families declare theirs in the registry: every
+tunable number. A composite is one nested template: its settings are its indicators'
+parameters and the lines its rules and filters draw. The rest is wiring and is named
+in `COMPOSITE_STRUCTURE`: input offsets, rule weights and confidences, and the
+aggregator's thresholds, which sit just under the rules' fixed confidences (moved up
+by a fifth, the strategy never trades). A test holds every number of every template
+in the generator's pool to be on one list or the other.
+
+**The rule** (`gates/neighbour_gate.py`). A neighbour *holds* when it traded and its
+Sharpe is at least `min_share_of_own_sharpe` (0.5) of the strategy's own run over the
+same days and at least `min_neighbour_sharpe` (0.0). A setting is *fragile* when none
+of its neighbours that were run holds; each fragile setting is a finding. Judged on
+level, not on spread: neighbours that are all equally bad vary very little.
+
+**Report only by default (`enforce: false`).** The two thresholds have not been
+measured against anything. Every neighbour's Sharpe, return, drawdown and trade
+count is on `NeighbourGateVerdict` (`StageDiagnostics.neighbour_verdict`) and in the
+gate report whatever the rule says.
+
+**Identity.** A neighbour is a strategy of its own with its own content-hash id; its
+run is stored under that id with window role `neighbour`. It never carries the id
+of the strategy it came from, because the runner stores a run's config under the
+run's strategy id. It is never a survivor, and its verdict is not handed to the
+overfitting stage as `parameter_fragility`.
+
+Cost: up to two simulations per setting per survivor (a plain strategy has 2 to 10
+settings, a composite 1 to 6), so place it after the stages that eliminate.
 
 ### Overfitting = formal gate over earlier-stage evidence
 
@@ -177,7 +225,10 @@ fixture (default 90 calendar days).
 ## Platform replay integration
 
 `run_scheduled_research_at_timestamp` builds all six stages whenever walk-forward
-fires (>= 75 days of data). Replay thresholds live in
+fires (>= 75 days of data), and in the admission layout
+(`research.options.window_layout: admission`) a seventh, `parameter_neighbours`,
+between stress and overfitting. A job without the option runs the six it ran
+before. Replay thresholds live in
 `_build_replay_experiment_definition` (`application/services/platform_replay/research_hooks.py`).
 The research tick summary now includes `stage_funnel`
 (`{stage_name: {entered, passed}}`) and `research_profile`.
@@ -265,6 +316,14 @@ research tick is the one that exercises all six stages.
   min_cost_sharpe: 0.0
   min_cost_survival_rate: 0.5
 
+- name: parameter_neighbours
+  type: neighbour
+  start_date: "2024-01-02"
+  end_date: "2024-04-01"
+  symbols: [SPY, QQQ, AAPL]
+  min_share_of_own_sharpe: 0.5      # a neighbour holds at half the own Sharpe
+  enforce: false                    # report only
+
 - name: overfitting_gate
   type: overfitting
   max_overfitting_probability: 0.6
@@ -281,6 +340,9 @@ research tick is the one that exercises all six stages.
 | Regime gate rules | `tests/research/pipeline/gates/test_regime_gate.py` |
 | Shock transforms + stress gate rules | `tests/research/pipeline/gates/test_stress_gate.py` |
 | Overfitting evidence + gate rules | `tests/research/pipeline/gates/test_overfitting_gate.py` |
+| Building parameter neighbours | `tests/research/pipeline/gates/test_parameter_neighbours.py` |
+| Neighbour gate rules | `tests/research/pipeline/gates/test_neighbour_gate.py` |
+| Neighbour stage with a scripted runner | `tests/research/pipeline/test_neighbour_stage.py` |
 | Cost multiplier (cost model, execution service reset, run_id) | `tests/research/simulation/test_cost_multiplier.py` |
 | Stage orchestration with a scripted runner | `tests/research/pipeline/test_robustness_stages.py` |
 | Evidence policy: robustness score | `tests/research/validation/test_robustness_scoring.py` |
@@ -304,7 +366,14 @@ research tick is the one that exercises all six stages.
   `find_for_simulation` can replace the on-the-fly one (same
   `RegimeLabelProvider` protocol).
 - **No checkpoint/resume for the new stages.** Walk-forward and Monte Carlo
-  support `ResearchCheckpointService`; regime/stress runs are not checkpointed.
+  support `ResearchCheckpointService`; regime, stress and neighbour runs are not
+  checkpointed.
+- **Parameter neighbours.** The thresholds are not calibrated (report only). A
+  composite's rule line at 0.0 is not moved. One setting at a time: a strategy that
+  fails only when two settings move together is not found. The neighbours read the
+  same days as the other gates, so they say nothing about other days. A neighbour's
+  run is a row of the experiment like any other: the experiment catalogue lists it
+  among the experiment's strategies (window role `neighbour`).
 - **Annualisation.** Per-regime Sharpe uses 252 for daily-resampled equity curves
   and `BARS_PER_YEAR` (5-min) otherwise; upstream stage filters always use
   `BARS_PER_YEAR`, so regime Sharpe thresholds are not directly comparable to
