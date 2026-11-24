@@ -209,7 +209,7 @@ proposed").
 | # | Item | What it is | Decision | Boxes | What is left | When |
 |---|---|---|---|---|---|---|
 | 1 | 🟡 G1 + G2 (built 2026-11-24 on `research/generation-repairs`, not committed; 33 a month, November and December share 9; see G2's box) | The draw: the same 30 candidates every month (the month seed never reaches generation); a draw that breaks a family's rule is thrown away, not replaced | Pass the month seed to generation; draw again until the family has the number asked for or no valid setting is left, and say which in the summary. The 2026-11-23 baseline is reproduced by commit `38a9b2c63`, not by seed | 0 done, 2 open | Build; correct the baseline fixture's header | First: every other row changes what a draw holds |
-| 2 | 🟡 G5 (built 2026-11-24 on `research/generation-repairs`, not committed; pool 437, 384 distinct, measured again; see G5's box) | Composite templates: 324 of 652 skeletons behave differently (measured on 21,316 bars) | Repair where the skeletons are made: regime filter compares price with its average; rate-of-change thresholds sized as fractions; one aggregator for single-rule skeletons | 0 done, 1 open | Build; measure the repaired pool again with `g5_measure.py` (B's `~/rehearsals/g5/`) | Before task 4: it sets the grid run's size |
+| 2 | 🟡 G5 (built 2026-11-24 on `research/generation-repairs`, committed, not pushed; pool 390, 384 distinct, measured again; see G5's box) | Composite templates: 324 of 652 skeletons behave differently (measured on 21,316 bars) | Repair where the skeletons are made: regime filter compares price with its average; rate-of-change thresholds sized as fractions; one aggregator for single-rule skeletons | 0 done, 1 open | Build; measure the repaired pool again with `g5_measure.py` (B's `~/rehearsals/g5/`) | Before task 4: it sets the grid run's size |
 | 3 | 🔴 G3 | Momentum's thresholds are in dollars | New setting `measure` (`price` default, `return` for the research draw); the neighbour check treats it as a choice | 0 done, 1 open | Build; size the return thresholds from the dataset | With row 2 (same unit problem) |
 | 4 | 🔴 G4 + G8 (factor) | Factor configs that can never buy; factor configs that are one behaviour under two ids | A rule of the draw (buy threshold above the reachable score is invalid, redrawn under G2); a canonical form before hashing (zero-weight windows to default, thresholds to the reachable score level) | 0 done, 2 open (G4, G8's second part) | Build; confirm the two zero-trade ids fail the rule and `4fa1` / `8919` get one id | After row 1 (uses its redraw) |
 | 5 | 🔴 G9 | No gate compares a candidate with buy and hold of the same names | Report-only: buy and hold of the run's universe per window; excess return and information ratio per candidate in the gate report | 0 done, 1 open | Build; settle corporate-action jumps (use the split source, not a 30% rule) | Any time; needed before task 5 (Step 2's fitness) |
@@ -3675,7 +3675,26 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       positive, so `p - p0 > 0` exactly when `p / p0 - 1 > 0`), and so are `z_20` and
       `dist_20` (z is distance over a positive std); `cmp_mom_N_vs_roc_N` compares
       dollars with a fraction and acts as the same rule. These make most of the 53
-      repeats (largest group 3). Not repaired: outside the three decided causes. Tests:
+      repeats (largest group 3). Outside the three decided causes.
+      **Removed after all, the user's go-ahead 2026-11-24 (own commit):** exact by
+      arithmetic, so no behaviour can be lost on any bars (the research simulator sizes
+      without the signal's confidence, so equal direction is equal trading). The
+      at-zero rule is kept for the indicator in its own scale and not built for its
+      dollar twin (`_SAME_SIGN_TWIN`: `mom_10` / `mom_20` give way to `roc_10` /
+      `roc_20`, `dist_20` to `z_20`; `dist_50` keeps its, there is no `z_50`), and
+      `cmp_mom_N_vs_roc_N` is not built. Pool **437 -> 390** (threshold 78, crossover
+      28, comparison 32, two-rule 252). **Measured again:** 384 distinct of 390, the
+      same 384 as before (none lost); 6 pairs left, again exact: `mom_10` against
+      `mom_20` and `roc_10` against `roc_20` in crossover and in comparison (both are
+      "price 20 bars ago above price 10 bars ago"), and a volume rule gated by
+      `dist_50 > 0` against `logic_and_dist_50_v0_vol_r_N_hi` (a gate and an AND do
+      the same there). Left as they are: 1.5% of the pool. Tests for it: the dollar
+      twins have no at-zero rule and the scaled ones and `dist_50` keep theirs, no
+      `mom_N` against `roc_N` comparison, and the arithmetic itself checked on the real
+      indicator functions over 300 random walks of positive prices with flat stretches
+      (z-score has no value where distance is exactly zero; the strict threshold gives
+      no signal on either). Mutation checks: each removal undone alone is caught, and
+      so is a twin check that ignores the window (it would drop `dist_50`'s rule). Tests:
       `test_composite_template_repairs.py` (10: pool size by kind, every regime gate
       reads price minus its average, no self-gating, one aggregator for one rule,
       rate-of-change bands, a missing band refused, other indicators unchanged, and on
