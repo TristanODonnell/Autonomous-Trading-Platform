@@ -114,6 +114,10 @@ infra/ops/worker_job.sh worker reset                                            
 - The reset keeps the `dataset_versions` rows the pull registered and never touches Parquet.
   Both `worker run` and `worker reset` refuse to run unless `APP_ENV` is backtest, dev or test.
 - `--resume` keeps the checkpoint and skips the reset; `--no-pull` / `--no-upload` for offline work.
+  Because the database is kept, a research step that stopped partway reads back the
+  simulations it had completed and does not run them again; its summary says how many
+  (`runs_reloaded`). It only reads back runs made by the same image (the commit in
+  `GIT_SHA`), so resume before rebuilding, not after. Everything else is simulated again.
 
 ## Handing results to Box A: `atp worker publish-result`
 

@@ -174,6 +174,7 @@ def run_scheduled_research_at_timestamp(
     replay_context: PlatformReplayContext,
     dataset_version_id: str | None = None,
     research_options: dict | None = None,
+    reuse_completed_runs: bool = False,
 ) -> ResearchReplayResult:
     """Run the full staged research pipeline at a scheduled replay timestamp.
 
@@ -182,6 +183,13 @@ def run_scheduled_research_at_timestamp(
     overfitting), runs it, runs the validation + intelligence layer on final
     survivors, and seeds StrategyGovernance records for deployable strategies
     in ranked order.
+
+    reuse_completed_runs: a simulation this experiment already completed, on this
+    database and these artifacts, by this code, is read back and not run again
+    (``research/simulation/completed_run_reuse.py``, plan R3). For a job resumed
+    after it stopped partway; the step's summary says how many were read back.
+    Every stage judges what it gets back again, so the outcome is the one an
+    uninterrupted run gives. The holdout runs leave no row and are always run.
 
     research_options comes from the fixture's scheduled_jobs.research.options.
     Supported keys:
@@ -296,6 +304,9 @@ def run_scheduled_research_at_timestamp(
         )
     except Exception as exc:
         return ResearchReplayResult(**base, status="failed", errors=[str(exc)])
+
+    if reuse_completed_runs:
+        simulation_context.simulation_runner.reuse_completed_runs()
 
     from autonomous_trading_platform.universe.services.survivorship_guard import (
         SurvivorshipBiasError,
@@ -534,6 +545,13 @@ def run_scheduled_research_at_timestamp(
         summary={
             "experiment_id": experiment_def.experiment_id,
             "total_runs": total_runs,
+            # Of the pipeline's runs, how many were read back from an earlier
+            # attempt and not simulated; None when reuse was not asked for.
+            "runs_reloaded": (
+                len(simulation_context.simulation_runner.reloaded_run_ids)
+                if reuse_completed_runs
+                else None
+            ),
             "stage_1_survivors": stage1_count,
             "stage_2_survivors": stage2_count,
             "stage_3_survivors": stage3_count,

@@ -44,7 +44,7 @@ from autonomous_trading_platform.research.simulation.simulation_runner import (
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
 from ..pipeline_validation import StageWindowFacts
-from .base_stage import BaseStage, StageResult
+from .base_stage import BaseStage, StageDiagnostics, StageResult
 
 logger = get_logger(__name__)
 
@@ -258,6 +258,14 @@ class SimulationStage(BaseStage):
             simulation_results=sim_results,
             filter_outputs=filter_outputs,
             survivors=next_survivors,
+            # Each run is the strategy's run over this stage's window at normal cost:
+            # a later stage that needs that same run takes it from here and does not
+            # simulate it again (find_reusable_reference). Walk-forward's train
+            # window is this stage's window in the admission layout (plan R2).
+            diagnostics={
+                result.strategy_id: StageDiagnostics(reference_result=result)
+                for result in sim_results
+            },
         )
 
     def _simulation_runner_for(

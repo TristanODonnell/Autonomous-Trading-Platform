@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import pandas as pd
 import pyarrow as pa
@@ -204,6 +205,37 @@ class ParquetSimulationRepository:
             }
             for _, row in frame.iterrows()
         ]
+
+    def read_run_frame(
+        self,
+        *,
+        output_name: str,
+        identity: SimulationArtifactIdentity,
+    ) -> pd.DataFrame | None:
+        """The rows one run wrote to one simulation dataset, in the order written.
+
+        Read from the run's own partition directory, so the cost does not grow with
+        the number of runs kept. The partition columns are in the directory names,
+        not in the rows returned. None when the run wrote nothing there: a frame with
+        no rows leaves no file.
+        """
+        try:
+            dataset = SIMULATION_DATASETS_BY_NAME[output_name]
+        except KeyError as exc:
+            raise ValueError(f"Unsupported simulation output_name={output_name}") from exc
+
+        directory = self._dataset_root(dataset)
+        for column in dataset.partition_cols:
+            # Hive directory names carry the value URI-encoded, as pyarrow writes it.
+            value = quote(str(getattr(identity, column)), safe="")
+            directory = directory / f"{column}={value}"
+        if not directory.is_dir():
+            return None
+        files = sorted(str(path) for path in directory.glob("*.parquet"))
+        if not files:
+            return None
+        frame: pd.DataFrame = ds.dataset(files, format="parquet").to_table().to_pandas()
+        return frame
 
     def write_per_bar_metrics(
         self,

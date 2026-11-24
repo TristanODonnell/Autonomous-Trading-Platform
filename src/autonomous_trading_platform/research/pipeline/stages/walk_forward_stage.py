@@ -26,7 +26,10 @@ the same date.
 By date (folds): the pipeline hands the stage its folds, each a train window
 and a test window given by first and last day, both read. This is how a
 layout counted in trading sessions reaches the stage, and how every fold can
-share one train window. A train window that several folds share is simulated
+share one train window. A train window an earlier stage already ran a strategy
+over (stage 1's window, in the admission layout) is not simulated again for that
+strategy: the earlier run is judged by this stage's train filter. A train window
+that several folds share is simulated
 once.
 
 Rules the config enforces (plan items R2 and R6)
@@ -62,7 +65,7 @@ third.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
@@ -102,6 +105,7 @@ from autonomous_trading_platform.research.validation.walk_forward_validation imp
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
 
 from ..pipeline_validation import StageWindowFacts
+from ._gate_stage_support import GateWindow, find_reusable_reference
 from .base_stage import BaseStage, StageDiagnostics, StageResult
 
 logger = get_logger(__name__)
@@ -388,6 +392,10 @@ class WalkForwardStage(BaseStage):
         self._resume_mode = resume_mode
         self._force_rerun = force_rerun
         self._dry_run = dry_run
+        self._prior_results: Sequence[StageResult] = ()
+        # Train runs taken from an earlier stage, by id(): judged here, not listed
+        # among this stage's simulations.
+        self._train_runs_taken: set[int] = set()
         self._seed_service = DeterministicSeedService()
         self._execution_service = ParallelExecutionService(
             ParallelExecutionConfig(
@@ -460,6 +468,9 @@ class WalkForwardStage(BaseStage):
             ),
         )
 
+    def bind_prior_results(self, prior_results: Sequence[StageResult]) -> None:
+        self._prior_results = prior_results
+
     def run(
         self,
         survivors: list[StrategyConfig],
@@ -474,6 +485,7 @@ class WalkForwardStage(BaseStage):
             logger.warning("Stage %s received empty survivor list — skipping.", self.stage_name)
             return StageResult(stage_name=self.stage_name)
 
+        self._train_runs_taken = set()
         folds = self._generate_folds()
         if not folds:
             raise RuntimeError(
@@ -518,9 +530,12 @@ class WalkForwardStage(BaseStage):
                 if not fr.train_filter_output.filter_result.passed:
                     failed_train += 1
                 # A shared train run is one simulation and one verdict in the results.
+                # A run taken from an earlier stage is that stage's simulation: here
+                # it has a verdict only.
                 if id(fr.train_sim_result) not in train_runs_recorded:
                     train_runs_recorded.add(id(fr.train_sim_result))
-                    all_sim_results.append(fr.train_sim_result)
+                    if id(fr.train_sim_result) not in self._train_runs_taken:
+                        all_sim_results.append(fr.train_sim_result)
                     all_filter_outputs.append(fr.train_filter_output)
                 if fr.test_sim_result is not None:
                     all_sim_results.append(fr.test_sim_result)
@@ -545,6 +560,13 @@ class WalkForwardStage(BaseStage):
                 passed_fold,
                 len(fold_results),
                 failed_train,
+            )
+
+        if self._train_runs_taken:
+            logger.info(
+                "Stage %-20s | %d train runs taken from an earlier stage, not simulated",
+                self.stage_name,
+                len(self._train_runs_taken),
             )
 
         if not all_sim_results:
@@ -629,8 +651,27 @@ class WalkForwardStage(BaseStage):
         # Simulated by the first fold that has this train window (and so under
         # that fold's name and seed); later folds with the same window reuse it.
         train_window = (fold.train_start, fold.train_end)
+        # A strategy an earlier stage already ran over this very window, on the same
+        # universe and at normal cost, is not simulated again: the same config on the
+        # same bars is the same run.
+        taken: dict[str, SimulationRunResult] = {}
+        if train_window not in train_runs:
+            earlier_window = GateWindow(
+                symbols=cfg.symbols,
+                start_date=fold.train_start,
+                end_date=fold.train_end,
+                universe_timeline_version=cfg.universe_timeline_version,
+            )
+            for config in configs:
+                earlier = find_reusable_reference(
+                    self._prior_results, config.strategy_id, earlier_window
+                )
+                if earlier is not None:
+                    taken[config.strategy_id] = earlier
         train_units: list[ExecutionUnit[SimulationRunResult | None]] = []
         for index, config in enumerate(configs if train_window not in train_runs else []):
+            if config.strategy_id in taken:
+                continue
             seed = self._seed_service.derive_seed(
                 DeterministicSeedInputs(
                     base_seed=random_seed,
@@ -674,8 +715,18 @@ class WalkForwardStage(BaseStage):
             )
         if train_window not in train_runs:
             maybe_train_sim_results = self._execution_service.values(train_units)
+            run_by_id = {
+                result.strategy_id: result
+                for result in maybe_train_sim_results
+                if result is not None
+            }
+            run_by_id.update(taken)
+            self._train_runs_taken.update(id(result) for result in taken.values())
+            # In the order the strategies came in, simulated here or taken.
             train_runs[train_window] = [
-                result for result in maybe_train_sim_results if result is not None
+                run_by_id[config.strategy_id]
+                for config in configs
+                if config.strategy_id in run_by_id
             ]
         train_sim_results = train_runs[train_window]
 

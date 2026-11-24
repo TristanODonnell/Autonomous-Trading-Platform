@@ -277,14 +277,39 @@ def test_regime_and_stress_reuse_the_nine_month_run(run: _Run) -> None:
     assert "stress_baseline" not in roles
 
 
-def test_every_fold_trains_on_the_selection_piece_simulated_once(run: _Run) -> None:
+def test_every_fold_trains_on_stage_ones_run_of_the_selection_piece(run: _Run) -> None:
+    """The train window is the selection piece, and stage 1 has simulated every
+    strategy that reaches walk-forward over exactly those days. That run is the train
+    run of every fold; walk-forward simulates none for it (plan R2, the saving on the
+    train run: 635 seconds of the baseline, a tenth of the job)."""
     selection = run.layout.selection
-    roles = sorted({r.window_role for r in run.runner.requests if r.window_role})
-    train_roles = [role for role in roles if role.endswith("_train")]
-    assert train_roles, roles
-    for strategy_id in STRATEGIES:
-        trained = [day for role in train_roles for day in run.dates(role, strategy_id)]
-        assert trained == [(selection.first, selection.last)], strategy_id
+    stage_1 = run.stage["initial_quality_filter"]
+    walk_forward = run.stage["walk_forward_robustness"]
+
+    simulated_by_stage_1 = [
+        (r.strategy_id, r.start_date, r.end_date)
+        for r in run.runner.requests
+        if r.stage_name == "initial_quality_filter"
+    ]
+    assert simulated_by_stage_1 == [(sid, selection.first, selection.last) for sid in STRATEGIES]
+    assert not [r for r in run.runner.requests if (r.window_role or "").endswith("_train")]
+
+    own_run = {r.strategy_id: r for r in stage_1.simulation_results}
+    entered = run.survivors("initial_quality_filter")
+    assert entered == STRATEGIES
+    for strategy_id in entered:
+        folds = walk_forward.diagnostics[strategy_id].fold_inputs
+        assert folds is not None
+        assert len(folds) == len(run.layout.test_folds)
+        assert {fold.train_return for fold in folds} == {
+            float(own_run[strategy_id].return_metrics.total_return)
+        }
+        assert {fold.train_sharpe for fold in folds} == {
+            float(own_run[strategy_id].risk_metrics.sharpe_ratio)
+        }
+    # Stage 1's runs stay stage 1's simulations: walk-forward lists its test runs.
+    assert len(walk_forward.simulation_results) == len(entered) * len(run.layout.test_folds)
+    assert not any(r is own for r in walk_forward.simulation_results for own in own_run.values())
 
 
 def test_no_simulation_reads_a_holdout_day(run: _Run) -> None:

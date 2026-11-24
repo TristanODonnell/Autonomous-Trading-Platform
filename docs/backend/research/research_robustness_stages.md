@@ -365,9 +365,16 @@ research tick is the one that exercises all six stages.
   computes regime classification over a rolling window, a provider backed by
   `find_for_simulation` can replace the on-the-fly one (same
   `RegimeLabelProvider` protocol).
-- **No checkpoint/resume for the new stages.** Walk-forward and Monte Carlo
-  support `ResearchCheckpointService`; regime, stress and neighbour runs are not
-  checkpointed.
+- **Resuming a run (plan R3).** A simulation an earlier attempt completed is read
+  back, not run again, when the research step is asked to
+  (`research/simulation/completed_run_reuse.py`; `atp worker run --resume`). It sits in
+  `SimulationRunner.run`, so it covers every stage here. No verdict is stored: a stage
+  judges a run it gets back as it judges a new one. `ResearchCheckpointService`, which
+  three stages still take as an argument, is wired to nothing.
+- **Runs taken from an earlier stage.** Stage 1 keeps each run as the strategy's
+  reference run over its window, as Monte Carlo does. A later stage that needs that
+  same run (walk-forward's train window in the admission layout) takes it and
+  simulates none.
 - **Parameter neighbours.** The thresholds are not calibrated (report only). A
   composite's rule line at 0.0 is not moved. One setting at a time: a strategy that
   fails only when two settings move together is not found. The neighbours read the

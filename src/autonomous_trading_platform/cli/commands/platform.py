@@ -119,6 +119,15 @@ def register(subparsers) -> None:
         action="store_true",
         help="Disable the one-line shell progress indicator.",
     )
+    run_parser.add_argument(
+        "--reuse-research-runs",
+        action="store_true",
+        help=(
+            "Research step: read back the simulations an earlier attempt of this run "
+            "completed instead of running them again. Only on the database and the "
+            "artifacts that attempt wrote to, and with the same code."
+        ),
+    )
     run_parser.set_defaults(func=handle_backtest_run)
 
     # ── inspect ───────────────────────────────────────────────────────
@@ -473,6 +482,7 @@ def handle_backtest_run(args: argparse.Namespace) -> int:
         initial_state=fixture.initial_state if fixture else None,
         progress_callback=progress_printer,
         checkpoint_path=checkpoint_path,
+        reuse_completed_research_runs=bool(getattr(args, "reuse_research_runs", False)),
     )
 
     print_header(f"Platform Backtest Run {'(dry-run)' if dry_run else ''}")

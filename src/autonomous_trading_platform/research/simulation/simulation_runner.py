@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import platform
 import random
 from collections.abc import Callable
@@ -63,6 +64,7 @@ from autonomous_trading_platform.research.experiments.filtering.metrics.trade_me
 from autonomous_trading_platform.research.services.research_dataset_resolver_service import (
     ResearchDatasetResolver,
 )
+from autonomous_trading_platform.research.simulation import completed_run_reuse
 from autonomous_trading_platform.research.simulation.artifact_identity import (
     SimulationArtifactIdentity,
 )
@@ -200,6 +202,18 @@ class SimulationRunRequest:
 FIXED_UNIVERSE_VERSION = "v1"
 
 
+def _same_number(stored: float | int | None, recomputed: float | int | None) -> bool:
+    """A stored metric and the same metric computed again: equal, both missing, or
+    both not a number. A float survives the database exactly; the tolerance is for
+    the last bit."""
+    if stored is None or recomputed is None:
+        return stored is None and recomputed is None
+    a, b = float(stored), float(recomputed)
+    if math.isnan(a) or math.isnan(b):
+        return math.isnan(a) and math.isnan(b)
+    return math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-12)
+
+
 def universe_version_for(request: SimulationRunRequest) -> str:
     """The universe a run is recorded and cached under: the id of its universe
     timeline when it trades on one, the fixed label otherwise. Two runs on the same
@@ -292,6 +306,18 @@ class SimulationRunner:
         self.experiment_repository = experiment_repository
         self.metrics_summary_repository = metrics_summary_repository
         self.feature_dependency_resolver = feature_dependency_resolver
+        # Off unless a caller switches it on (reuse_completed_runs): a completed run
+        # with the request's run id and fingerprint is read back, not simulated.
+        self._reuse_completed_runs = False
+        # The run ids read back since reuse was switched on.
+        self.reloaded_run_ids: list[str] = []
+
+    def reuse_completed_runs(self, enabled: bool = True) -> None:
+        """From now on, hand back a completed run instead of simulating it again
+        (``completed_run_reuse``). For resuming a research job that stopped partway,
+        on the database and the artifacts its first attempt wrote to."""
+        self._reuse_completed_runs = enabled
+        self.reloaded_run_ids = []
 
     def reuse_loaded_bars(self) -> AbstractContextManager[None]:
         """Around one pipeline run: its simulations share the bars they load
@@ -329,6 +355,20 @@ class SimulationRunner:
             start_date=request.start_date,
             end_date=request.end_date,
         )
+
+        # What decides the result and is not in the run id; stored with the run so a
+        # later attempt can tell whether this run answers its request.
+        fingerprint = self._reuse_fingerprint(request)
+        if self._reuse_completed_runs and request.record_run:
+            reloaded = self._reload_completed_run(
+                request=request,
+                run_id=run_id,
+                experiment_id=experiment_id,
+                identity=artifact_identity,
+                fingerprint=fingerprint,
+            )
+            if reloaded is not None:
+                return reloaded
 
         resolved_dataset = self.dataset_resolver.resolve_bars_dataset(
             dataset_version=request.dataset_version,
@@ -376,6 +416,7 @@ class SimulationRunner:
                 experiment_id=experiment_id,
                 resolved_dataset_metadata=resolved_dataset.metadata,
                 resolved_feature_dataset_ids=resolved_feature_dataset_ids,
+                fingerprint=fingerprint,
             )
             self._commit_metadata()
 
@@ -475,6 +516,8 @@ class SimulationRunner:
                     win_rate=tm.win_rate,
                     consistency_score=sm.consistency_score,
                     universe_exit_count=universe_exit_count,
+                    symbols_loaded=list(window.symbols),
+                    warmup_shortfall_by_symbol=dict(window.warmup_shortfall_by_symbol),
                 )
                 self._commit_metadata()
 
@@ -611,6 +654,7 @@ class SimulationRunner:
         experiment_id: str,
         resolved_dataset_metadata: dict[str, Any],
         resolved_feature_dataset_ids: dict[str, str],
+        fingerprint: str | None = None,
     ) -> None:
         now = datetime.now(UTC)
         if self.experiment_repository is not None:
@@ -689,6 +733,17 @@ class SimulationRunner:
                     ),
                     "resolved_dataset_metadata": resolved_dataset_metadata,
                     "resolved_feature_dataset_ids": resolved_feature_dataset_ids,
+                    # What a later attempt compares before reading this run back.
+                    **(
+                        {
+                            completed_run_reuse.REUSE_KEY: {
+                                "fingerprint": fingerprint,
+                                "code_version": completed_run_reuse.code_version(),
+                            }
+                        }
+                        if fingerprint is not None
+                        else {}
+                    ),
                 },
                 status="RUNNING",
                 metrics_snapshot_id=None,
@@ -778,6 +833,8 @@ class SimulationRunner:
         win_rate: float = 0.0,
         consistency_score: float = 0.0,
         universe_exit_count: int | None = None,
+        symbols_loaded: list[str] | None = None,
+        warmup_shortfall_by_symbol: dict[str, int] | None = None,
     ) -> None:
         now = datetime.now(UTC)
 
@@ -820,6 +877,16 @@ class SimulationRunner:
                         **(
                             {"universe_exit_count": universe_exit_count}
                             if universe_exit_count is not None
+                            else {}
+                        ),
+                        # The parts of the result that are in no saved frame: read
+                        # back with the frames when the run is reused.
+                        **(
+                            {
+                                "symbols_loaded": symbols_loaded,
+                                "warmup_shortfall_by_symbol": warmup_shortfall_by_symbol or {},
+                            }
+                            if symbols_loaded is not None
                             else {}
                         ),
                     },
@@ -887,6 +954,101 @@ class SimulationRunner:
         for repo in repos:
             if repo is not None:
                 repo.session.commit()
+
+    def _reuse_fingerprint(self, request: SimulationRunRequest) -> str:
+        service = self.simulated_execution_service
+        return completed_run_reuse.reuse_fingerprint(
+            request,
+            code=completed_run_reuse.code_version(),
+            cost_model=getattr(service, "cost_model_summary", None),
+            fill_model=getattr(service, "slippage_model_summary", None),
+        )
+
+    def _reload_completed_run(
+        self,
+        *,
+        request: SimulationRunRequest,
+        run_id: UUID,
+        experiment_id: str,
+        identity: SimulationArtifactIdentity,
+        fingerprint: str,
+    ) -> SimulationRunResult | None:
+        """The completed run that answers this request, read back; None when there is
+        none or it must not be used, and the request is then simulated as usual."""
+        log = {"run_id": str(run_id), "strategy_id": request.strategy_id}
+        if request.shuffle_timestamp:
+            # A shuffled run's warmup rows are not the first rows in time.
+            return None
+        frames = getattr(self.result_recorder, "parquet_simulation_repository", None)
+        if self.simulation_run_repository is None or frames is None:
+            return None
+        try:
+            saved = completed_run_reuse.load_saved_run(
+                identity=identity,
+                fingerprint=fingerprint,
+                code=completed_run_reuse.code_version(),
+                run_rows=self.simulation_run_repository,
+                metric_rows=self.metrics_summary_repository,
+                frames=frames,
+            )
+        except completed_run_reuse.RunNotSaved:
+            return None
+        except completed_run_reuse.RunNotReusable as exc:
+            logger.warning("simulation.reuse_refused", extra={**log, "reason": str(exc)})
+            return None
+
+        rm = compute_return_metrics(saved.equity_curve)
+        risk = compute_risk_metrics(saved.equity_curve)
+        tm = compute_trade_metrics(saved.trade_logs, saved.equity_curve)
+        sm = compute_stability_metrics(saved.equity_curve)
+        differing = [
+            name
+            for name, stored, recomputed in (
+                ("total_return", saved.stored.total_return, rm.total_return),
+                ("sharpe_ratio", saved.stored.sharpe_ratio, risk.sharpe_ratio),
+                ("max_drawdown", saved.stored.max_drawdown, risk.max_drawdown),
+                ("volatility", saved.stored.volatility, risk.volatility),
+                ("trade_count", saved.stored.trade_count, tm.total_trades),
+            )
+            if not _same_number(stored, recomputed)
+        ]
+        if differing:
+            # The saved frames are not the run the row describes: simulate again.
+            logger.warning(
+                "simulation.reuse_refused",
+                extra={
+                    **log,
+                    "reason": "metrics recomputed from the saved frames differ from the "
+                    f"stored ones: {', '.join(differing)}",
+                },
+            )
+            return None
+
+        self.reloaded_run_ids.append(str(run_id))
+        logger.info("simulation.run_reloaded", extra=log)
+        return SimulationRunResult(
+            run_id=run_id,
+            experiment_id=experiment_id,
+            strategy_id=request.strategy_id,
+            dataset_version=request.dataset_version,
+            random_seed=request.random_seed,
+            symbols=saved.symbols,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            trade_count=len(saved.trade_logs),
+            equity_points=len(saved.equity_curve),
+            per_bar_metric_points=saved.per_bar_metric_points,
+            status="completed",
+            return_metrics=rm,
+            risk_metrics=risk,
+            trade_metrics=tm,
+            stability_metrics=sm,
+            equity_curve=saved.equity_curve,
+            trade_logs=saved.trade_logs,
+            warmup_shortfall_by_symbol=saved.warmup_shortfall_by_symbol,
+            universe_timeline_version=request.universe_timeline_version,
+            universe_exit_count=saved.universe_exit_count,
+        )
 
     def _derive_run_id(self, request: SimulationRunRequest) -> UUID:
         """Derive a stable UUID from the simulation inputs (P-01).

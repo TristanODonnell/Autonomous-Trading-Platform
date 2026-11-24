@@ -160,12 +160,28 @@ Every unticked box was checked against the code or the recorded evidence on 2026
 > **Update 2026-11-23, night.** The rerun's results merged as PR #199
 > (`a5d901162`), on A and B, checked 23:50 UTC. **R13 decided by the user:
 > build the neighbour check now, report only, every setting moved one at a
-> time.** Built on `research/r13-neighbour-check` (not merged): a seventh
+> time.** Built on `research/r13-neighbour-check` (merged since, see the
+> next update): a seventh
 > stage in the admission layout, between stress and overfitting, and a
 > section for it in the gate report. It eliminates nobody, so the baseline
 > stands and no rerun is needed to merge it; its first real numbers come
 > with the next run on B. Still to ask the user: R2's repeated-attempts
 > box; then R3 with R2's train-run saving; then one run on B for the lot.
+>
+> **Update 2026-11-24.** R13 merged as PR #200 (`30b143274`), on A and B,
+> checked 00:47 UTC. **R2's repeated-attempts box decided by the user:
+> accept it, the holdout is the guard, and the count of what was tried is
+> kept by the monthly job (a new box in Step 5).** No code. Next: R3 with
+> R2's train-run saving; then one run on B for the lot.
+>
+> **Update 2026-11-24, later. R3's design decided by the user: the saved run
+> is the checkpoint.** A simulation an earlier attempt completed is read
+> back from its row and its saved frames and not run again; nothing else is
+> stored, and every stage judges what it gets back again. Built on
+> `research/r3-checkpoint-and-reuse` (not merged) with R2's saving on the
+> train run: `worker run --resume` switches it on for the research step.
+> Not run on B. Next: one run on B for the lot (R13's first numbers, the
+> train-run saving measured), on the user's go-ahead.
 
 Key: 🟢 done (shipped; anything left is a follow-up or waits on something else) · 🟡 in progress or partly done · 🔴 not started · ⚪ no work of its own, or deferred.
 
@@ -182,9 +198,9 @@ section 3: done, then still open.
 
 | Item | What it is | Status | Boxes | What is left | When |
 |---|---|---|---|---|---|
-| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 19 done, 1 open (the hook layout's own piece boxes not counted) | Built 2026-11-20 on `research/r2-hook-layout`, merged as PR #194 (`9cf5582d6`) and on A and B 2026-11-23, for a job that names the admission layout: the selection / evaluation split, folds in sessions, fold geometry, the two-part pass rule (2 of 3 folds, and the nine-month record held to the filter), and the holdout (read by no stage, which the validator checks; the final survivors reported on it in the step's summary). The rehearsal on B (piece 5) ran 2026-11-23 (exit 0, 33 minutes, peak 1,850 MiB of 3,055); nothing of the hook layout is open. Built 2026-11-22 on `research/r2-code-boxes`, merged as PR #196 (`19a26dffa`), on A and B 2026-11-23 (checked: A's app and scheduler containers and B's worker image are built from it; B rebuilt once the baseline released the job lock): the walk-forward "entered" count, a minimum test span in the walk-forward config (twelve weeks, with a named exception), and the daily-resample mode refused. Closed 2026-11-22 by the user's decisions, no code: fold count from the history available (answered by the admission layout) and longer folds (delivered by the 24-month dataset). The one box left is a later saving on the train run, not needed for correctness. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Commit and merge the three code boxes. After that R2 has no work left but one optional saving |
-| 🔴 R3 | Checkpoint and resume | Not started (one housekeeping box done) | 1 done, 5 open | All of the wiring | After package B, before Step 5 (package C). It saves time on long runs; it does not change any result |
-| 🟡 R13 | No parameter-stability check | **Decided 2026-11-23: build now, report only, every setting one at a time.** Built on `research/r13-neighbour-check`, not merged: a seventh stage in the admission layout | 4 done, 6 open | Merge; then its first numbers on the next run on B | The user's word to commit; a run on B for the numbers |
+| 🟡 R2 | Walk-forward folds out of sample | **Partial.** The small set merged in #181. Package A's code-only boxes merged in #184, deployed 2026-11-16 | 20 done, 0 open in this list since 2026-11-24 (the hook layout's own piece boxes not counted; the last of those, the saving on the train run, built 2026-11-24 on `research/r3-checkpoint-and-reuse`, not merged) | Built 2026-11-20 on `research/r2-hook-layout`, merged as PR #194 (`9cf5582d6`) and on A and B 2026-11-23, for a job that names the admission layout: the selection / evaluation split, folds in sessions, fold geometry, the two-part pass rule (2 of 3 folds, and the nine-month record held to the filter), and the holdout (read by no stage, which the validator checks; the final survivors reported on it in the step's summary). The rehearsal on B (piece 5) ran 2026-11-23 (exit 0, 33 minutes, peak 1,850 MiB of 3,055); nothing of the hook layout is open. Built 2026-11-22 on `research/r2-code-boxes`, merged as PR #196 (`19a26dffa`), on A and B 2026-11-23 (checked: A's app and scheduler containers and B's worker image are built from it; B rebuilt once the baseline released the job lock): the walk-forward "entered" count, a minimum test span in the walk-forward config (twelve weeks, with a named exception), and the daily-resample mode refused. Closed 2026-11-22 by the user's decisions, no code: fold count from the history available (answered by the admission layout) and longer folds (delivered by the 24-month dataset). The one box left is a later saving on the train run, not needed for correctness. The two box lists overlap: one was written for the old four-stage file, one for the six-stage hook | Commit and merge the three code boxes. After that R2 has no work left but one optional saving |
+| 🟡 R3 | Checkpoint and resume | **Decided 2026-11-24: the saved run is the checkpoint.** Built on `research/r3-checkpoint-and-reuse`, not merged: a completed simulation is read back, not run again, when a job is resumed | 7 done, 6 open | Merge; then a resume of a real job on B | The user's word to commit; a run on B, on the user's go-ahead. It saves time on long runs; it does not change any result |
+| 🟡 R13 | No parameter-stability check | **Decided 2026-11-23: build now, report only, every setting one at a time.** Merged as PR #200 (`30b143274`), on A and B 2026-11-24: a seventh stage in the admission layout | 4 done, 6 open | Its first numbers, on the next run on B | A run on B, on the user's go-ahead |
 
 *Deferred: nothing to do until its trigger*
 
@@ -247,10 +263,10 @@ Package A is merged and deployed. Nothing is running.
 |---|---|---|---|---|
 | 🟢 A | **Validators and evidence** (done: merged PR #184, deployed 2026-11-16) | Done: R14's decision and its two-fold test; R6's validator; R2's range guard, `step_days >= test_days`, `min_folds_passed <= n_folds`, validators cover Python-built configs, `WindowType` deleted, hook lookback as a setting, train-failed folds kept as evidence. R5 and R16's decision (trusted evidence only: `research/validation/evidence_policy.py`). Left: nothing in code. Moved to B: folds in sessions, minimum test span, R6's holdout date | Nothing | One PR, no new data (#184) |
 | 🟡 B | **Longer history on B** (on IEX; the feed does not change). Chosen by the user 2026-11-16; investigation done; first code merged as PR #185 and deployed the same day; swap on; generator dry run done on B; coverage check (70%) merged as PR #186, deployed and dry-run on B (job memory ceiling, swap installer, bars parsed once per pipeline run, point-in-time pool option on the rotation command); B has a data key; PR #187 merged (failed pool refresh or scoring stops the rotation); universe timeline builder merged as PR #188 and the timeline built on B 2026-11-16 (25 steps, 31 names); five-minute bars backfilled for the 31 names and merged into the 24-month dataset on B 2026-11-18 (PRs #189, #190; 532 sessions); R17 fixed (PR #191); timeline export, loader and the reset that keeps built research data merged as PR #192, exported and reset-checked on B 2026-11-19. Open in this package: the engine reading the timeline (done: merged as PR #193, on A and B 2026-11-20; no job uses it yet), then the hook's 9 / 9 / 6 layout with the holdout date and the two-part fold rule (started 2026-11-20 on `research/r2-hook-layout`: pieces 1, 2, 3a, 3b and 4 merged as PR #194, `9cf5582d6`, on A and B 2026-11-23; the layout is switched on by a research option that only the rehearsal fixture sets; the rehearsal on B ran 2026-11-23, exit 0, 33 minutes, peak 1,850 MiB of 3,055; the hook layout is done), memory at the union's size, corporate actions for the 31 names | R2's selection / evaluation / holdout split and fold geometry (about 8 boxes), folds in sessions, minimum test span, R6's holdout date, removing the hook's `allow_overlapping_test_folds` exception, R15's four prerequisites, R14's prerequisites | The user's decisions (universe for old dates first). Investigated 2026-11-16: history is documented back to 2016; one run over 12 months needs about 1.7 GB and over 24 months about 3.2 GB, against about 3.0 GB usable on B | Investigation done, then one PR or two |
-| 🔴 C | **Checkpoint and resume (R3)** | R3's five boxes | Nothing. Pays off once B runs take hours, which is after package B | One PR |
+| 🟡 C | **Checkpoint and resume (R3)** (decided 2026-11-24: the saved run is the checkpoint; built, not merged) | R3's five boxes and its scope box, and R2's saving on the train run; six follow-ups stay open under R3 | The user's word to commit | One PR |
 | 🟢 D | **Test hardening (R7)** (done: merged as PR #197, `fce347f3b`, on A and B 2026-11-23) | R7 both boxes, and the R7 boxes under R10, R14 (done earlier, with R14's change) and R15: all built | Nothing | One PR: tests, and one production change for speed (the regime label join) |
 | 🔴 E | **Parity and integrity** | R4's drawdown kill on the backtest path, R12's slippage in fill rows, D2. R8 left this package 2026-11-16: deferred until random fills are switched on | The drawdown kill goes through the safety doctrine and the rehearsal rule | Separate PRs, none blocks A to C |
-| 🟡 F | **R13** (decided 2026-11-23: build now, report only; built, not merged) | The decision and the build; six follow-ups stay open under R13 | The user's word to commit; a run on B for its first numbers | One PR |
+| 🟢 F | **R13** (decided 2026-11-23: build now, report only; merged as PR #200, `30b143274`, on A and B 2026-11-24) | The decision and the build; six follow-ups stay open under R13 | A run on B for its first numbers | One PR |
 
 After these: Step 1 (baseline; started 2026-11-22, its first job, the hook's full profile on B, ran 2026-11-23), then Steps 2 to 5.
 
@@ -988,13 +1004,46 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
               windows allowed, 2).
             - Left as it is, on purpose: a stage read from a YAML file cannot be
               given folds by date (the hook builds its configs in code).
-            - [ ] Later saving, not built: the train run on the selection piece
+            - [x] Later saving, not built: the train run on the selection piece
                   repeats what stage 1 simulated for the same strategy and days
                   (about nine minutes of a full run at the laptop's measured 68
                   seconds per nine-month simulation and 8 survivors). Reusing
                   stage 1's run needs stage 1 to keep it where the reuse lookup
                   reads. Measured on B in the baseline of 2026-11-23: 635 seconds
                   for the 8 train runs, 10% of the job.
+                  **Built 2026-11-24** on `research/r3-checkpoint-and-reuse` (not
+                  merged). Stage 1 keeps each run as the strategy's reference run
+                  over its window; walk-forward looks for an earlier run of the
+                  strategy over a train window's very days, on the same universe,
+                  takes it, and judges it with its own train filter. In the hook's
+                  admission pipeline no train run is simulated any more. A run
+                  over other days, other names or another timeline is not taken.
+                  That the two are the same run was the open question (they are
+                  asked for by different stages with different seeds): shown on
+                  the real engine, where every number of every fold is equal
+                  whether the train run is taken or simulated
+                  (`tests/research/test_train_run_taken_on_real_runs.py`).
+                  Checked that the tests can fail: seven bugs put in one at a
+                  time, six caught; the seventh (taken runs listed ahead of
+                  simulated ones) changes nothing a stage's result shows, since
+                  the runs are looked up by strategy from there on.
+                  One thing changed besides: Monte Carlo already took an earlier
+                  reference run over its own days, so it now takes stage 1's when
+                  stage 1 read the same days. No real layout has that (stage 1 ends
+                  before the days the gates read); a smoke pipeline has, and its
+                  Monte Carlo simulates nothing of its own. The 635 seconds are the
+                  baseline's; the saving itself is to be read off the next run on B.
+                  Two more places read a stage's reference run, found on re-reading
+                  the change. The gate report: stage 1's entry for a strategy now
+                  has a `reference_run` block (the selection run's days, Sharpe,
+                  return, drawdown and trade count), which it did not have. The
+                  final gate: it takes the latest reference run among the stages
+                  before it, which stays Monte Carlo's wherever there is a Monte
+                  Carlo stage, so nothing changes in the hook's pipelines; a
+                  pipeline with the final gate and no Monte Carlo or regime stage
+                  would now be judged on stage 1's run where it had none before.
+                  No pipeline in the code or the fixtures is built that way
+                  (checked 2026-11-24).
       - Found 2026-11-20 while reading for piece 3, and missed when the pieces
         were first cut (the open box under Step 5, "Hook: take the dataset
         version explicitly", already said it): the six-stage pipeline has one
@@ -1423,20 +1472,38 @@ PR #181; package A's code-only boxes done, merged PR #184, deployed 2026-11-16; 
           otherwise the hook can drift from its own rules the way the four-stage file did.
           Done 2026-11-15 (package A, merged PR #184): single-stage rules sit in the stage's config class, cross-stage
           rules in `StagedPipelineConfig`; the hook builds both.
-    - [ ] Repeated attempts. Research in the platform backtest runs on a monthly cadence
+    - [x] Repeated attempts. Research in the platform backtest runs on a monthly cadence
           (`platform_backtest_service.py:1035-1051`; the cadence comes from the run's
           scheduled-jobs config, not traced through every config) with a 90-day lookback,
           so consecutive runs share about two thirds of their days and a strategy that
           fails gets another attempt on mostly the same data. First confirm the cadence
           the real runs use; then decide between counting attempts per strategy identity
           and accepting it with the holdout as the guard.
+          **The cadence, read 2026-11-24.** No research runs on a schedule: the monthly
+          job (Step 5) is not built, and every run on B so far was started by hand and
+          fired research once (the two admission job files span three days). The monthly
+          cadence fires more than once only in backtest job files on the 90-day layout
+          (`portfolio_rotation_6m.yaml`: six times, smoke profile). The candidates are
+          drawn with the research month as the seed (`research_hooks.py`,
+          `random_seed=int(tick_date.strftime("%Y%m"))`), so each month draws others.
+          **The two layouts differ.** On the 90-day layout it is as written above. On the
+          admission layout the selection and evaluation days do not move until the
+          holdout date does (2027-05-18), so the same strategy gets the same answer from
+          every stage but Monte Carlo, whose resampling takes the month's seed. What
+          repeats there is something else: each month about 30 new candidates are tried
+          against the same 18 months, and the survivors are scored on the holdout again.
+          **Decided by the user 2026-11-24: "Accept, count in Step 5".** The holdout is
+          the guard; nothing is counted or refused now; the monthly job keeps the count
+          (Step 5, new box). Not decided here: a correction to the scores for the number
+          tried (a deflated Sharpe), which needs that count first.
 
 **Verify:** the config validator rejects the current `ma_sweep_staged.yaml`; a fixture with
 one train-failed fold shows it in the overfitting evidence; a daily-resampled fold's Sharpe
 matches a hand computation within rounding.
 
-**R3 — Research checkpointing is built but never instantiated (cost/convenience; not
-started).**
+**R3 — Research checkpointing is built but never instantiated (cost/convenience;
+decided 2026-11-24: the saved run is the checkpoint; built on
+`research/r3-checkpoint-and-reuse`, not merged).**
 `ResearchCheckpointService` is complete and `SimulationStage`, `WalkForwardStage` and
 `MonteCarloStage` accept `checkpoint_service` and route through `run_simulation_unit` when
 set. No production path passes it: the three stage constructors in
@@ -1457,9 +1524,19 @@ restarts.
       the pass/fail verdict with the checkpoint as well, and re-filter on resume: resume
       is currently wrong in both directions (a strategy that failed before the crash can
       come back as a survivor, and a partial resume loses earlier passes) **[7.10 #3]**.
+      Closed 2026-11-24 by the design below. A run is read back whole, from its row and
+      its saved frames, so no stage is handed a missing result. No verdict is stored:
+      each stage judges the run it gets back with the rule it applies to a new one, so
+      neither wrong direction can happen.
 - [ ] Identity: thread the real `universe_version`, `random_seed` and `pipeline_id`, and
       include the `SimulationResultCache` key's `key_id` (today the identity lacks seed,
       symbols, date range and cost model) **[7.10 #4]**.
+      Closed 2026-11-24 by the design below. The identity of a saved run is its run id
+      (strategy id, seed, dataset, price basis, symbols, dates, experiment, stage, window
+      role, cost multiplier, universe timeline) and a fingerprint stored on its row for
+      what the run id leaves out: the code version, the strategy's settings, cash, the
+      cost and fill models, settlement, and corporate actions handed in with the
+      request. The cache's `key_id` is not used: the cache is not wired.
 - [ ] Instantiate in `experiment_orchestration_service.py` (where
       `plan.staged_pipeline_config.stages` is built) with
       `persist_path=<artifacts>/research/<experiment_id>.checkpoints.json`, pass
@@ -1467,23 +1544,86 @@ restarts.
       same in `research_hooks.py` if replay research should resume. The concrete call
       sites are `from_dict()` and `_build_replay_experiment_definition`, and
       `SimulationResultCache` is wired there in the same change **[7.10 #2]**.
+      Closed 2026-11-24 by the design below: neither is instantiated. The switch is
+      `SimulationRunner.reuse_completed_runs()`, which the research hook sets when it is
+      called with `reuse_completed_runs=True`; the platform backtest passes it from its
+      inputs.
 - [ ] CLI: `--resume`, `--checkpoint-store`, `--force-rerun` on the full-pipeline command;
       retire the deprecated `resume-experiment` alias.
+      Done 2026-11-24 for the path real runs take: `atp worker run --resume` (which
+      keeps the database) asks the research step to read back, and
+      `atp platform backtest run` has `--reuse-research-runs`. Not done: the research
+      CLI's own pipeline command and the alias (open box below).
 - [ ] End-to-end test: run, kill after the first stage, rerun with `--resume`, assert only
       the missing units execute and the final survivors match an uninterrupted run; plus
       the two directional cases from [7.10 #3] (failed-before-crash still fails, partial
       resume keeps earlier passes).
+      Done 2026-11-24, on the real runner, engine, database and Parquet files through
+      all seven kinds of stage (`tests/research/test_research_resume_on_real_runs.py`,
+      9): a second attempt simulates nothing and says what the first said; an attempt
+      killed after 7 simulations (its eighth left RUNNING) and resumed says what an
+      uninterrupted one says and simulates only what was missing; a run is simulated
+      again when it was made by other code, with other cash under the same run id, or
+      when its saved frames are gone or were changed. The rules one at a time:
+      `tests/research/simulation/test_completed_run_reuse.py` (32). The whole research
+      step twice on one database: `test_research_stages_smoke.py`. The flag from the
+      worker to the step: `tests/application/services/test_backtest_research_reuse.py`
+      (4) and `test_worker_run_service.py`. Checked that they can fail: eight bugs put
+      in one at a time, seven caught by the real-engine tests, the eighth (a run that
+      is not COMPLETED read back) hidden behind a later rule and held by a unit test.
 - [ ] Scope, found 2026-11-23 while building R13: the stress and neighbour stages run
       their simulations through `GateSimulationRunner` (`_gate_stage_support.py`), which
       takes no checkpoint service. In the baseline rerun stress was about 21 minutes of
       the job, and the neighbours are estimated at more than that (R13). Decide with the
       boxes above whether resume covers those runs too.
+      Covered 2026-11-24: the read-back sits in `SimulationRunner.run`, which every
+      stage's simulations go through, those two among them. The holdout runs leave no
+      row (`record_run=False`) and are always simulated.
+- [x] **The design, decided by the user 2026-11-24: "Saved run is the checkpoint".**
+      Asked against wiring the checkpoint service as written above, and against no
+      resume. What was read first: a run id is derived from the run's inputs; the hook's
+      experiment id is `replay_research_<YYYYMM>`, the same on a restart; a run's frames
+      are saved under its own run id. Measured on real simulations: the saved equity
+      curve and trade log equal the returned ones on every column that is saved; the
+      saved copy lacks six cash columns of the curve (settled, unsettled and reserved
+      cash, buying power, pending settlements, dividend cash) and the trade log's
+      `slippage`, which no stage or metric reads.
+      Built (`research/simulation/completed_run_reuse.py`, `SimulationRunner`): a run
+      is handed back only when its row is COMPLETED, the row's fingerprint is this
+      request's and was made by this code version, its saved frames are there and as
+      long as the row says, and the metrics computed again from the saved frames equal
+      the stored ones. Anything else is simulated again, which costs time and changes
+      no result. Off unless asked for. The step's summary says how many runs were read
+      back (`runs_reloaded`).
+- [ ] Not run on B. A resume of a real job, on the user's go-ahead: start the rehearsal
+      job, stop it partway, run it again with `--resume`, and compare its summary with
+      the rehearsal's of 2026-11-23; record `runs_reloaded` and the time.
+- [ ] Decide: `ResearchCheckpointService`, the restart plan, `SimulationResultCache`,
+      the three stages' checkpoint arguments and the CLI that reads a store nothing
+      writes (`research inspect-checkpoints`, `plan-restart`, `resume-experiment`) are
+      all still there and still wired to nothing. Delete them, or keep them.
+- [ ] The research CLI's own pipeline command has no way to ask for the read-back
+      (the first CLI box above). No real run goes through it.
+- [ ] Corporate actions the runner reads from its own source are in neither the run id
+      nor the fingerprint. A resume therefore belongs on the database the first attempt
+      wrote to, with nothing ingested in between. Not checked: whether B's nightly pull
+      can change them between a run that dies in the evening and its resume.
+- [ ] The code version is `GIT_SHA` where the image sets it, else the checkout's HEAD,
+      which says nothing about uncommitted changes: on the laptop a resume after an
+      edit that was not committed reads back runs the edited code did not make. Found
+      beside it: the run manifest's `git_commit` asks `git rev-parse` once for every
+      simulation, and inside an image there is no checkout to ask, so what the boxes
+      have been recording there was not checked. Decide whether the manifest reads the
+      same value.
+- [ ] A run read back holds the columns the simulation datasets keep. If a stage comes
+      to read one of the seven that are not kept, a resumed run will not have it; the
+      list is held by `test_a_run_read_back_keeps_the_columns_the_stages_read`.
 - [x] Housekeeping while in the file: the replay hook's "42-day lookback" comment is
       stale, the lookback is 90 days **[7.10 #10]**. Already fixed in `e5bbab498` (the R2
       small set); ticked 2026-11-15: the comment at `research_hooks.py:487` now says 90
       days.
 
-**Verify:** the e2e test above; `research inspect-checkpoints` lists a real run's store.
+**Verify:** the e2e test above. (Was also: `research inspect-checkpoints` lists a real run's store. No store is written under the design decided 2026-11-24.)
 
 **R4 — Audit the remaining gates the same way (audit done 2026-11-15: notes below for
 stress, overfitting, parameter stability and regime, problems recorded as R11 to R15; the
@@ -1840,6 +1980,11 @@ this is live.
       before changing the number.
 - [ ] Tests: same run with and without an extra symbol gives identical fills for the
       shared symbols; the unseeded-stochastic case raises.
+- [ ] Noted 2026-11-24 (R2's saving, R3): a run one stage takes from another was drawn
+      with the other stage's seed (Monte Carlo's run taken by the regime, stress and
+      neighbour stages; stage 1's taken by walk-forward). Today the seed changes
+      nothing, which the real-engine test of the taken train run shows. Once fills are
+      random, decide whether a taken run is still the same evidence.
 
 **Verify:** R7's cross-process checksum test passes before and after; the 5c parity
 check is re-run because this touches `research/simulation/`.
@@ -2348,7 +2493,7 @@ closes, and the cost of the best strategy in the table is within the range the c
 assumption implies.
 
 **R13 — No stage checks parameter stability (found 2026-11-15 under R4; decided
-2026-11-23: build now, report only; built on `research/r13-neighbour-check`, not merged).**
+2026-11-23: build now, report only; merged as PR #200, `30b143274`, on A and B 2026-11-24).**
 The analyzer exists and is unreachable from the funnel (R4 note). A strategy tuned to
 one exact setting, the commonest form of overfitting in a parameter sweep, is not
 tested for it anywhere.
@@ -3284,6 +3429,15 @@ behind a fixture flag; default stays `alpaca`.
   - [ ] The window comes from a rule fixed in advance and rolls forward each month (for
         example the most recent 24 months with the last 6 held out). Choosing it after
         seeing results is one more way to fit.
+  - [ ] The count of what was tried (from R2's repeated-attempts box, decided
+        2026-11-24). Between two moves of the holdout date every month's candidates meet
+        the same selection and evaluation days, and the holdout is read once more each
+        month. The job keeps, somewhere a worker reset does not wipe (the summary it
+        sends to S3, or a table the reset keeps): candidates tried and admitted since
+        the holdout date last moved, how many times the holdout has been scored, and for
+        a strategy that comes round again, how many times it has been through. Each
+        run's result file already holds its own in / through counts (the stage funnel).
+        The 90-day layout is left as it is: no real run uses it.
 - Window design (proposed 2026-11-14 in answer to the user's "is 90 days the correct
   timing ... does extending the time overall help or adding the market condition
   timespans"; not agreed, and not to be fixed before the history depth is known):
