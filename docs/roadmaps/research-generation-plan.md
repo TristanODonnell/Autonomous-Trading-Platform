@@ -210,7 +210,7 @@ proposed").
 |---|---|---|---|---|---|---|
 | 1 | 🟡 G1 + G2 (built 2026-11-24 on `research/generation-repairs`, not committed; 33 a month, November and December share 9; see G2's box) | The draw: the same 30 candidates every month (the month seed never reaches generation); a draw that breaks a family's rule is thrown away, not replaced | Pass the month seed to generation; draw again until the family has the number asked for or no valid setting is left, and say which in the summary. The 2026-11-23 baseline is reproduced by commit `38a9b2c63`, not by seed | 0 done, 2 open | Build; correct the baseline fixture's header | First: every other row changes what a draw holds |
 | 2 | 🟡 G5 (built 2026-11-24 on `research/generation-repairs`, committed, not pushed; pool 390, 384 distinct, measured again; see G5's box) | Composite templates: 324 of 652 skeletons behave differently (measured on 21,316 bars) | Repair where the skeletons are made: regime filter compares price with its average; rate-of-change thresholds sized as fractions; one aggregator for single-rule skeletons | 0 done, 1 open | Build; measure the repaired pool again with `g5_measure.py` (B's `~/rehearsals/g5/`) | Before task 4: it sets the grid run's size |
-| 3 | 🔴 G3 | Momentum's thresholds are in dollars | New setting `measure` (`price` default, `return` for the research draw); the neighbour check treats it as a choice | 0 done, 1 open | Build; size the return thresholds from the dataset | With row 2 (same unit problem) |
+| 3 | 🟡 G3 (built 2026-11-24 on `research/generation-repairs`, not committed; old ids unchanged, draw 6 `return` a month, Nov / Dec share 0; see G3's box) | Momentum's thresholds are in dollars | New setting `measure` (`price` default, `return` for the research draw); the neighbour check treats it as a choice | 0 done, 1 open | Build; size the return thresholds from the dataset | With row 2 (same unit problem) |
 | 4 | 🔴 G4 + G8 (factor) | Factor configs that can never buy; factor configs that are one behaviour under two ids | A rule of the draw (buy threshold above the reachable score is invalid, redrawn under G2); a canonical form before hashing (zero-weight windows to default, thresholds to the reachable score level) | 0 done, 2 open (G4, G8's second part) | Build; confirm the two zero-trade ids fail the rule and `4fa1` / `8919` get one id | After row 1 (uses its redraw) |
 | 5 | 🔴 G9 | No gate compares a candidate with buy and hold of the same names | Report-only: buy and hold of the run's universe per window; excess return and information ratio per candidate in the gate report | 0 done, 1 open | Build; settle corporate-action jumps (use the split source, not a 30% rule) | Any time; needed before task 5 (Step 2's fitness) |
 | 6 | 🔴 G8 (turnover) | Turnover is computed by stage 1's filter and dropped; nothing shows return per dollar traded | Report-only: store daily turnover with the run's metrics; gate report shows it against the 10x cap and net return per dollar traded, beside the stress stage's 2x / 3x costs | 0 done, 1 open (G8's first part) | Build | With row 5 (both gate-report additions) |
@@ -3592,8 +3592,58 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       price and return give the same signals, so it is unaffected. Open with it: the
       return thresholds the draw uses, to be sized from the dataset (the spread of
       `rate_of_change` at the drawn lookbacks on 5-minute bars), not picked by hand.
-      The neighbour check (R13) has to treat `measure` as a choice, not a number. Not
-      built.
+      The neighbour check (R13) has to treat `measure` as a choice, not a number.
+      **Decided by the user 2026-11-24, building it:** the research grid for both
+      thresholds is -0.02, -0.01, 0, 0.01, 0.02 (shared by lookbacks 10 and 60, as the
+      resolver multiplies settings independently). Measured on the G5 bars
+      (`rate_of_change`, 5-minute, March-April 2026, 31 names, ~88k values each): std
+      0.0102 at lookback 10 and 0.0253 at 60; |change| reaches 0.01 on 15.5% / 57.8% of
+      bars and 0.02 on 4.6% / 30.3%; the old grid's 0.1 on 0.06% / 0.66%. 30 valid
+      configs (sell_below <= buy_above), was 12. Asked against three points (+-0.02, 0)
+      and against bands per lookback. And, a knock-on: the declared range of both
+      thresholds goes from +-0.1 to +-0.05, so R13's nudge (a tenth of the range) is
+      0.01, one grid step, not 0.02. Asked against keeping +-0.1 and against +-0.02
+      (the grid's edges would lose their outward neighbour).
+      **Built 2026-11-24 on `research/generation-repairs`, not committed.**
+      `MomentumParameters.measure: Literal["price", "return"] = "price"`;
+      `MomentumStrategy` reads `rate_of_change()` for return, `momentum()` for price.
+      Ids: normalising fills defaults and ids hash the result, so a plain new field
+      would have moved every momentum id; the schemas now have
+      `omitted_at_default` (a setting left out of the canonical dict while it holds
+      its default), momentum names `measure`. Checked: 25 momentum ids taken before
+      the change (lookbacks 1, 5, 10, 60 by the old threshold grid, and `{}`, Box A's
+      `momentum_v1`) are all unchanged; naming `measure: price` gives the same id. A
+      price signal's params carry no `measure` either (they feed the signal id).
+      `default_parameters` lists `measure` (every setting with its default); the
+      normalised form leaves it out, and the registry tests now say which is which.
+      `ParameterSpec.search_values`: the values research tries when they are not the
+      ones min / max / default give; search only, validation never reads it. `measure`
+      has `("return",)`, the thresholds the grid above; a stored config outside the
+      grid or the range still loads with its id. `required_indicators` for momentum
+      is `momentum, rate_of_change`. R13 already skips string settings: a return
+      config's neighbours move lookback and the thresholds by one grid step and keep
+      `measure: return`. The evolutionary generator's first member is still the plain
+      default (a price config); it is not used by the hook. **Measured on the draw**
+      (`draw_check.py`, 2026-11 and 2026-12): momentum delivers 6 a month, all
+      `return`, 2 rejected by its rule each month; November and December share 0 of 6
+      (4 of 6 after row 1). Tests: `test_momentum_measure.py` (14: the three pinned
+      ids, naming the default, a return config is another, an unknown measure refused,
+      the same 1% rise on a 20 and a 500 dollar name signals alike in returns and only
+      on the dear name in price, a price signal has no `measure`, the research grid, the
+      grid is not validation, R13's step and kept measure); the draw and neighbour
+      tests moved to the new grid and range (values at 0.05 now sit on the range's edge,
+      so they use 0.02); five registry tests read `omitted_at_default`. Mutation checks:
+      the default kept in the hash, the strategy ignoring `measure`, price signals
+      carrying it, the resolver ignoring `search_values`, and the draw not asking for
+      return: each is caught. The full suite then failed five real-run tests (the
+      cross-process artifact test, two hook smoke tests, the neighbour stage smoke
+      test, the sparse-bars test): they ran "whatever the first momentum draw gives",
+      which is now a return config, so their scenarios gave other signals or none. As
+      row 1 did for the gate tests, the real-run tests now take fixed configs
+      (`tests/research/real_run_support.PINNED_STRATEGIES`, the draw these tests were
+      written against, with `parameter_space=None`) wherever they set the strategies
+      themselves; the two that go through the hook's own draw keep it. All seven
+      real-run files pass with their expected values unchanged.
 - [ ] G4. The factor family draws configs that cannot trade: both of the baseline's
       zero-trade candidates. Each costs a simulation to find out.
       **Decided by the user 2026-11-24 (task 3): a rule of the draw.** Read before
