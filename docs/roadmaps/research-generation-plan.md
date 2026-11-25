@@ -5,7 +5,9 @@ strategy generation) or the worker's research jobs.** It records what the resear
 does today, what we are changing, how each change is measured, and the numbers as they
 land. Deployment state lives in `pre-launch-deployment-plan.md` (Phase 3.3(b), 3.4, Phase
 4); portfolio governance (bench admission, tiers, review) lives in
-`portfolio-rotation-plan.md`. This doc is the research-side companion to both.
+`portfolio-rotation-plan.md`. This doc is the research-side companion to both. Whether
+the strategies it finds make money, and how they keep improving, is in
+`strategy-quality-roadmap.md` (started 2026-11-25).
 
 **This sprint runs beside the deployment track, not after it.** Nothing in `research/` is
 imported by Box A's trading loop, so every step here can be built, tested and merged while
@@ -14,10 +16,54 @@ pieces on A (Step 3's endpoint) and the worker timers (Step 5), and both stay in
 switched on. Deployment findings keep going into the pre-launch plan; research findings
 (numbered R1, R2, …) go here.
 
-Last updated: 2026-11-16 (08:30 UTC). Status is in "Where we are" directly below; the detail
+Last updated: 2026-11-25. Status is in "Where we are" directly below; the detail
 and the evidence for every line are in section 3.
 
-## Where we are (2026-11-16)
+## Where we are (2026-11-25)
+
+> **Now.** Step 0 (R1 to R17) is done except follow-ups and parked items; Step 1's three
+> baselines are in section 5. Step 1b's six repairs are built and merged: rows 1 to 4 as
+> PR #203 (`fb0a8c8aa`), rows 5 and 6 as PR #204 (`1eccf3da9`), on A and B 2026-11-25
+> (A's app and scheduler, B's checkout and image, all checked on the merge commit). B's
+> `corporate_actions` table was loaded the same day (it was empty: see G9's box). **The
+> run on B for rows 1 to 6 ran 2026-11-25 04:49 to 11:21 UTC, exit 0** (`1eccf3da9`,
+> numbers in section 5): 33 in, 21 through every stage, none made money on the holdout,
+> and all 21 trail buy-and-hold by 28 to 48 points on evaluation. **Next (user,
+> 2026-11-25): planted controls first** (board "Planted controls, M1" below: a noisy
+> oracle that must be found, noise that must be rejected, outcomes fixed before the run);
+> then G10 and task 5 (what Step 2 builds) and task 4 (the grid baseline); R4's
+> observe-only drawdown kill (Step 3's prerequisite) can be built beside them.
+> **Candidate next build (not decided):** T1, a tear sheet for every research run
+> (`strategy-quality-roadmap.md`, section 8), report-only; its first input is the
+> 2026-11-25 run.
+
+### Where this plan joins the pre-launch plan (added 2026-11-25)
+
+Most of what is left here is the work the deployment track waits on. The three late steps
+are the pre-launch plan's own items, written once in each doc:
+
+| Here | Pre-launch plan | Needs from the deployment track | Gives the deployment track |
+|---|---|---|---|
+| Step 3, hand-off to A's bench | 3.3(b) | A's bench and portfolio mode (on since 11/03); the weekly re-sims from B (working: Sat 11/21 exited 0, A accepted it); the weekly review in `advisory`, then `auto` (still `off`), or an admitted candidate is never weighed against the active strategies | Candidates for the bench |
+| Step 4, recorded-dataset source | 3.4 | A's nightly dataset publish to S3 (running) | Scheduled replays that repeat exactly; `.env.worker` can drop the Alpaca keys |
+| Step 5, monthly research job + timer | Phase 4 campaign timer | The rehearsal rule (pre-launch 7.3); a slot after the Saturday re-sim | The go-live gate's Research row |
+| Every result | D1, one feed | The go-live date: the SIP switch comes six weeks before it, and research re-baselines on SIP then | |
+
+The critical path to go-live runs through here: the gate needs four clean weeks with every
+Phase 3 automation on, and the Research row goes live only when Step 5 runs on its timer.
+
+```
+Step 2 (search) ───────────┐
+R4 drawdown kill ──────────┼─► Step 3 = 3.3(b) ─► Step 5 = Phase 4 timer ─► Research row live ─► gate clock
+Step 4 = 3.4 recorded data ┘                                              ▲
+review mode advisory → auto (3.3(a)) ─────────────────────────────────────┘
+```
+
+Not waiting on research: the calendar tests (11/26, 11/27, 11/30, 12/24, 12/31), the
+`advisory` rehearsal and flip, the IEX `SLA_BREACH` baseline, retention pruning, Phase 5's
+push channel. The re-dated calendar is in the pre-launch plan, 7.7.
+
+## Where we were (2026-11-16, kept as the record)
 
 Every unticked box was checked against the code or the recorded evidence on 2026-11-15.
 
@@ -196,24 +242,69 @@ Key: 🟢 done (shipped; anything left is a follow-up or waits on something else
 Keep this board in step with the boxes: when a box changes in section 3, change its row.
 "Done / open" counts checkboxes.
 
-**Step 1b, generation repairs (the current work)**
+**Planted controls, M1 (the current work, added 2026-11-25)**
+
+Pulled forward from Step 5's box "Planted controls in every campaign" by the user,
+2026-11-25, after the run of that day (section 5: 21 through every stage, none beats buy
+and hold). G10's decision-point row says controls come first, so that a "nothing found" is
+about the strategies and not the pipeline; this is the strategy-quality roadmap's M1 ("the
+pipeline can find an edge"). Done before G10 and task 5.
+
+| # | Decision (user, 2026-11-25) | Chosen | Instead of |
+|---|---|---|---|
+| C1 | How the edge is planted | A **noisy oracle on the real dataset**: a precomputed list of each name's next-session move, built from the run's own dataset version, which the strategy follows and is right a set share of the time | A synthetic dataset with a planted pattern |
+| C2 | What the oracle knows | **The next session**: at the session's first bar it knows each name's move to the session's close; about one trade per name per day (turnover near the real survivors') | The next 5-minute bar (moves about the size of costs: a test of the cost model, not the gates) |
+| C3 | Where it runs | **Its own controls-only fixture** (about 8 controls, about 2 hours on B); "in every campaign" waits for Step 5's monthly job | Mixed into the normal research run |
+| C4 | Expected outcomes | **Fixed before the run** (below); the result file marks each met / not met, report only | Read the numbers afterwards |
+
+Pre-registered outcomes (C4, written before any control has run):
+
+| Control | Expected | If not |
+|---|---|---|
+| Oracle 60% | Passes every stage and beats buy and hold of the names in force on the holdout | The pipeline is broken somewhere: trace it before G10 |
+| Oracle 55% | The same | The pipeline only sees large edges; G10 takes that into account |
+| Oracle 52% | No expectation, reported | The sensitivity probe: where the detection floor sits |
+| Noise, 5 seeds | None passes every stage; each stage's pass rate reported (the gates' false-pass rate) | The gates let noise through, and a pass of theirs is not evidence |
+
+Build notes (proposed with the decisions, to settle while building):
+- One strategy type for all controls, with `accuracy` and `seed`; the noise control is the
+  same strategy at accuracy 0.5 (right half the time, so its trades are independent of
+  the outcome). A matched control: same trades per day, same names, only the edge differs.
+  The existing `random` type (signal on a third of all bars) would be killed by costs in
+  stage 1 and so test nothing about the statistical gates.
+- The engine gives strategies only bars before the evaluation time
+  (`strategy_context_builder.py`, `assert_historical_only`); the oracle's list is its one
+  side channel and the guard stays as it is for every other strategy.
+- Controls are tagged and never reach governance seeding
+  (`_seed_research_governance_from_intelligence`), the intelligence ranking, or a
+  hand-off to A.
+- Not in any generation family: the controls fixture lists them by hand.
+
+| # | Item | State |
+|---|---|---|
+| 1 | Oracle-control strategy + its next-session list + exclusion tag, with tests | ⚪ not started |
+| 2 | Controls fixture (60 / 55 / 52%, noise × 5) and the met / not met lines in the result file | ⚪ not started |
+| 3 | One run on B (go-ahead needed); results into section 5 against the table above | ⚪ waits on 1 and 2 |
+
+**Step 1b, generation repairs (built and merged)**
 
 Added 2026-11-24 (user: move the settled build tasks up here, as the R boxes were). Each
 row is a piece of work built together; the G boxes it closes are in section 3, Step 1b,
 with the measurements and the decision behind each. All decided by the user 2026-11-24
-(task 3); nothing built. Order and PR split below agreed by the user 2026-11-24 ("as
+(task 3); all six built and merged (PRs #203 and #204, on A and B by 2026-11-25);
+the run on B for both started 2026-11-25 04:49 UTC. Order and PR split below agreed by the user 2026-11-24 ("as
 proposed").
 
-*Open: will be built (in this order)*
+*Built and merged (in this order)*
 
 | # | Item | What it is | Decision | Boxes | What is left | When |
 |---|---|---|---|---|---|---|
-| 1 | 🟡 G1 + G2 (built 2026-11-24 on `research/generation-repairs`, not committed; 33 a month, November and December share 9; see G2's box) | The draw: the same 30 candidates every month (the month seed never reaches generation); a draw that breaks a family's rule is thrown away, not replaced | Pass the month seed to generation; draw again until the family has the number asked for or no valid setting is left, and say which in the summary. The 2026-11-23 baseline is reproduced by commit `38a9b2c63`, not by seed | 0 done, 2 open | Build; correct the baseline fixture's header | First: every other row changes what a draw holds |
-| 2 | 🟡 G5 (built 2026-11-24 on `research/generation-repairs`, committed, not pushed; pool 390, 384 distinct, measured again; see G5's box) | Composite templates: 324 of 652 skeletons behave differently (measured on 21,316 bars) | Repair where the skeletons are made: regime filter compares price with its average; rate-of-change thresholds sized as fractions; one aggregator for single-rule skeletons | 0 done, 1 open | Build; measure the repaired pool again with `g5_measure.py` (B's `~/rehearsals/g5/`) | Before task 4: it sets the grid run's size |
-| 3 | 🟡 G3 (built 2026-11-24 on `research/generation-repairs`, not committed; old ids unchanged, draw 6 `return` a month, Nov / Dec share 0; see G3's box) | Momentum's thresholds are in dollars | New setting `measure` (`price` default, `return` for the research draw); the neighbour check treats it as a choice | 0 done, 1 open | Build; size the return thresholds from the dataset | With row 2 (same unit problem) |
-| 4 | 🟡 G4 + G8 (factor) (built 2026-11-24 on `research/generation-repairs`, not committed; `0a2d` / `8c07` refused, `4fa1` = `8919`, factor grid 12,336; see G4's and G8's boxes) | Factor configs that can never buy; factor configs that are one behaviour under two ids | A rule of the draw (buy threshold above the reachable score is invalid, redrawn under G2); a canonical form before hashing (zero-weight windows to default, thresholds to the reachable score level) | 0 done, 2 open (G4, G8's second part) | Build; confirm the two zero-trade ids fail the rule and `4fa1` / `8919` get one id | After row 1 (uses its redraw) |
-| 5 | 🟡 G9 (built 2026-11-24 on `research/gate-report-benchmark`, not committed; names in force, the run's corporate actions, the layout's sessions; B has no corporate actions: see G9's box) | No gate compares a candidate with buy and hold of the same names | Report-only: buy and hold of the run's universe per window; excess return and information ratio per candidate in the gate report | 0 done, 1 open | Build; settle corporate-action jumps (use the split source, not a 30% rule) | Any time; needed before task 5 (Step 2's fitness) |
-| 6 | 🟡 G8 (turnover) (built 2026-11-25 on `research/gate-report-benchmark`, not committed; result file only, per the user; see G8's box) | Turnover is computed by stage 1's filter and dropped; nothing shows return per dollar traded | Report-only: store daily turnover with the run's metrics; gate report shows it against the 10x cap and net return per dollar traded, beside the stress stage's 2x / 3x costs | 0 done, 1 open (G8's first part) | Build | With row 5 (both gate-report additions) |
+| 1 | 🟢 G1 + G2 (merged as PR #203, `fb0a8c8aa`, on A and B; 33 a month, November and December share 9; see G2's box) | The draw: the same 30 candidates every month (the month seed never reaches generation); a draw that breaks a family's rule is thrown away, not replaced | Pass the month seed to generation; draw again until the family has the number asked for or no valid setting is left, and say which in the summary. The 2026-11-23 baseline is reproduced by commit `38a9b2c63`, not by seed | 0 done, 2 open | Build; correct the baseline fixture's header | First: every other row changes what a draw holds |
+| 2 | 🟢 G5 (merged as PR #203, `fb0a8c8aa`, on A and B; pool 390, 384 distinct, measured again; see G5's box) | Composite templates: 324 of 652 skeletons behave differently (measured on 21,316 bars) | Repair where the skeletons are made: regime filter compares price with its average; rate-of-change thresholds sized as fractions; one aggregator for single-rule skeletons | 0 done, 1 open | Build; measure the repaired pool again with `g5_measure.py` (B's `~/rehearsals/g5/`) | Before task 4: it sets the grid run's size |
+| 3 | 🟢 G3 (merged as PR #203, `fb0a8c8aa`, on A and B; old ids unchanged, draw 6 `return` a month, Nov / Dec share 0; see G3's box) | Momentum's thresholds are in dollars | New setting `measure` (`price` default, `return` for the research draw); the neighbour check treats it as a choice | 0 done, 1 open | Build; size the return thresholds from the dataset | With row 2 (same unit problem) |
+| 4 | 🟢 G4 + G8 (factor) (merged as PR #203, `fb0a8c8aa`, on A and B; `0a2d` / `8c07` refused, `4fa1` = `8919`, factor grid 12,336; see G4's and G8's boxes) | Factor configs that can never buy; factor configs that are one behaviour under two ids | A rule of the draw (buy threshold above the reachable score is invalid, redrawn under G2); a canonical form before hashing (zero-weight windows to default, thresholds to the reachable score level) | 0 done, 2 open (G4, G8's second part) | Build; confirm the two zero-trade ids fail the rule and `4fa1` / `8919` get one id | After row 1 (uses its redraw) |
+| 5 | 🟢 G9 (merged as PR #204, `1eccf3da9`, on A and B 2026-11-25; names in force, the run's corporate actions, the layout's sessions; B's corporate actions loaded 2026-11-25: see G9's box) | No gate compares a candidate with buy and hold of the same names | Report-only: buy and hold of the run's universe per window; excess return and information ratio per candidate in the gate report | 0 done, 1 open | Build; settle corporate-action jumps (use the split source, not a 30% rule) | Any time; needed before task 5 (Step 2's fitness) |
+| 6 | 🟢 G8 (turnover) (merged as PR #204, `1eccf3da9`, on A and B 2026-11-25; result file only, per the user; see G8's box) | Turnover is computed by stage 1's filter and dropped; nothing shows return per dollar traded | Report-only: store daily turnover with the run's metrics; gate report shows it against the 10x cap and net return per dollar traded, beside the stress stage's 2x / 3x costs | 0 done, 1 open (G8's first part) | Build | With row 5 (both gate-report additions) |
 
 PR split (agreed 2026-11-24): rows 1 to 4 as one generation PR (they change the draw; measured
 before / after on the draw itself, no run needed to merge), rows 5 and 6 as one gate-report
@@ -227,6 +318,7 @@ composite-grid baseline) and task 5 (revise Step 2).
 | ⚪ G6 | Closed 2026-11-24: covered by G3, G4, G5. A turnover pre-pass is reconsidered in Step 2 |
 | ⚪ G7 | Folded into Step 2 2026-11-24: taken in task 5 with the fitness question; the generation cache is wired there |
 | ⚪ G10 | Open, decided later (user, 2026-11-24): which search algorithms to use (evolutionary, Bayesian, successive halving, local search, a mix), and so whether Step 2's evolutionary design stands; the code structure follows the choice (methods are hard-wired twice today). Decided after rows 1 to 6 are built, with G9's numbers in hand, before or with task 5 |
+| ⚪ G10, decision point | Added 2026-11-25 (with the user): if after Step 2's search and the first monthly runs no candidate beats buy-and-hold of the names in force on the holdout (pre-launch 7.1b Research tier), change what is searched, not how hard: slower strategies (daily bars, holding days), cross-sectional ranking, lower turnover by design. Positive and negative controls come first, so a "nothing found" is about the strategies, not the pipeline. The number of runs before this point is set with G10 |
 
 **Step 0, pipeline integrity** (no run left to wait for since 2026-11-24: R3's resume
 passed on the rehearsal job and R13's first numbers came with the baseline; what is open
@@ -4044,6 +4136,21 @@ on operators, not on the gates.
 Copy the bench re-sim hand-off (`POST /api/v1/worker/...`, `worker` role, idempotent by
 `run_id`, dataset version + git SHA checked, A rejects stale or mismatched results).
 
+**Found 2026-11-25 (read-only): research and A trade different names.** Research runs on
+B's 31-name universe timeline; A's newest published dataset
+(`raw_bars_20261124T230055Z_1aa92f2e`) holds 22. They share 11 (AAPL, AMD, AMZN, AVGO,
+GOOGL, META, MSFT, NVDA, TSLA, UNH, V). A only: ADBE, BKNG, COST, CRM, HD, MA and the ETFs
+DIA, IWM, QQQ, SPY, TLT. Research only: BA, BAC, C, CSCO, CVX, GOOG, INTC, JNJ, MRK, MRVL,
+MU, NFLX, ORCL, PFE, PLTR, SCHW, UBER, WFC, WMT, XOM. A candidate's holdout numbers are
+of names A may not trade, and A's re-sim of it would run on names research never tested.
+
+- [ ] Before automatic admission: the Research and Admission tiers of the
+      pre-launch plan's 7.1b quality benchmarks pass (decided by the user 2026-11-25:
+      quality gates the automatic switches, not go-live), including the positive and
+      negative controls (a planted edge is found, planted noise is rejected).
+- [ ] Decide which universe a handed-off candidate is judged on (research's, A's, or both
+      with the gap recorded), before the contract below is fixed.
+
 - [ ] Before the hand-off is switched on: the 12% drawdown kill on the backtest
       trading path (R4's open box, deferred here by the user 2026-11-24). Until it is
       there, the holdout numbers a batch carries are of runs that traded on through a
@@ -5656,7 +5763,10 @@ behind a fixture flag; default stays `alpaca`.
     (R7); before/after on identical bars (ground rules); a rehearsed dry run before the
     timer (this step).
   - [ ] Planted controls in every campaign: a strategy built to have no edge and a
-        synthetic one with a strong edge. A no-edge control that passes more often than
+        synthetic one with a strong edge. **The first, controls-only version was pulled
+        forward 2026-11-25** (top board, "Planted controls, M1": a noisy oracle on the
+        real dataset rather than a synthetic one); what stays here is running them in
+        every monthly campaign. A no-edge control that passes more often than
         the gate's design rate means something leaks.
   - [ ] One frozen reference window (medium length, fixed dataset version) for
         before/after comparisons of code changes, so a change is never judged on a full
@@ -5922,3 +6032,68 @@ that fits). Not built, 16: 12 a setting at the edge of its declared range (the d
 short value lists sit on the bounds, so half the neighbours fall outside), 4 a zero with
 no declared range. `ce0a` and `93a0` are one behaviour (G5) and so have the same
 neighbours' numbers.
+
+### The run with Step 1b's rows 1 to 6 and corporate actions (2026-11-25, `feed=iex`)
+
+The same fixture on `1eccf3da9` (PRs #203 and #204 in, B's `corporate_actions` loaded),
+started 04:49:18 UTC on the user's go-ahead, exit 0 at 11:21:04, 23,506 s (6 h 32 min; the
+2026-11-24 run took 2 h 46 min). Dir
+`~/rehearsals/research_admission_baseline_20261125T044918Z/` on B, summary saved as
+`research_summary.json`. Peak memory 2.60 of 2.98 GiB (87%, 09:43, in the neighbour
+stage; was 1.85). Not compared field by field with 2026-11-24: generation changed (rows 1
+to 4), so the candidates are different ones. `total_runs` 342 (was 132).
+
+**Data change against 2026-11-24:** the benchmark and every return now include 1 split and
+178 cash dividends from `corporate_actions` (it was empty before).
+
+Generation (random draws per family): momentum 6 of 6 (2 rejected and redrawn), mean
+reversion 6 of 6, moving-average crossover **3 of 6, exhausted** (3 rejected, no draws
+left), factor 8 of 8 (2 rejected), composite 10 of 10. 33 in all (was 30).
+
+Stage times: stage 1 39 min (33 runs), walk-forward 32 min (24 train runs taken from stage
+1), Monte Carlo 32 min, regime 4 s (24 reused runs, 7 report-only findings), stress 61 min
+(48 runs), **neighbours 3 h 29 min (165 runs, 51 not built)**, overfitting + holdout +
+wrap-up 19 min. The neighbour check is now the longest stage by far.
+
+| Stage | 2026-11-24 | 2026-11-25 |
+|---|---|---|
+| initial quality filter | 30 -> 8 | 33 -> 24 |
+| walk-forward | 8 -> 8 | 24 -> 24 |
+| Monte Carlo | 8 -> 8 | 24 -> 24 |
+| regime | 8 -> 8 | 24 -> 24 |
+| stress | 8 -> 8 | 24 -> 21 |
+| parameter neighbours (report only) | 8 -> 8 | 21 -> 21 (2 with findings) |
+| overfitting gate | 8 -> 8 | 21 -> 21 |
+
+Stage 1's 9: six lose money (Sharpe -0.25 to -1.52, profit factor below 1), one positive
+but weak (Sharpe 0.24), **two mean-reversion draws with zero trades**. Stress's 3: each
+survived 0 of 2 cost scenarios (Sharpe about -0.05 at 2x, -1.2 to -1.35 at 3x); they are
+the three busiest survivors (daily turnover 2.95 to 3.17, about 1 bp net per dollar
+traded). `momentum 09a9` and `factor 6552` have the same numbers on every field read (G5's
+"one behaviour", across families this time).
+
+**Against buy-and-hold (G9).** Buy-and-hold of the names in force made +28.2% on selection,
++50.1% on evaluation (Sharpe 2.84) and **-8.8% on the holdout** (Sharpe -0.55). Every one
+of the 21 survivors trails it on evaluation, by 27.6 to 47.8 points (best: `composite
+0a8d` +22.6%). The three test folds read the same way for the one checked.
+
+**Holdout (2026-05-18 to 2026-11-16, 127 sessions), 21 scored:**
+
+| | Count | Notes |
+|---|---|---|
+| Made money (more than 0.05%) | 0 | best two about 0.0%: `mean_reversion f369` (Sharpe 0.09, 228 trades), `crossover bf6d` (0.03, 879) |
+| Lost less than buy-and-hold | 15 | excess +0.3 to +8.8 points, only because the market fell |
+| About equal (within 0.1 point) | 2 | `factor b5c1`, `composite 620a`, both -8.8% |
+| Lost more than buy-and-hold | 4 | -10.1% to -11.1%, all with 29,600 to 41,600 trades |
+
+Turnover (G8): survivors' daily turnover 0.03 to 2.39 (0.3% to 24% of the 10x cap). Net
+return per dollar traded ranges from 69 bp (`mean_reversion 8ac1`, 0.03 turnover) down to
+about 3 bp for the busiest; the busiest are the worst on the holdout.
+
+Read: rows 1 to 4 let many more candidates through (24 of 33 past stage 1, was 8 of 30), and
+the later gates pass nearly all of them, but none earns more than buying the names: they
+trail by 28 to 48 points in the up market and lose less only when the market falls. This
+is G10's decision point as written (nothing beats buy-and-hold) after one run, before any
+Step 2 search; it fits the quieter, low-turnover end doing least badly. Costs: the
+neighbour stage scales with survivors (3.5 h for 21) and memory is at 87%, so a wider
+generation needs the neighbour stage's cost settled first.
