@@ -3463,7 +3463,32 @@ The 2026-11-06 version:
 **Verify:** the run completes end to end on B against pulled Parquet (no Alpaca call), the
 summary JSON lands under `artifacts/worker/`, and the numbers are in section 5.
 
-### Step 1b — Generation system review (started 2026-11-24: audit read, findings G1 to G8 open, decisions next; added 2026-11-15)
+### Step 1b — Generation system review (audit and repairs done; G7, G10, tasks 4 and 5 open; added 2026-11-15)
+
+**Status at a glance (2026-11-25).** The boxes below keep the full record; this table is
+what is finished and what is not.
+
+| Item | What it was | State |
+|---|---|---|
+| Task 1 | Read the 2026-11-23 baseline | ✅ done 2026-11-24 |
+| Task 2 | The six-question audit | ✅ done 2026-11-24 |
+| Task 3 | Decisions on G1 to G9 | ✅ done 2026-11-24 (G10 left for later by the user) |
+| G1 + G2 | Month seed reaches the draw; refused draws redrawn | ✅ merged PR #203, on A and B |
+| G3 | Momentum `measure: return` | ✅ merged PR #203, on A and B |
+| G4 | Factor configs that can never buy refused | ✅ merged PR #203, on A and B |
+| G5 | Composite templates repaired (pool 390, 384 distinct) | ✅ merged PR #203, on A and B |
+| G6 | Cheap rejection before simulating | ✅ closed: covered by G3, G4, G5 |
+| G7 | Nothing a run learns reaches the next draw | ⏳ open: folded into Step 2, closes when task 5 writes it in |
+| G8 | Factor canonical form (PR #203); turnover and return per dollar traded (PR #204) | ✅ both parts merged, on A and B |
+| G9 | Buy and hold of the names in force, report only | ✅ merged PR #204, on A and B; corporate actions loaded on B. **Open:** whether to enforce it (a gate or Step 2's fitness), taken with task 5; the first numbers are in section 5 (2026-11-25) |
+| Run on B | Rows 1 to 6 + corporate actions | ✅ ran 2026-11-25, exit 0, section 5 |
+| Planted controls (M1) | Does the pipeline find a known edge? | ⏳ **next**, top board "Planted controls, M1" (added 2026-11-25, before G10) |
+| G10 | Which search method(s) | ⏳ open, decided after the controls |
+| Task 5 | Revise or confirm Step 2's design | ⏳ open, with G10, G7 and G9's enforcement |
+| Task 4 | The composite-grid baseline | ⏳ open; it is what Step 2's search is compared with (Step 2's **Verify**) |
+
+Order from here: controls first (user, 2026-11-25), then G10 + task 5 and task 4 (their
+order not decided), then Step 2's build.
 
 User, 2026-11-15: "the strategy generation and structure of the generation system needs
 overhauling/update"; not urgent, later in this sprint. What the plan had before this
@@ -3616,9 +3641,10 @@ the first n. The baseline's three surviving composites are all "rule A or volume
 high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
 `logic_or_z_20_v0_vol_r_30_hi`. The first two have the same numbers in every run.
 
-**Findings (2026-11-24), each a box; none is fixed and none is decided.**
+**Findings (opened 2026-11-24), each a box.** Ticked = built and merged (or closed); G7
+and G10 are still open. The status table at the top of this step summarises them.
 
-- [ ] G1. The candidates never change. The month seed does not reach generation, so
+- [x] G1. The candidates never change. The month seed does not reach generation, so
       every month's job draws the baseline's 30 again. A monthly job as built would
       test nothing new. The baseline fixture's header says the month changes the
       candidates drawn; it does not. This also changes what R2's "repeated attempts"
@@ -3634,14 +3660,14 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       code, so the 2026-11-23 baseline is reproduced by running the commit it ran on
       (`38a9b2c63`, with its fixture, seed and dataset version), not by seed 42 on
       later code. Asked against keeping a legacy draw option in the code.
-- [ ] G2. Draws that break a family's rule are thrown away and not replaced, so a family
+- [x] G2. Draws that break a family's rule are thrown away and not replaced, so a family
       returns fewer than asked: 4 of 6 momentum, 2 of 6 crossover, and with another
       seed none of 6 crossover. Crossover has three settings that pass its rule in all.
       **Decided by the user 2026-11-24 (with G1): repair it in this step, before the
       grid baseline.** Draw again until the family has the number asked for or has no
       setting left that passes its rule, and say in the summary which it was. Not built.
       **G1 + G2 built 2026-11-24 on `research/generation-repairs` (off main
-      `4419c04cf`), not committed.** The hook hands every family the research month
+      `4419c04cf`), merged as PR #203 (`fb0a8c8aa`).** The hook hands every family the research month
       as `seed` (`_replay_strategy_set(smoke, seed)`; the same `month_seed` the
       simulations use). The random generator draws without replacement: every
       combination listed once, shuffled by the seed, walked until `n_samples` distinct
@@ -3672,7 +3698,7 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       canonical form; its test goes with row 4. (Done in row 4:
       `test_two_draws_of_one_behaviour_are_one_candidate_and_a_repeat` fails without
       the check.)
-- [ ] G3. Momentum's thresholds are in dollars and are documented as a return. Ten cents
+- [x] G3. Momentum's thresholds are in dollars and are documented as a return. Ten cents
       is a different bar for a 20 dollar name and a 500 dollar one.
       **Decided by the user 2026-11-24 (task 3): a new setting, `measure`.** The
       momentum strategy takes `measure: price` (today's meaning, the default) or
@@ -3698,7 +3724,7 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       thresholds goes from +-0.1 to +-0.05, so R13's nudge (a tenth of the range) is
       0.01, one grid step, not 0.02. Asked against keeping +-0.1 and against +-0.02
       (the grid's edges would lose their outward neighbour).
-      **Built 2026-11-24 on `research/generation-repairs`, not committed.**
+      **Built 2026-11-24 on `research/generation-repairs`, merged as PR #203 (`fb0a8c8aa`).**
       `MomentumParameters.measure: Literal["price", "return"] = "price"`;
       `MomentumStrategy` reads `rate_of_change()` for return, `momentum()` for price.
       Ids: normalising fills defaults and ids hash the result, so a plain new field
@@ -3738,7 +3764,7 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       written against, with `parameter_space=None`) wherever they set the strategies
       themselves; the two that go through the hook's own draw keep it. All seven
       real-run files pass with their expected values unchanged.
-- [ ] G4. The factor family draws configs that cannot trade: both of the baseline's
+- [x] G4. The factor family draws configs that cannot trade: both of the baseline's
       zero-trade candidates. Each costs a simulation to find out.
       **Decided by the user 2026-11-24 (task 3): a rule of the draw.** Read before
       asking (`factor_based_strategy.py`): the score is momentum +1 / -1 (sign only),
@@ -3753,7 +3779,7 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       returns 6 of 8). The check catches "can never buy" only; a reachable maximum
       still needs all three parts at their top on one bar. To confirm when built: the
       two zero-trade ids (`0a2d5aed`, `8c07c0ec`) fail it.
-      **Built 2026-11-24 on `research/generation-repairs`, not committed (with G8's
+      **Built 2026-11-24 on `research/generation-repairs`, merged as PR #203 (`fb0a8c8aa`) (with G8's
       canonical form, row 4).** `research/strategy_generation/family_rules.py`,
       `research_form(type, params)`, applied by the random and grid draws before a
       config is made; other families pass through; schemas, stored rows and
@@ -3775,7 +3801,7 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       identical closes in a row. **Measured:** the 2026-11 and 2026-12 draws refused 2
       and 3 (the same configs the old draw delivered and could never buy) and still
       delivered 8; the grid refuses 8,208 of 39,366.
-- [ ] G5. Composites that behave the same are counted and simulated as different. The
+- [x] G5. Composites that behave the same are counted and simulated as different. The
       template's name is part of the config, so of the id. Seen: two survivors with
       the same numbers in every run. Reported, by reasoning, not measured: the rule
       variants at 1.5 and 2.0 on a rate of change cannot fire (it is a fraction);
@@ -3824,7 +3850,7 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       (the user's choice):** `mom_*` and `dist_*` thresholds of +-1.5 / +-2.0 are in
       dollars (G3's problem in the composites), and the volatility filter
       `roll_std_20 < 5.0` is in dollars and passes 98.1%.
-      **Built 2026-11-24 on `research/generation-repairs`, not committed.** In
+      **Built 2026-11-24 on `research/generation-repairs`, merged as PR #203 (`fb0a8c8aa`).** In
       `composite_generation.py`: `_ROC_MEAN_REVERSION_BANDS` and
       `_threshold_variants_for` (a rate-of-change lookback with no measured band is
       refused, not given the z-score variants), the regime list is `dist_50`, one-rule
@@ -3888,7 +3914,7 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       cache is wired there (Step 2's "Bounds" line). Asked against wiring the cache now
       (small saving with fresh seeds) and against closing it. The box closes when
       task 5 has written it into Step 2.
-- [ ] G8. The baseline's eight survivors are about four behaviours: the factor survivor
+- [x] G8. The baseline's eight survivors are about four behaviours: the factor survivor
       and the three composites are within a hair of one another on every window
       (evaluation return 17.8% to 18.5%), two of them equal. Five of the eight trade
       139 to 278 times a day.
@@ -3926,7 +3952,7 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
         result; no report showed it and no database column holds it. **Decided by the
         user 2026-11-25: the result file only** (as the holdout's numbers, 2026-11-20),
         no column. Asked against a migration for a number no code reads.
-        **Built 2026-11-25 on `research/gate-report-benchmark`, not committed (row 6).**
+        **Built 2026-11-25 on `research/gate-report-benchmark`, merged as PR #204 (`1eccf3da9`) (row 6).**
         `notional_traded(trade_logs)` in `trade_metrics.py` (every fill's |quantity| x
         price; turnover now uses it, so the two share one measure of dollars traded);
         every `reference_run` in the gate report gains `daily_turnover`,
@@ -3954,7 +3980,7 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
         sampled (308 configs, 10,665 bars each, signals on 52.8% of them): **0 ever act
         differently**. The threshold part is exact (the score takes finitely many
         values; a threshold moves to the reachable score that picks the same ones).
-        **Built 2026-11-24 on `research/generation-repairs`, not committed (with G4,
+        **Built 2026-11-24 on `research/generation-repairs`, merged as PR #203 (`fb0a8c8aa`) (with G4,
         row 4).** A zero-weight part's window goes to the research floor, 10 (the user
         agreed 2026-11-24; the schema default would put momentum at 5, under the
         floor), then the buy threshold moves to the smallest reachable score at or
@@ -3974,7 +4000,7 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
         volatility score always counted (the first rule above), the random draw
         skipping the family rules, and the random draw keeping repeats: each is
         caught.
-- [ ] G9. No gate compares a candidate with holding the same names (opened 2026-11-24
+- [x] G9. No gate compares a candidate with holding the same names (opened 2026-11-24
       from task 1). Stage 1's bar is absolute (Sharpe >= 0.5, return >= 0), so in a
       rising market a strategy that is long most of the time passes on market
       exposure alone. None of the 30 beat buy and hold on the selection window.
@@ -3997,7 +4023,7 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       31.) Asked against all 31 names and against both side by side. Corporate actions
       settled in the build: the run's own source, splits and cash dividends, since the
       simulator credits both to the candidate's equity.
-      **Built 2026-11-24 on `research/gate-report-benchmark`, not committed (row 5).**
+      **Built 2026-11-24 on `research/gate-report-benchmark`, merged as PR #204 (`1eccf3da9`) (row 5).**
       `research/pipeline/benchmark_report.py` (pure functions, plus a reader of each
       name's first and last bar of a day: ~33k points for 24 months of 31 names, not
       1.3M bar objects) and three pieces in the hook, run after the survivors are
@@ -4063,7 +4089,10 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       guard). The code structure follows the choice: a method that learns needs a
       propose, evaluate, propose loop, which today's two hard-wired switches cannot
       give. **The user, 2026-11-24: not sure yet; decide after the Step 1b build rows
-      are done.** Not decided, nothing to build.
+      are done.** Not decided, nothing to build. **2026-11-25:** the build rows are done
+      and the run with them found nothing above buy and hold (section 5), which is G10's
+      decision-point reading; the user put the planted controls first (top board), so
+      G10 is decided after them.
 - [x] Task 3. Options for the user from the above, in plain terms, before any code.
       **Done 2026-11-24:** G1 to G9 each decided (G1's reproducibility wording
       corrected; G8's first part replaced the same session after a wrong reading; G6
@@ -4084,7 +4113,32 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       cheap rejections. Its numbers go in section 5 (the `grid` and `random n=50` rows).
 - [ ] Task 5. Revise Step 2's design or confirm it.
 
-### Step 2 — A real evolutionary search for composites (not started)
+### Step 2 — A real evolutionary search for composites (not started; design under review)
+
+**Status (2026-11-25).** Nothing built. Step 2 is the search that replaces today's random
+draw: it proposes candidates, learns from their scores and proposes better ones. What it
+waits on, in order:
+
+| # | Waits on | State | Why it matters here |
+|---|---|---|---|
+| 1 | Planted controls (M1, top board) | ⏳ next | If the pipeline cannot find a planted edge, a better search cannot help |
+| 2 | G10: which search method(s) | ⏳ open | The design below assumes evolutionary; Bayesian, successive halving or local search are also on the table |
+| 3 | Task 5: revise or confirm this design | ⏳ open | Takes G10's answer, G7 (the run-to-run memory, the cache) and G9 (whether beating buy and hold is the fitness or a gate) |
+| 4 | Task 4: the composite-grid baseline | ⏳ open | The **Verify** below compares the search with `grid`'s top 10 |
+
+Already done that Step 2 builds on: the draw varies by month and redraws refused configs
+(G1, G2), the families' settings are repaired (G3, G4, G5, G8), every candidate is measured
+against buy and hold (G9) and its turnover reported (G8), and the neighbour builder (R13)
+exists for local search.
+
+Numbers to beat, from the 2026-11-25 run (section 5): 21 survivors of 33; median holdout
+Sharpe -1.44 against buy and hold's -0.55; 0 of 21 above buy and hold on evaluation (they
+trail by 28 to 48 points); 18.7 minutes of B per survivor (6 h 32 min for 21). These
+replace task 1's numbers from the 2026-11-23 baseline.
+
+Note for task 5: the **Verify** below was written before G9 and judges the search against
+`grid` only, on Sharpe. Since G9, beating buy and hold of the names in force is the bar that
+matters (pre-launch 7.1b, Research tier); task 5 decides whether Verify changes.
 
 > **Under question since 2026-11-24 (G10, Step 1b):** whether the search should be
 > evolutionary at all, or another method or a mix. The design below is from 2026-11-06,
