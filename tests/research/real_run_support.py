@@ -213,6 +213,39 @@ def build_context(session: Any, data_root: Path) -> Any:
     return ctx
 
 
+# One fully specified config per family: what one random draw per family gave with the
+# default seed when the real-run tests were written, before research plan G2 (the draw)
+# and G3 (momentum draws returns) changed what a draw gives. The real-run tests measure
+# the pipeline, not the draw, so they run these with ``parameter_space=None`` (no
+# generation) and do not move when generation does. The momentum one is also the
+# 2026-11-23 baseline's.
+PINNED_STRATEGIES: dict[str, dict[str, Any]] = {
+    "momentum": {
+        "type": "momentum",
+        "strategy_id": "momentum__f84afdd49e7e463aa29a211bf0425d17bdf157f2a7cde251b34d00711a34d9bc",
+        "parameters": {"lookback": 10, "buy_above": 0.1, "sell_below": -0.1},
+    },
+    "mean_reversion": {
+        "type": "mean_reversion",
+        "strategy_id": "mean_reversion__c4865a764b31bd0b87b1f60f05d3b19235fca9dcddbd913e13e8436f55886e09",
+        "parameters": {"window": 10, "buy_below_z": -0.5, "sell_above_z": 0.5},
+    },
+    "moving_average_crossover": {
+        "type": "moving_average_crossover",
+        "strategy_id": "moving_average_crossover__bf6d39da67fe77ecb6710f02e729c152869aa8d39e1c607f23d64f5440087594",
+        "parameters": {"short_window": 10, "long_window": 200},
+    },
+}
+
+
+def pinned_strategy_set(*families: str) -> list[dict[str, Any]]:
+    """The pinned configs of these families, as a strategy_set (copies)."""
+    return [
+        {**PINNED_STRATEGIES[f], "parameters": dict(PINNED_STRATEGIES[f]["parameters"])}
+        for f in families
+    ]
+
+
 def hook_experiment(session: Any, simulation_runner: Any, dataset_version: str) -> Any:
     """The experiment the research hook builds for TICK: its six stages, its thresholds."""
     import autonomous_trading_platform.application.services.platform_replay.research_hooks as rh

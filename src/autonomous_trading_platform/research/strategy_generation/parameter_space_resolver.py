@@ -49,6 +49,8 @@ class ParameterSpaceResolver:
         return resolved
 
     def _values_for_spec(self, spec: ParameterSpec) -> list[Any]:
+        if spec.search_values is not None:
+            return list(spec.search_values)
         if spec.parameter_type == ParameterType.BOOL:
             return [False, True]
         if spec.parameter_type == ParameterType.STRING:

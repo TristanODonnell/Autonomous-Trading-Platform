@@ -32,6 +32,7 @@ from tests.research.real_run_support import (
     build_context,
     closes,
     hook_experiment,
+    pinned_strategy_set,
     seed_dataset,
     short_data_root,
     trading_days,
@@ -46,7 +47,7 @@ _NO_BAR_ON = {
     "AAPL": frozenset(day for i, day in enumerate(_WINDOW) if i % 5 == 1),
     "MSFT": frozenset(day for i, day in enumerate(_WINDOW) if i % 5 == 3),
 }
-_ONE_MOMENTUM_STRATEGY = [{"type": "momentum", "method": "random", "options": {"n_samples": 1}}]
+_ONE_MOMENTUM_STRATEGY = pinned_strategy_set("momentum")  # fixed, not a draw
 
 
 @dataclass
@@ -71,6 +72,7 @@ def run(db_session) -> Iterator[_Run]:
         experiment = replace(
             experiment,
             strategy_set=_ONE_MOMENTUM_STRATEGY,
+            parameter_space=None,
             staged_pipeline_config=StagedPipelineConfig(stages=[stage_1], smoke=True),
         )
         result = ctx.experiment_orchestration_service.run_staged_experiment(experiment)

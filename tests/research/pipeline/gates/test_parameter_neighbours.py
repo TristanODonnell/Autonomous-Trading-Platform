@@ -25,7 +25,7 @@ from autonomous_trading_platform.strategy.configs.strategy_config import Strateg
 
 def _momentum(**parameters: float) -> StrategyConfig:
     return make_config(
-        "momentum", {"lookback": 10, "buy_above": 0.05, "sell_below": -0.05} | parameters
+        "momentum", {"lookback": 10, "buy_above": 0.02, "sell_below": -0.02} | parameters
     )
 
 
@@ -76,9 +76,10 @@ def test_a_number_with_a_declared_range_moves_by_a_tenth_of_the_range() -> None:
 
 def test_a_threshold_of_zero_with_a_declared_range_still_moves() -> None:
     """Why the range is the scale and not the value: a share of 0.0 is nothing."""
-    config = make_config("momentum", {"lookback": 10, "buy_above": 0.0, "sell_below": -0.05})
+    config = make_config("momentum", {"lookback": 10, "buy_above": 0.0, "sell_below": -0.02})
 
-    assert _moved_to(build_neighbours(config), "buy_above") == (-0.02, 0.02)
+    # Declared -0.05 to 0.05 (plan G3): a tenth of 0.1, one step of the research grid.
+    assert _moved_to(build_neighbours(config), "buy_above") == (-0.01, 0.01)
 
 
 def test_the_rule_says_how_far() -> None:
@@ -86,8 +87,8 @@ def test_the_rule_says_how_far() -> None:
     neighbours = build_neighbours(_momentum(lookback=10, buy_above=0.0), rule)
 
     assert _moved_to(neighbours, "lookback") == (5, 15)
-    # buy_above is declared from -0.1 to 0.1: a quarter of 0.2.
-    assert _moved_to(neighbours, "buy_above") == (-0.05, 0.05)
+    # buy_above is declared from -0.05 to 0.05: a quarter of 0.1.
+    assert _moved_to(neighbours, "buy_above") == (-0.025, 0.025)
 
 
 @pytest.mark.parametrize("name", ["window_fraction", "range_fraction", "unranged_fraction"])
@@ -150,14 +151,14 @@ def test_a_strategy_whose_id_is_not_its_hash_still_gets_neighbours_with_ids_of_t
 
 
 def test_a_move_outside_the_declared_range_is_not_built_and_says_so() -> None:
-    by = _by(build_neighbours(_momentum(lookback=60, buy_above=0.1, sell_below=-0.1)))
+    by = _by(build_neighbours(_momentum(lookback=60, buy_above=0.05, sell_below=-0.05)))
 
     assert by[("lookback", DOWN)].config is not None
     over = by[("lookback", UP)]
     assert over.config is None and over.value == 72
     assert over.skipped == "above the declared maximum 60"
-    assert by[("buy_above", UP)].skipped == "above the declared maximum 0.1"
-    assert by[("sell_below", DOWN)].skipped == "below the declared minimum -0.1"
+    assert by[("buy_above", UP)].skipped == "above the declared maximum 0.05"
+    assert by[("sell_below", DOWN)].skipped == "below the declared minimum -0.05"
 
 
 def test_the_research_floor_on_windows_is_not_a_limit_here() -> None:

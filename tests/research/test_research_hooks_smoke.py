@@ -39,6 +39,7 @@ from autonomous_trading_platform.storage.parquet.metadata import (
 from autonomous_trading_platform.storage.parquet.paths import partition_file_path
 from autonomous_trading_platform.storage.parquet.schemas import BAR_SCHEMA
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from tests.research.real_run_support import pinned_strategy_set
 from tests.utilities.universe_seeding import seed_universe_version
 
 # ---------------------------------------------------------------------------
@@ -240,11 +241,10 @@ def test_research_hook_completes_without_error(
         exp = _orig_build_exp(*args, **kwargs)
         if exp is None:
             return None
-        minimal_strategy_set = [
-            {"type": t, "method": "random", "options": {"n_samples": 1}}
-            for t in ("momentum", "mean_reversion", "moving_average_crossover")
-        ]
-        return replace(exp, strategy_set=minimal_strategy_set)
+        minimal_strategy_set = pinned_strategy_set(
+            "momentum", "mean_reversion", "moving_average_crossover"
+        )
+        return replace(exp, strategy_set=minimal_strategy_set, parameter_space=None)
 
     monkeypatch.setattr(rh_mod, "_build_replay_experiment_definition", _minimal_experiment)
 
@@ -282,7 +282,8 @@ def test_research_hook_no_missing_price_flood(
             return None
         return replace(
             exp,
-            strategy_set=[{"type": "momentum", "method": "random", "options": {"n_samples": 1}}],
+            strategy_set=pinned_strategy_set("momentum"),
+            parameter_space=None,  # pinned config, not a draw
         )
 
     monkeypatch.setattr(rh_mod, "_build_replay_experiment_definition", _minimal_experiment)
@@ -331,7 +332,8 @@ def test_research_hook_with_sparse_bars_logs_missing_price(
             return None
         return replace(
             exp,
-            strategy_set=[{"type": "momentum", "method": "random", "options": {"n_samples": 1}}],
+            strategy_set=pinned_strategy_set("momentum"),
+            parameter_space=None,  # pinned config, not a draw
             symbols=["AAPL"],
         )
 
@@ -458,7 +460,8 @@ def _run_on_timeline(
             return None
         exp = replace(
             exp,
-            strategy_set=[{"type": "momentum", "method": "random", "options": {"n_samples": 1}}],
+            strategy_set=pinned_strategy_set("momentum"),
+            parameter_space=None,  # pinned config, not a draw
         )
         run.experiments.append(exp)
         return exp

@@ -27,6 +27,7 @@ from autonomous_trading_platform.storage.parquet.metadata import attach_metadata
 from autonomous_trading_platform.storage.parquet.paths import partition_file_path
 from autonomous_trading_platform.storage.parquet.schemas import BAR_SCHEMA
 from autonomous_trading_platform.storage.sor.models.dataset_versions import DatasetVersions
+from tests.research.real_run_support import pinned_strategy_set
 from tests.utilities.universe_seeding import seed_universe_version
 
 _SYMBOLS = ["AAPL", "MSFT", "SPY"]
@@ -43,10 +44,13 @@ _PERMISSIVE_FILTER = {
     "min_profit_factor": 0.0,
     "min_total_return": -1.0,
 }
+# What the hook generates from, where a test goes through the hook's own draw.
 _MINIMAL_STRATEGY_SET = [
     {"type": t, "method": "random", "options": {"n_samples": 1}}
     for t in ("momentum", "mean_reversion", "moving_average_crossover")
 ]
+# Where a test sets the strategies itself: fixed configs, so the draw does not move it.
+_PINNED_STRATEGY_SET = pinned_strategy_set("momentum", "mean_reversion", "moving_average_crossover")
 
 
 def _trading_days(start: date, end: date) -> list[date]:
@@ -370,7 +374,8 @@ def test_every_new_stage_runs_on_real_simulations(
     ]
     exp = replace(
         exp,
-        strategy_set=_MINIMAL_STRATEGY_SET,
+        strategy_set=_PINNED_STRATEGY_SET,
+        parameter_space=None,  # pinned configs, not a draw
         # smoke: the filters pass everything and stage 1 reads the whole window.
         staged_pipeline_config=StagedPipelineConfig(stages=stages, smoke=True),
     )
@@ -464,7 +469,8 @@ def test_the_neighbour_stage_runs_on_real_simulations_each_under_an_id_of_its_ow
     stages = [StageRegistry.load(raw, ctx.simulation_runner) for raw in raw_stages]
     exp = replace(
         exp,
-        strategy_set=_MINIMAL_STRATEGY_SET,
+        strategy_set=_PINNED_STRATEGY_SET,
+        parameter_space=None,  # pinned configs, not a draw
         staged_pipeline_config=StagedPipelineConfig(stages=stages, smoke=True),
     )
 
@@ -608,7 +614,8 @@ def test_governance_source_run_is_the_full_window_run(
         ]
         built["exp"] = replace(
             exp,
-            strategy_set=_MINIMAL_STRATEGY_SET,
+            strategy_set=_PINNED_STRATEGY_SET,
+            parameter_space=None,  # pinned configs, not a draw
             staged_pipeline_config=StagedPipelineConfig(stages=stages, smoke=True),
         )
         built["selection_end"] = selection_end

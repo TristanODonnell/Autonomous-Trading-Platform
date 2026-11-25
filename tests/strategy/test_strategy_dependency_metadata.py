@@ -7,7 +7,7 @@ EXPECTED_INDICATORS = {
     "intentional_loser": (),
     "random": (),
     "moving_average_crossover": ("simple_moving_average",),
-    "momentum": ("momentum",),
+    "momentum": ("momentum", "rate_of_change"),  # measure: price | return (plan G3)
     "mean_reversion": ("z_score", "simple_moving_average", "rolling_standard_deviation"),
     "factor_based": ("momentum", "z_score", "rolling_standard_deviation", "volume_ratio"),
     "composite_rule": ("momentum",),

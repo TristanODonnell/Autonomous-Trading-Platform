@@ -33,8 +33,9 @@ def _hashes(result) -> list[str]:
 
 
 def test_momentum_gets_the_number_asked_for_although_some_draws_break_its_rule() -> None:
-    # Default space: lookback {10, 60}, buy_above and sell_below {-0.1, 0, 0.1}; a draw
-    # with sell_below above buy_above breaks the rule. 12 of the 18 combinations pass.
+    # Default space (plan G3): lookback {10, 60}, measure {return}, buy_above and
+    # sell_below {-0.02, -0.01, 0, 0.01, 0.02}; a draw with sell_below above buy_above
+    # breaks the rule. 30 of the 50 combinations pass.
     result = _draw("momentum", 6)
 
     assert len(result.configs) == 6
@@ -43,14 +44,15 @@ def test_momentum_gets_the_number_asked_for_although_some_draws_break_its_rule()
     assert result.summary.exhausted is False
     for config in result.configs:
         assert config.parameters["sell_below"] <= config.parameters["buy_above"]
+        assert config.parameters["measure"] == "return"
 
 
 def test_momentum_asked_for_more_than_its_valid_settings_returns_them_all_and_says_so() -> None:
-    result = _draw("momentum", 13)
+    result = _draw("momentum", 31)
 
-    assert len(result.configs) == 12
-    assert len(set(_hashes(result))) == 12
-    assert result.summary.rejected_count == 6
+    assert len(result.configs) == 30
+    assert len(set(_hashes(result))) == 30
+    assert result.summary.rejected_count == 20
     assert result.summary.exhausted is True
 
 

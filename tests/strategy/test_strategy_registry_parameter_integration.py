@@ -19,8 +19,12 @@ def test_every_registered_strategy_has_parameter_schema(strategy_type: str) -> N
 @pytest.mark.parametrize("strategy_type", get_registry().list_strategy_types())
 def test_registry_defaults_come_from_schema(strategy_type: str) -> None:
     defn = get_registry().get_definition(strategy_type)
-    assert defn.default_parameters == defn.normalize_parameters()
-    assert get_registry().get_default_parameters(strategy_type) == defn.default_parameters
+    # default_parameters lists every setting; the normalised (hashed) form leaves out
+    # the schema's omitted_at_default settings while they hold their default.
+    omitted: frozenset[str] = getattr(defn.parameter_schema, "omitted_at_default", frozenset())
+    canonical = {k: v for k, v in defn.default_parameters.items() if k not in omitted}
+    assert canonical == defn.normalize_parameters()
+    assert get_registry().get_default_parameters(strategy_type) == canonical
 
 
 @pytest.mark.parametrize("strategy_type", get_registry().list_strategy_types())

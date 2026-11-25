@@ -40,6 +40,7 @@ from tests.research.real_run_support import (
     SYMBOLS,
     build_context,
     hook_experiment,
+    pinned_strategy_set,
     seed_dataset,
     short_data_root,
 )
@@ -57,27 +58,9 @@ OVERFITTING = "overfitting_gate"
 # The same stages with gates that pass everything, by the smoke test's names.
 _PASSES_EVERYTHING = {WALK_FORWARD: "wf", MONTE_CARLO: "mc", REGIME: "regime"}
 
-# Written out, not drawn: these are the configs one random draw per family gave with the
-# default seed before plan G2 changed how a draw is made (they are also the 2026-11-23
-# baseline's candidates of these families). Pinned so that a change to generation does
-# not move what this file measures, which is the gates.
-_THREE_STRATEGIES = [
-    {
-        "type": "momentum",
-        "strategy_id": "momentum__f84afdd49e7e463aa29a211bf0425d17bdf157f2a7cde251b34d00711a34d9bc",
-        "parameters": {"lookback": 10, "buy_above": 0.1, "sell_below": -0.1},
-    },
-    {
-        "type": "mean_reversion",
-        "strategy_id": "mean_reversion__c4865a764b31bd0b87b1f60f05d3b19235fca9dcddbd913e13e8436f55886e09",
-        "parameters": {"window": 10, "buy_below_z": -0.5, "sell_above_z": 0.5},
-    },
-    {
-        "type": "moving_average_crossover",
-        "strategy_id": "moving_average_crossover__bf6d39da67fe77ecb6710f02e729c152869aa8d39e1c607f23d64f5440087594",
-        "parameters": {"short_window": 10, "long_window": 200},
-    },
-]
+# Written out, not drawn (real_run_support.PINNED_STRATEGIES): a change to generation
+# does not move what this file measures, which is the gates.
+_THREE_STRATEGIES = pinned_strategy_set("momentum", "mean_reversion", "moving_average_crossover")
 _ALL_THREE = ["mean_reversion", "momentum", "moving_average_crossover"]
 
 
