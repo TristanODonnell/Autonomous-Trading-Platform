@@ -1225,7 +1225,8 @@ def _report_gates(stage_results: Sequence[StageResult]) -> dict[str, Any]:
     )
 
     try:
-        return build_gate_report(stage_results)
+        # The research filters' cap: each run's turnover is shown as a share of it.
+        return build_gate_report(stage_results, turnover_cap=RESEARCH_MAX_DAILY_TURNOVER)
     except Exception as exc:
         logger.warning("gate_report: not built", exc_info=True)
         return gate_report_not_built(f"failed: {exc}")

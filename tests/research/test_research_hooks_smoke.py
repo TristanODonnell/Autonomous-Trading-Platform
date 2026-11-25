@@ -1639,5 +1639,13 @@ def test_admission_layout_sets_every_candidate_against_buy_and_hold(
         selection["return"] - benchmark["selection"]["total_return"]
     )
     assert selection["benchmark_return"] == pytest.approx(benchmark["selection"]["total_return"])
+    # Turnover and return per dollar traded (plan G8, row 6), against the filters' cap.
+    assert report["turnover_cap"] == 10.0
+    assert stage_1["daily_turnover"] >= 0.0
+    assert stage_1["share_of_turnover_cap"] == pytest.approx(stage_1["daily_turnover"] / 10.0)
+    if stage_1["notional_traded"] > 0:
+        # Net over notional has the sign of the run's own return.
+        per_dollar = stage_1["net_return_per_dollar_traded_bp"]
+        assert (per_dollar > 0) == (stage_1["total_return"] > 0)
     # Report only: the funnel is as it was, and the report is still plain JSON.
     _assert_gate_report_counts_what_the_funnel_counts(run.result.summary)

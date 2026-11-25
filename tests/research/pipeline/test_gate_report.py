@@ -11,10 +11,17 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import date
+from types import SimpleNamespace
+from typing import Any, cast
 
 import numpy as np
+import pandas as pd
 import pytest
 
+from autonomous_trading_platform.research.experiments.filtering.metrics.trade_metrics import (
+    daily_turnover,
+)
 from autonomous_trading_platform.research.pipeline.aggregation.monte_carlo_aggregator import (
     MetricDistribution,
     MonteCarloAggregation,
@@ -144,7 +151,7 @@ def test_a_pipeline_that_ran_out_of_survivors_admits_nobody() -> None:
 
 
 def test_no_stage_results_is_an_empty_report() -> None:
-    assert build_gate_report([]) == {"stages": [], "strategies": []}
+    assert build_gate_report([]) == {"stages": [], "turnover_cap": None, "strategies": []}
 
 
 def test_a_stage_with_a_verdict_per_fold_gives_the_folds_and_not_a_list_of_reasons() -> None:
@@ -374,7 +381,7 @@ def test_the_neighbours_of_a_strategy_are_written_down_run_by_run(
 
     lines = [r.getMessage() for r in caplog.records if r.name == LOGGER]
     assert lines[-1] == (
-        "gate_report | a | passed every stage | neighbours: passed "
+        "gate_report | a | passed every stage | turnover n/a | neighbours: passed "
         "(neighbours holding 1/3, 1 not built, 1 finding(s), report only)"
     )
 
@@ -420,8 +427,9 @@ def test_the_log_has_a_line_for_each_strategy_that_got_past_the_first_stage(
     lines = [record.getMessage() for record in caplog.records if record.name == LOGGER]
     assert lines == [
         "gate_report | 3 strategies | 1 passed every stage",
-        "gate_report | a | passed every stage | second: passed",
-        "gate_report | c | eliminated at second | second: FAILED (drawdown -0.45 < -0.40)",
+        "gate_report | a | passed every stage | turnover n/a | second: passed",
+        "gate_report | c | eliminated at second | turnover n/a | "
+        "second: FAILED (drawdown -0.45 < -0.40)",
     ]
 
 
@@ -431,3 +439,81 @@ def test_a_report_that_was_not_built_says_why() -> None:
         "strategies": [],
         "not_built": "failed: boom",
     }
+
+
+# -- turnover and return per dollar traded (plan G8, Step 1b row 6), report only ---------
+
+
+def _traded_run() -> SimpleNamespace:
+    """Three fills (100 @ 200, -100 @ 205, 50 @ 201: 50,550 traded) over three days of
+    equity (100,000, 101,000, 100,500: a mean of 100,500, a net gain of 500)."""
+    trade_logs = pd.DataFrame({"quantity": [100, -100, 50], "price": [200.0, 205.0, 201.0]})
+    equity_curve = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                ["2026-03-02 20:55", "2026-03-03 20:55", "2026-03-04 20:55"], utc=True
+            ),
+            "equity": [100_000.0, 101_000.0, 100_500.0],
+        }
+    )
+    return SimpleNamespace(
+        start_date=date(2026, 3, 2),
+        end_date=date(2026, 3, 4),
+        risk_metrics=SimpleNamespace(sharpe_ratio=1.0, max_drawdown=-0.005),
+        return_metrics=SimpleNamespace(total_return=0.005),
+        trade_metrics=SimpleNamespace(
+            total_trades=3, daily_turnover=daily_turnover(trade_logs, equity_curve)
+        ),
+        trade_logs=trade_logs,
+        equity_curve=equity_curve,
+    )
+
+
+def _report_of(run: SimpleNamespace, **kwargs) -> dict:
+    stage = _stage("first", {"a": []}, {"a": StageDiagnostics(reference_result=cast(Any, run))})
+    return build_gate_report([stage], **kwargs)
+
+
+def test_a_run_shows_its_turnover_against_the_cap_and_what_each_dollar_kept() -> None:
+    report = _report_of(_traded_run(), turnover_cap=10.0)
+
+    assert report["turnover_cap"] == 10.0
+    run = _by_id(report)["a"]["stages"][0]["reference_run"]
+    assert run["notional_traded"] == pytest.approx(50_550.0)
+    assert run["daily_turnover"] == pytest.approx(50_550 / 3 / 100_500)
+    assert run["share_of_turnover_cap"] == pytest.approx(50_550 / 3 / 100_500 / 10)
+    assert run["net_return_per_dollar_traded_bp"] == pytest.approx(500 / 50_550 * 10_000)
+    assert json.loads(json.dumps(report, allow_nan=False)) == report
+
+
+def test_a_run_that_never_traded_has_no_return_per_dollar() -> None:
+    run = _traded_run()
+    run.trade_logs = run.trade_logs.iloc[0:0]
+    run.trade_metrics.daily_turnover = 0.0
+
+    reported = _by_id(_report_of(run, turnover_cap=10.0))["a"]["stages"][0]["reference_run"]
+
+    assert reported["notional_traded"] == 0.0
+    assert reported["net_return_per_dollar_traded_bp"] is None
+    assert reported["share_of_turnover_cap"] == 0.0
+
+
+def test_without_a_cap_no_share_of_it_is_shown() -> None:
+    report = _report_of(_traded_run())
+    assert report["turnover_cap"] is None
+    assert _by_id(report)["a"]["stages"][0]["reference_run"]["share_of_turnover_cap"] is None
+
+
+def test_the_log_line_gives_the_first_stages_turnover(caplog: pytest.LogCaptureFixture) -> None:
+    second = _stage("second", {"a": []})
+    first = _stage(
+        "first", {"a": []}, {"a": StageDiagnostics(reference_result=cast(Any, _traded_run()))}
+    )
+    with caplog.at_level(logging.INFO, logger=LOGGER):
+        build_gate_report([first, second], turnover_cap=10.0)
+
+    lines = [record.getMessage() for record in caplog.records if record.name == LOGGER]
+    assert lines[-1] == (
+        "gate_report | a | passed every stage | turnover 0.17x/day, +98.91 bp per $ traded | "
+        "second: passed"
+    )

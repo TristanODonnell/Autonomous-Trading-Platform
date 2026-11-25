@@ -190,10 +190,17 @@ def daily_turnover(trade_logs: pd.DataFrame | None, equity_curve: pd.DataFrame |
     mean_equity = float(equity_curve["equity"].astype(float).mean())
     if days == 0 or mean_equity <= 0:
         return 0.0
-    notional = (
-        trade_logs["quantity"].astype(float).abs() * trade_logs["price"].astype(float)
-    ).sum()
-    return float(notional) / days / mean_equity
+    return notional_traded(trade_logs) / days / mean_equity
+
+
+def notional_traded(trade_logs: pd.DataFrame | None) -> float:
+    """Dollars traded: every fill's |quantity| x price, buys and sells alike. The one
+    measure behind turnover and the research gate report's return per dollar traded."""
+    if trade_logs is None or trade_logs.empty:
+        return 0.0
+    return float(
+        (trade_logs["quantity"].astype(float).abs() * trade_logs["price"].astype(float)).sum()
+    )
 
 
 def trade_metrics(
