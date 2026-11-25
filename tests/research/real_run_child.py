@@ -21,10 +21,8 @@ from pathlib import Path
 from typing import Any
 
 SHAPE = "falls_then_rises"
-STRATEGY_SET = [
-    {"type": family, "method": "random", "options": {"n_samples": 1}}
-    for family in ("momentum", "mean_reversion", "moving_average_crossover")
-]
+# Fixed configs, not a draw (real_run_support.PINNED_STRATEGIES), resolved in main().
+FAMILIES = ("momentum", "mean_reversion", "moving_average_crossover")
 
 
 def _file_checksums(data_root: Path) -> dict[str, str]:
@@ -95,6 +93,7 @@ def main(data_root: Path, summary_path: Path) -> None:
         SYMBOLS,
         build_context,
         hook_experiment,
+        pinned_strategy_set,
         seed_dataset,
     )
     from tests.utilities.universe_seeding import seed_universe_version
@@ -110,7 +109,9 @@ def main(data_root: Path, summary_path: Path) -> None:
         version = seed_dataset(data_root, session, SHAPE)
         ctx = build_context(session, data_root)
         experiment = replace(
-            hook_experiment(session, ctx.simulation_runner, version), strategy_set=STRATEGY_SET
+            hook_experiment(session, ctx.simulation_runner, version),
+            strategy_set=pinned_strategy_set(*FAMILIES),
+            parameter_space=None,
         )
         result = ctx.experiment_orchestration_service.run_staged_experiment(experiment)
         summary = _summary(result, data_root)

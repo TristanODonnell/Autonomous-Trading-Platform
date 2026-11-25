@@ -60,7 +60,7 @@ def _gains_only_at_ten_bars(_sid: str, request: SimulationRunRequest, day: date)
 
 
 def _momentum(lookback: int = 10) -> StrategyConfig:
-    return make_config("momentum", {"lookback": lookback, "buy_above": 0.05, "sell_below": -0.05})
+    return make_config("momentum", {"lookback": lookback, "buy_above": 0.02, "sell_below": -0.02})
 
 
 def _stage(runner: ScriptedRunner, **gate: object) -> NeighbourStage:

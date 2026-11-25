@@ -271,20 +271,30 @@ def test_all_registered_strategies_have_complete_metadata_and_valid_defaults() -
         assert defn.parameter_schema is not None
 
         normalized_defaults = defn.normalize_parameters(defn.default_parameters)
+        # Settings the schema leaves out of the canonical form at their default
+        # (`omitted_at_default`, so ids written before them do not move) are listed in
+        # default_parameters but not in the normalised dict.
+        omitted: frozenset[str] = getattr(defn.parameter_schema, "omitted_at_default", frozenset())
 
-        assert normalized_defaults == defn.default_parameters
+        assert normalized_defaults == {
+            k: v for k, v in defn.default_parameters.items() if k not in omitted
+        }
         assert isinstance(defn.compute_warmup_bars(normalized_defaults), int)
         assert defn.compute_warmup_bars(normalized_defaults) >= 0
 
 
 def test_parameter_specs_match_schema_defaults() -> None:
     for defn in get_registry().list_definitions():
-        schema_fields = set(defn.normalize_parameters({}))
+        schema_fields = set(defn.parameter_schema.model_fields)
         spec_names = {spec.name for spec in defn.parameter_specs}
 
         assert spec_names <= schema_fields
         for spec in defn.parameter_specs:
-            if spec.default is not None:
-                assert (
-                    defn.normalize_parameters({spec.name: spec.default})[spec.name] == spec.default
-                )
+            if spec.default is None:
+                continue
+            normalized = defn.normalize_parameters({spec.name: spec.default})
+            if spec.name in getattr(defn.parameter_schema, "omitted_at_default", frozenset()):
+                # Left out at its default, so ids written before the setting stay.
+                assert spec.name not in normalized
+            else:
+                assert normalized[spec.name] == spec.default

@@ -102,6 +102,11 @@ class StrategyGenerationEngine:
             summary.family_distribution[defn.family.value] += 1
 
         summary.generated_count += generator.last_summary.generated_count
+        summary.requested_count += generator.last_summary.requested_count
+        summary.exhausted = summary.exhausted or generator.last_summary.exhausted
+        # A generator that drops its own repeats (random, plan G2) records them in its
+        # summary; the count has to travel with the details.
+        summary.duplicate_count += generator.last_summary.duplicate_count
         summary.rejected_count += generator.last_summary.rejected_count
         summary.rejection_reasons.update(generator.last_summary.rejection_reasons)
         summary.rejected_details.extend(generator.last_summary.rejected_details)

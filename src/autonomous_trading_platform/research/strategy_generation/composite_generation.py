@@ -57,6 +57,78 @@ _THRESHOLD_VARIANTS: dict[str, list[dict[str, Any]]] = {
     ],
 }
 
+# rate_of_change is a fraction (0.01 = 1%), so the +-1.5 / +-2.0 above cannot fire on it:
+# no 5-minute bar of 31 names in March-April 2026 moved 150% in 10 or 20 bars (research
+# plan G5: the 80 such skeletons acted as 7 behaviours). Its two mean-reversion variants
+# are sized as z-score's are, at 1.5 and 2 standard deviations, but of rate_of_change
+# itself, measured per lookback on those bars (~88k values each, rounded):
+#   lookback 10: std 0.0102 -> 0.015 / 0.020 (|roc| reaches them on 7.6% / 4.4% of bars)
+#   lookback 20: std 0.0144 -> 0.022 / 0.029 (8.9% / 4.9%)
+# Fixed here, not computed per run, so a template (and its id) does not move with the
+# data. A fixed fraction is still a higher bar for a quiet name than a busy one (the
+# per-name std ran 0.005 to 0.019 at lookback 10); z_score is the per-name scaled form.
+_ROC_MEAN_REVERSION_BANDS: dict[int, tuple[float, float]] = {
+    10: (0.015, 0.020),
+    20: (0.022, 0.029),
+}
+
+
+# At threshold zero some rules are one rule by arithmetic, on any bars (plan G5, found by
+# the re-measure): momentum and rate of change of one lookback have the same sign (a
+# price is positive, so p - p0 > 0 exactly when p / p0 - 1 > 0), and so do distance
+# from the average and z-score of one window (z is that distance over a positive std).
+# The at-zero rule is kept for the indicator in its own scale (rate of change, z-score)
+# and not built for its dollar twin; the twin's +-1.5 / +-2.0 variants are other rules
+# and stay. The research simulator sizes without the signal's confidence, so equal
+# direction on every bar is equal trading.
+_SAME_SIGN_TWIN: dict[str, tuple[str, str]] = {
+    "momentum": ("rate_of_change", "lookback"),
+    "distance_from_moving_average": ("z_score", "window"),
+}
+
+
+def _zero_rule_has_a_twin(component: str, params: dict[str, Any]) -> bool:
+    """True when the pool holds the twin that makes this indicator's at-zero rule."""
+    if component not in _SAME_SIGN_TWIN:
+        return False
+    twin_component, key = _SAME_SIGN_TWIN[component]
+    return any(
+        comp == twin_component and twin_params.get(key) == params.get(key)
+        for _, comp, twin_params in _ZERO_CENTERED
+    )
+
+
+def _is_same_sign_comparison(
+    a: tuple[str, str, dict[str, Any]], b: tuple[str, str, dict[str, Any]]
+) -> bool:
+    """Momentum against rate of change of one lookback compares dollars with a fraction:
+    (p - p0) > (p / p0 - 1) exactly when p > p0, for any p0 above one dollar, so it is
+    the at-zero rule again. Every name the platform trades is above a dollar."""
+    return {a[1], b[1]} == {"momentum", "rate_of_change"} and a[2].get("lookback") == b[2].get(
+        "lookback"
+    )
+
+
+def _threshold_variants_for(component: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+    """The zero-centered variants in the indicator's own units: v0 (at zero) is the same
+    for all; for rate_of_change v1 / v2 take the measured bands above."""
+    variants = _THRESHOLD_VARIANTS["zero_centered"]
+    if component != "rate_of_change":
+        return variants
+    lookback = int(params["lookback"])
+    if lookback not in _ROC_MEAN_REVERSION_BANDS:
+        raise ValueError(
+            f"rate_of_change lookback {lookback} has no measured band: "
+            "add it to _ROC_MEAN_REVERSION_BANDS"
+        )
+    mild, strong = _ROC_MEAN_REVERSION_BANDS[lookback]
+    return [
+        variants[0],
+        {**variants[1], "buy_below": -mild, "sell_above": mild},
+        {**variants[2], "buy_below": -strong, "sell_above": strong},
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Named indicator instances used when building skeletons.
 # Each entry: (instance_id, component_name, params_dict)
@@ -81,10 +153,13 @@ _RATIO: list[tuple[str, str, dict[str, Any]]] = [
     ("vol_r_30", "volume_ratio", {"window": 30}),
 ]
 
-# Instances used exclusively as filter/gating indicators (never as entry drivers)
+# Regime gate: trade only while price is above its 50-bar average. A filter compares one
+# indicator with a constant, so the gate reads price minus the average (dist_50 > 0).
+# It used to read the average itself (sma_50 > 0, ema_50 > 0), which a price always
+# passes: 100.00% of 2.56 million checks (research plan G5). There is no price-minus-EMA
+# indicator, so the EMA variant went with it (decided 2026-11-24).
 _REGIME_FILTER_INDS: list[tuple[str, str, dict[str, Any]]] = [
-    ("sma_50", "simple_moving_average", {"window": 50}),
-    ("ema_50", "exponential_moving_average", {"window": 50}),
+    ("dist_50", "distance_from_moving_average", {"window": 50}),
 ]
 
 _VOL_FILTER_INDS: list[tuple[str, str, dict[str, Any]]] = [
@@ -161,9 +236,11 @@ _PRICE_COMPARISON_PAIRS = [
     pair for pair in _PRICE_COMPARISON_PAIRS if _above_floor(pair[0]) and _above_floor(pair[1])
 ]
 
+# One aggregator for one-rule skeletons: with a single rule, voting (min 1 vote) and
+# weighted_score (0.55) decided alike on every bar, 78 pairs of 78 (research plan G5),
+# so the second copy only doubled the pool. Two-rule skeletons keep logical AND / OR.
 _SINGLE_RULE_AGGS: list[dict[str, Any]] = [
     {"component": "voting", "parameters": {"min_votes": 1}},
-    {"component": "weighted_score", "parameters": {"buy_threshold": 0.55, "sell_threshold": -0.55}},
 ]
 
 _MULTI_RULE_AGGS: list[dict[str, Any]] = [
@@ -185,8 +262,16 @@ def generate_composite_rule_configs(
     summary = GenerationSummary()
     configs: list[StrategyConfig] = []
     seen: set[str] = set()
+    options = options or GenerationOptions()
+    # `random` takes the first n distinct valid skeletons of the shuffled pool (at
+    # least one, as before); grid and evolutionary take everything they are offered.
+    limit = max(1, options.n_samples) if method == "random" else None
+    if limit is not None:
+        summary.requested_count = limit
 
-    for template in _selected_templates(method=method, options=options or GenerationOptions()):
+    for template in _selected_templates(method=method, options=options):
+        if limit is not None and summary.accepted_count >= limit:
+            break
         summary.generated_count += 1
         try:
             _validate_template_components(template)
@@ -214,6 +299,8 @@ def generate_composite_rule_configs(
         summary.family_distribution["composite"] += 1
         configs.append(config)
 
+    if limit is not None and summary.accepted_count < limit:
+        summary.exhausted = True
     return configs, summary
 
 
@@ -226,10 +313,12 @@ def _selected_templates(
     if method == "random":
         import random
 
+        # The whole shuffled pool is offered; the caller stops at the number asked for,
+        # so a skeleton that fails validation is replaced by the next one (plan G2).
         rng = random.Random(options.seed)
         shuffled = list(templates)
         rng.shuffle(shuffled)
-        yield from shuffled[: max(1, min(options.n_samples, len(shuffled)))]
+        yield from shuffled
         return
     if method == "evolutionary":
         yield from templates
@@ -263,14 +352,18 @@ def _build_skeletons() -> list[dict[str, Any]]:
     and optional filters from module-level domain tables. No registry calls needed —
     compatibility is encoded in _INDICATOR_DOMAIN and the instance lists above.
 
-    Pattern counts (before validation / dedup):
-      threshold  : ~288  (zero_centered × 3 variants × 2 agg × 4 filter options
-                          + ratio × 2 variants × 2 agg × 4 filter options)
-      crossover  : ~104  (same-family pairs × 2 agg × with/without vol confirmation)
-      comparison : ~102  (zero_centered pairs + ratio pairs + price cross-type pairs)
-      two-rule   : ~360  (zero_centered × 3 variants × ratio × 2 vol-variants × 2 logical agg)
+    Pattern counts after the research floor (tests pin them; 652 before plan G5's repair):
+      threshold  :  78  (8 zero_centered × 3 variants × 3 filter options (none,
+                         regime, volatility), less dist_50 gated by itself (3),
+                         less the at-zero rule of mom_10, mom_20, dist_20 (9),
+                         + 3 ratio × 2 variants × 3 filter options)
+      crossover  :  28  (14 same-family pairs × with/without volume confirmation)
+      comparison :  32  (28 zero_centered pairs less mom_N vs roc_N (2)
+                         + 3 ratio pairs + 3 SMA-vs-EMA pairs)
+      two-rule   : 252  (8 zero_centered × 3 variants, less the 3 at-zero twins,
+                         × 3 ratio × 2 vol-variants × AND / OR)
       ─────────────────
-      total pool : ~854 skeletons → n_samples=30 draws from a genuinely diverse pool
+      total pool : 390 skeletons
     """
     out: list[dict[str, Any]] = []
     out.extend(_threshold_skeletons())
@@ -292,22 +385,36 @@ def _threshold_skeletons() -> list[dict[str, Any]]:
     ]
 
     for instances, domain in [(_ZERO_CENTERED, "zero_centered"), (_RATIO, "ratio")]:
-        for vi, variant in enumerate(_THRESHOLD_VARIANTS[domain]):
-            for ind_id, ind_comp, ind_params in instances:
+        for ind_id, ind_comp, ind_params in instances:
+            variants = (
+                _threshold_variants_for(ind_comp, ind_params)
+                if domain == "zero_centered"
+                else _THRESHOLD_VARIANTS[domain]
+            )
+            for vi, variant in enumerate(variants):
+                if (
+                    domain == "zero_centered"
+                    and vi == 0
+                    and _zero_rule_has_a_twin(ind_comp, ind_params)
+                ):
+                    continue
                 for agg in _SINGLE_RULE_AGGS:
                     agg_tag = "voti" if agg["component"] == "voting" else "weig"
                     for ftag, finstance in filter_opts:
+                        if finstance is not None and finstance[0] == ind_id:
+                            # Gated by itself (dist_50 > 0 on a dist_50 rule): the
+                            # unfiltered skeleton already covers it.
+                            continue
                         indicators = [_ind(ind_id, ind_comp, **ind_params)]
                         filters: list[dict[str, Any]] = []
 
                         if finstance is not None:
                             fid, fcomp, fparams = finstance
-                            if fid != ind_id:
-                                indicators.append(_ind(fid, fcomp, **fparams))
-                                if ftag == "reg":
-                                    filters = [_regime_filter(fid)]
-                                else:
-                                    filters = [_volatility_filter(fid)]
+                            indicators.append(_ind(fid, fcomp, **fparams))
+                            if ftag == "reg":
+                                filters = [_regime_filter(fid)]
+                            else:
+                                filters = [_volatility_filter(fid)]
 
                         name_parts = [f"thresh_{ind_id}_v{vi}_{agg_tag}"]
                         if filters:
@@ -364,7 +471,10 @@ def _comparison_skeletons() -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
 
     # Zero-centered × zero-centered — all C(10, 2) pairs
-    for (a_id, a_comp, a_p), (b_id, b_comp, b_p) in combinations(_ZERO_CENTERED, 2):
+    for a, b in combinations(_ZERO_CENTERED, 2):
+        if _is_same_sign_comparison(a, b):
+            continue
+        (a_id, a_comp, a_p), (b_id, b_comp, b_p) = a, b
         for agg in _SINGLE_RULE_AGGS:
             agg_tag = "voti" if agg["component"] == "voting" else "weig"
             out.append(
@@ -413,7 +523,9 @@ def _two_rule_skeletons() -> list[dict[str, Any]]:
     """
     out: list[dict[str, Any]] = []
     for pri_id, pri_comp, pri_p in _ZERO_CENTERED:
-        for vi, variant in enumerate(_THRESHOLD_VARIANTS["zero_centered"]):
+        for vi, variant in enumerate(_threshold_variants_for(pri_comp, pri_p)):
+            if vi == 0 and _zero_rule_has_a_twin(pri_comp, pri_p):
+                continue
             for vol_id, vol_comp, vol_p in _RATIO:
                 for vol_variant in _THRESHOLD_VARIANTS["ratio"]:
                     for agg in _MULTI_RULE_AGGS:

@@ -7,7 +7,7 @@ remain reproducible and generation metadata cannot drift silently.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, ClassVar, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
@@ -17,8 +17,18 @@ class StrategyParameterSchema(BaseModel):
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
+    # Settings added after configs were stored. Each is left out of the canonical dict
+    # while it holds its default, so a config written before the setting existed keeps
+    # its id: ids hash this dict, and stored rows, saved runs and live strategies are
+    # matched by them. A setting named here must default to the old behaviour.
+    omitted_at_default: ClassVar[frozenset[str]] = frozenset()
+
     def canonical_dict(self) -> dict[str, Any]:
-        return cast(dict[str, Any], self.model_dump(mode="json"))
+        out = cast(dict[str, Any], self.model_dump(mode="json"))
+        for name in self.omitted_at_default:
+            if getattr(self, name) == type(self).model_fields[name].default:
+                del out[name]
+        return out
 
 
 def _number(value: Any, field_name: str) -> float:
@@ -58,6 +68,14 @@ class MomentumParameters(StrategyParameterSchema):
     lookback: StrictInt = 5
     buy_above: float = 0.0
     sell_below: float = 0.0
+    # What the thresholds are compared with (research plan G3): "price" is the change
+    # in dollars over the lookback (momentum(), the meaning every existing config has),
+    # "return" the change as a fraction (rate_of_change()), so 0.01 is the same bar
+    # for a 20 dollar name and a 500 dollar one.
+    measure: Literal["price", "return"] = "price"
+    # Added 2026-11-24: Box A's momentum_v1, the baselines and every saved momentum run
+    # were written without it.
+    omitted_at_default: ClassVar[frozenset[str]] = frozenset({"measure"})
 
     @field_validator("lookback", mode="before")
     @classmethod

@@ -552,6 +552,9 @@ def run_scheduled_research_at_timestamp(
                 if reuse_completed_runs
                 else None
             ),
+            # One line per family the draw asked for: asked, delivered, rejected,
+            # repeats, and whether it ran out of distinct valid settings (plan G2).
+            "generation": list(pipeline_result.generation),
             "stage_1_survivors": stage1_count,
             "stage_2_survivors": stage2_count,
             "stage_3_survivors": stage3_count,
@@ -1017,11 +1020,12 @@ def _build_replay_experiment_definition(
             )
         )
 
+    month_seed = int(tick_date.strftime("%Y%m"))
     return ExperimentDefinition(
         experiment_id=experiment_id,
         experiment_type=ExperimentType.SWEEP,
         description=f"Monthly platform replay research — {tick_date.strftime('%B %Y')}",
-        strategy_set=_replay_strategy_set(smoke=smoke),
+        strategy_set=_replay_strategy_set(smoke=smoke, seed=month_seed),
         parameter_grid=[{}],
         dataset_version=dataset_version,
         universe_version=universe_version,
@@ -1029,7 +1033,7 @@ def _build_replay_experiment_definition(
         symbols=symbols,
         start_date=start_date,
         end_date=end_date,
-        random_seed=int(tick_date.strftime("%Y%m")),
+        random_seed=month_seed,
         parameter_space={},
         # In the admission layout the validator is told the holdout date and
         # refuses a stage that reads it. The lookback layout sets no holdout aside.
@@ -1442,8 +1446,14 @@ def _resolve_research_profile(research_options: dict | None) -> str:
     return profile
 
 
-def _replay_strategy_set(*, smoke: bool) -> list[dict]:
-    """Candidate mix per research tick. Smoke keeps every family at 2 samples each."""
+def _replay_strategy_set(*, smoke: bool, seed: int) -> list[dict]:
+    """Candidate mix per research tick. Smoke keeps every family at 2 samples each.
+
+    ``seed`` is the research month (``YYYYMM``), the seed the tick's simulations use, so
+    each month draws its own candidates (plan G1; before, every month drew the
+    generator's default seed, 42, and so the same set). Every family gets the same seed:
+    each draw starts its own generator over a different space.
+    """
     full_counts = {
         "momentum": 6,
         "mean_reversion": 6,
@@ -1452,7 +1462,7 @@ def _replay_strategy_set(*, smoke: bool) -> list[dict]:
         "composite_rule": 10,
     }
     return [
-        {"type": t, "method": "random", "options": {"n_samples": 2 if smoke else n}}
+        {"type": t, "method": "random", "options": {"n_samples": 2 if smoke else n, "seed": seed}}
         for t, n in full_counts.items()
     ]
 

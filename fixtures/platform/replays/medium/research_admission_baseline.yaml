@@ -11,10 +11,15 @@
 #     Three daily ticks. Research fires once, on the first tick (2026-11-16, the
 #     dataset's last day), with the same windows as
 #     research_admission_rehearsal.yaml. The candidates are the hook's full mix:
-#     36 random draws over five strategy families, seeded by the research month,
-#     so the same date draws the same candidates. The step's summary carries the
-#     `stage_funnel` and the `holdout_report`. No simulation_runs row ends on or
-#     after 2026-05-18.
+#     36 asked for over five strategy families, drawn without repeats and seeded
+#     by the research month, so the same date draws the same candidates (33 for
+#     2026-11: crossover has three valid settings of the six asked). This holds
+#     since plan G1 / G2 (Step 1b); before them every month drew seed 42's 30,
+#     and the runs of 2026-11-23 and 2026-11-24 are reproduced by their commits
+#     (`e7f4ea8d2`, `869b21114`, `38a9b2c63`), not by this file on later code.
+#     The step's summary carries the `generation` lines (asked, delivered,
+#     rejected, repeats, exhausted per family), the `stage_funnel` and the
+#     `holdout_report`. No simulation_runs row ends on or after 2026-05-18.
 #   cost_notes: >
 #     Estimated from the rehearsal of 2026-11-23 (9 candidates, 33 minutes, peak
 #     1,850 MiB of 3,055), not measured: 1.5 to 2.5 hours, and a peak at 80 to

@@ -7,7 +7,7 @@ from autonomous_trading_platform.strategy.implementations.base_strategy_helpers 
     build_signal_id,
     extract_closes,
 )
-from autonomous_trading_platform.strategy.indicators.momentum import momentum
+from autonomous_trading_platform.strategy.indicators.momentum import momentum, rate_of_change
 from autonomous_trading_platform.strategy.signal_logic.threshold_rule import ThresholdRule
 
 
@@ -18,11 +18,17 @@ class MomentumStrategy(BaseStrategy):
         lookback: int = 5,
         buy_above: float = 0.0,
         sell_below: float = 0.0,
+        measure: str = "price",
     ) -> None:
+        if measure not in ("price", "return"):
+            raise ValueError(f"measure must be 'price' or 'return', got {measure!r}")
         self._strategy_id = strategy_id
         self.lookback = lookback
         self.buy_above = buy_above
         self.sell_below = sell_below
+        # "price": change in dollars (momentum()); "return": change as a fraction
+        # (rate_of_change()). Research plan G3.
+        self.measure = measure
 
     @property
     def strategy_id(self) -> str:
@@ -30,7 +36,10 @@ class MomentumStrategy(BaseStrategy):
 
     def evaluate_symbol(self, context: StrategyContext) -> Signal | None:
         closes = extract_closes(context.bars)
-        value = momentum(closes, self.lookback)
+        if self.measure == "return":
+            value = rate_of_change(closes, self.lookback)
+        else:
+            value = momentum(closes, self.lookback)
 
         if value is None:
             return None
@@ -49,6 +58,10 @@ class MomentumStrategy(BaseStrategy):
             "lookback": self.lookback,
             **result.params,
         }
+        # Only when it is not the default: the params feed the signal id, so a price
+        # config's signals keep the ids they had before `measure` existed.
+        if self.measure != "price":
+            params["measure"] = self.measure
 
         return Signal(
             signal_id=build_signal_id(

@@ -40,6 +40,7 @@ from tests.research.real_run_support import (
     SYMBOLS,
     build_context,
     hook_experiment,
+    pinned_strategy_set,
     seed_dataset,
     short_data_root,
 )
@@ -57,10 +58,9 @@ OVERFITTING = "overfitting_gate"
 # The same stages with gates that pass everything, by the smoke test's names.
 _PASSES_EVERYTHING = {WALK_FORWARD: "wf", MONTE_CARLO: "mc", REGIME: "regime"}
 
-_THREE_STRATEGIES = [
-    {"type": family, "method": "random", "options": {"n_samples": 1}}
-    for family in ("momentum", "mean_reversion", "moving_average_crossover")
-]
+# Written out, not drawn (real_run_support.PINNED_STRATEGIES): a change to generation
+# does not move what this file measures, which is the gates.
+_THREE_STRATEGIES = pinned_strategy_set("momentum", "mean_reversion", "moving_average_crossover")
 _ALL_THREE = ["mean_reversion", "momentum", "moving_average_crossover"]
 
 
@@ -102,6 +102,8 @@ class _RealRuns:
         experiment = replace(
             experiment,
             strategy_set=_THREE_STRATEGIES,
+            # Fully specified configs: no generation (see _THREE_STRATEGIES).
+            parameter_space=None,
             # smoke: the cross-stage rules are about a whole pipeline, and this
             # is one stage with pass-everything stages in front of it.
             staged_pipeline_config=StagedPipelineConfig(stages=[*before, stage], smoke=True),

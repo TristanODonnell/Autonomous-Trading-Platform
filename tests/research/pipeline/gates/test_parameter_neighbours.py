@@ -25,7 +25,7 @@ from autonomous_trading_platform.strategy.configs.strategy_config import Strateg
 
 def _momentum(**parameters: float) -> StrategyConfig:
     return make_config(
-        "momentum", {"lookback": 10, "buy_above": 0.05, "sell_below": -0.05} | parameters
+        "momentum", {"lookback": 10, "buy_above": 0.02, "sell_below": -0.02} | parameters
     )
 
 
@@ -76,9 +76,10 @@ def test_a_number_with_a_declared_range_moves_by_a_tenth_of_the_range() -> None:
 
 def test_a_threshold_of_zero_with_a_declared_range_still_moves() -> None:
     """Why the range is the scale and not the value: a share of 0.0 is nothing."""
-    config = make_config("momentum", {"lookback": 10, "buy_above": 0.0, "sell_below": -0.05})
+    config = make_config("momentum", {"lookback": 10, "buy_above": 0.0, "sell_below": -0.02})
 
-    assert _moved_to(build_neighbours(config), "buy_above") == (-0.02, 0.02)
+    # Declared -0.05 to 0.05 (plan G3): a tenth of 0.1, one step of the research grid.
+    assert _moved_to(build_neighbours(config), "buy_above") == (-0.01, 0.01)
 
 
 def test_the_rule_says_how_far() -> None:
@@ -86,8 +87,8 @@ def test_the_rule_says_how_far() -> None:
     neighbours = build_neighbours(_momentum(lookback=10, buy_above=0.0), rule)
 
     assert _moved_to(neighbours, "lookback") == (5, 15)
-    # buy_above is declared from -0.1 to 0.1: a quarter of 0.2.
-    assert _moved_to(neighbours, "buy_above") == (-0.05, 0.05)
+    # buy_above is declared from -0.05 to 0.05: a quarter of 0.1.
+    assert _moved_to(neighbours, "buy_above") == (-0.025, 0.025)
 
 
 @pytest.mark.parametrize("name", ["window_fraction", "range_fraction", "unranged_fraction"])
@@ -150,14 +151,14 @@ def test_a_strategy_whose_id_is_not_its_hash_still_gets_neighbours_with_ids_of_t
 
 
 def test_a_move_outside_the_declared_range_is_not_built_and_says_so() -> None:
-    by = _by(build_neighbours(_momentum(lookback=60, buy_above=0.1, sell_below=-0.1)))
+    by = _by(build_neighbours(_momentum(lookback=60, buy_above=0.05, sell_below=-0.05)))
 
     assert by[("lookback", DOWN)].config is not None
     over = by[("lookback", UP)]
     assert over.config is None and over.value == 72
     assert over.skipped == "above the declared maximum 60"
-    assert by[("buy_above", UP)].skipped == "above the declared maximum 0.1"
-    assert by[("sell_below", DOWN)].skipped == "below the declared minimum -0.1"
+    assert by[("buy_above", UP)].skipped == "above the declared maximum 0.05"
+    assert by[("sell_below", DOWN)].skipped == "below the declared minimum -0.05"
 
 
 def test_the_research_floor_on_windows_is_not_a_limit_here() -> None:
@@ -229,9 +230,9 @@ def test_a_composite_neighbour_differs_in_the_one_number_and_keeps_its_wiring() 
 
 
 def test_a_composites_line_at_zero_has_no_scale_and_is_not_moved() -> None:
-    by = _by(build_neighbours(_composite("thresh_mom_10_v0_voti")))
+    by = _by(build_neighbours(_composite("thresh_roc_10_v0_voti")))
 
-    assert by[("indicators.mom_10.lookback", DOWN)].value == 8
+    assert by[("indicators.roc_10.lookback", DOWN)].value == 8
     for direction in (DOWN, UP):
         at_zero = by[("entry_rules.entry.buy_above", direction)]
         assert at_zero.config is None and at_zero.value is None
@@ -240,11 +241,17 @@ def test_a_composites_line_at_zero_has_no_scale_and_is_not_moved() -> None:
 
 def test_the_aggregators_thresholds_are_wiring_and_are_not_moved() -> None:
     """They sit just under the rules' fixed confidences: moved up by a fifth the
-    aggregator can no longer be reached, and the strategy never trades."""
-    configs, _summary = generate_composite_rule_configs(method="grid")
-    weighted = next(
-        c for c in configs if c.parameters["aggregator"]["component"] == "weighted_score"
-    )
+    aggregator can no longer be reached, and the strategy never trades.
+
+    The generated pool has no weighted_score composite since plan G5 (one aggregator
+    for one-rule skeletons), but stored and hand-written ones can, so one is made here
+    from a pool template with the aggregator the pool used to give it."""
+    template = dict(_composite("thresh_z_20_v1_voti").parameters)
+    template["aggregator"] = {
+        "component": "weighted_score",
+        "parameters": {"buy_threshold": 0.55, "sell_threshold": -0.55},
+    }
+    weighted = make_config("composite_rule", template)
 
     assert not any(n.setting.startswith("aggregator") for n in build_neighbours(weighted))
     for neighbour in build_neighbours(weighted):
@@ -256,7 +263,7 @@ def test_every_number_in_every_template_is_a_setting_or_is_named_as_wiring() -> 
     """A number added to a template later must be put on one list or the other: it is
     not left unchecked without anybody having decided so."""
     configs, _summary = generate_composite_rule_configs(method="grid")
-    assert len(configs) > 500
+    assert len(configs) > 350  # 390 since plan G5
 
     unaccounted: set[str] = set()
     settings: set[str] = set()

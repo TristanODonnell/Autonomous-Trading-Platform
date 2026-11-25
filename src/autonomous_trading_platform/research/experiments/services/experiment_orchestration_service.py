@@ -161,28 +161,59 @@ class ExperimentOrchestrationService:
     # --- strategy expansion ---------------------------------------------------
 
     def _expand_strategy_configs(self, plan: ExperimentDefinition) -> list[StrategyConfig]:
+        configs, _ = self._expand_strategy_configs_with_report(plan)
+        return configs
+
+    def _expand_strategy_configs_with_report(
+        self, plan: ExperimentDefinition
+    ) -> tuple[list[StrategyConfig], list[dict[str, object]]]:
+        """The experiment's configs, and one line per generated family: how many were
+        asked for, delivered, rejected and repeated, and whether the family ran out of
+        distinct valid settings (plan G2). No lines when nothing is generated."""
         if plan.experiment_type == ExperimentType.AB:
             if len(plan.strategy_set) != 2:
                 raise ValueError("AB experiment requires exactly 2 strategies in strategy_set")
-            return [StrategyConfig(**s) for s in plan.strategy_set]
+            return [StrategyConfig(**s) for s in plan.strategy_set], []
 
         if plan.parameter_space is None:
             # No generation needed — strategy_set is already fully specified
-            return [StrategyConfig(**s) for s in plan.strategy_set]
+            return [StrategyConfig(**s) for s in plan.strategy_set], []
 
         # SWEEP or any type using the generation engine
         configs: list[StrategyConfig] = []
+        report: list[dict[str, object]] = []
         for strategy in plan.strategy_set:
             method = strategy.get("method")
             options = strategy.get("options")
-            generated = self.strategy_generation_engine.generate(
+            result = self.strategy_generation_engine.generate_result(
                 strategy_type=strategy["type"],
                 parameter_space=plan.parameter_space,
                 method=method,
                 options=options,
             )
-            configs.extend(generated)
-        return configs
+            configs.extend(result.configs)
+            summary = result.summary
+            line: dict[str, object] = {
+                "strategy_type": strategy["type"],
+                "method": method,
+                "requested": summary.requested_count,
+                "delivered": len(result.configs),
+                "rejected": summary.rejected_count,
+                "duplicates": summary.duplicate_count,
+                "exhausted": summary.exhausted,
+            }
+            report.append(line)
+            logger.info(
+                "Generation | %-26s | %s | asked %d | delivered %d | rejected %d | repeats %d | %s",
+                strategy["type"],
+                method,
+                summary.requested_count,
+                len(result.configs),
+                summary.rejected_count,
+                summary.duplicate_count,
+                "ran out of valid settings" if summary.exhausted else "full count",
+            )
+        return configs, report
 
     # --- window expansion -----------------------------------------------------
 
@@ -290,7 +321,7 @@ class ExperimentOrchestrationService:
         try:
             if plan.staged_pipeline_config is None:
                 raise ValueError("run_staged_experiment requires staged_pipeline_config.")
-            initial_configs = self._expand_strategy_configs(plan)
+            initial_configs, generation_report = self._expand_strategy_configs_with_report(plan)
             pipeline = PipelineRunner(stages=plan.staged_pipeline_config.stages)
             # The dataset version is fixed for the whole pipeline, so its
             # simulations can share the bars they load.
@@ -304,6 +335,7 @@ class ExperimentOrchestrationService:
                     initial_cash=plan.initial_cash,
                     resample_to_daily=plan.resample_to_daily,
                 )
+            result.generation = generation_report
             self._mark_experiment_completed(plan.experiment_id)
             return result
         except Exception:

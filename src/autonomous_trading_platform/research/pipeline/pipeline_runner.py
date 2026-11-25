@@ -77,12 +77,16 @@ class PipelineRunResult:
                             and regime stages.
     all_filter_outputs  Every FilterScoreOutput across all stages.
     final_survivors     Strategies that passed every stage — the elite set.
+    generation          One line per generated family (asked, delivered, rejected,
+                        repeats, exhausted), set by the orchestration service when it
+                        generated the initial configs; empty otherwise.
     """
 
     stage_results: list[StageResult] = field(default_factory=list)
     all_simulation_results: list[SimulationRunResult] = field(default_factory=list)
     all_filter_outputs: list[FilterScoreOutput] = field(default_factory=list)
     final_survivors: list[StrategyConfig] = field(default_factory=list)
+    generation: list[dict[str, object]] = field(default_factory=list)
 
 
 class PipelineRunner:

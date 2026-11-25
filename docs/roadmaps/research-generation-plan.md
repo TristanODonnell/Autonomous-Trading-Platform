@@ -208,10 +208,10 @@ proposed").
 
 | # | Item | What it is | Decision | Boxes | What is left | When |
 |---|---|---|---|---|---|---|
-| 1 | 🔴 G1 + G2 | The draw: the same 30 candidates every month (the month seed never reaches generation); a draw that breaks a family's rule is thrown away, not replaced | Pass the month seed to generation; draw again until the family has the number asked for or no valid setting is left, and say which in the summary. The 2026-11-23 baseline is reproduced by commit `38a9b2c63`, not by seed | 0 done, 2 open | Build; correct the baseline fixture's header | First: every other row changes what a draw holds |
-| 2 | 🔴 G5 | Composite templates: 324 of 652 skeletons behave differently (measured on 21,316 bars) | Repair where the skeletons are made: regime filter compares price with its average; rate-of-change thresholds sized as fractions; one aggregator for single-rule skeletons | 0 done, 1 open | Build; measure the repaired pool again with `g5_measure.py` (B's `~/rehearsals/g5/`) | Before task 4: it sets the grid run's size |
-| 3 | 🔴 G3 | Momentum's thresholds are in dollars | New setting `measure` (`price` default, `return` for the research draw); the neighbour check treats it as a choice | 0 done, 1 open | Build; size the return thresholds from the dataset | With row 2 (same unit problem) |
-| 4 | 🔴 G4 + G8 (factor) | Factor configs that can never buy; factor configs that are one behaviour under two ids | A rule of the draw (buy threshold above the reachable score is invalid, redrawn under G2); a canonical form before hashing (zero-weight windows to default, thresholds to the reachable score level) | 0 done, 2 open (G4, G8's second part) | Build; confirm the two zero-trade ids fail the rule and `4fa1` / `8919` get one id | After row 1 (uses its redraw) |
+| 1 | 🟡 G1 + G2 (built 2026-11-24 on `research/generation-repairs`, not committed; 33 a month, November and December share 9; see G2's box) | The draw: the same 30 candidates every month (the month seed never reaches generation); a draw that breaks a family's rule is thrown away, not replaced | Pass the month seed to generation; draw again until the family has the number asked for or no valid setting is left, and say which in the summary. The 2026-11-23 baseline is reproduced by commit `38a9b2c63`, not by seed | 0 done, 2 open | Build; correct the baseline fixture's header | First: every other row changes what a draw holds |
+| 2 | 🟡 G5 (built 2026-11-24 on `research/generation-repairs`, committed, not pushed; pool 390, 384 distinct, measured again; see G5's box) | Composite templates: 324 of 652 skeletons behave differently (measured on 21,316 bars) | Repair where the skeletons are made: regime filter compares price with its average; rate-of-change thresholds sized as fractions; one aggregator for single-rule skeletons | 0 done, 1 open | Build; measure the repaired pool again with `g5_measure.py` (B's `~/rehearsals/g5/`) | Before task 4: it sets the grid run's size |
+| 3 | 🟡 G3 (built 2026-11-24 on `research/generation-repairs`, not committed; old ids unchanged, draw 6 `return` a month, Nov / Dec share 0; see G3's box) | Momentum's thresholds are in dollars | New setting `measure` (`price` default, `return` for the research draw); the neighbour check treats it as a choice | 0 done, 1 open | Build; size the return thresholds from the dataset | With row 2 (same unit problem) |
+| 4 | 🟡 G4 + G8 (factor) (built 2026-11-24 on `research/generation-repairs`, not committed; `0a2d` / `8c07` refused, `4fa1` = `8919`, factor grid 12,336; see G4's and G8's boxes) | Factor configs that can never buy; factor configs that are one behaviour under two ids | A rule of the draw (buy threshold above the reachable score is invalid, redrawn under G2); a canonical form before hashing (zero-weight windows to default, thresholds to the reachable score level) | 0 done, 2 open (G4, G8's second part) | Build; confirm the two zero-trade ids fail the rule and `4fa1` / `8919` get one id | After row 1 (uses its redraw) |
 | 5 | 🔴 G9 | No gate compares a candidate with buy and hold of the same names | Report-only: buy and hold of the run's universe per window; excess return and information ratio per candidate in the gate report | 0 done, 1 open | Build; settle corporate-action jumps (use the split source, not a 30% rule) | Any time; needed before task 5 (Step 2's fitness) |
 | 6 | 🔴 G8 (turnover) | Turnover is computed by stage 1's filter and dropped; nothing shows return per dollar traded | Report-only: store daily turnover with the run's metrics; gate report shows it against the 10x cap and net return per dollar traded, beside the stress stage's 2x / 3x costs | 0 done, 1 open (G8's first part) | Build | With row 5 (both gate-report additions) |
 
@@ -3548,6 +3548,38 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       **Decided by the user 2026-11-24 (with G1): repair it in this step, before the
       grid baseline.** Draw again until the family has the number asked for or has no
       setting left that passes its rule, and say in the summary which it was. Not built.
+      **G1 + G2 built 2026-11-24 on `research/generation-repairs` (off main
+      `4419c04cf`), not committed.** The hook hands every family the research month
+      as `seed` (`_replay_strategy_set(smoke, seed)`; the same `month_seed` the
+      simulations use). The random generator draws without replacement: every
+      combination listed once, shuffled by the seed, walked until `n_samples` distinct
+      valid configs or the list is used up (`GenerationSummary.requested_count`,
+      `exhausted`; the engine now also carries the generator's repeat count). The
+      composite random draw walks the whole shuffled pool and stops at n (the same
+      skeletons as the old slice while none is rejected). The orchestration service
+      keeps one line per family on `PipelineRunResult.generation` and logs it
+      (`Generation | <family> | asked | delivered | rejected | repeats | full count /
+      ran out of valid settings`); the research summary carries it as `generation`.
+      **Measured on the draw** (laptop, `draw_check.py`, months 2026-11 and 2026-12,
+      before / after): before, both months drew the 2026-11-23 baseline's 30 ids
+      exactly (momentum 4 of 6, crossover 2 of 6 with one repeat); after, 33 a month
+      (momentum 6, mean reversion 6, crossover 3 of 6 and `exhausted`, factor 8,
+      composites 10), November and December share 9 of 33 (crossover 3 of 3,
+      momentum 4 of 6, mean reversion 2 of 6, factor 0 of 8, composites 0 of 10), and
+      each shares 7 or 8 with the baseline. The small families cannot vary much
+      (crossover has 3 valid settings, momentum 12), so they meet the same configs
+      most months: worth knowing for R2's count of attempts. Tests: 16 new
+      (`test_draw_without_replacement.py`, `test_research_draw_by_month.py`), two
+      generation tests rewritten to the new contract, the two stub signatures in the
+      stage smoke test, and `test_stage_gates_on_real_runs.py`'s three strategies
+      pinned to the configs the old draw gave (gate tests should not move with the
+      draw; with them pinned all six pass with every expected value unchanged).
+      Mutation checks: seed not passed, caught (2 tests); no redraw, caught (3);
+      repeats not dropped, not caught: no space today has two settings that make one
+      config, so the generator's repeat check is unobservable until row 4's factor
+      canonical form; its test goes with row 4. (Done in row 4:
+      `test_two_draws_of_one_behaviour_are_one_candidate_and_a_repeat` fails without
+      the check.)
 - [ ] G3. Momentum's thresholds are in dollars and are documented as a return. Ten cents
       is a different bar for a 20 dollar name and a 500 dollar one.
       **Decided by the user 2026-11-24 (task 3): a new setting, `measure`.** The
@@ -3562,8 +3594,58 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       price and return give the same signals, so it is unaffected. Open with it: the
       return thresholds the draw uses, to be sized from the dataset (the spread of
       `rate_of_change` at the drawn lookbacks on 5-minute bars), not picked by hand.
-      The neighbour check (R13) has to treat `measure` as a choice, not a number. Not
-      built.
+      The neighbour check (R13) has to treat `measure` as a choice, not a number.
+      **Decided by the user 2026-11-24, building it:** the research grid for both
+      thresholds is -0.02, -0.01, 0, 0.01, 0.02 (shared by lookbacks 10 and 60, as the
+      resolver multiplies settings independently). Measured on the G5 bars
+      (`rate_of_change`, 5-minute, March-April 2026, 31 names, ~88k values each): std
+      0.0102 at lookback 10 and 0.0253 at 60; |change| reaches 0.01 on 15.5% / 57.8% of
+      bars and 0.02 on 4.6% / 30.3%; the old grid's 0.1 on 0.06% / 0.66%. 30 valid
+      configs (sell_below <= buy_above), was 12. Asked against three points (+-0.02, 0)
+      and against bands per lookback. And, a knock-on: the declared range of both
+      thresholds goes from +-0.1 to +-0.05, so R13's nudge (a tenth of the range) is
+      0.01, one grid step, not 0.02. Asked against keeping +-0.1 and against +-0.02
+      (the grid's edges would lose their outward neighbour).
+      **Built 2026-11-24 on `research/generation-repairs`, not committed.**
+      `MomentumParameters.measure: Literal["price", "return"] = "price"`;
+      `MomentumStrategy` reads `rate_of_change()` for return, `momentum()` for price.
+      Ids: normalising fills defaults and ids hash the result, so a plain new field
+      would have moved every momentum id; the schemas now have
+      `omitted_at_default` (a setting left out of the canonical dict while it holds
+      its default), momentum names `measure`. Checked: 25 momentum ids taken before
+      the change (lookbacks 1, 5, 10, 60 by the old threshold grid, and `{}`, Box A's
+      `momentum_v1`) are all unchanged; naming `measure: price` gives the same id. A
+      price signal's params carry no `measure` either (they feed the signal id).
+      `default_parameters` lists `measure` (every setting with its default); the
+      normalised form leaves it out, and the registry tests now say which is which.
+      `ParameterSpec.search_values`: the values research tries when they are not the
+      ones min / max / default give; search only, validation never reads it. `measure`
+      has `("return",)`, the thresholds the grid above; a stored config outside the
+      grid or the range still loads with its id. `required_indicators` for momentum
+      is `momentum, rate_of_change`. R13 already skips string settings: a return
+      config's neighbours move lookback and the thresholds by one grid step and keep
+      `measure: return`. The evolutionary generator's first member is still the plain
+      default (a price config); it is not used by the hook. **Measured on the draw**
+      (`draw_check.py`, 2026-11 and 2026-12): momentum delivers 6 a month, all
+      `return`, 2 rejected by its rule each month; November and December share 0 of 6
+      (4 of 6 after row 1). Tests: `test_momentum_measure.py` (14: the three pinned
+      ids, naming the default, a return config is another, an unknown measure refused,
+      the same 1% rise on a 20 and a 500 dollar name signals alike in returns and only
+      on the dear name in price, a price signal has no `measure`, the research grid, the
+      grid is not validation, R13's step and kept measure); the draw and neighbour
+      tests moved to the new grid and range (values at 0.05 now sit on the range's edge,
+      so they use 0.02); five registry tests read `omitted_at_default`. Mutation checks:
+      the default kept in the hash, the strategy ignoring `measure`, price signals
+      carrying it, the resolver ignoring `search_values`, and the draw not asking for
+      return: each is caught. The full suite then failed five real-run tests (the
+      cross-process artifact test, two hook smoke tests, the neighbour stage smoke
+      test, the sparse-bars test): they ran "whatever the first momentum draw gives",
+      which is now a return config, so their scenarios gave other signals or none. As
+      row 1 did for the gate tests, the real-run tests now take fixed configs
+      (`tests/research/real_run_support.PINNED_STRATEGIES`, the draw these tests were
+      written against, with `parameter_space=None`) wherever they set the strategies
+      themselves; the two that go through the hook's own draw keep it. All seven
+      real-run files pass with their expected values unchanged.
 - [ ] G4. The factor family draws configs that cannot trade: both of the baseline's
       zero-trade candidates. Each costs a simulation to find out.
       **Decided by the user 2026-11-24 (task 3): a rule of the draw.** Read before
@@ -3578,7 +3660,29 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       load) and against leaving it to stage 1 (about 2.5 minutes a month, the family
       returns 6 of 8). The check catches "can never buy" only; a reachable maximum
       still needs all three parts at their top on one bar. To confirm when built: the
-      two zero-trade ids (`0a2d5aed`, `8c07c0ec`) fail it. Not built.
+      two zero-trade ids (`0a2d5aed`, `8c07c0ec`) fail it.
+      **Built 2026-11-24 on `research/generation-repairs`, not committed (with G8's
+      canonical form, row 4).** `research/strategy_generation/family_rules.py`,
+      `research_form(type, params)`, applied by the random and grid draws before a
+      config is made; other families pass through; schemas, stored rows and
+      hand-written configs untouched (`0a2d`'s config still loads under its id).
+      **Correction to the rule above, found on the real configs** (read from B's
+      `run_manifests`): "the highest score is momentum + mean reversion + volume
+      weights" does not catch `8c07` (momentum 1.0, volume 0.2, volatility 1.0: 1.2 >=
+      1.0), yet it never traded. Volatility scores -0.25 whenever price moves and 0
+      only on a window of identical closes, and when its window is no shorter than
+      mean reversion's that window is flat too, z-score is undefined and there is no
+      signal: so the flat score is reachable only when `volatility_window <
+      mean_reversion_window`. `8c07` (100, 100) tops out at 0.95 and is refused; `0a2d`
+      (all weights 0) at 0. The rule computes every reachable score the way the
+      strategy does (same terms and order, so floats compare exactly), with the part
+      scores read from the strategy's own scoring functions (a test checks they are
+      all of them). Exact up to one floating-point corner, written in the code: z-score
+      is undefined only at a std of exactly 0, and identical closes can leave float
+      noise in one window's mean and not another's; it needs `volatility_window`
+      identical closes in a row. **Measured:** the 2026-11 and 2026-12 draws refused 2
+      and 3 (the same configs the old draw delivered and could never buy) and still
+      delivered 8; the grid refuses 8,208 of 39,366.
 - [ ] G5. Composites that behave the same are counted and simulated as different. The
       template's name is part of the config, so of the id. Seen: two survivors with
       the same numbers in every run. Reported, by reasoning, not measured: the rule
@@ -3613,7 +3717,66 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       take one aggregator. Task 4's grid run is sized from the repaired pool, which is
       measured again with the same script before it. Asked against a behaviour check
       before simulating (sample-based, a pass each run; G6's ground) and against
-      recording only. Not built.
+      recording only.
+      **Decided by the user 2026-11-24, building it:** the regime gate is one filter,
+      `dist_50 > 0` (price minus its 50-bar SMA; a filter compares one indicator with a
+      constant and there is no price-minus-EMA indicator, so the EMA variant is
+      dropped); rate-of-change's two mean-reversion variants are 1.5 and 2 standard
+      deviations of rate-of-change itself, per lookback, measured on the G5 bars
+      (5-minute, March-April 2026, 31 names, ~88k values each): lookback 10, std
+      0.0102, bands 0.015 / 0.020 (reached on 7.6% / 4.4% of bars); lookback 20, std
+      0.0144, bands 0.022 / 0.029 (8.9% / 4.9%); today's +-1.5 / +-2.0 on 0% of bars.
+      The per-name std runs 0.005 to 0.019 at lookback 10, so a fixed fraction is still
+      a higher bar for a quiet name. Asked against one pair for both lookbacks and
+      against dropping rate-of-change from mean reversion. **Recorded, left to Step 2
+      (the user's choice):** `mom_*` and `dist_*` thresholds of +-1.5 / +-2.0 are in
+      dollars (G3's problem in the composites), and the volatility filter
+      `roll_std_20 < 5.0` is in dollars and passes 98.1%.
+      **Built 2026-11-24 on `research/generation-repairs`, not committed.** In
+      `composite_generation.py`: `_ROC_MEAN_REVERSION_BANDS` and
+      `_threshold_variants_for` (a rate-of-change lookback with no measured band is
+      refused, not given the z-score variants), the regime list is `dist_50`, one-rule
+      skeletons take `voting` only, and a skeleton gated by its own rule indicator is
+      skipped. Pool **652 -> 437** (threshold 240 -> 87, crossover 56 -> 28, comparison
+      68 -> 34, two-rule 288 unchanged). **Measured again** (same script, bars, stride
+      2; 381 s): **384 distinct behaviours of 437** (386 with confidence), was 324 of
+      652; by kind threshold 87 -> 78, crossover 28 -> 26, comparison 34 -> 33, two-rule
+      288 -> 252; never signal 0 (was 56); regime gate passes 59.22% of 575,532 checks
+      (was 100.00%); the volatility filter still 98.10%; the baseline's equal pair
+      (`logic_or_roc_20_v1_vol_r_10_hi`, `_v2_`) now behaves differently. **Left
+      over, found by the measure, exact by arithmetic, not by the data:** at threshold
+      zero, momentum and rate-of-change of one lookback are one rule (a price is
+      positive, so `p - p0 > 0` exactly when `p / p0 - 1 > 0`), and so are `z_20` and
+      `dist_20` (z is distance over a positive std); `cmp_mom_N_vs_roc_N` compares
+      dollars with a fraction and acts as the same rule. These make most of the 53
+      repeats (largest group 3). Outside the three decided causes.
+      **Removed after all, the user's go-ahead 2026-11-24 (own commit):** exact by
+      arithmetic, so no behaviour can be lost on any bars (the research simulator sizes
+      without the signal's confidence, so equal direction is equal trading). The
+      at-zero rule is kept for the indicator in its own scale and not built for its
+      dollar twin (`_SAME_SIGN_TWIN`: `mom_10` / `mom_20` give way to `roc_10` /
+      `roc_20`, `dist_20` to `z_20`; `dist_50` keeps its, there is no `z_50`), and
+      `cmp_mom_N_vs_roc_N` is not built. Pool **437 -> 390** (threshold 78, crossover
+      28, comparison 32, two-rule 252). **Measured again:** 384 distinct of 390, the
+      same 384 as before (none lost); 6 pairs left, again exact: `mom_10` against
+      `mom_20` and `roc_10` against `roc_20` in crossover and in comparison (both are
+      "price 20 bars ago above price 10 bars ago"), and a volume rule gated by
+      `dist_50 > 0` against `logic_and_dist_50_v0_vol_r_N_hi` (a gate and an AND do
+      the same there). Left as they are: 1.5% of the pool. Tests for it: the dollar
+      twins have no at-zero rule and the scaled ones and `dist_50` keep theirs, no
+      `mom_N` against `roc_N` comparison, and the arithmetic itself checked on the real
+      indicator functions over 300 random walks of positive prices with flat stretches
+      (z-score has no value where distance is exactly zero; the strict threshold gives
+      no signal on either). Mutation checks: each removal undone alone is caught, and
+      so is a twin check that ignores the window (it would drop `dist_50`'s rule). Tests:
+      `test_composite_template_repairs.py` (10: pool size by kind, every regime gate
+      reads price minus its average, no self-gating, one aggregator for one rule,
+      rate-of-change bands, a missing band refused, other indicators unchanged, and on
+      the real composite strategy: below its average the gate blocks a buy its ungated
+      twin makes, above it lets one through, a 2% fall fires the mild band and a 1%
+      fall does not); the neighbour test that needs a `weighted_score` composite builds
+      one from a pool template. Mutation checks: each of the four repairs undone alone
+      is caught (the regime one by its behaviour tests too).
 - [x] G6. Nothing rejects a candidate before its simulation except the schema and an
       equal id (the fourth audit box).
       **Closed by the user 2026-11-24 (task 3): covered by G3, G4 and G5.** The exact
@@ -3670,7 +3833,34 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
         form before hashing (a zero-weight part's window set to its default; buy and
         sell thresholds moved to the score level the weights can reach that selects
         the same bars), so one behaviour has one id and the engine's same-hash check
-        in a draw drops the repeat. Asked against leaving factor repeats. Not built.
+        in a draw drops the repeat. Asked against leaving factor repeats.
+        **Measured before building (laptop, G5 bars):** the zero-weight-window part is
+        not exact by arithmetic (a part with weight 0 still withholds the signal while
+        its indicator has no value, and its window sets the warm-up), so it was checked:
+        of 5,370 groups of grid configs that merge only by zero-weight windows, 120
+        sampled (308 configs, 10,665 bars each, signals on 52.8% of them): **0 ever act
+        differently**. The threshold part is exact (the score takes finitely many
+        values; a threshold moves to the reachable score that picks the same ones).
+        **Built 2026-11-24 on `research/generation-repairs`, not committed (with G4,
+        row 4).** A zero-weight part's window goes to the research floor, 10 (the user
+        agreed 2026-11-24; the schema default would put momentum at 5, under the
+        floor), then the buy threshold moves to the smallest reachable score at or
+        above it and the sell threshold to the largest at or below it; a config that
+        can never sell gets min(reachable) - 1, so all such configs share it. Windows go
+        first, so the thresholds are exact for the config that will run. `4fa1` and
+        `8919` are one id. **The factor grid is 12,336 configs** (39,366 combinations,
+        8,208 refused; the prototype that set thresholds before windows gave 13,056 /
+        7,830): task 4's factor size. Tests: `test_factor_family_rules.py` (16: the two
+        zero-trade configs refused and why `8c07` is, a refused draw is drawn again,
+        stored configs untouched, `4fa1` = `8919`, windows to the floor and weighted
+        ones kept, exactness over 2,000 random configs, never-sell configs share one
+        threshold, two draws of one behaviour are one candidate and a repeat, the grid
+        size, other families pass through, the part scores, and on the real strategy
+        `e7d4`, `4fa1`, `8919` trade as their canonical forms on three random walks).
+        Mutation checks: no rule, no window step, thresholds not moved, the flat
+        volatility score always counted (the first rule above), the random draw
+        skipping the family rules, and the random draw keeping repeats: each is
+        caught.
 - [ ] G9. No gate compares a candidate with holding the same names (opened 2026-11-24
       from task 1). Stage 1's bar is absolute (Sharpe >= 0.5, return >= 0), so in a
       rising market a strategy that is long most of the time passes on market

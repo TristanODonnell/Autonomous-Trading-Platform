@@ -104,6 +104,8 @@ def _build_momentum(strategy_id: str, params: dict[str, Any]) -> MomentumStrateg
         lookback=params["lookback"],
         buy_above=params["buy_above"],
         sell_below=params["sell_below"],
+        # Absent from the normalised dict when it is the default (see MomentumParameters).
+        measure=params.get("measure", "price"),
     )
 
 
@@ -398,11 +400,11 @@ _REGISTRY.register(
         implementation_class=MomentumStrategy,
         debug=False,
         production_ready=True,
-        default_parameters={"lookback": 5, "buy_above": 0.0, "sell_below": 0.0},
+        default_parameters={"lookback": 5, "buy_above": 0.0, "sell_below": 0.0, "measure": "price"},
         parameter_validator=_validate_momentum,
         parameter_schema=MomentumParameters,
         warmup_bars_fn=_warmup_momentum,
-        required_indicators=("momentum",),
+        required_indicators=("momentum", "rate_of_change"),
         required_persisted_features=(),
         parameter_specs=(
             ParameterSpec(
@@ -418,27 +420,53 @@ _REGISTRY.register(
                 tunable=True,
                 mutation_strategy="step",
             ),
+            # Research draws thresholds as returns (`measure` below). The grid is sized
+            # from rate_of_change on 5-minute bars, 31 names, March-April 2026 (research
+            # plan G3): std 0.010 at lookback 10 and 0.025 at 60, so 0.01 is about 1
+            # and 0.4 std and 0.02 about 2 and 0.8 std (the old -0.1 / 0 / 0.1 grid was
+            # reached on 0.06% and 0.66% of bars). The range +-0.05 is what R13 nudges
+            # by a tenth of: 0.01, one grid step. Neither is read by validation.
             ParameterSpec(
                 name="buy_above",
                 parameter_type=ParameterType.FLOAT,
                 default=0.0,
-                description="Minimum return required to emit a BUY signal.",
-                min_value=-0.1,
-                max_value=0.1,
+                description=(
+                    "Change over the lookback above which to emit a BUY signal, in the "
+                    "unit `measure` names (dollars for price, a fraction for return)."
+                ),
+                min_value=-0.05,
+                max_value=0.05,
                 discrete=False,
                 tunable=True,
                 mutation_strategy="gaussian",
+                search_values=(-0.02, -0.01, 0.0, 0.01, 0.02),
             ),
             ParameterSpec(
                 name="sell_below",
                 parameter_type=ParameterType.FLOAT,
                 default=0.0,
-                description="Maximum return below which to emit a SELL signal.",
-                min_value=-0.1,
-                max_value=0.1,
+                description=(
+                    "Change over the lookback below which to emit a SELL signal, in the "
+                    "unit `measure` names (dollars for price, a fraction for return)."
+                ),
+                min_value=-0.05,
+                max_value=0.05,
                 discrete=False,
                 tunable=True,
                 mutation_strategy="gaussian",
+                search_values=(-0.02, -0.01, 0.0, 0.01, 0.02),
+            ),
+            ParameterSpec(
+                name="measure",
+                parameter_type=ParameterType.STRING,
+                default="price",
+                description=(
+                    "What the thresholds are compared with: 'price' (change in dollars, "
+                    "every config written before G3) or 'return' (change as a fraction)."
+                ),
+                tunable=True,
+                # Research draws returns only (decided 2026-11-24, plan G3).
+                search_values=("return",),
             ),
         ),
         builder=_build_momentum,

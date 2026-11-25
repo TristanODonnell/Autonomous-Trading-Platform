@@ -32,3 +32,8 @@ class ParameterSpec:
     # a floor (short windows trade 5-minute noise); validation still uses min_value, so
     # existing strategies with shorter windows stay valid.
     is_window: bool = False
+    # The values research candidate generation tries, when they are not the ones
+    # min_value / max_value / default would give (research plan G3: momentum's return
+    # thresholds are measured, and its `measure` is drawn as "return" though "price" is
+    # the default). Search only: validation and hand-written configs never read it.
+    search_values: tuple[Any, ...] | None = None

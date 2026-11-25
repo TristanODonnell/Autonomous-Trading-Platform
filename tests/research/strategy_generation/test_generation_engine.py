@@ -98,7 +98,13 @@ def test_random_generation_is_seed_deterministic_and_dedupes() -> None:
     assert [config.config_hash() for config in first] != [
         config.config_hash() for config in different
     ]
-    assert first.summary.duplicate_count > 0
+    # Without replacement (plan G2): the space has 4 combinations, all valid, so 8 asked
+    # gives the 4, each once, and the summary says the space ran out.
+    assert len(first.configs) == 4
+    assert len({config.config_hash() for config in first.configs}) == 4
+    assert first.summary.duplicate_count == 0
+    assert first.summary.requested_count == 8
+    assert first.summary.exhausted is True
 
 
 def test_evolutionary_generation_is_implemented_deterministic_and_valid() -> None:
@@ -306,9 +312,15 @@ def test_duplicate_summaries_are_deterministic_and_use_normalized_hashes() -> No
     assert [config.config_hash() for config in first.configs] == [
         config.config_hash() for config in second.configs
     ]
-    assert first.summary.duplicate_count == second.summary.duplicate_count == 4
-    assert first.summary.duplicate_details == second.summary.duplicate_details
-    assert first.summary.duplicate_details[0]["duplicate_hash"] == first.configs[0].config_hash()
+    # The resolver collapses the repeated values (5 / 5, 0 / 0.0), so the space holds one
+    # combination. Drawn without replacement (plan G2) that is one config, no repeats,
+    # and the space runs out before the 5 asked, whichever order the space is written
+    # in. (Before G2, five draws with replacement took it five times: four repeats.)
+    assert len(first.configs) == len(second.configs) == 1
+    assert first.summary.duplicate_count == second.summary.duplicate_count == 0
+    assert first.summary.exhausted is True
+    assert second.summary.exhausted is True
+    assert first.summary.to_dict() == second.summary.to_dict()
 
 
 def test_evolutionary_generation_count_and_duplicate_summary_are_deterministic() -> None:
