@@ -211,7 +211,7 @@ proposed").
 | 1 | 🟡 G1 + G2 (built 2026-11-24 on `research/generation-repairs`, not committed; 33 a month, November and December share 9; see G2's box) | The draw: the same 30 candidates every month (the month seed never reaches generation); a draw that breaks a family's rule is thrown away, not replaced | Pass the month seed to generation; draw again until the family has the number asked for or no valid setting is left, and say which in the summary. The 2026-11-23 baseline is reproduced by commit `38a9b2c63`, not by seed | 0 done, 2 open | Build; correct the baseline fixture's header | First: every other row changes what a draw holds |
 | 2 | 🟡 G5 (built 2026-11-24 on `research/generation-repairs`, committed, not pushed; pool 390, 384 distinct, measured again; see G5's box) | Composite templates: 324 of 652 skeletons behave differently (measured on 21,316 bars) | Repair where the skeletons are made: regime filter compares price with its average; rate-of-change thresholds sized as fractions; one aggregator for single-rule skeletons | 0 done, 1 open | Build; measure the repaired pool again with `g5_measure.py` (B's `~/rehearsals/g5/`) | Before task 4: it sets the grid run's size |
 | 3 | 🟡 G3 (built 2026-11-24 on `research/generation-repairs`, not committed; old ids unchanged, draw 6 `return` a month, Nov / Dec share 0; see G3's box) | Momentum's thresholds are in dollars | New setting `measure` (`price` default, `return` for the research draw); the neighbour check treats it as a choice | 0 done, 1 open | Build; size the return thresholds from the dataset | With row 2 (same unit problem) |
-| 4 | 🔴 G4 + G8 (factor) | Factor configs that can never buy; factor configs that are one behaviour under two ids | A rule of the draw (buy threshold above the reachable score is invalid, redrawn under G2); a canonical form before hashing (zero-weight windows to default, thresholds to the reachable score level) | 0 done, 2 open (G4, G8's second part) | Build; confirm the two zero-trade ids fail the rule and `4fa1` / `8919` get one id | After row 1 (uses its redraw) |
+| 4 | 🟡 G4 + G8 (factor) (built 2026-11-24 on `research/generation-repairs`, not committed; `0a2d` / `8c07` refused, `4fa1` = `8919`, factor grid 12,336; see G4's and G8's boxes) | Factor configs that can never buy; factor configs that are one behaviour under two ids | A rule of the draw (buy threshold above the reachable score is invalid, redrawn under G2); a canonical form before hashing (zero-weight windows to default, thresholds to the reachable score level) | 0 done, 2 open (G4, G8's second part) | Build; confirm the two zero-trade ids fail the rule and `4fa1` / `8919` get one id | After row 1 (uses its redraw) |
 | 5 | 🔴 G9 | No gate compares a candidate with buy and hold of the same names | Report-only: buy and hold of the run's universe per window; excess return and information ratio per candidate in the gate report | 0 done, 1 open | Build; settle corporate-action jumps (use the split source, not a 30% rule) | Any time; needed before task 5 (Step 2's fitness) |
 | 6 | 🔴 G8 (turnover) | Turnover is computed by stage 1's filter and dropped; nothing shows return per dollar traded | Report-only: store daily turnover with the run's metrics; gate report shows it against the 10x cap and net return per dollar traded, beside the stress stage's 2x / 3x costs | 0 done, 1 open (G8's first part) | Build | With row 5 (both gate-report additions) |
 
@@ -3577,7 +3577,9 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       Mutation checks: seed not passed, caught (2 tests); no redraw, caught (3);
       repeats not dropped, not caught: no space today has two settings that make one
       config, so the generator's repeat check is unobservable until row 4's factor
-      canonical form; its test goes with row 4.
+      canonical form; its test goes with row 4. (Done in row 4:
+      `test_two_draws_of_one_behaviour_are_one_candidate_and_a_repeat` fails without
+      the check.)
 - [ ] G3. Momentum's thresholds are in dollars and are documented as a return. Ten cents
       is a different bar for a 20 dollar name and a 500 dollar one.
       **Decided by the user 2026-11-24 (task 3): a new setting, `measure`.** The
@@ -3658,7 +3660,29 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       load) and against leaving it to stage 1 (about 2.5 minutes a month, the family
       returns 6 of 8). The check catches "can never buy" only; a reachable maximum
       still needs all three parts at their top on one bar. To confirm when built: the
-      two zero-trade ids (`0a2d5aed`, `8c07c0ec`) fail it. Not built.
+      two zero-trade ids (`0a2d5aed`, `8c07c0ec`) fail it.
+      **Built 2026-11-24 on `research/generation-repairs`, not committed (with G8's
+      canonical form, row 4).** `research/strategy_generation/family_rules.py`,
+      `research_form(type, params)`, applied by the random and grid draws before a
+      config is made; other families pass through; schemas, stored rows and
+      hand-written configs untouched (`0a2d`'s config still loads under its id).
+      **Correction to the rule above, found on the real configs** (read from B's
+      `run_manifests`): "the highest score is momentum + mean reversion + volume
+      weights" does not catch `8c07` (momentum 1.0, volume 0.2, volatility 1.0: 1.2 >=
+      1.0), yet it never traded. Volatility scores -0.25 whenever price moves and 0
+      only on a window of identical closes, and when its window is no shorter than
+      mean reversion's that window is flat too, z-score is undefined and there is no
+      signal: so the flat score is reachable only when `volatility_window <
+      mean_reversion_window`. `8c07` (100, 100) tops out at 0.95 and is refused; `0a2d`
+      (all weights 0) at 0. The rule computes every reachable score the way the
+      strategy does (same terms and order, so floats compare exactly), with the part
+      scores read from the strategy's own scoring functions (a test checks they are
+      all of them). Exact up to one floating-point corner, written in the code: z-score
+      is undefined only at a std of exactly 0, and identical closes can leave float
+      noise in one window's mean and not another's; it needs `volatility_window`
+      identical closes in a row. **Measured:** the 2026-11 and 2026-12 draws refused 2
+      and 3 (the same configs the old draw delivered and could never buy) and still
+      delivered 8; the grid refuses 8,208 of 39,366.
 - [ ] G5. Composites that behave the same are counted and simulated as different. The
       template's name is part of the config, so of the id. Seen: two survivors with
       the same numbers in every run. Reported, by reasoning, not measured: the rule
@@ -3809,7 +3833,34 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
         form before hashing (a zero-weight part's window set to its default; buy and
         sell thresholds moved to the score level the weights can reach that selects
         the same bars), so one behaviour has one id and the engine's same-hash check
-        in a draw drops the repeat. Asked against leaving factor repeats. Not built.
+        in a draw drops the repeat. Asked against leaving factor repeats.
+        **Measured before building (laptop, G5 bars):** the zero-weight-window part is
+        not exact by arithmetic (a part with weight 0 still withholds the signal while
+        its indicator has no value, and its window sets the warm-up), so it was checked:
+        of 5,370 groups of grid configs that merge only by zero-weight windows, 120
+        sampled (308 configs, 10,665 bars each, signals on 52.8% of them): **0 ever act
+        differently**. The threshold part is exact (the score takes finitely many
+        values; a threshold moves to the reachable score that picks the same ones).
+        **Built 2026-11-24 on `research/generation-repairs`, not committed (with G4,
+        row 4).** A zero-weight part's window goes to the research floor, 10 (the user
+        agreed 2026-11-24; the schema default would put momentum at 5, under the
+        floor), then the buy threshold moves to the smallest reachable score at or
+        above it and the sell threshold to the largest at or below it; a config that
+        can never sell gets min(reachable) - 1, so all such configs share it. Windows go
+        first, so the thresholds are exact for the config that will run. `4fa1` and
+        `8919` are one id. **The factor grid is 12,336 configs** (39,366 combinations,
+        8,208 refused; the prototype that set thresholds before windows gave 13,056 /
+        7,830): task 4's factor size. Tests: `test_factor_family_rules.py` (16: the two
+        zero-trade configs refused and why `8c07` is, a refused draw is drawn again,
+        stored configs untouched, `4fa1` = `8919`, windows to the floor and weighted
+        ones kept, exactness over 2,000 random configs, never-sell configs share one
+        threshold, two draws of one behaviour are one candidate and a repeat, the grid
+        size, other families pass through, the part scores, and on the real strategy
+        `e7d4`, `4fa1`, `8919` trade as their canonical forms on three random walks).
+        Mutation checks: no rule, no window step, thresholds not moved, the flat
+        volatility score always counted (the first rule above), the random draw
+        skipping the family rules, and the random draw keeping repeats: each is
+        caught.
 - [ ] G9. No gate compares a candidate with holding the same names (opened 2026-11-24
       from task 1). Stage 1's bar is absolute (Sharpe >= 0.5, return >= 0), so in a
       rising market a strategy that is long most of the time passes on market
