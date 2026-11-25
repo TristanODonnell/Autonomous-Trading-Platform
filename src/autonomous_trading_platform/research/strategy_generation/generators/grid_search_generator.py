@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from itertools import product
 
+from autonomous_trading_platform.research.strategy_generation.family_rules import research_form
 from autonomous_trading_platform.research.strategy_generation.generation_result import (
     GenerationOptions,
     GenerationSummary,
@@ -50,7 +51,8 @@ class GridSearchGenerator(BaseStrategyGenerator):
             self.last_summary.generated_count += 1
             params = dict(zip(sorted_keys, combo, strict=True))
             try:
-                yield make_config(strategy_type, params)
+                # Refused or canonical (plan G4 / G8); the engine drops same-id repeats.
+                yield make_config(strategy_type, research_form(strategy_type, params))
             except ValueError as exc:
                 self.last_summary.reject(
                     str(exc),

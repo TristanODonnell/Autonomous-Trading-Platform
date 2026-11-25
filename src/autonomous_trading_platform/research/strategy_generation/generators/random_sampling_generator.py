@@ -4,6 +4,7 @@ import random
 from collections.abc import Iterator
 from itertools import product
 
+from autonomous_trading_platform.research.strategy_generation.family_rules import research_form
 from autonomous_trading_platform.research.strategy_generation.generation_result import (
     GenerationOptions,
     GenerationSummary,
@@ -75,7 +76,9 @@ class RandomSamplingGenerator(BaseStrategyGenerator):
             self.last_summary.generated_count += 1
             params = dict(zip(sorted_keys, values, strict=True))
             try:
-                config = make_config(strategy_type, params)
+                # The family's rule may refuse the draw, or put it in a canonical form
+                # that another draw already took (a repeat, below). Plan G4 / G8.
+                config = make_config(strategy_type, research_form(strategy_type, params))
             except ValueError as exc:
                 self.last_summary.reject(
                     str(exc),
