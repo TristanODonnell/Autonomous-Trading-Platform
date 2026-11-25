@@ -35,6 +35,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from autonomous_trading_platform.observability.logging import get_logger
+from autonomous_trading_platform.research.experiments.filtering.metrics.trade_metrics import (
+    notional_traded,
+)
 
 if TYPE_CHECKING:
     from autonomous_trading_platform.research.pipeline.aggregation.monte_carlo_aggregator import (
@@ -61,11 +64,16 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def build_gate_report(stage_results: Sequence[StageResult]) -> dict[str, Any]:
+def build_gate_report(
+    stage_results: Sequence[StageResult], *, turnover_cap: float | None = None
+) -> dict[str, Any]:
     """One record per strategy that entered the pipeline, in the order it entered.
 
     A stage is handed the survivors of the stage before it. The first stage's entrants
     are the strategies its result names, since a result does not list who entered.
+
+    ``turnover_cap`` is stage 1's daily turnover cap: each reference run's turnover is
+    shown as a share of it (plan G8, report only).
     """
     records: dict[str, dict[str, Any]] = {}
     entrants: list[str] | None = None
@@ -94,7 +102,7 @@ def build_gate_report(stage_results: Sequence[StageResult]) -> dict[str, Any]:
                 entry["failures"] = list(own[0])
             diagnostics = stage_result.diagnostics.get(strategy_id)
             if diagnostics is not None:
-                entry.update(_evidence(diagnostics))
+                entry.update(_evidence(diagnostics, turnover_cap))
             record["stages"].append(entry)
             if strategy_id not in passed:
                 record["eliminated_at"] = stage_result.stage_name
@@ -108,6 +116,7 @@ def build_gate_report(stage_results: Sequence[StageResult]) -> dict[str, Any]:
 
     report = {
         "stages": [stage_result.stage_name for stage_result in stage_results],
+        "turnover_cap": turnover_cap,
         "strategies": list(records.values()),
     }
     safe: dict[str, Any] = _json_safe(report)
@@ -137,10 +146,10 @@ def _named(stage_result: StageResult) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _evidence(diagnostics: StageDiagnostics) -> dict[str, Any]:
+def _evidence(diagnostics: StageDiagnostics, turnover_cap: float | None = None) -> dict[str, Any]:
     evidence: dict[str, Any] = {}
     if diagnostics.reference_result is not None:
-        evidence["reference_run"] = _reference_run(diagnostics.reference_result)
+        evidence["reference_run"] = _reference_run(diagnostics.reference_result, turnover_cap)
     if diagnostics.fold_inputs:
         evidence["folds"] = [_fold(fold) for fold in diagnostics.fold_inputs]
         evidence["folds_passed"] = sum(1 for fold in diagnostics.fold_inputs if fold.fold_passed)
@@ -157,8 +166,19 @@ def _evidence(diagnostics: StageDiagnostics) -> dict[str, Any]:
     return evidence
 
 
-def _reference_run(result: SimulationRunResult) -> dict[str, Any]:
-    """The full-window run a gate judged: its dates say which days the gate read."""
+def _reference_run(
+    result: SimulationRunResult, turnover_cap: float | None = None
+) -> dict[str, Any]:
+    """The full-window run a gate judged: its dates say which days the gate read.
+
+    With its turnover (plan G8, report only): notional traded per day over mean equity,
+    as stage 1's cap measures it, and the share of the cap it uses; and the net return
+    per dollar traded, in basis points: the equity it ended with less the equity it
+    started with, over every dollar it traded. Fills, slippage and commissions are in
+    the equity, so this is what each dollar pushed through the market kept.
+    """
+    turnover = result.trade_metrics.daily_turnover
+    notional = notional_traded(result.trade_logs)
     return {
         "first": result.start_date.isoformat(),
         "last": result.end_date.isoformat(),
@@ -166,7 +186,22 @@ def _reference_run(result: SimulationRunResult) -> dict[str, Any]:
         "total_return": result.return_metrics.total_return,
         "max_drawdown": result.risk_metrics.max_drawdown,
         "trade_count": result.trade_metrics.total_trades,
+        "daily_turnover": turnover,
+        "share_of_turnover_cap": (
+            turnover / turnover_cap if turnover_cap is not None and turnover_cap > 0 else None
+        ),
+        "notional_traded": notional,
+        "net_return_per_dollar_traded_bp": _net_per_dollar_bp(result.equity_curve, notional),
     }
+
+
+def _net_per_dollar_bp(equity_curve: Any, notional: float) -> float | None:
+    """(last equity - first equity) / notional traded, in basis points; None with no
+    trade or no curve."""
+    if notional <= 0 or equity_curve is None or getattr(equity_curve, "empty", True):
+        return None
+    equity = equity_curve["equity"].astype(float)
+    return float(equity.iloc[-1] - equity.iloc[0]) / notional * 10_000
 
 
 def _fold(fold: FoldValidationInput) -> dict[str, Any]:
@@ -390,13 +425,26 @@ def _log(report: dict[str, Any]) -> None:
         if len(record["stages"]) < 2:
             continue
         logger.info(
-            "gate_report | %s | %s | %s",
+            "gate_report | %s | %s | %s | %s",
             record["strategy_id"],
             "passed every stage"
             if record["passed_every_stage"]
             else f"eliminated at {record['eliminated_at']}",
+            _turnover_brief(record["stages"][0]),
             " | ".join(_brief(entry) for entry in record["stages"][1:]),
         )
+
+
+def _turnover_brief(entry: dict[str, Any]) -> str:
+    """The first stage's run: its turnover and what each dollar traded kept."""
+    run = entry.get("reference_run")
+    if not run:
+        return "turnover n/a"
+    per_dollar = run.get("net_return_per_dollar_traded_bp")
+    return (
+        f"turnover {_shown(run.get('daily_turnover'))}x/day, "
+        f"{'n/a' if per_dollar is None else f'{per_dollar:+.2f}'} bp per $ traded"
+    )
 
 
 def _brief(entry: dict[str, Any]) -> str:

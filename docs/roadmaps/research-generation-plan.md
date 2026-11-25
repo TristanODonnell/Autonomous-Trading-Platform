@@ -212,8 +212,8 @@ proposed").
 | 2 | 🟡 G5 (built 2026-11-24 on `research/generation-repairs`, committed, not pushed; pool 390, 384 distinct, measured again; see G5's box) | Composite templates: 324 of 652 skeletons behave differently (measured on 21,316 bars) | Repair where the skeletons are made: regime filter compares price with its average; rate-of-change thresholds sized as fractions; one aggregator for single-rule skeletons | 0 done, 1 open | Build; measure the repaired pool again with `g5_measure.py` (B's `~/rehearsals/g5/`) | Before task 4: it sets the grid run's size |
 | 3 | 🟡 G3 (built 2026-11-24 on `research/generation-repairs`, not committed; old ids unchanged, draw 6 `return` a month, Nov / Dec share 0; see G3's box) | Momentum's thresholds are in dollars | New setting `measure` (`price` default, `return` for the research draw); the neighbour check treats it as a choice | 0 done, 1 open | Build; size the return thresholds from the dataset | With row 2 (same unit problem) |
 | 4 | 🟡 G4 + G8 (factor) (built 2026-11-24 on `research/generation-repairs`, not committed; `0a2d` / `8c07` refused, `4fa1` = `8919`, factor grid 12,336; see G4's and G8's boxes) | Factor configs that can never buy; factor configs that are one behaviour under two ids | A rule of the draw (buy threshold above the reachable score is invalid, redrawn under G2); a canonical form before hashing (zero-weight windows to default, thresholds to the reachable score level) | 0 done, 2 open (G4, G8's second part) | Build; confirm the two zero-trade ids fail the rule and `4fa1` / `8919` get one id | After row 1 (uses its redraw) |
-| 5 | 🔴 G9 | No gate compares a candidate with buy and hold of the same names | Report-only: buy and hold of the run's universe per window; excess return and information ratio per candidate in the gate report | 0 done, 1 open | Build; settle corporate-action jumps (use the split source, not a 30% rule) | Any time; needed before task 5 (Step 2's fitness) |
-| 6 | 🔴 G8 (turnover) | Turnover is computed by stage 1's filter and dropped; nothing shows return per dollar traded | Report-only: store daily turnover with the run's metrics; gate report shows it against the 10x cap and net return per dollar traded, beside the stress stage's 2x / 3x costs | 0 done, 1 open (G8's first part) | Build | With row 5 (both gate-report additions) |
+| 5 | 🟡 G9 (built 2026-11-24 on `research/gate-report-benchmark`, not committed; names in force, the run's corporate actions, the layout's sessions; B has no corporate actions: see G9's box) | No gate compares a candidate with buy and hold of the same names | Report-only: buy and hold of the run's universe per window; excess return and information ratio per candidate in the gate report | 0 done, 1 open | Build; settle corporate-action jumps (use the split source, not a 30% rule) | Any time; needed before task 5 (Step 2's fitness) |
+| 6 | 🟡 G8 (turnover) (built 2026-11-25 on `research/gate-report-benchmark`, not committed; result file only, per the user; see G8's box) | Turnover is computed by stage 1's filter and dropped; nothing shows return per dollar traded | Report-only: store daily turnover with the run's metrics; gate report shows it against the 10x cap and net return per dollar traded, beside the stress stage's 2x / 3x costs | 0 done, 1 open (G8's first part) | Build | With row 5 (both gate-report additions) |
 
 PR split (agreed 2026-11-24): rows 1 to 4 as one generation PR (they change the draw; measured
 before / after on the draw itself, no run needed to merge), rows 5 and 6 as one gate-report
@@ -3828,7 +3828,28 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
         turnover against the 10x cap and its net return per dollar traded, next to
         the stress stage's 2x / 3x cost results. Nothing is eliminated by it. Asked
         against withdrawing the part (the stress stage covers cost sensitivity) and
-        against keeping return per trade. Not built.
+        against keeping return per trade.
+        **Found when building (2026-11-25): turnover was not dropped, only unread.**
+        Every run's `TradeMetrics.daily_turnover` is computed and held on the run's
+        result; no report showed it and no database column holds it. **Decided by the
+        user 2026-11-25: the result file only** (as the holdout's numbers, 2026-11-20),
+        no column. Asked against a migration for a number no code reads.
+        **Built 2026-11-25 on `research/gate-report-benchmark`, not committed (row 6).**
+        `notional_traded(trade_logs)` in `trade_metrics.py` (every fill's |quantity| x
+        price; turnover now uses it, so the two share one measure of dollars traded);
+        every `reference_run` in the gate report gains `daily_turnover`,
+        `share_of_turnover_cap`, `notional_traded` and `net_return_per_dollar_traded_bp`
+        ((last equity - first equity) / notional traded: net, since fills, slippage and
+        commissions are in the equity); the report gains `turnover_cap` (the research
+        filters' 10x, from the hook), and each strategy's log line the first stage's
+        turnover and bp per $ traded. The stress stage's entry carries its baseline as
+        `reference_run`, so the two figures sit beside its 2x / 3x cost runs. Tests: 4
+        in `test_gate_report.py` (worked by hand: three fills, 50,550 traded, a net 500,
+        98.91 bp; a run with no trade; no cap), 3 existing tests updated for the new key
+        and log piece, and the hook's end-to-end test (the cap is passed; the per-dollar
+        figure has the run's own sign). Mutation checks (5): the ends of the equity
+        swapped, percent for bp, the share not divided by the cap, sells counted
+        negative, the hook not passing the cap: each is caught.
       - G5's repair extended to factor: the factor draw puts a config in a canonical
         form before hashing (a zero-weight part's window set to its default; buy and
         sell thresholds moved to the score level the weights can reach that selects
@@ -3875,7 +3896,54 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
       Asked against enforcing it in stage 1 now (all 30 would go) and against using
       it only as Step 2's fitness. To settle when built: the corporate-action jumps
       (the 30% rule flattens a real ORCL move; the split source the context builder
-      uses is the better input). Not built.
+      uses is the better input).
+      **Decided by the user 2026-11-24 (row 5): the names in force.** Buy and hold is
+      equal weight across the names the universe timeline has in force each day, the
+      set the candidate may trade, not all the dataset's names: excess return then
+      measures the strategy's choices, not a difference of universe. (This replaces
+      "the dataset's names" above; buy_and_hold.py's numbers in section 5 are of all
+      31.) Asked against all 31 names and against both side by side. Corporate actions
+      settled in the build: the run's own source, splits and cash dividends, since the
+      simulator credits both to the candidate's equity.
+      **Built 2026-11-24 on `research/gate-report-benchmark`, not committed (row 5).**
+      `research/pipeline/benchmark_report.py` (pure functions, plus a reader of each
+      name's first and last bar of a day: ~33k points for 24 months of 31 names, not
+      1.3M bar objects) and three pieces in the hook, run after the survivors are
+      seeded, beside the holdout report. Rules: equal weight over the names in force,
+      rebalanced daily; bought at each name's first bar of the window, as a candidate's
+      equity starts at its first; a split multiplies the shares, a dividend pays on the
+      ex-date to the shares held then; a name with no bar on a day counts its move on
+      its next bar; days are the layout's sessions (one helper, shared with the layout:
+      NYSE calendar less the dataset's left-out days), and a bar on any other day is not
+      read, for buy and hold and candidate alike (found by the end-to-end test: the
+      synthetic fixture has bars on market holidays, 195 days against 185 sessions).
+      Output: the gate report's `benchmark` (selection, evaluation, each test fold: total
+      return, Sharpe, max drawdown, names held; the names in force with no bars; the
+      corporate actions read) and each strategy's `versus_benchmark` (return, buy and
+      hold's, excess, information ratio, days) for every window a stage kept a run of
+      (stage 1: selection, for every entrant; Monte Carlo's base run: evaluation, for
+      walk-forward's survivors) and the excess return per test fold (walk-forward keeps
+      only totals); the holdout report's `benchmark` and each candidate's
+      `versus_benchmark`. Report only: an error is written in the report's place.
+      Tests: `test_benchmark_report.py` (12, every number worked by hand: a split, a
+      dividend on post-split shares, a name entering the list, a missing bar, a day that
+      is no session), 3 in `test_holdout_report.py`, and one through the hook with the
+      real runner and bars, which checks the candidate side against the engine: the
+      selection return rebuilt from the equity curve equals stage 1's total return
+      (to 1e-9). Mutation checks (11): no split, no dividend, names out of force held,
+      non-session days read (each side), population std, fold off by one, any run taken
+      for a window, every bar kept, the first day measured from the previous close, the
+      holdout not compared: each is caught.
+      **Found while building: B's `corporate_actions` table is empty** (0 rows, read
+      2026-11-24), and research reads the actions from the database it runs on: so
+      every research run on B so far has had no splits or dividends. The package B box
+      "corporate actions for the 31 names over the span" was open; its consequence is
+      that NFLX's 10-for-1 split on 2025-11-17 reads as a -90% day for any candidate
+      holding NFLX then (and for buy and hold), inside test fold 2, and the history the
+      strategies read is not split-adjusted. The report now says how many splits and
+      dividends it read, so the next run shows it. **Decided 2026-11-24: load them on
+      B first; done 2026-11-25** (package B's box: 280 dividends, 4 splits with NFLX's,
+      the five other jumps market moves).
 - [ ] G10. Search methods are hard-wired in two places, and only one new search is
       planned (opened 2026-11-24, from the user's question whether the generator should
       be extended for other kinds of search). **Read 2026-11-24** (this checks the sixth
@@ -5391,6 +5459,22 @@ behind a fixture flag; default stays `alpaca`.
           see below. **Open: corporate actions for the 31 names over the span**; a
           backfill does not fill that table, and five of the six price jumps in the
           report are not checked against one.)
+          **Done 2026-11-25 ~03:45 UTC on B (the user's go-ahead, found while building
+          G9: the table had 0 rows, so every research run on B before had no splits or
+          dividends).** `atp ingestion run-corporate-actions --source-raw-bars-dataset-version
+          raw_bars_20261118T234501Z_043e50ad --start 2023-10-15 --end 2026-11-16`
+          (from 400 days before the selection window, the simulator's warmup reach), after
+          a dry run; exit 0, version `corporate_actions_20261125T034534Z_904e9bcb`, log
+          `~/rehearsals/corporate_actions_load_20261125.log`. 300 created, none failed: 280
+          cash dividends, 4 forward splits (WMT 3 on 2024-02-26, NVDA 10 on 2024-06-10, AVGO
+          10 on 2024-07-15, **NFLX 10 on 2025-11-17**), and 16 the platform does not apply,
+          flagged for manual review (15 mergers, mostly of companies the 31 bought, and an
+          XOM name change). The six price jumps: NFLX's is the split; ORCL 2025-09-10, INTC
+          2025-09-18, AMD 2025-10-06, INTC 2026-04-24 and INTC 2026-10-30 have no action,
+          so they are market moves (the first three match known news). Runs from now on
+          are not comparable with the earlier baselines for a candidate that held NFLX on
+          2025-11-17 or held a dividend payer (every one, a little): the next run is the
+          first with them.
       - Backfill done on B 2026-11-16 (about 22:05 New York): 26 monthly
         `atp ingestion run-backfill` versions, 2024-10-01 to 2026-11-16, the 31 names
         of the timeline's union, five-minute bars, IEX. Every chunk exit 0, about 100

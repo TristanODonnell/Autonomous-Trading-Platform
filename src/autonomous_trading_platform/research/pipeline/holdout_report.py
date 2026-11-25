@@ -18,7 +18,7 @@ code that is not in that chain cannot remove anyone from it.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -75,8 +75,13 @@ def score_holdout(
     survivors: Sequence[StrategyConfig],
     span: SessionSpan,
     settings: HoldoutRunSettings,
+    compare: Callable[[SimulationRunResult], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run each survivor once over ``span`` and report its numbers.
+
+    ``compare`` (plan G9: the run against buy and hold) adds each scored candidate's
+    ``versus_benchmark``; a comparison that fails is that candidate's
+    ``versus_benchmark`` error, and its own numbers still stand.
 
     A run that fails is reported as that candidate's ``error`` and logged; the others
     are still run and nothing is raised: the report decides nothing, so it must not be
@@ -122,15 +127,27 @@ def score_holdout(
         if result is None:
             candidates.append({"strategy_id": config.strategy_id, "error": "no result"})
             continue
-        candidates.append(
-            {
-                "strategy_id": config.strategy_id,
-                "sharpe": _number(result.risk_metrics.sharpe_ratio),
-                "total_return": _number(result.return_metrics.total_return),
-                "max_drawdown": _number(result.risk_metrics.max_drawdown),
-                "trade_count": result.trade_metrics.total_trades,
-            }
-        )
+        candidate: dict[str, Any] = {
+            "strategy_id": config.strategy_id,
+            "sharpe": _number(result.risk_metrics.sharpe_ratio),
+            "total_return": _number(result.return_metrics.total_return),
+            "max_drawdown": _number(result.risk_metrics.max_drawdown),
+            "trade_count": result.trade_metrics.total_trades,
+        }
+        if compare is not None:
+            try:
+                candidate["versus_benchmark"] = {
+                    key: _number(value) if isinstance(value, float) else value
+                    for key, value in compare(result).items()
+                }
+            except Exception as exc:
+                logger.warning(
+                    "holdout_report: no benchmark comparison for strategy %s",
+                    config.strategy_id,
+                    exc_info=True,
+                )
+                candidate["versus_benchmark"] = {"error": str(exc)}
+        candidates.append(candidate)
 
     scored = sum(1 for candidate in candidates if "error" not in candidate)
     logger.info(
