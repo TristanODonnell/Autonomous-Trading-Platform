@@ -213,7 +213,7 @@ proposed").
 | 3 | 🟡 G3 (built 2026-11-24 on `research/generation-repairs`, not committed; old ids unchanged, draw 6 `return` a month, Nov / Dec share 0; see G3's box) | Momentum's thresholds are in dollars | New setting `measure` (`price` default, `return` for the research draw); the neighbour check treats it as a choice | 0 done, 1 open | Build; size the return thresholds from the dataset | With row 2 (same unit problem) |
 | 4 | 🟡 G4 + G8 (factor) (built 2026-11-24 on `research/generation-repairs`, not committed; `0a2d` / `8c07` refused, `4fa1` = `8919`, factor grid 12,336; see G4's and G8's boxes) | Factor configs that can never buy; factor configs that are one behaviour under two ids | A rule of the draw (buy threshold above the reachable score is invalid, redrawn under G2); a canonical form before hashing (zero-weight windows to default, thresholds to the reachable score level) | 0 done, 2 open (G4, G8's second part) | Build; confirm the two zero-trade ids fail the rule and `4fa1` / `8919` get one id | After row 1 (uses its redraw) |
 | 5 | 🟡 G9 (built 2026-11-24 on `research/gate-report-benchmark`, not committed; names in force, the run's corporate actions, the layout's sessions; B has no corporate actions: see G9's box) | No gate compares a candidate with buy and hold of the same names | Report-only: buy and hold of the run's universe per window; excess return and information ratio per candidate in the gate report | 0 done, 1 open | Build; settle corporate-action jumps (use the split source, not a 30% rule) | Any time; needed before task 5 (Step 2's fitness) |
-| 6 | 🔴 G8 (turnover) | Turnover is computed by stage 1's filter and dropped; nothing shows return per dollar traded | Report-only: store daily turnover with the run's metrics; gate report shows it against the 10x cap and net return per dollar traded, beside the stress stage's 2x / 3x costs | 0 done, 1 open (G8's first part) | Build | With row 5 (both gate-report additions) |
+| 6 | 🟡 G8 (turnover) (built 2026-11-25 on `research/gate-report-benchmark`, not committed; result file only, per the user; see G8's box) | Turnover is computed by stage 1's filter and dropped; nothing shows return per dollar traded | Report-only: store daily turnover with the run's metrics; gate report shows it against the 10x cap and net return per dollar traded, beside the stress stage's 2x / 3x costs | 0 done, 1 open (G8's first part) | Build | With row 5 (both gate-report additions) |
 
 PR split (agreed 2026-11-24): rows 1 to 4 as one generation PR (they change the draw; measured
 before / after on the draw itself, no run needed to merge), rows 5 and 6 as one gate-report
@@ -3828,7 +3828,28 @@ high": `logic_or_roc_20_v1_vol_r_10_hi`, `logic_or_roc_20_v2_vol_r_10_hi` and
         turnover against the 10x cap and its net return per dollar traded, next to
         the stress stage's 2x / 3x cost results. Nothing is eliminated by it. Asked
         against withdrawing the part (the stress stage covers cost sensitivity) and
-        against keeping return per trade. Not built.
+        against keeping return per trade.
+        **Found when building (2026-11-25): turnover was not dropped, only unread.**
+        Every run's `TradeMetrics.daily_turnover` is computed and held on the run's
+        result; no report showed it and no database column holds it. **Decided by the
+        user 2026-11-25: the result file only** (as the holdout's numbers, 2026-11-20),
+        no column. Asked against a migration for a number no code reads.
+        **Built 2026-11-25 on `research/gate-report-benchmark`, not committed (row 6).**
+        `notional_traded(trade_logs)` in `trade_metrics.py` (every fill's |quantity| x
+        price; turnover now uses it, so the two share one measure of dollars traded);
+        every `reference_run` in the gate report gains `daily_turnover`,
+        `share_of_turnover_cap`, `notional_traded` and `net_return_per_dollar_traded_bp`
+        ((last equity - first equity) / notional traded: net, since fills, slippage and
+        commissions are in the equity); the report gains `turnover_cap` (the research
+        filters' 10x, from the hook), and each strategy's log line the first stage's
+        turnover and bp per $ traded. The stress stage's entry carries its baseline as
+        `reference_run`, so the two figures sit beside its 2x / 3x cost runs. Tests: 4
+        in `test_gate_report.py` (worked by hand: three fills, 50,550 traded, a net 500,
+        98.91 bp; a run with no trade; no cap), 3 existing tests updated for the new key
+        and log piece, and the hook's end-to-end test (the cap is passed; the per-dollar
+        figure has the run's own sign). Mutation checks (5): the ends of the equity
+        swapped, percent for bp, the share not divided by the cap, sells counted
+        negative, the hook not passing the cap: each is caught.
       - G5's repair extended to factor: the factor draw puts a config in a canonical
         form before hashing (a zero-weight part's window set to its default; buy and
         sell thresholds moved to the score level the weights can reach that selects
