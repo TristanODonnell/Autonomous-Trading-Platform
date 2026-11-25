@@ -7,6 +7,13 @@ Related: `docs/audits/execution_topology_deployment_audit.md` (component invento
 
 ## 0. Open items at a glance (2026-11-08; the rest of this doc is the record)
 
+**Update 2026-11-25.** Finding 29 merged (PR #180); the timed bench re-sim of Sat 11/21
+exited 0 and A accepted it. Review mode set to `advisory` and rehearsed the same day (first
+real advisory review Mon 11/30); `auto` is next. Research sprint: Step 0 and Step 1 done, Step 1b's six repairs merged
+(PRs #203, #204) and in their run on B. Its Steps 3, 4 and 5 are this plan's 3.3(b), 3.4
+and Phase 4: see "Where this plan joins the pre-launch plan" in the research plan. 7.7 is
+re-dated.
+
 Everything unchecked below this section is a real task. Checked boxes with a note were
 verified during the soak and ticked on 2026-11-08 when the doc was tidied.
 
@@ -14,16 +21,20 @@ verified during the soak and ticked on 2026-11-08 when the doc was tidied.
 - Finding 27 (fix and backfills done 2026-11-14, thin 10/12 to 10/14 repaired too): verify Monday 11/16's rolling version holds 8/31, 9/30, 10/08, 10/09 and full 10/12 to 10/14, and B's dry run reports 62 `daily_returns` (3.3(a) findings)
 - Finding 28 (fix deployed 2026-11-14, PR #178, rehearsed on A for Fri 11/13: 78 slots): verify Mon 11/16's scheduled chain stores the 15:55 ET bar (3.3(a) findings)
 - `atp runtime run-eod-step` (deployed and smoke-tested on A 2026-11-14, §6): rehearse `weekly_portfolio_review` (advisory) and the next rotation (§7.3)
-- Finding 29 (found 2026-11-14, fix on `fix/finding-29-pull-index-fallback`): the Saturday re-sim's pull fails on a day with no publish index; merge before Sat 06:00 ET or re-run by hand after (3.3(a) findings)
-- Box B: Saturday timer installed 2026-11-14; verify the first timed run and that A accepts it (3.3(a))
-- Flips: `worker_results_enabled` on since 2026-11-14; next `portfolio_review_mode=advisory`, then `auto` (3.3(a))
+- ~~Finding 29~~ merged as PR #180 (found 2026-11-14, fix on `fix/finding-29-pull-index-fallback`): the Saturday re-sim's pull fails on a day with no publish index; merge before Sat 06:00 ET or re-run by hand after (3.3(a) findings)
+- ~~Box B: Saturday timer installed 2026-11-14; verify the first timed run and that A accepts it (3.3(a))~~ Sat 11/21's run exited 0, A accepted it (checked 2026-11-25)
+- Flips: `worker_results_enabled` on since 2026-11-14; `portfolio_review_mode=advisory` set and rehearsed 2026-11-25 (first real review Mon 11/30); next `auto` (3.3(a))
 - Calendar tests still ahead: Thu 11/26 closed, Fri 11/27 and Thu 12/24 early close, Mon 11/30 and Thu 12/31 rotations (1.7 table)
 - Set the IEX `SLA_BREACH` baseline for the §7.1 Data row
 - Worker observability leftovers (2.3), log formatter (1.6), rolling-version pruning in `retention.sh` (Finding 14 follow-up): P2
 - 3.3(b) monthly research → bench, 3.3(c) parameter changes, 3.4 recorded-dataset replay, Phase 4, Phase 5 (push channel, feed switch six weeks before go-live)
 - §6: SIP free-tier probe (research plan D1), worker→A publishing contract, settlement/T+1 question
 
-**Research sprint:** `research-generation-plan.md` (Step 0 R1–R7, D1; then Steps 1–5).
+**Research sprint:** `research-generation-plan.md` (Step 0 and Step 1 done; Step 1b in its run;
+Steps 3, 4, 5 = 3.3(b), 3.4, Phase 4 here).
+
+**Strategy quality:** `strategy-quality-roadmap.md` (what "working" means, milestones M1 to M4,
+the levers); its Research and Live tiers are 7.1b here.
 
 **Where we are:** §7.6 inventory (state of every scheduled process), §7.7 calendar.
 
@@ -703,9 +714,26 @@ is a finding.
           Review mode still `off`, so an accepted result is stored and nothing acts on it.
           Needed before the first timed run: a rejected `run_id` is final (the gate
           answers a repeat with the first decision) and the default id is per date.
-    - [ ] `portfolio_review_mode=advisory`: rehearse first with `run-eod-step
+    - [x] `portfolio_review_mode=advisory`: rehearse first with `run-eod-step
           weekly_portfolio_review --as-of <Monday> --dry-run`
-    - [ ] `portfolio_review_mode=auto`
+          **Set on A 2026-11-25 05:27 UTC** (`atp settings set`, previewed with `--dry-run`
+          first: `off` → `advisory`, no other key). Set before the rehearsal on purpose: a dry
+          run reads the mode from `operator_settings`, and with `off` the review returns
+          `None`, so it would pass having exercised nothing. The review fires only on a
+          week's first session, so nothing ran for real before the rehearsal (next: Mon
+          11/30). **Rehearsal, 2026-11-25 05:28 UTC:** `--as-of 2026-11-23 --dry-run`, exit 0,
+          `completed`, mode `advisory`, `worker_run_id` `bench_resims_2026-11-21`,
+          `swap_eligible` true, kill switch not blocking. Four decisions, none applied:
+          `macd_crossover_v1` challenge (held by streak); `momentum_v1` and
+          `mean_reversion_v1` keep, below the floor (held by streak); `macd_crossover_v1`
+          add seat (below the minimum active). Read before `auto`: both ACTIVE strategies
+          are below the floor, so once their streaks complete an `auto` review would act on
+          them. Row counts not compared this time (the DB read was not available); the
+          rollback was shown on Postgres on 11/14 (section 6 smoke test).
+    - [ ] `portfolio_review_mode=auto`: after the Auto policy tier in 7.1b passes, and
+          after a `run-eod-step` dry-run mode override exists to rehearse it (the mode is
+          read from `operator_settings`, so today `auto` could be rehearsed only by
+          switching it on)
   - **3.3(a) findings (2026-10-27, from the first dry run on B)**
     - [x] **Finding 14: live raw-bars versions are one session each.** (Resolved: rolling version + Finding 15 fix + backfill + Finding 26; the 2026-11-07 rolling version holds 83,988 rows over Aug 1–Nov 6 and B pulled it.) Every EOD publish cuts
           a `raw_bars_<date>T133000Z_*` version whose coverage is that single day (25 versions on
@@ -937,7 +965,8 @@ is a finding.
         time, `manual_cli` and the actor, so the run is still traceable.
       - Other past live days (10/15 to 11/12) keep 77 slots unless the step is re-run
         for each date, which is not worth doing.
-    - [ ] **Finding 29: the Saturday bench re-sim could never pull its data (found
+    - [x] **Finding 29 (merged as PR #180; Sat 11/21's timed run exited 0 and A accepted it):
+          the Saturday bench re-sim could never pull its data (found
           2026-11-14, before its first timed run).** The timer runs `worker bench-resim`
           with no `--as-of`, so the date is today in UTC, a Saturday. Its pull step calls
           `DatasetPullService.pull(as_of=Saturday)`, and `versions_as_of` raised `no
@@ -1023,7 +1052,8 @@ is a finding.
           30% guard); `market_data_source: bar_source:alpaca_daily`; rotation rolled back.
           Nothing left to verify before the Mon 11/30 close.
 - [ ] (b) Monthly research / strategy generation → bench
-- [ ] (c) Allocation/governance parameter changes, last (riskiest)
+- [ ] (c) Allocation/governance parameter changes, last (riskiest). Waits on 7.1b: after
+      `auto` and 3.3(b), once admitted candidates pass the Research tier
 
 **3.4 Data fetching restructure: recorded-dataset replay (before any scheduled replay)**
 
@@ -1158,6 +1188,28 @@ any row is n/a.
 | Research | monthly research job posted candidates; A admitted or rejected each with a recorded reason | yes, once Phase 4 exists |
 | Alerts | Grafana alert rules firing only on real conditions; no alert unacknowledged > 24 h; no heartbeat gap | yes |
 
+### 7.1b Quality benchmarks (decided 2026-11-25)
+
+The milestones and levers behind these rows are in `strategy-quality-roadmap.md`.
+
+The 7.1 rows check that each automation runs; none checks that it picks well. A research
+job that finds nothing and an A that rejects every candidate pass the Research row. Every
+baseline so far (research plan, section 5) had all its survivors lose on the holdout.
+
+**Decided by the user 2026-11-25: quality gates the automatic switches, not go-live.**
+`portfolio_review_mode=auto` and automatic admission under 3.3(b) are switched on only
+after their tier below passes. 3.3(c) (automatic allocation and governance parameter
+changes) comes after both and waits on 3.3(b) admitting candidates that pass the
+Research tier: tuning allocation across strategies with no edge only moves losses. Go-live needs the 7.4 gate as before, with these rows filled
+in and read every week. Thresholds marked *to set* are decided before the switch they gate.
+
+| Tier | Benchmark | Measured where | Gates |
+|---|---|---|---|
+| Research | Holdout excess return over buy-and-hold of the names in force > 0 and information ratio ≥ *to set* (G9's numbers in `research_summary.json`); a planted strategy with a known edge is found, and a planted noise strategy is rejected (positive and negative controls) | B, every research run | 3.3(b) automatic admission |
+| Admission | A candidate is admitted only if it is novel or beats its group champion on A's re-sim; hand-made batches check duplicate, novel and better cases | A, each batch | 3.3(b) automatic admission |
+| Auto policy | Rotation replay over history, after costs: the review policy swapping ≥ the same set held fixed ≥ buy-and-hold of A's universe; the `advisory` weeks' decisions read against what followed | B (replay), A (advisory weeks) | `portfolio_review_mode=auto` |
+| Live | A promoted strategy's paper Sharpe against its research holdout Sharpe (decay ratio ≥ *to set*) | A, weekly | Read weekly; a breach is a P1 finding; 3.3(c) |
+
 ### 7.2 Bug classes
 
 | Class | Definition | Rule |
@@ -1204,7 +1256,7 @@ zero open P0 or P1; the SIP switch weekend done at least six weeks before the da
 5. Set the IEX `SLA_BREACH` baseline from the November sessions so the Data row has a
    number.
 
-### 7.6 Scheduled-process inventory (status as of Sun 2026-11-08; update when a row changes)
+### 7.6 Scheduled-process inventory (status as of Sun 2026-11-08, checkpoint row 2026-11-25; update when a row changes)
 
 One row per process the finished system runs on a schedule. **State** is what it is today:
 `timer` (fires on its own), `gated step` (inside the EOD chain, fires when its calendar rule
@@ -1218,7 +1270,7 @@ cadence is section 3; this table is the gap between intended and actual.
 | EOD chain (16 steps, 3.3) | A scheduler | after close | gated step | yes | `atp runtime run-eod-step <step> --as-of` (section 6; `--dry-run` for ten of the steps) | partially (Finding 15/26 rebuilds were by hand; two steps dry-run on A 11/14) | Finding 28 deploy: `final_ingestion` stores the 15:55 bar from Mon 11/16 |
 | Rolling bench window (`rolling_raw_bars`) | A EOD step | every session | gated step | yes | `run-eod-step rolling_raw_bars --as-of` (no dry run: it writes Parquet) | yes, 11/07 | Mon 11/16 build picks up the Finding 27 backfills |
 | Dataset publish to S3 | A EOD step | every session | gated step | yes | `atp datasets publish --trading-date` | yes, 11/07 | — |
-| Weekly portfolio review | A EOD step | first session of week | gated step, **no-op** | `portfolio_review_mode=off` | `run-eod-step weekly_portfolio_review --as-of --dry-run` | no | flip to `advisory` (11/24), rehearse first |
+| Weekly portfolio review | A EOD step | first session of week | gated step | `portfolio_review_mode=advisory` since 2026-11-25 | `run-eod-step weekly_portfolio_review --as-of --dry-run` | yes, 2026-11-25 dry run as of 11/23 | first real advisory review Mon 11/30; then `auto` |
 | Monthly universe rotation | A EOD step | last session of month | gated step | yes (churn guard) | `atp universe monthly-rotation --dry-run` | yes, 11/03 dry run | fires Mon 11/30; rehearse again week before |
 | Drawdown ladder / governance / allocation rebalance | A, per tick + EOD | per tick / daily | gated step | yes (rebalance proposals `noop` under manual override) | none | n/a | — |
 | Postgres backup → S3 | A host timer | nightly 23:30 ET | timer | yes | `infra/ops/backup.sh` | n/a | — |
@@ -1228,7 +1280,7 @@ cadence is section 3; this table is the gap between intended and actual.
 | Worker result apply (A consumes re-sims in the review) | A EOD step | Monday, with the review | gated step | depends on the two flags above | none | no | first real pass Mon 11/17 |
 | Monthly research / strategy generation → bench candidates | B | monthly + triggers | **not built** (pipeline on demand via `atp research … run-pipeline`; no worker job, no hand-off, no timer) | — | `atp research` full pipeline with a YAML | no | research sprint Steps 3, 5 |
 | Recorded-dataset replay (scheduled fixtures) | B | monthly (Phase 4) | **not built** | — | `worker_job.sh worker run --fixture` (Alpaca-sourced) | no | 3.4 |
-| Research checkpoint / resume | B | per research run | **unwired** (service exists, never instantiated) | — | `research inspect-checkpoints`, `plan-restart` (read-only) | tests only | research sprint R3 |
+| Research checkpoint / resume | B | per research run | **on demand**: the saved run is the checkpoint (PR #201) | yes | `worker run --fixture ... --resume` | yes, 2026-11-24 on B (killed at 14 rows, resumed) | R3 follow-ups |
 | Alert rules | A Grafana/Prometheus | continuous | live (18 rules) | yes | — | n/a | push channel (Phase 5) |
 | Heartbeat panel | A Grafana | continuous | live | yes | — | n/a | — |
 | Regime-suite portfolio/governance sims | B | monthly (Phase 4) | **not built** | — | — | no | after suite `v1` |
@@ -1237,7 +1289,27 @@ Reading it: everything on A that trades or keeps books is live and gated; the tw
 the dynamic portfolio needs from B (re-sim timer, results flag) are one weekend of operator
 steps away; the research side is where the "not built" rows are, and that is the sprint.
 
-### 7.7 Rough calendar (as of Sun 2026-11-08; adjust as we go, this is for visibility not commitment)
+### 7.7 Rough calendar (re-dated Wed 2026-11-25; estimates, for visibility not commitment)
+
+Why it moved: the research sprint went deeper than the 11/08 table assumed (Step 1b, the
+generation repairs, did not exist then), and the 3.3(a) flips are about a week behind
+(`advisory` was due 11/24 and went on 11/25). The go-live month below depends on a
+decision not yet made: the go-live window, which dates the SIP switch.
+
+| Week of | Deployment track | Research sprint | Calendar events |
+|---|---|---|---|
+| Mon 11/23 | Watch 11/26 and 11/27; ~~rehearse `weekly_portfolio_review --dry-run`, then `advisory` for Mon 11/30~~ done 11/25 | Step 1b run on B (11/25), results into the results log; G10 + task 5 decided; R4 observe-only drawdown kill | Thu 11/26 closed, Fri 11/27 early close, Mon 11/30 rotation |
+| Mon 11/30 | First `advisory` review read; rotation checked | Step 3 contract and admission gate, tested with hand-made batches; Step 3's universe decision; task 4 grid baseline | |
+| Mon 12/7 | IEX `SLA_BREACH` baseline; `auto` once `advisory` reads clean | Step 2 search built; Step 4 (3.4) recorded-data source | Decision point: set a go-live window → SIP switch weekend |
+| Mon 12/14 | 3.3(b) hand-off endpoint on A, switched off | Step 2 run on B; Step 4 parity check | |
+| Mon 12/21 | Holiday week: watch, do not change | Docs only | Thu 12/24 early close, Thu 12/31 rotation |
+| Mon 1/4/2027 | Step 5 job + timer rehearsed `--no-publish`, then 3.3(b) on | Step 5 rehearsal | |
+| Jan 2027 | First scheduled monthly research run; Research row live; gate clock starts when every row is | Monthly run #1, results log | |
+| Feb–Mar 2027 | Four clean weeks with everything on, the SIP switch at least six weeks before go-live → **realistically March 2027** | Monthly run #2 | |
+
+**The 2026-11-08 table, kept as the record of the drift:**
+
+#### 7.7 (old) Rough calendar (as of Sun 2026-11-08)
 
 Assumptions: deployment track and research sprint run in parallel; one person-week of
 attention per week; the four-week gate clock starts only when every scorecard row is live;
