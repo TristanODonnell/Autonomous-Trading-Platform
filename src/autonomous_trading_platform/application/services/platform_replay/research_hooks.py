@@ -27,11 +27,15 @@ from autonomous_trading_platform.observability.logging import get_logger
 from autonomous_trading_platform.storage.sor.models.strategy_governance import StrategyGovernance
 
 if TYPE_CHECKING:
+    from autonomous_trading_platform.contracts.market.corporate_action import CorporateAction
     from autonomous_trading_platform.research.pipeline.admission_window import (
         AdmissionWindowLayout,
         SessionSpan,
     )
     from autonomous_trading_platform.research.pipeline.stages.base_stage import StageResult
+    from autonomous_trading_platform.research.simulation.simulation_runner import (
+        SimulationRunResult,
+    )
 
 # ``get_logger``, as the simulation runner uses: a logger from ``logging.getLogger``
 # has no handler in a job's process and its INFO lines are dropped.
@@ -525,8 +529,23 @@ def run_scheduled_research_at_timestamp(
 
     # The holdout report, last: the survivors are chosen and seeded before any
     # holdout day is read, and nothing above is handed its numbers.
+    # Buy and hold of the names in force (plan G9), report only, read here for the
+    # same reason: the gate report gets its windows and the holdout report its own.
     holdout_report: dict[str, Any] | None = None
     if admission_layout is not None:
+        benchmark_inputs = _benchmark_inputs(
+            simulation_runner=simulation_context.simulation_runner,
+            layout=admission_layout,
+            experiment_def=experiment_def,
+            universe_timeline=universe_timeline,
+            research_dataset=research_dataset,
+        )
+        _report_benchmark(
+            gate_report=gate_report,
+            stage_results=stage_results,
+            layout=admission_layout,
+            inputs=benchmark_inputs,
+        )
         holdout_report = _report_holdout(
             simulation_runner=simulation_context.simulation_runner,
             layout=admission_layout,
@@ -534,6 +553,7 @@ def run_scheduled_research_at_timestamp(
             experiment_def=experiment_def,
             universe_timeline=universe_timeline,
             research_dataset=research_dataset,
+            benchmark_inputs=benchmark_inputs,
         )
 
     return ResearchReplayResult(
@@ -1139,13 +1159,6 @@ def _lay_out_admission_window(
         admission_window_layout,
     )
     from autonomous_trading_platform.research.pipeline.holdout import HOLDOUT_START
-    from autonomous_trading_platform.runtime.clock import RealMarketCalendar
-
-    calendar = RealMarketCalendar()
-    left_out = frozenset(research_dataset.excluded_sessions)
-
-    def sessions(first: date, last: date) -> list[date]:
-        return [day for day in calendar.trading_days(first, last) if day not in left_out]
 
     try:
         return admission_window_layout(
@@ -1153,7 +1166,7 @@ def _lay_out_admission_window(
             as_of=tick_date,
             data_first=research_dataset.first_day,
             data_last=research_dataset.last_day,
-            trading_days=sessions,
+            trading_days=_research_sessions(research_dataset),
         )
     except AdmissionWindowError as exc:
         raise ResearchWindowError(
@@ -1226,10 +1239,14 @@ def _report_holdout(
     experiment_def,  # ExperimentDefinition
     universe_timeline: UniverseTimeline | None,
     research_dataset: ResearchWindowDataset | None,
+    benchmark_inputs: _BenchmarkInputs | str | None = None,
 ) -> dict[str, Any]:
     """Each final survivor run once over the holdout sessions there are so far
     (``research/pipeline/holdout_report.py``). Report only: whatever goes wrong here is
     written into the report and the research step's outcome is not changed.
+
+    With ``benchmark_inputs`` (plan G9) the report also holds buy and hold over the
+    holdout and each candidate's ``versus_benchmark``.
     """
     from autonomous_trading_platform.research.pipeline.holdout_report import (
         HoldoutRunSettings,
@@ -1262,11 +1279,13 @@ def _report_holdout(
                 f"dataset {research_dataset.dataset_version_id} does not hold the universe's "
                 f"names for the holdout: {not_held}",
             )
+        benchmark_block, compare = _holdout_benchmark(span, benchmark_inputs)
         with simulation_runner.reuse_loaded_bars():
-            return score_holdout(
+            report = score_holdout(
                 simulation_runner=simulation_runner,
                 survivors=survivors,
                 span=span,
+                compare=compare,
                 settings=HoldoutRunSettings(
                     experiment_id=experiment_def.experiment_id,
                     dataset_version=experiment_def.dataset_version,
@@ -1278,9 +1297,181 @@ def _report_holdout(
                     universe_timeline_version=universe_timeline.dataset_version_id,
                 ),
             )
+        report["benchmark"] = benchmark_block
+        return report
     except Exception as exc:
         logger.warning("holdout_report: not scored", exc_info=True)
         return holdout_not_scored(span, f"failed: {exc}")
+
+
+def _research_sessions(
+    research_dataset: ResearchWindowDataset,
+) -> Callable[[date, date], list[date]]:
+    """A named dataset's sessions: the NYSE calendar's, less the ones it left out by
+    name (a day with no bars is no session). The admission layout and buy and hold
+    both count days by this one rule."""
+    from autonomous_trading_platform.runtime.clock import RealMarketCalendar
+
+    calendar = RealMarketCalendar()
+    left_out = frozenset(research_dataset.excluded_sessions)
+
+    def sessions(first: date, last: date) -> list[date]:
+        return [day for day in calendar.trading_days(first, last) if day not in left_out]
+
+    return sessions
+
+
+@dataclass(frozen=True)
+class _BenchmarkInputs:
+    """What buy and hold is computed from, read once for every window (plan G9)."""
+
+    closes_by_symbol: dict[str, list[tuple[datetime, float]]]
+    actions: list[CorporateAction]
+    members_at: Callable[[datetime], frozenset[str]]
+    # The layout's sessions, from the selection's first to the last one read.
+    sessions: frozenset[date]
+    # Names in force that the dataset holds no bars of: left out, and said so.
+    names_without_bars: list[str]
+
+
+def _benchmark_inputs(
+    *,
+    simulation_runner,
+    layout: AdmissionWindowLayout,
+    experiment_def,  # ExperimentDefinition
+    universe_timeline: UniverseTimeline | None,
+    research_dataset: ResearchWindowDataset | None,
+) -> _BenchmarkInputs | str:
+    """Each name in force's first and last close of every day from the selection's
+    first session to the last one there is, and their splits and cash dividends; or,
+    when they cannot be read, why (written into the reports in their place)."""
+    from autonomous_trading_platform.contracts.common.enums import PriceBasis
+    from autonomous_trading_platform.research.pipeline.benchmark_report import (
+        read_daily_closes,
+    )
+
+    if universe_timeline is None or research_dataset is None:
+        # Not reachable through the options: the layout is refused without either.
+        return "the layout was run without a timeline or a dataset"
+    if experiment_def.price_basis != PriceBasis.RAW:
+        return f"buy and hold is read from raw bars; the run used {experiment_def.price_basis}"
+    last = layout.holdout.last if layout.holdout is not None else layout.last_gate_day
+    try:
+        in_force = universe_timeline.symbols_on_dates(layout.start, last)
+        held = set(research_dataset.symbols)
+        symbols = [symbol for symbol in in_force if symbol in held]
+        resolved = simulation_runner.dataset_resolver.resolve_bars_dataset(
+            dataset_version=experiment_def.dataset_version,
+            price_basis=experiment_def.price_basis,
+        )
+        closes = read_daily_closes(
+            reader=simulation_runner.window_loader.bar_reader,
+            dataset=resolved.dataset,
+            dataset_version=experiment_def.dataset_version,
+            symbols=symbols,
+            start_date=layout.start,
+            end_date=last,
+        )
+        source = simulation_runner.corporate_action_source
+        actions = (
+            source.actions_for(symbols=symbols, start_date=layout.start, end_date=last)
+            if source is not None
+            else []
+        )
+    except Exception as exc:
+        logger.warning("benchmark: inputs not read", exc_info=True)
+        return f"failed: {exc}"
+    return _BenchmarkInputs(
+        closes_by_symbol=closes,
+        actions=list(actions),
+        members_at=universe_timeline.members_at,
+        sessions=frozenset(_research_sessions(research_dataset)(layout.start, last)),
+        names_without_bars=sorted(set(in_force) - held),
+    )
+
+
+def _report_benchmark(
+    *,
+    gate_report: dict[str, Any],
+    stage_results: Sequence[StageResult],
+    layout: AdmissionWindowLayout,
+    inputs: _BenchmarkInputs | str,
+) -> None:
+    """Buy and hold over the windows the gates read, and every strategy against it,
+    written into the gate report (``research/pipeline/benchmark_report.py``). Report
+    only: what goes wrong is written in its place."""
+    from autonomous_trading_platform.research.pipeline.benchmark_report import (
+        add_to_gate_report,
+        admission_benchmark,
+        benchmark_not_built,
+    )
+
+    if "strategies" not in gate_report:
+        return  # the gate report itself was not built and says why
+    if isinstance(inputs, str):
+        gate_report["benchmark"] = benchmark_not_built(inputs)
+        return
+    try:
+        benchmark = admission_benchmark(
+            layout=layout,
+            closes_by_symbol=inputs.closes_by_symbol,
+            actions=inputs.actions,
+            members_at=inputs.members_at,
+            sessions=inputs.sessions,
+        )
+        add_to_gate_report(gate_report, stage_results, benchmark)
+        gate_report["benchmark"].update(_benchmark_provenance(inputs))
+    except Exception as exc:
+        logger.warning("benchmark: not built", exc_info=True)
+        gate_report["benchmark"] = benchmark_not_built(f"failed: {exc}")
+
+
+def _benchmark_provenance(inputs: _BenchmarkInputs) -> dict[str, Any]:
+    """What buy and hold was built from, beside its numbers. The corporate actions are
+    the run's own (the database the job runs on): with none, a split reads as a fall,
+    for buy and hold and for every candidate alike."""
+    return {
+        "names_without_bars": inputs.names_without_bars,
+        "corporate_actions": {
+            "splits": sum(1 for action in inputs.actions if _is_split_action(action)),
+            "cash_dividends": sum(1 for action in inputs.actions if not _is_split_action(action)),
+        },
+    }
+
+
+def _is_split_action(action: CorporateAction) -> bool:
+    from autonomous_trading_platform.accounting.corporate_actions import is_split
+
+    return is_split(action)
+
+
+def _holdout_benchmark(
+    span: SessionSpan, inputs: _BenchmarkInputs | str | None
+) -> tuple[dict[str, Any], Callable[[SimulationRunResult], dict[str, Any]] | None]:
+    """Buy and hold over the holdout, and the comparison each holdout run is given."""
+    from autonomous_trading_platform.research.pipeline.benchmark_report import (
+        benchmark_not_built,
+        holdout_benchmark,
+        run_versus_benchmark,
+    )
+
+    if inputs is None:
+        return benchmark_not_built("not asked for"), None
+    if isinstance(inputs, str):
+        return benchmark_not_built(inputs), None
+    try:
+        series = holdout_benchmark(
+            span=span,
+            closes_by_symbol=inputs.closes_by_symbol,
+            actions=inputs.actions,
+            members_at=inputs.members_at,
+            sessions=inputs.sessions,
+        )
+        block = {**series.block(), **_benchmark_provenance(inputs)}
+    except Exception as exc:
+        logger.warning("benchmark: holdout not built", exc_info=True)
+        return benchmark_not_built(f"failed: {exc}"), None
+    return block, lambda result: run_versus_benchmark(result, series)
 
 
 def _admission_window_summary(layout: AdmissionWindowLayout) -> dict[str, Any]:

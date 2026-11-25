@@ -1590,3 +1590,54 @@ def test_a_holdout_run_through_the_real_runner_leaves_no_row(
     # row under its own id. It still writes nothing: no second metrics row.
     context.simulation_runner.run(request)
     assert rows() == after
+
+
+# --------------------------------------------------------------------------------------
+# Buy and hold of the names in force (plan G9, Step 1b row 5): report only
+# --------------------------------------------------------------------------------------
+
+
+def test_admission_layout_sets_every_candidate_against_buy_and_hold(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """Through the hook, with the real runner, engine and bars: buy and hold over every
+    window the gates read, and the tick's candidate against it on the selection."""
+    layout = _expected_layout()
+
+    run = _run_admission(db_session, replay_context, monkeypatch, research_smoke_data_root)
+
+    assert run.result.status == "ok", run.result.errors
+    report = run.result.summary["gate_report"]
+    benchmark = report["benchmark"]
+    assert "not_built" not in benchmark, benchmark
+    for name in ("selection", "evaluation"):
+        piece = getattr(layout, name)
+        assert (benchmark[name]["first"], benchmark[name]["last"]) == (
+            piece.first.isoformat(),
+            piece.last.isoformat(),
+        )
+        assert benchmark[name]["sessions"] == piece.sessions
+        assert benchmark[name]["total_return"] is not None
+        # Two names in each list of the timeline, and the fixture has bars of both.
+        assert benchmark[name]["fewest_names_held"] >= 1
+        assert benchmark[name]["mean_names_held"] <= 2
+    assert [fold["sessions"] for fold in benchmark["test_folds"]] == [
+        fold.sessions for fold in layout.test_folds
+    ]
+    assert benchmark["names_without_bars"] == []
+    # What it was built from is said beside it: this database holds no corporate actions.
+    assert benchmark["corporate_actions"] == {"splits": 0, "cash_dividends": 0}
+
+    (record,) = report["strategies"]
+    selection = record["versus_benchmark"]["selection"]
+    stage_1 = record["stages"][0]["reference_run"]
+    # The candidate's side is rebuilt from its run's equity curve: it is the run's own
+    # total return, over the same days as buy and hold.
+    assert selection["return"] == pytest.approx(stage_1["total_return"], abs=1e-9)
+    assert selection["days"] == layout.selection.sessions
+    assert selection["excess_return"] == pytest.approx(
+        selection["return"] - benchmark["selection"]["total_return"]
+    )
+    assert selection["benchmark_return"] == pytest.approx(benchmark["selection"]["total_return"])
+    # Report only: the funnel is as it was, and the report is still plain JSON.
+    _assert_gate_report_counts_what_the_funnel_counts(run.result.summary)

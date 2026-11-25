@@ -200,3 +200,75 @@ def test_a_report_that_was_not_scored_says_why(span: SessionSpan | None) -> None
     assert report["first"] == ("2026-05-18" if span is not None else None)
     # The same keys either way, so a reader of the summary need not ask which it got.
     assert set(report) == set(_report(ScriptedRunner(_daily_return), "gains"))
+
+
+# -- against buy and hold (plan G9) -----------------------------------------------------
+
+
+def _compared(runner: ScriptedRunner, compare, *strategy_ids: str) -> dict:
+    return score_holdout(
+        simulation_runner=runner,
+        survivors=[_cfg(sid) for sid in strategy_ids],
+        span=SPAN,
+        settings=SETTINGS,
+        compare=compare,
+    )
+
+
+def test_each_holdout_run_is_compared_with_buy_and_hold() -> None:
+    from autonomous_trading_platform.research.pipeline.benchmark_report import (
+        BenchmarkSeries,
+        run_versus_benchmark,
+    )
+
+    runner = ScriptedRunner(_daily_return)
+    days = [request_day for request_day in _sessions_of(runner, "gains")]
+    flat = BenchmarkSeries(
+        first=SPAN.first,
+        last=SPAN.last,
+        returns=dict.fromkeys(days, 0.0),
+        names_held=dict.fromkeys(days, 2),
+    )
+
+    report = _compared(runner, lambda result: run_versus_benchmark(result, flat), "gains")
+
+    (gains,) = report["candidates"]
+    # Against a flat benchmark the excess is the run's own return over the same days.
+    assert gains["versus_benchmark"]["benchmark_return"] == 0.0
+    assert gains["versus_benchmark"]["excess_return"] == pytest.approx(gains["total_return"])
+    # The scripted runner trades every weekday (Memorial Day too), so its own days.
+    assert gains["versus_benchmark"]["days"] == len(days)
+
+
+def _sessions_of(runner: ScriptedRunner, strategy_id: str) -> list[date]:
+    result = ScriptedRunner(_daily_return).run(
+        SimulationRunRequest(
+            experiment_id="x",
+            strategy_id=strategy_id,
+            strategy_config=_cfg(strategy_id).model_dump(),
+            dataset_version="window_dataset",
+            random_seed=1,
+            price_basis=PriceBasis.RAW,
+            symbols=["AAA"],
+            start_date=SPAN.first,
+            end_date=SPAN.last,
+        )
+    )
+    return sorted({timestamp.date() for timestamp in result.equity_curve["timestamp"]})
+
+
+def test_a_comparison_that_fails_leaves_the_runs_own_numbers() -> None:
+    def broken(_result):
+        raise RuntimeError("no closes")
+
+    report = _compared(ScriptedRunner(_daily_return), broken, "gains")
+
+    (gains,) = report["candidates"]
+    assert gains["versus_benchmark"] == {"error": "no closes"}
+    assert gains["total_return"] > 0
+    assert report["scored"] == 1
+
+
+def test_without_a_comparison_the_report_is_as_before() -> None:
+    (gains,) = _report(ScriptedRunner(_daily_return), "gains")["candidates"]
+    assert "versus_benchmark" not in gains
