@@ -273,7 +273,7 @@ the names on random sessions, so in the evaluation window's rising market (buy a
 (Sharpe >= 0.5, return >= 0). If so it is a finding, not a fault of the controls: the
 gates reward exposure to a rising market (G9), now measured.
 
-**Built 2026-11-25 on `research/planted-controls`, not committed.**
+**Built 2026-11-25 on `research/planted-controls`; merged as PR #207 (`6b4d8349f`).**
 - `strategy/implementations/planted_control.py`: `PlantedControlStrategy`, the base class
   the simulator checks (an `isinstance` check, so a strategy sharing a method name gets
   nothing); `PlantedControlNotBoundError`, raised by a control asked for a signal without
@@ -325,9 +325,11 @@ gates reward exposure to a rising market (G9), now measured.
 
 | # | Item | State |
 |---|---|---|
-| 1 | Oracle-control strategy + its next-session list + exclusion tag, with tests | 🟡 built 2026-11-25, not committed |
-| 2 | Controls fixture (60 / 55 / 52%, noise × 5) and the met / not met lines in the result file | 🟡 built 2026-11-25, not committed |
-| 3 | One run on B (go-ahead needed); results into section 5 against the table above | ⚪ waits on 1 and 2 being merged and deployed to B |
+| 1 | Oracle-control strategy + its next-session list + exclusion tag, with tests | ✅ merged as PR #207 (`6b4d8349f`), on B 2026-11-26 |
+| 2 | Controls fixture (60 / 55 / 52%, noise × 5) and the met / not met lines in the result file | ✅ merged as PR #207 (`6b4d8349f`), on B 2026-11-26 |
+| 3 | One run on B (go-ahead needed); results into section 5 against the table above | ✅ ran 2026-11-26 (exit 0, 8 min): planted edge found (60% and 55%), noise **not** rejected (1 of 5 seeds passed every stage); 52% out at stage 1. Section 5, "The planted controls" |
+| 4 | Noise sample (user 2026-11-26: "do more coin flippers"): option `noise_seeds` (the three oracles kept as a check on the run, N noise controls on fresh seeds 101 on, never 11 to 15), the noise pass rate with its exact 95% range in `controls_report`, fixture `research_planted_controls_noise40.yaml` (the controls fixture plus `noise_seeds: 40`, a test holds it), the bar of row 5 judged in the summary (`noise_within_bar`), tests, 6 mutation checks caught | 🟡 built 2026-11-26 on `research/noise-controls`, not committed |
+| 5 | Run the 40-seed sample on B (go-ahead needed); results into section 5 | ⚪ waits on 4 merged and deployed. **Bar fixed before the run (user, 2026-11-26): at most 2 of the 40 noise controls pass every stage (5%); 3 or more, and the gates are tightened before G10.** In code as `NOISE_SAMPLE_PASS_RATE_ALLOWED` (the summary's `noise_within_bar`). The 60% and 55% oracles passing again is the check that the run itself worked |
 
 **Step 1b, generation repairs (built and merged)**
 
@@ -360,7 +362,7 @@ composite-grid baseline) and task 5 (revise Step 2).
 |---|---|
 | ⚪ G6 | Closed 2026-11-24: covered by G3, G4, G5. A turnover pre-pass is reconsidered in Step 2 |
 | ⚪ G7 | Folded into Step 2 2026-11-24: taken in task 5 with the fitness question; the generation cache is wired there |
-| ⚪ G10 | Open, decided later (user, 2026-11-24): which search algorithms to use (evolutionary, Bayesian, successive halving, local search, a mix), and so whether Step 2's evolutionary design stands; the code structure follows the choice (methods are hard-wired twice today). Decided after rows 1 to 6 are built, with G9's numbers in hand, before or with task 5 |
+| ⚪ G10 | Open, decided later (user, 2026-11-24): which search algorithms to use (evolutionary, Bayesian, successive halving, local search, a mix), and so whether Step 2's evolutionary design stands; the code structure follows the choice (methods are hard-wired twice today). Decided after rows 1 to 6 are built, with G9's numbers in hand, before or with task 5. **2026-11-25 (user): the composites' own structure (more conditions, a regime router) is to be part of the generation work**, weighed with G10 and task 5 (Step 1b, G10) |
 | ⚪ G10, decision point | Added 2026-11-25 (with the user): if after Step 2's search and the first monthly runs no candidate beats buy-and-hold of the names in force on the holdout (pre-launch 7.1b Research tier), change what is searched, not how hard: slower strategies (daily bars, holding days), cross-sectional ranking, lower turnover by design. Positive and negative controls come first, so a "nothing found" is about the strategies, not the pipeline. The number of runs before this point is set with G10 |
 
 **Step 0, pipeline integrity** (no run left to wait for since 2026-11-24: R3's resume
@@ -4136,6 +4138,35 @@ and G10 are still open. The status table at the top of this step summarises them
       and the run with them found nothing above buy and hold (section 5), which is G10's
       decision-point reading; the user put the planted controls first (top board), so
       G10 is decided after them.
+      **Added 2026-11-25 (with the user, during the controls run): what is searched,
+      not only how.** Nothing decided or built; options for G10 and task 5:
+      - **Composite structure: in scope (user: "should be part of the generation
+        structure").** The composite language already has several weighted entry rules,
+        filters (block a trade), confirmations and aggregators (`logical_and`,
+        `logical_or`, `voting`, `weighted_score`; `composite_strategy_config.py`), but
+        the generator writes only the simplest: at most two rules, one filter (regime or
+        volatility), an optional volume confirmation (`composite_generation.py`,
+        `_build_skeletons`). Two directions: (a) deeper combinations within today's
+        language (A and (B or C), only when D); (b) a **regime router**, the one piece
+        the language lacks: a filter can only block, not switch rule sets ("trending:
+        momentum rules; choppy: mean-reversion rules"). Proposed (not decided): add one
+        kind of structure at a time and keep it only if it beats the same rules without
+        it on the holdout; each condition costs trades (evidence) and each switch
+        doubles the settings. Tree-shaped strategies are what evolutionary search and
+        genetic programming handle and TPE does not, so this weighs on G10's method.
+      - **Genetic programming of formulas (alpha mining), an option for later.** Needs
+        tens of thousands of evaluations, so not on full simulations (about 1.4 minutes
+        each on B): a cheap stand-in score first (the information coefficient of a daily
+        cross-sectional ranking, vectorised), full simulation for the top few, every
+        formula counted (deflated Sharpe). Fits the decision point's "cross-sectional
+        ranking, daily bars"; needs a wider universe than about 22 names to rank.
+      - **Reinforcement learning: discussed, my assessment a poor fit for finding
+        strategies** (532 sessions against the millions of steps it needs; it learns the
+        simulator's flaws; our gates and neighbour check assume a rule with settings).
+        Its use in trading is mostly execution. Not proposed; not decided by the user.
+      - Not part of generation and already elsewhere: blending whole strategies (A's
+        portfolio mode) and running whichever did best lately (rotation,
+        `portfolio-rotation-plan.md`).
 - [x] Task 3. Options for the user from the above, in plain terms, before any code.
       **Done 2026-11-24:** G1 to G9 each decided (G1's reproducibility wording
       corrected; G8's first part replaced the same session after a wrong reading; G6
@@ -4154,7 +4185,9 @@ and G10 are still open. The status table at the top of this step summarises them
       (or the grid split into jobs). A job longer than a night can now be resumed (R3,
       PR #201). To decide in task 3: all 652, a sample, or the set left after the
       cheap rejections. Its numbers go in section 5 (the `grid` and `random n=50` rows).
-- [ ] Task 5. Revise Step 2's design or confirm it.
+- [ ] Task 5. Revise Step 2's design or confirm it. Includes, since 2026-11-25 (user),
+      the composites' structure (G10's "what is searched" above: deeper combinations, a
+      regime router), and where it sits against the search method.
 
 ### Step 2 — A real evolutionary search for composites (not started; design under review)
 
@@ -4165,7 +4198,7 @@ waits on, in order:
 | # | Waits on | State | Why it matters here |
 |---|---|---|---|
 | 1 | Planted controls (M1, top board) | ⏳ next | If the pipeline cannot find a planted edge, a better search cannot help |
-| 2 | G10: which search method(s) | ⏳ open | The design below assumes evolutionary; Bayesian, successive halving or local search are also on the table |
+| 2 | G10: which search method(s) | ⏳ open | The design below assumes evolutionary; Bayesian, successive halving or local search are also on the table. Since 2026-11-25 also what is searched: richer composite structure (user: in scope), genetic programming (later option) |
 | 3 | Task 5: revise or confirm this design | ⏳ open | Takes G10's answer, G7 (the run-to-run memory, the cache) and G9 (whether beating buy and hold is the fitness or a gate) |
 | 4 | Task 4: the composite-grid baseline | ⏳ open | The **Verify** below compares the search with `grid`'s top 10 |
 
@@ -6194,3 +6227,59 @@ is G10's decision point as written (nothing beats buy-and-hold) after one run, b
 Step 2 search; it fits the quieter, low-turnover end doing least badly. Costs: the
 neighbour stage scales with survivors (3.5 h for 21) and memory is at 87%, so a wider
 generation needs the neighbour stage's cost settled first.
+
+### The planted controls (2026-11-26, `feed=iex`)
+
+Run on B 2026-11-26 03:33:49 to 03:41:32 UTC (7 min 43 s, exit 0; peak 1.48 of 2.98 GiB),
+commit `6b4d8349f` (PR #207), fixture `research_planted_controls` (the 2026-11-25
+baseline's dataset, timeline and dates; the 8 controls as candidates, nothing generated).
+Read from `artifacts/platform/backtests/research_planted_controls.json` on B. All 8
+controls traded about 1,830 to 1,900 times in the selection window (about 0.74 of the
+book a day). None reached governance: 3 held back (`controls_withheld_from_governance`),
+0 `planted_oracle` rows in B's `strategy_governance`. The run's two universe warnings
+(`universe_candidate_dataset_version_unresolved`, `universe_candidate_empty`) are the
+same two the 2026-11-25 baseline logged.
+
+Against the outcomes fixed before the run (C4):
+
+| Control | Stage 1 (selection) | Result | Holdout (127 sessions; buy and hold -8.8%) | Expected | Met |
+|---|---|---|---|---|---|
+| Oracle 60% | Sharpe 3.28, +14.1%, +9.8 bp per $ traded | passed every stage (folds 3 / 3, Monte Carlo 2000 / 2000) | Sharpe 4.52, +12.1%, excess +20.8 points | passes, beats buy and hold | ✅ |
+| Oracle 55% | Sharpe 1.30, +5.3%, +3.9 bp | passed every stage (folds 3 / 3, MC 1959 / 2000) | Sharpe 1.97, +5.1%, excess +13.8 | the same | ✅ |
+| Oracle 52% | Sharpe 0.08, +0.2%, +0.15 bp | out at stage 1 (Sharpe below 0.5) | not scored | report only | (floor) |
+| Noise, seed 11 | Sharpe -0.41, -1.7% | out at stage 1 | not scored | rejected | ✅ |
+| Noise, seed 12 | Sharpe 0.75, +2.8%, +2.1 bp | **passed every stage** (folds 2 / 3, MC 1253 / 2000, stress cost survival 0.5, overfitting probability 0.39, highest of the three, the gate report-only) | Sharpe -0.98, -2.5%, excess **+6.2** | rejected | ❌ |
+| Noise, seed 13 | Sharpe 0.41 | out at stage 1 | not scored | rejected | ✅ |
+| Noise, seed 14 | Sharpe 0.25 | out at stage 1 | not scored | rejected | ✅ |
+| Noise, seed 15 | Sharpe 0.05 | out at stage 1 | not scored | rejected | ✅ |
+
+The two answers: **planted edge found: yes** (60% and 55%); **noise rejected: no**, 1 of
+5 noise seeds passed every stage. Noise pass rate by stage: stage 1, 1 of 5; every stage
+after it, 1 of 1.
+
+What it says (read 2026-11-26; decisions are the user's):
+- **The pipeline sees an edge.** The simulator, the hand-off, the stages and the holdout
+  carried a planted edge through to the holdout at 60% and 55%, each far above buy and
+  hold. So the 2026-11-25 run's "nothing above buy and hold" is not the pipeline being
+  blind to an edge of that size. The detection floor sits between 52% and 55% in this
+  layout: 52% earned 0.15 bp per dollar traded in selection, close to nothing after costs.
+- **Once noise clears stage 1, nothing after it stops it.** Seed 12 cleared the Sharpe
+  0.5 bar by luck (0.75), and the later stages passed it: walk-forward on 2 of 3 folds,
+  Monte Carlo on 63% of paths, stress at half the cost levels; regime, neighbours and
+  overfitting are report-only. Most of them re-test the same evaluation window
+  (2025-08-18 to 2026-05-15), so a lucky stretch there passes them all. One case is a
+  small sample (1 of 5 is anywhere from about 0.5% to 72% at 95% confidence); the
+  measurement is what to make of it.
+- **The holdout caught it, the buy-and-hold comparison did not.** Seed 12 lost on the
+  holdout (Sharpe -0.98, -2.5%) but "beat" buy and hold by 6.2 points, because the market
+  fell 8.8% and the noise is in the market part of the day only. The pre-run prediction
+  was the mirror of this (exposure helps an absolute bar in a rising market); what was
+  seen is that the benchmark comparison rewards *less* exposure in a falling one. The
+  noise control is exposure-matched to the oracles, so its +6.2 points is the size of
+  that effect here: the oracles' +20.8 and +13.8 stand above it, a "beat" of a few points
+  would not. This bears on G9 (beating buy and hold as the fitness or a gate) and task 5.
+- Noise in selection: mean Sharpe about 0.2 over the five seeds (-0.41, 0.75, 0.41, 0.25,
+  0.05) in a window where buy and hold made +28%, so the 0.5 bar sits roughly 0.75 of a
+  spread above the noise. The pre-run guess that exposure alone might carry noise past
+  stage 1 matched one seed of five.
+- Cost: under 8 minutes for 8 controls, so more noise seeds are cheap.
