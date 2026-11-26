@@ -201,11 +201,12 @@ def test_family_allow_exclude_filters_and_debug_family_behavior_are_enforced() -
     assert family_excluded.configs == []
     assert family_excluded.summary.rejection_reasons["family_excluded"] == 1
     assert debug_default.configs == []
-    assert debug_default.summary.rejection_reasons["debug_excluded"] == 3
+    assert debug_default.summary.rejection_reasons["debug_excluded"] == 4
     assert {config.type for config in debug_included.configs} == {
         "stub",
         "intentional_loser",
         "random",
+        "planted_oracle",
     }
 
 

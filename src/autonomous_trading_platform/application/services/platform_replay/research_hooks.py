@@ -62,6 +62,11 @@ MIN_RESEARCH_WINDOW_DAYS = 15
 WINDOW_LAYOUT_ADMISSION = "admission"
 _WINDOW_LAYOUTS = frozenset({WINDOW_LAYOUT_ADMISSION})
 
+# Which candidates a research tick runs (research.options.candidates).
+CANDIDATES_DRAW = "draw"
+CANDIDATES_PLANTED_CONTROLS = "planted_controls"
+_CANDIDATES = frozenset({CANDIDATES_DRAW, CANDIDATES_PLANTED_CONTROLS})
+
 # The lookback window's walk-forward folds, in calendar days: it needs train + test
 # (75 days) of window, and the stages after it are built only with it.
 _ROLLING_TRAIN_DAYS = 45
@@ -229,6 +234,13 @@ def run_scheduled_research_at_timestamp(
                ``lookback_days``. A dataset the layout cannot be laid on is a
                failed step. Any other value is an error.
 
+      candidates: "draw" (default) | "planted_controls". ``planted_controls`` runs the
+               planted controls (``research/pipeline/controls_report.py``) in place of
+               the month's draw: a fixed list, nothing generated. It needs
+               ``window_layout: admission`` (the controls are scored on the holdout), and
+               the summary's ``controls_report`` scores each against its expected
+               outcome. Controls never seed governance. Any other value is an error.
+
     Under either layout the summary's ``gate_report`` holds what every stage said
     about every strategy (``research/pipeline/gate_report.py``): the funnel gives the
     counts, and a report-only gate's findings show in no count.
@@ -238,6 +250,7 @@ def run_scheduled_research_at_timestamp(
     universe_timeline_id = _resolve_universe_timeline_option(research_options)
     research_dataset_id = _resolve_dataset_version_option(research_options)
     window_layout = _resolve_window_layout_option(research_options)
+    candidates = _resolve_candidates_option(research_options)
     base = dict(
         domain="research",
         timestamp=timestamp,
@@ -328,6 +341,7 @@ def run_scheduled_research_at_timestamp(
             universe_timeline=universe_timeline,
             research_dataset=research_dataset,
             admission_layout=admission_layout,
+            candidates=candidates,
         )
     except SurvivorshipBiasError as exc:
         return ResearchReplayResult(**base, status="failed", errors=[f"survivorship_guard: {exc}"])
@@ -518,6 +532,9 @@ def run_scheduled_research_at_timestamp(
         for _, s in ranked
         if s.candidate_score.is_deployable and s.strategy_id not in spam_excluded
     ]
+    # Planted controls are never candidates for trading: they are held back here, and
+    # the seeding refuses them again (two checks, each with its own test).
+    deployable, controls_withheld = _withhold_planted_controls(deployable, config_by_id)
     _seed_research_governance_from_intelligence(
         session=session,
         summaries=deployable,
@@ -556,6 +573,20 @@ def run_scheduled_research_at_timestamp(
             benchmark_inputs=benchmark_inputs,
         )
 
+    controls_report: dict[str, Any] | None = None
+    if candidates == CANDIDATES_PLANTED_CONTROLS:
+        from autonomous_trading_platform.research.pipeline.controls_report import score_controls
+
+        controls_report = score_controls(gate_report=gate_report, holdout_report=holdout_report)
+        logger.info(
+            "planted_controls | planted edge found=%s | noise rejected=%s (%d of %d noise "
+            "seeds passed every stage)",
+            controls_report.get("planted_edge_found"),
+            controls_report.get("noise_rejected"),
+            controls_report.get("noise_passed_every_stage", 0),
+            controls_report.get("noise_seeds", 0),
+        )
+
     return ResearchReplayResult(
         **base,
         status="ok",
@@ -592,6 +623,9 @@ def run_scheduled_research_at_timestamp(
                 else None
             ),
             "holdout_report": holdout_report,
+            "candidates": candidates,
+            "controls_report": controls_report,
+            "controls_withheld_from_governance": len(controls_withheld),
             "intelligence_analyzed": len(intelligence_summaries),
             "deployable_seeded": len(deployable),
             "spam_cluster_excluded": len(spam_excluded),
@@ -647,6 +681,7 @@ def _build_replay_experiment_definition(
     universe_timeline: UniverseTimeline | None = None,
     research_dataset: ResearchWindowDataset | None = None,
     admission_layout: AdmissionWindowLayout | None = None,
+    candidates: str = CANDIDATES_DRAW,
 ):
     """Build an ExperimentDefinition with the staged pipeline for the monthly research tick.
 
@@ -1040,12 +1075,20 @@ def _build_replay_experiment_definition(
             )
         )
 
+    from autonomous_trading_platform.research.pipeline.controls_report import (
+        planted_control_strategy_set,
+    )
+
     month_seed = int(tick_date.strftime("%Y%m"))
     return ExperimentDefinition(
         experiment_id=experiment_id,
         experiment_type=ExperimentType.SWEEP,
         description=f"Monthly platform replay research — {tick_date.strftime('%B %Y')}",
-        strategy_set=_replay_strategy_set(smoke=smoke, seed=month_seed),
+        strategy_set=(
+            planted_control_strategy_set()
+            if candidates == CANDIDATES_PLANTED_CONTROLS
+            else _replay_strategy_set(smoke=smoke, seed=month_seed)
+        ),
         parameter_grid=[{}],
         dataset_version=dataset_version,
         universe_version=universe_version,
@@ -1054,7 +1097,9 @@ def _build_replay_experiment_definition(
         start_date=start_date,
         end_date=end_date,
         random_seed=month_seed,
-        parameter_space={},
+        # None: the strategy set is used as written, nothing is generated (the
+        # orchestration service's rule); {} hands each family to the generator.
+        parameter_space=None if candidates == CANDIDATES_PLANTED_CONTROLS else {},
         # In the admission layout the validator is told the holdout date and
         # refuses a stage that reads it. The lookback layout sets no holdout aside.
         staged_pipeline_config=StagedPipelineConfig(
@@ -1619,6 +1664,48 @@ def _resolve_window_layout_option(research_options: dict | None) -> str | None:
 _RESEARCH_PROFILES = frozenset({"full", "smoke"})
 
 
+def _resolve_candidates_option(research_options: dict | None) -> str:
+    """Which candidates the tick runs: the month's draw (default) or the planted
+    controls. An unknown value is an error, never the draw: the run would look valid
+    and be a different experiment. The controls are scored on the holdout, so they need
+    the admission layout."""
+    options = research_options or {}
+    raw: object = options.get("candidates", CANDIDATES_DRAW)
+    if not isinstance(raw, str) or raw not in _CANDIDATES:
+        raise ValueError(
+            f"research.options.candidates must be one of {sorted(_CANDIDATES)}, got {raw!r}"
+        )
+    if (
+        raw == CANDIDATES_PLANTED_CONTROLS
+        and options.get("window_layout") != WINDOW_LAYOUT_ADMISSION
+    ):
+        raise ValueError(
+            "research.options.candidates 'planted_controls' needs window_layout "
+            f"{WINDOW_LAYOUT_ADMISSION!r}: the controls are scored on the holdout"
+        )
+    return raw
+
+
+def _withhold_planted_controls(deployable: list, config_by_id: dict) -> tuple[list, list[str]]:
+    """The deployable summaries without the planted controls, and the controls' ids."""
+    withheld = [
+        s.strategy_id for s in deployable if _is_planted_control(s.strategy_id, config_by_id)
+    ]
+    return [s for s in deployable if s.strategy_id not in withheld], withheld
+
+
+def _is_planted_control(strategy_id: str, config_by_id: dict) -> bool:
+    """Whether a strategy is a planted control, by its config's type, or by the type
+    its id starts with when no config is at hand."""
+    from autonomous_trading_platform.strategy.implementations.planted_control import (
+        is_planted_control_type,
+    )
+
+    config = config_by_id.get(strategy_id)
+    strategy_type = config.type if config is not None else strategy_id.split("__", 1)[0]
+    return is_planted_control_type(strategy_type)
+
+
 def _resolve_lookback_days(research_options: dict | None) -> int:
     raw: object = (research_options or {}).get("lookback_days", DEFAULT_RESEARCH_LOOKBACK_DAYS)
     if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
@@ -1675,6 +1762,9 @@ def _seed_research_governance_from_intelligence(
 
     for summary in summaries:
         strategy_id = summary.strategy_id
+        if _is_planted_control(strategy_id, config_by_id):
+            logger.warning("governance seeding refused planted control %s", strategy_id)
+            continue
         config = config_by_id.get(strategy_id)
         config_hash = (
             config.config_hash()

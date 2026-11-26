@@ -92,6 +92,10 @@ def _validate_random(params: dict[str, Any]) -> None:
     SCHEMAS_BY_STRATEGY["random"].model_validate(params)
 
 
+def _validate_planted_oracle(params: dict[str, Any]) -> None:
+    SCHEMAS_BY_STRATEGY["planted_oracle"].model_validate(params)
+
+
 def _validate_intentional_loser(params: dict[str, Any]) -> None:
     SCHEMAS_BY_STRATEGY["intentional_loser"].model_validate(params)
 
@@ -110,6 +114,7 @@ VALIDATORS: dict[str, Any] = {
     "mean_reversion": _validate_mean_reversion,
     "factor_based": _validate_factor_based,
     "random": _validate_random,
+    "planted_oracle": _validate_planted_oracle,
     "intentional_loser": _validate_intentional_loser,
     "stub": _validate_stub,
 }

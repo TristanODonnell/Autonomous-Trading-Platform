@@ -31,6 +31,9 @@ from autonomous_trading_platform.strategy.implementations.momentum_strategy impo
 from autonomous_trading_platform.strategy.implementations.moving_average_crossover_strategy import (
     MovingAverageCrossoverStrategy,
 )
+from autonomous_trading_platform.strategy.implementations.planted_oracle_strategy import (
+    PlantedOracleStrategy,
+)
 from autonomous_trading_platform.strategy.implementations.random_debug_strategy import (
     RandomStrategy,
 )
@@ -43,6 +46,7 @@ from .parameter_schemas import (
     MeanReversionParameters,
     MomentumParameters,
     MovingAverageCrossoverParameters,
+    PlantedOracleParameters,
     RandomParameters,
     StrategyParameterSchema,
     StubParameters,
@@ -56,6 +60,7 @@ from .validators import (
     _validate_mean_reversion,
     _validate_momentum,
     _validate_moving_average_crossover,
+    _validate_planted_oracle,
     _validate_random,
     _validate_stub,
 )
@@ -85,6 +90,14 @@ def _build_random(strategy_id: str, params: dict[str, Any]) -> RandomStrategy:
         signal_probability=params["signal_probability"],
         buy_probability=params["buy_probability"],
         random_seed=params["random_seed"],
+    )
+
+
+def _build_planted_oracle(strategy_id: str, params: dict[str, Any]) -> PlantedOracleStrategy:
+    return PlantedOracleStrategy(
+        strategy_id=strategy_id,
+        accuracy=params["accuracy"],
+        seed=params["seed"],
     )
 
 
@@ -152,6 +165,10 @@ def _warmup_intentional_loser(p: dict[str, Any]) -> int:
 
 
 def _warmup_random(p: dict[str, Any]) -> int:
+    return 0
+
+
+def _warmup_planted_oracle(p: dict[str, Any]) -> int:
     return 0
 
 
@@ -340,6 +357,56 @@ _REGISTRY.register(
         ),
         builder=_build_random,
         deterministic=False,
+    )
+)
+
+# The planted control (research plan, "Planted controls, M1"). debug and not production
+# ready, so no generation draw and no production list includes it; its settings are not
+# tunable, so the neighbour stage builds no neighbours of it. See planted_control.py.
+_REGISTRY.register(
+    StrategyDefinition(
+        strategy_type="planted_oracle",
+        display_name="Planted oracle (control)",
+        description=(
+            "Research control only: told each session's outcome, right a set share of the "
+            "time. Tests whether the pipeline finds a known edge."
+        ),
+        family=StrategyFamily.DEBUG,
+        implementation_class=PlantedOracleStrategy,
+        debug=True,
+        production_ready=False,
+        default_parameters={"accuracy": 0.5, "seed": 0},
+        parameter_validator=_validate_planted_oracle,
+        parameter_schema=PlantedOracleParameters,
+        warmup_bars_fn=_warmup_planted_oracle,
+        required_indicators=(),
+        required_persisted_features=(),
+        parameter_specs=(
+            ParameterSpec(
+                name="accuracy",
+                parameter_type=ParameterType.FLOAT,
+                default=0.5,
+                description="Share of sessions the oracle calls right; 0.5 is no edge.",
+                min_value=0.0,
+                max_value=1.0,
+                discrete=False,
+                tunable=False,
+                mutation_strategy="fixed",
+            ),
+            ParameterSpec(
+                name="seed",
+                parameter_type=ParameterType.INT,
+                default=0,
+                description="Seed of the oracle's calls.",
+                discrete=True,
+                step=1,
+                tunable=False,
+                mutation_strategy="fixed",
+            ),
+        ),
+        builder=_build_planted_oracle,
+        supports_shorting=False,
+        deterministic=True,
     )
 )
 

@@ -24,6 +24,7 @@ _EXPECTED_ALL = {
     "stub",
     "intentional_loser",
     "random",
+    "planted_oracle",
     "moving_average_crossover",
     "momentum",
     "mean_reversion",
@@ -31,7 +32,7 @@ _EXPECTED_ALL = {
     "composite_rule",
 }
 
-_EXPECTED_DEBUG = {"stub", "intentional_loser", "random"}
+_EXPECTED_DEBUG = {"stub", "intentional_loser", "random", "planted_oracle"}
 _EXPECTED_PRODUCTION = _EXPECTED_ALL - _EXPECTED_DEBUG
 
 
@@ -100,6 +101,7 @@ _STRATEGY_IDS = {
     "stub": "stub-1",
     "intentional_loser": "loser-1",
     "random": "random-1",
+    "planted_oracle": "planted-1",
     "moving_average_crossover": "mac-1",
     "momentum": "mom-1",
     "mean_reversion": "mr-1",

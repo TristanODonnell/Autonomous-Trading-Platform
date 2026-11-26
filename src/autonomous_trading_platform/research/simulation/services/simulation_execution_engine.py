@@ -49,6 +49,9 @@ from autonomous_trading_platform.research.simulation.services.simulation_executi
 from autonomous_trading_platform.strategy.contexts.strategy_context_builder import (
     StrategyContextBuilder,
 )
+from autonomous_trading_platform.strategy.implementations.planted_control import (
+    PlantedControlStrategy,
+)
 
 logger = get_logger(__name__)
 
@@ -240,6 +243,13 @@ class SimulationExecutionEngine:
         timeline = list(window.timeline)
 
         self.lookahead_guard_service.assert_timeline_strictly_increasing(timeline=timeline)
+
+        # Planted controls (research plan, "Planted controls, M1") are the one kind of
+        # strategy handed the run's whole window: their edge is the future, on purpose.
+        # Every other strategy is given nothing here and reads its bars through the
+        # context builder and the lookahead guard below.
+        if isinstance(strategy, PlantedControlStrategy):
+            strategy.bind_run_window(window)
 
         membership = (
             _UniverseMembership(universe_timeline) if universe_timeline is not None else None

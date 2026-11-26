@@ -423,6 +423,7 @@ def _run_on_timeline(
     forbid_universe_tables: bool = True,
     backtest_dataset_id: str | None = _DATASET_VERSION_ID,
     timestamp: datetime = _TICK_TS,
+    keep_strategy_set: bool = False,
 ) -> _TimelineRun:
     import autonomous_trading_platform.application.services.platform_replay.research_hooks as rh_mod
     from autonomous_trading_platform.research.simulation.services.simulation_execution_engine import (
@@ -458,11 +459,12 @@ def _run_on_timeline(
         exp = _orig_build_exp(*args, **kwargs)
         if exp is None:
             return None
-        exp = replace(
-            exp,
-            strategy_set=pinned_strategy_set("momentum"),
-            parameter_space=None,  # pinned config, not a draw
-        )
+        if not keep_strategy_set:
+            exp = replace(
+                exp,
+                strategy_set=pinned_strategy_set("momentum"),
+                parameter_space=None,  # pinned config, not a draw
+            )
         run.experiments.append(exp)
         return exp
 
@@ -1014,6 +1016,7 @@ def _run_admission(
     timeline=None,
     options: dict | None = None,
     timestamp: datetime = _ADMISSION_TICK_TS,
+    keep_strategy_set: bool = False,
 ) -> _TimelineRun:
     """One research tick in the admission layout, on a dataset registered for it. The
     replay's own dataset has no bars, and the universe tables may not be read."""
@@ -1040,6 +1043,7 @@ def _run_admission(
         forbid_universe_tables=True,
         backtest_dataset_id=_REPLAY_DATASET_WITH_NO_BARS,
         timestamp=timestamp,
+        keep_strategy_set=keep_strategy_set,
     )
 
 
@@ -1649,3 +1653,69 @@ def test_admission_layout_sets_every_candidate_against_buy_and_hold(
         assert (per_dollar > 0) == (stage_1["total_return"] > 0)
     # Report only: the funnel is as it was, and the report is still plain JSON.
     _assert_gate_report_counts_what_the_funnel_counts(run.result.summary)
+
+
+def test_admission_layout_runs_the_planted_controls_and_scores_them(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """``candidates: planted_controls`` (research plan, "Planted controls, M1"): the
+    controls reach the pipeline as written, nothing is generated, every stage and the
+    holdout run them, the summary scores them, and none is seeded into governance.
+
+    The fixture's bars are daily, one a session, so the oracle has no session it can buy
+    and sell within and makes no trade (``session_calls`` leaves one-bar sessions out):
+    every control falls at stage 1, and the scorecard must say so. That the oracle trades
+    the moves it is told of is checked on 5-minute bars in the real engine
+    (``tests/strategy/test_planted_oracle_strategy.py``).
+    """
+    from autonomous_trading_platform.research.pipeline.controls_report import (
+        PLANTED_CONTROLS,
+        planted_control_strategy_set,
+    )
+    from autonomous_trading_platform.storage.sor.models.strategy_governance import (
+        StrategyGovernance,
+    )
+
+    run = _run_admission(
+        db_session,
+        replay_context,
+        monkeypatch,
+        research_smoke_data_root,
+        options={**_ADMISSION, "candidates": "planted_controls"},
+        keep_strategy_set=True,
+    )
+
+    assert run.result.status == "ok", run.result.errors
+    (experiment,) = run.experiments
+    assert experiment.strategy_set == planted_control_strategy_set()
+    assert experiment.parameter_space is None
+    summary = run.result.summary
+    assert summary["candidates"] == "planted_controls"
+    assert summary["generation"] == []
+    assert summary["stage_funnel"]["initial_quality_filter"] == {
+        "entered": len(PLANTED_CONTROLS),
+        "passed": 0,
+    }
+
+    report = summary["controls_report"]
+    ids = [row["strategy_id"] for row in report["controls"]]
+    assert ids == [control.strategy_id for control in PLANTED_CONTROLS]
+    for row in report["controls"]:
+        assert row["eliminated_at"] == "initial_quality_filter"
+    assert report["planted_edge_found"] is False
+    assert report["noise_rejected"] is True
+    assert report["noise_pass_rate_by_stage"]["initial_quality_filter"] == {
+        "entered": 5,
+        "passed": 0,
+    }
+    # Every simulation of a control was handed its window (an unbound control raises).
+    assert run.engine_calls
+    assert run.signals.empty
+    assert summary["controls_withheld_from_governance"] == 0
+    assert (
+        db_session.query(StrategyGovernance)
+        .filter(StrategyGovernance.strategy_id.like("planted_oracle%"))
+        .count()
+        == 0
+    )
+    json.dumps(summary["controls_report"])
