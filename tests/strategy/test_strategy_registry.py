@@ -83,6 +83,7 @@ _EXPECTED_ALL = {
     "stub",
     "intentional_loser",
     "random",
+    "planted_oracle",
     "moving_average_crossover",
     "momentum",
     "mean_reversion",
@@ -90,7 +91,7 @@ _EXPECTED_ALL = {
     "composite_rule",
 }
 
-_EXPECTED_DEBUG = {"stub", "intentional_loser", "random"}
+_EXPECTED_DEBUG = {"stub", "intentional_loser", "random", "planted_oracle"}
 _EXPECTED_PRODUCTION = _EXPECTED_ALL - _EXPECTED_DEBUG
 
 
@@ -169,6 +170,7 @@ _EXPECTED_FAMILIES = {
     "stub": StrategyFamily.DEBUG,
     "intentional_loser": StrategyFamily.DEBUG,
     "random": StrategyFamily.DEBUG,
+    "planted_oracle": StrategyFamily.DEBUG,
     "moving_average_crossover": StrategyFamily.TREND,
     "momentum": StrategyFamily.MOMENTUM,
     "mean_reversion": StrategyFamily.MEAN_REVERSION,

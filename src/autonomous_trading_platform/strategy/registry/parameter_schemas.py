@@ -182,6 +182,19 @@ class RandomParameters(StrategyParameterSchema):
         return _number(value, info.field_name)
 
 
+class PlantedOracleParameters(StrategyParameterSchema):
+    """The planted control (research plan, "Planted controls, M1"): the share of sessions
+    it calls right, and the seed of its calls. 0.5 is the negative control."""
+
+    accuracy: float = Field(default=0.5, ge=0.0, le=1.0)
+    seed: StrictInt = 0
+
+    @field_validator("accuracy", mode="before")
+    @classmethod
+    def _accuracy_is_number(cls, value: Any, info: Any) -> float:
+        return _number(value, info.field_name)
+
+
 class StubParameters(StrategyParameterSchema):
     price_change_threshold: float = Field(default=0.0, ge=0.0)
 
@@ -201,6 +214,7 @@ SCHEMAS_BY_STRATEGY: dict[str, type[StrategyParameterSchema]] = {
     "mean_reversion": MeanReversionParameters,
     "factor_based": FactorBasedParameters,
     "random": RandomParameters,
+    "planted_oracle": PlantedOracleParameters,
     "stub": StubParameters,
     "intentional_loser": IntentionalLoserParameters,
 }

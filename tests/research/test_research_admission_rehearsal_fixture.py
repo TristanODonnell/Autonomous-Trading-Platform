@@ -27,10 +27,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MEDIUM = REPO_ROOT / "fixtures" / "platform" / "replays" / "medium"
 REHEARSAL = MEDIUM / "research_admission_rehearsal.yaml"
 BASELINE = MEDIUM / "research_admission_baseline.yaml"
+CONTROLS = MEDIUM / "research_planted_controls.yaml"
 # Fixture file and the research profile it is meant to run.
 FIXTURES = [
     pytest.param(REHEARSAL, "smoke", id="rehearsal"),
     pytest.param(BASELINE, "full", id="baseline"),
+    pytest.param(CONTROLS, "full", id="planted_controls"),
 ]
 # Every key run_scheduled_research_at_timestamp reads from research.options.
 OPTIONS_THE_HOOK_READS = {
@@ -39,6 +41,7 @@ OPTIONS_THE_HOOK_READS = {
     "universe_timeline",
     "dataset_version",
     "window_layout",
+    "candidates",
 }
 
 
@@ -93,3 +96,21 @@ def test_the_two_fixtures_differ_in_name_and_profile_alone() -> None:
     assert rehearsal["scheduled_jobs"]["research"]["options"].pop("profile") == "smoke"
     assert baseline["scheduled_jobs"]["research"]["options"].pop("profile") == "full"
     assert rehearsal == baseline
+
+
+def test_the_controls_fixture_is_the_baseline_with_the_controls_in_place_of_the_draw() -> None:
+    """The controls are read against the 2026-11-25 run: same dataset, timeline, dates
+    and profile, so the name and the candidates option are all that may differ."""
+    baseline = yaml.safe_load(BASELINE.read_text(encoding="utf-8"))
+    controls = yaml.safe_load(CONTROLS.read_text(encoding="utf-8"))
+
+    assert rh._resolve_candidates_option(_research_options(BASELINE)) == rh.CANDIDATES_DRAW
+    assert (
+        rh._resolve_candidates_option(_research_options(CONTROLS)) == rh.CANDIDATES_PLANTED_CONTROLS
+    )
+    assert baseline["platform_replay"].pop("name") == "research_admission_baseline"
+    assert controls["platform_replay"].pop("name") == "research_planted_controls"
+    assert controls["scheduled_jobs"]["research"]["options"].pop("candidates") == (
+        "planted_controls"
+    )
+    assert controls == baseline

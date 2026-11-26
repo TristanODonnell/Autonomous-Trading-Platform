@@ -6,6 +6,7 @@ EXPECTED_INDICATORS = {
     "stub": (),
     "intentional_loser": (),
     "random": (),
+    "planted_oracle": (),  # handed its window by the simulator (planted controls)
     "moving_average_crossover": ("simple_moving_average",),
     "momentum": ("momentum", "rate_of_change"),  # measure: price | return (plan G3)
     "mean_reversion": ("z_score", "simple_moving_average", "rolling_standard_deviation"),
