@@ -1719,3 +1719,38 @@ def test_admission_layout_runs_the_planted_controls_and_scores_them(
         == 0
     )
     json.dumps(summary["controls_report"])
+
+
+def test_admission_layout_runs_a_noise_sample_and_scores_the_same_list(
+    research_smoke_data_root, db_session, replay_context, monkeypatch
+):
+    """``noise_seeds`` (2026-11-26): the strategy set and the scorecard are built from one
+    list, so every control that ran is scored and none that did not is."""
+    from autonomous_trading_platform.research.pipeline.controls_report import (
+        planted_control_strategy_set,
+        planted_controls_with_noise_sample,
+    )
+
+    run = _run_admission(
+        db_session,
+        replay_context,
+        monkeypatch,
+        research_smoke_data_root,
+        options={**_ADMISSION, "candidates": "planted_controls", "noise_seeds": 3},
+        keep_strategy_set=True,
+    )
+
+    assert run.result.status == "ok", run.result.errors
+    sample = planted_controls_with_noise_sample(3)
+    (experiment,) = run.experiments
+    assert experiment.strategy_set == planted_control_strategy_set(sample)
+    report = run.result.summary["controls_report"]
+    assert [row["strategy_id"] for row in report["controls"]] == [c.strategy_id for c in sample]
+    assert report["noise_seeds"] == 3
+    assert report["noise_pass_rate"]["rate"] == 0.0
+    assert report["noise_passes_allowed"] == 0  # 5% of 3
+    assert report["noise_within_bar"] is True
+    assert report["noise_pass_rate_by_stage"]["initial_quality_filter"] == {
+        "entered": 3,
+        "passed": 0,
+    }

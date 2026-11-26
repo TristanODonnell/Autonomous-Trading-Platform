@@ -155,3 +155,35 @@ def test_the_seeding_refuses_a_control_it_is_handed(db_session: Session) -> None
     _seed(db_session, "momentum__abc", {})
 
     assert _governance_ids(db_session) == ["momentum__abc"]
+
+
+# --- the noise sample option (2026-11-26) ---------------------------------------------------
+
+
+def test_without_noise_seeds_the_controls_are_the_fixed_table() -> None:
+    options = {**_ADMISSION, "candidates": "planted_controls"}
+    assert rh._resolve_planted_controls(options, rh.CANDIDATES_PLANTED_CONTROLS) == (
+        PLANTED_CONTROLS
+    )
+
+
+def test_noise_seeds_gives_the_oracles_and_that_many_noise_controls() -> None:
+    options = {**_ADMISSION, "candidates": "planted_controls", "noise_seeds": 40}
+    controls = rh._resolve_planted_controls(options, rh.CANDIDATES_PLANTED_CONTROLS)
+
+    assert controls is not None
+    assert len(controls) == 43
+    assert controls[:3] == PLANTED_CONTROLS[:3]
+
+
+def test_the_draw_has_no_controls_and_refuses_noise_seeds() -> None:
+    assert rh._resolve_planted_controls(_ADMISSION, rh.CANDIDATES_DRAW) is None
+    with pytest.raises(ValueError, match="noise_seeds needs candidates 'planted_controls'"):
+        rh._resolve_planted_controls({**_ADMISSION, "noise_seeds": 40}, rh.CANDIDATES_DRAW)
+
+
+@pytest.mark.parametrize("bad", [0, 500, True, "40"])
+def test_a_bad_noise_seeds_option_is_an_error(bad: object) -> None:
+    options = {**_ADMISSION, "candidates": "planted_controls", "noise_seeds": bad}
+    with pytest.raises(ValueError, match="research.options.noise_seeds must be"):
+        rh._resolve_planted_controls(options, rh.CANDIDATES_PLANTED_CONTROLS)
