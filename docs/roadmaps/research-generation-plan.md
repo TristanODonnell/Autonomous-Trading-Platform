@@ -328,8 +328,10 @@ gates reward exposure to a rising market (G9), now measured.
 | 1 | Oracle-control strategy + its next-session list + exclusion tag, with tests | ✅ merged as PR #207 (`6b4d8349f`), on B 2026-11-26 |
 | 2 | Controls fixture (60 / 55 / 52%, noise × 5) and the met / not met lines in the result file | ✅ merged as PR #207 (`6b4d8349f`), on B 2026-11-26 |
 | 3 | One run on B (go-ahead needed); results into section 5 against the table above | ✅ ran 2026-11-26 (exit 0, 8 min): planted edge found (60% and 55%), noise **not** rejected (1 of 5 seeds passed every stage); 52% out at stage 1. Section 5, "The planted controls" |
-| 4 | Noise sample (user 2026-11-26: "do more coin flippers"): option `noise_seeds` (the three oracles kept as a check on the run, N noise controls on fresh seeds 101 on, never 11 to 15), the noise pass rate with its exact 95% range in `controls_report`, fixture `research_planted_controls_noise40.yaml` (the controls fixture plus `noise_seeds: 40`, a test holds it), the bar of row 5 judged in the summary (`noise_within_bar`), tests, 6 mutation checks caught | 🟡 built 2026-11-26 on `research/noise-controls`, not committed |
-| 5 | Run the 40-seed sample on B (go-ahead needed); results into section 5 | ⚪ waits on 4 merged and deployed. **Bar fixed before the run (user, 2026-11-26): at most 2 of the 40 noise controls pass every stage (5%); 3 or more, and the gates are tightened before G10.** In code as `NOISE_SAMPLE_PASS_RATE_ALLOWED` (the summary's `noise_within_bar`). The 60% and 55% oracles passing again is the check that the run itself worked |
+| 4 | Noise sample (user 2026-11-26: "do more coin flippers"): option `noise_seeds` (the three oracles kept as a check on the run, N noise controls on fresh seeds 101 on, never 11 to 15), the noise pass rate with its exact 95% range in `controls_report`, fixture `research_planted_controls_noise40.yaml` (the controls fixture plus `noise_seeds: 40`, a test holds it), the bar of row 5 judged in the summary (`noise_within_bar`), tests, 6 mutation checks caught | ✅ merged as PR #208 (`81e2569fa`), on B 2026-11-26 |
+| 5 | Run the 40-seed sample on B (go-ahead needed); results into section 5 | ✅ ran 2026-11-26 (exit 0, 19 min): **4 of 40 noise passed every stage (10%, 95% range 2.8% to 23.7%), over the bar**; oracles as before. Section 5, "The noise sample". The bar was fixed before the run (user, 2026-11-26): at most 2 of the 40 pass every stage (5%); 3 or more, and the gates are tightened before G10. In code as `NOISE_SAMPLE_PASS_RATE_ALLOWED` (the summary's `noise_within_bar`) |
+| 6 | Tighten the gate (user 2026-11-26, from the recorded evidence): Monte Carlo at 90% of paths in the admission layout; the overfitting cut weighed and left out (it overrode the two-of-three fold rule); option `noise_first_seed`; fixture `research_planted_controls_check40.yaml`; tests, 3 mutation checks caught | 🟡 built 2026-11-26 on `research/gate-tightening`, not committed |
+| 7 | Check the tightened gate on B on 40 fresh noise seeds (141 to 180; go-ahead needed) | ⚪ waits on 6 merged and deployed. Holds if at most 2 of 40 pass every stage and the 60% and 55% oracles are found again (fixed before the run) |
 
 **Step 1b, generation repairs (built and merged)**
 
@@ -6283,3 +6285,103 @@ What it says (read 2026-11-26; decisions are the user's):
   spread above the noise. The pre-run guess that exposure alone might carry noise past
   stage 1 matched one seed of five.
 - Cost: under 8 minutes for 8 controls, so more noise seeds are cheap.
+
+### The noise sample, 40 coin-flippers (2026-11-26, `feed=iex`)
+
+Run on B 2026-11-26 04:56:01 to 05:15:18 UTC (19 min 17 s, exit 0; peak 1.69 of 2.98
+GiB), commit `81e2569fa` (PR #208), fixture `research_planted_controls_noise40`: the three
+oracles and 40 noise controls (accuracy 0.50, seeds 101 to 140). Read from
+`artifacts/platform/backtests/research_planted_controls_noise40.json` on B. None reached
+governance (4 held back, 0 `planted_oracle` rows). **The run itself worked:** the
+oracles' numbers are the first run's to the last digit (the calls are drawn from seed,
+name and session alone), 60% and 55% again through every stage and far above buy and
+hold on the holdout.
+
+**Against the bar fixed before the run (at most 2 of 40): 4 of 40 noise controls passed
+every stage, 10%, 95% range 2.8% to 23.7%. Over the bar** (`noise_within_bar` false), so
+by the user's rule the gates are tightened before G10. With the first run's 1 of 5:
+5 of 45, 11%.
+
+Where the noise fell (entered → passed):
+
+| Stage | Noise | Note |
+|---|---|---|
+| 1 initial quality (Sharpe ≥ 0.5, return ≥ 0) | 40 → 7 | Noise mean Sharpe 0.23, spread 0.39, in a selection window where buy and hold made +28% |
+| 2 walk-forward (2 of 3 folds + pooled) | 7 → 5 | Two out on 1 of 3 folds; every pass on exactly 2 of 3 (the oracles 3 of 3) |
+| 3 Monte Carlo | 5 → 4 | One out at 780 of 2000 paths; the passes 1263 to 1539 (the oracles 1959 and 2000) |
+| 4 regime, 5 stress, 6 neighbours, 7 overfitting | 4 → 4 each | Regime, neighbours, overfitting report-only; the controls' settings are not tunable, so the neighbour stage has nothing to test on them |
+
+The four that passed every stage, against the oracles:
+
+| Control | Stage-1 Sharpe | Folds | MC paths | Overfitting probability (report-only) | Holdout Sharpe | Holdout return | "Excess" over buy and hold |
+|---|---|---|---|---|---|---|---|
+| Oracle 60% | 3.28 | 3 / 3 | 2000 | 0.08 | 4.52 | +12.1% | +20.8 |
+| Oracle 55% | 1.30 | 3 / 3 | 1959 | 0.12 | 1.97 | +5.1% | +13.8 |
+| Noise 118 | 0.61 | 2 / 3 | 1539 | 0.31 | -1.68 | -4.1% | +4.7 |
+| Noise 129 | 0.71 | 2 / 3 | 1514 | 0.33 | -1.28 | -3.2% | +5.6 |
+| Noise 135 | 0.77 | 2 / 3 | 1501 | 0.32 | -1.42 | -3.5% | +5.2 |
+| Noise 140 | 1.25 | 2 / 3 | 1263 | 0.43 | -0.98 | -2.4% | +6.3 |
+| (first run) Noise 12 | 0.75 | 2 / 3 | 1253 | 0.39 | -0.98 | -2.5% | +6.2 |
+
+What it says (read 2026-11-26; how to tighten is the user's decision):
+- **The gates pass about one no-edge strategy in ten** (range about 3% to 24%), against
+  a bar of one in twenty. Stage 1 lets through 17.5% of the noise, walk-forward and Monte
+  Carlo take off a little, and nothing after Monte Carlo removes any.
+- **Every noise pass lost money on the holdout** (Sharpe -0.98 to -1.68) while "beating"
+  buy and hold by 4.7 to 6.3 points: the falling holdout (-8.8%) rewards being out of
+  the market. An absolute holdout bar would have caught all five; the excess return over
+  buy and hold caught none.
+- **Three measures already computed separate noise from the oracles in this run**, none
+  of them deciding today: walk-forward folds (noise 2 of 3, oracles 3 of 3), Monte Carlo
+  paths passed (noise 63% to 77%, oracles 98% to 100%) and the report-only overfitting
+  probability (noise 0.31 to 0.43, oracles 0.08 and 0.12). A caution before using them:
+  a cut-off read off these 45 controls is fitted to them, so whatever is chosen is
+  checked on fresh noise seeds (141 on) before it is trusted.
+- Noise in selection has a positive mean Sharpe (0.23) because it holds stocks part of
+  the day in a rising window: the pre-run prediction (exposure lifts noise toward the
+  stage-1 bar) holds on the larger sample.
+
+**Candidate rules measured on the recorded evidence (2026-11-26, the user's choice:
+"measure rules, then pick").** No new run: each rule adds one condition to "passed every
+stage", so applying it to what passed is exact. Three sets: the 5 noise controls that
+passed (both runs), the 2 oracles that must be found, and the 21 real survivors of the
+2026-11-25 run (`research_admission_baseline.json` on B, written 11:21 that day).
+
+| Rule added | Noise kept (of 5) | Oracles kept (of 2) | Real survivors kept (of 21) |
+|---|---|---|---|
+| Walk-forward: 3 of 3 folds | 0 | 2 | 15 |
+| Monte Carlo: at least 80% of paths | 0 | 2 | 20 |
+| Monte Carlo: at least 90% of paths | 0 | 2 | 20 |
+| Overfitting probability at most 0.25 | 0 | 2 | 21 |
+| Overfitting probability at most 0.20 | 0 | 2 | 19 |
+| Stage-1 Sharpe at least 1.0 | 1 | 2 | 16 |
+| Holdout Sharpe above 0 (the final check, not a gate) | 0 | 2 | 2 |
+
+Gaps: Monte Carlo paths, noise at most 77%, oracles 98% and 100%, real survivors 90% to
+98% but one at 75%; overfitting probability, noise 0.31 to 0.43, oracles 0.08 and 0.12,
+real survivors 0.08 to 0.21. The real survivors' evidence does not look like the noise
+controls': they pass Monte Carlo and the overfitting score cleanly, yet trail buy and hold
+by 28 to 48 points. So a rule that stops the noise removes few or no real survivors, and
+does not change the 2026-11-25 reading: their failure is not luck but something steady
+across the windows, consistent with exposure to a rising market (G9), which the noise
+rules do not touch. Whatever cut-off is chosen was read off these controls, so it is
+checked on fresh noise seeds (141 on) before it is trusted.
+
+**Decided (user, 2026-11-26): Monte Carlo decides at 90% of paths (0.6 before), in the
+admission layout only** (`ADMISSION_MC_MIN_PASS_RATE`; the lookback layout keeps 0.6,
+nothing was measured there). The overfitting score stays report-only. It was chosen
+first as a second rule ("both"), with the scores left as they are ("gate only, scores
+unchanged"), and taken back the same hour: at 0.25 it rejected `small_loss` in
+`test_research_hooks_admission_pass_rule.py` (a small loss in one fold of three, gains in
+two, the nine months clearing the filter: the record the 2026-11-18 rule admits on
+purpose), which scored 0.266, through its fold-instability part (0.69). That sits
+between the real survivors (at most 0.21) and the noise (at least 0.31), so the cut
+would have overridden the two-of-three rule. Monte Carlo at 90% keeps `small_loss` and
+alone rejected all five noise passes (the best reached 77%). With it the research tests
+pass unchanged, so the two-of-three rule stands.
+
+**Next, fixed before the run (user, 2026-11-26):** the tightened gate is checked on 40
+noise controls no run has used (seeds 141 to 180, option `noise_first_seed`, fixture
+`research_planted_controls_check40.yaml`). It holds if at most 2 of the 40 pass every
+stage (`noise_within_bar`) and the 60% and 55% oracles again pass every stage and beat
+buy and hold on the holdout (`planted_edge_found`).

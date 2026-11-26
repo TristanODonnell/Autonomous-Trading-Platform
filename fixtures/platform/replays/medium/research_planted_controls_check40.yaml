@@ -1,0 +1,105 @@
+# scenario:
+#   name: research_planted_controls_check40
+#   purpose: >
+#     The check of the tightened gate (research plan, section 5, "The noise
+#     sample"): the 40-seed sample let 4 of 40 noise controls through every
+#     stage, over the user's bar of 2; the user chose Monte Carlo at 90% of
+#     paths (0.6 before) as the fix, read off those runs' evidence. A cut-off
+#     read off a sample is fitted to it, so it is checked here on 40 noise
+#     controls none of the earlier runs used. The same job as
+#     research_planted_controls_noise40.yaml, with `noise_first_seed: 141`.
+#   expected_behavior: >
+#     Fixed before the run (user, 2026-11-26): the tightened gate holds if at
+#     most 2 of the 40 fresh noise controls (accuracy 0.50, seeds 141 to 180)
+#     pass every stage (`noise_within_bar` true) and the oracles at 0.60 and
+#     0.55 again pass every stage and beat buy and hold on the holdout
+#     (`planted_edge_found` true). Nothing is generated; no control is seeded
+#     into governance; no simulation_runs row ends on or after 2026-05-18.
+#   cost_notes: >
+#     The 40-seed sample took 19 min 17 s, peak 1.69 of 2.98 GiB; this one
+#     should be about the same.
+#   needs: >
+#     As research_admission_baseline.yaml: its two datasets exist on Box B
+#     only, and the dates must stay on or after the holdout date and on or
+#     before the dataset's last day.
+#   recommended_use: worker box, by hand; one job at a time
+
+# Command (Box B):
+#   infra/ops/worker_job.sh worker run \
+#     --fixture fixtures/platform/replays/medium/research_planted_controls_check40.yaml \
+#     --name research_planted_controls_check40
+
+platform_replay:
+  name: research_planted_controls_check40
+  mode: historical_backtest
+
+  symbols: [SPY]
+
+  start: 2026-11-16
+  end: 2026-11-18
+  starting_cash: 50000
+  random_seed: 1
+
+initial_state:
+  settings: {}
+  controls: {}
+  strategies: [momentum_v1]
+  governance: []
+  allocations:
+    - strategy_id: momentum_v1
+      allocation_pct: "1.00"
+  universe: {}
+  datasets: {}
+
+scheduled_jobs:
+  ingestion:
+    cadence: daily
+    enabled: true
+  corporate_actions:
+    cadence: daily
+    enabled: false
+  features:
+    cadence: after_ingestion
+    enabled: true
+  trading_cycle:
+    cadence: daily
+    enabled: true
+  risk:
+    cadence: daily
+    enabled: false
+  governance:
+    cadence: daily
+    enabled: false
+  portfolio_snapshot:
+    cadence: daily
+    enabled: false
+  operations_health:
+    cadence: daily
+    enabled: false
+  universe:
+    cadence: monthly
+    enabled: false
+  research:
+    cadence: monthly
+    enabled: true
+    options:
+      profile: full
+      candidates: planted_controls
+      noise_seeds: 40
+      noise_first_seed: 141
+      window_layout: admission
+      dataset_version: raw_bars_20261118T234501Z_043e50ad
+      universe_timeline: universe_timeline_20261119T220329Z_54a0ff84
+  dashboard_snapshot:
+    cadence: daily
+    enabled: false
+
+timeline_events: []
+
+outputs:
+  write_event_log: true
+  write_equity_curve: false
+  write_portfolio_snapshots: false
+  write_governance_audit: false
+  write_failure_report: false
+  write_dashboard_snapshot: false

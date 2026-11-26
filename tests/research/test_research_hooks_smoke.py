@@ -1100,6 +1100,21 @@ def test_admission_layout_gives_each_stage_its_days(
     # The run over the evaluation piece answers for the walk-forward filter itself.
     monte_carlo = by_name["monte_carlo_structural_robustness"]
     assert monte_carlo.base_run_clears_filter is True
+    # Tightened 2026-11-26 (user), from the planted controls: 0.6 before.
+    from autonomous_trading_platform.application.services.platform_replay.research_hooks import (
+        ADMISSION_MC_MIN_PASS_RATE,
+    )
+
+    assert monte_carlo.min_pass_rate == ADMISSION_MC_MIN_PASS_RATE == 0.9
+    # Weighed and left out the same day: the overfitting gate stays report-only.
+    from autonomous_trading_platform.research.pipeline.stages.overfitting_stage import (
+        OverfittingStage,
+    )
+
+    (overfitting,) = [
+        s for s in experiment.staged_pipeline_config.stages if isinstance(s, OverfittingStage)
+    ]
+    assert overfitting._cfg.gate.enforce is False
     assert monte_carlo.filter_config == walk_forward.test_filter_config
 
     # The first simulation is stage 1's, on the selection piece, from the named dataset.

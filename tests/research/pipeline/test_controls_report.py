@@ -310,3 +310,17 @@ def test_the_fixed_table_has_no_bar() -> None:
     report = score_controls(gate_report={"stages": _STAGES, "strategies": []}, holdout_report=None)
     assert report["noise_passes_allowed"] is None
     assert report["noise_within_bar"] is None
+
+
+def test_a_later_sample_starts_where_it_is_told() -> None:
+    controls = planted_controls_with_noise_sample(40, first_seed=141)
+
+    noise = [c for c in controls if c.role == ROLE_MUST_BE_REJECTED]
+    assert [c.seed for c in noise] == list(range(141, 181))
+    assert not {c.seed for c in noise} & set(range(101, 141))
+
+
+@pytest.mark.parametrize("bad", [100, 15, True, "141", 141.0])
+def test_a_first_seed_among_the_fixed_table_or_not_an_integer_is_refused(bad: object) -> None:
+    with pytest.raises(ValueError, match="noise_first_seed must be"):
+        planted_controls_with_noise_sample(40, first_seed=bad)  # type: ignore[arg-type]
