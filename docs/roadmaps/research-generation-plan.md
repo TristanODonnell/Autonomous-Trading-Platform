@@ -256,6 +256,7 @@ pipeline can find an edge"). Done before G10 and task 5.
 | C2 | What the oracle knows | **The next session**: at the session's first bar it knows each name's move to the session's close; about one trade per name per day (turnover near the real survivors') | The next 5-minute bar (moves about the size of costs: a test of the cost model, not the gates) |
 | C3 | Where it runs | **Its own controls-only fixture** (about 8 controls, about 2 hours on B); "in every campaign" waits for Step 5's monthly job | Mixed into the normal research run |
 | C4 | Expected outcomes | **Fixed before the run** (below); the result file marks each met / not met, report only | Read the numbers afterwards |
+| C5 | How the oracle gets its answers | **The simulator hands the run's window** to a strategy that is a planted control (a few lines in `SimulationExecutionEngine.execute`, gated on the class); its answers are the very bars the fills price from | The oracle reading the dataset itself (a strategy doing I/O, and answers that could drift from the fill prices) |
 
 Pre-registered outcomes (C4, written before any control has run):
 
@@ -266,25 +267,67 @@ Pre-registered outcomes (C4, written before any control has run):
 | Oracle 52% | No expectation, reported | The sensitivity probe: where the detection floor sits |
 | Noise, 5 seeds | None passes every stage; each stage's pass rate reported (the gates' false-pass rate) | The gates let noise through, and a pass of theirs is not evidence |
 
-Build notes (proposed with the decisions, to settle while building):
-- One strategy type for all controls, with `accuracy` and `seed`; the noise control is the
-  same strategy at accuracy 0.5 (right half the time, so its trades are independent of
-  the outcome). A matched control: same trades per day, same names, only the edge differs.
-  The existing `random` type (signal on a third of all bars) would be killed by costs in
-  stage 1 and so test nothing about the statistical gates.
-- The engine gives strategies only bars before the evaluation time
-  (`strategy_context_builder.py`, `assert_historical_only`); the oracle's list is its one
-  side channel and the guard stays as it is for every other strategy.
-- Controls are tagged and never reach governance seeding
-  (`_seed_research_governance_from_intelligence`), the intelligence ranking, or a
-  hand-off to A.
-- Not in any generation family: the controls fixture lists them by hand.
+A prediction, written down before the run (2026-11-25): the noise controls hold about half
+the names on random sessions, so in the evaluation window's rising market (buy and hold
++50%) market exposure alone may carry some of them through stage 1's absolute bar
+(Sharpe >= 0.5, return >= 0). If so it is a finding, not a fault of the controls: the
+gates reward exposure to a rising market (G9), now measured.
+
+**Built 2026-11-25 on `research/planted-controls`, not committed.**
+- `strategy/implementations/planted_control.py`: `PlantedControlStrategy`, the base class
+  the simulator checks (an `isinstance` check, so a strategy sharing a method name gets
+  nothing); `PlantedControlNotBoundError`, raised by a control asked for a signal without
+  its window, so one started outside the research simulator (the live cycle never binds a
+  window) refuses to trade; `is_planted_control_type`.
+- `strategy/implementations/planted_oracle_strategy.py`: `session_calls` builds the answer
+  key from the window (per name and New York session, last close above first close; a
+  one-bar session is left out; warm-up bars not read); `oracle_is_right` draws each call
+  from `(seed, symbol, session)` alone, so a session gets the same call in every stage,
+  window and process; the strategy buys at the session's first bar the names it calls up
+  and sells at the last bar, silent between. The first-to-last-close move is exactly what
+  it trades: with `latency_bars` 0 an order fills at the close of its bar. The noise
+  control is the same strategy at accuracy 0.5, a matched control (the existing `random`
+  type signals on a third of all bars, and costs would end it in stage 1, testing nothing
+  about the statistical gates). The three oracles share seed 1, so they are nested.
+- Registered as `planted_oracle`: `debug=True`, `production_ready=False` (no generation
+  draw and no production list includes it), `accuracy` and `seed` not tunable (the
+  neighbour stage builds no neighbours of it).
+- `SimulationExecutionEngine.execute`: hands the window to a `PlantedControlStrategy`
+  before the first bar (C5). Every stage's simulations, and the holdout's, go through it.
+- `research/pipeline/controls_report.py`: `PLANTED_CONTROLS`, the table above as code (the
+  hook's candidates and the scoring read the same table); `score_controls` writes the
+  summary's `controls_report` (each control met / not met with why, `planted_edge_found`,
+  `noise_rejected`, each stage's noise pass rate).
+- Research hook: option `candidates` (`draw` default, `planted_controls`; needs the
+  admission layout; anything else an error); the controls go in as written
+  (`parameter_space=None`, nothing generated). They are ranked with the intelligence
+  layer like any survivor (in a controls-only run they are the only candidates), and
+  **never seeded into governance**, by two checks: held back from the deployable list
+  (`_withhold_planted_controls`, counted as `controls_withheld_from_governance`) and
+  refused by the seeding itself.
+- Fixture `fixtures/platform/replays/medium/research_planted_controls.yaml`: the baseline
+  fixture with `candidates: planted_controls` and its own name, nothing else (a test
+  holds this), so the controls run on the 2026-11-25 run's dataset, timeline and dates.
+- Tests: `test_planted_oracle_strategy.py` (20: the key, the call shares and their
+  independence at 0.5, the nesting, the signals, the refusal unbound, and in the real
+  engine at zero cost a perfect oracle buying only rising sessions at the first close and
+  selling at the last; a strategy that is not a control is handed nothing),
+  `test_controls_report.py` (10: the table pinned, each rule), `test_planted_controls_hook.py`
+  (14: the option, the set used as written, no draw produces a control, both governance
+  checks), the fixture tests (the new fixture against the baseline), and one run through
+  the hook on the admission layout (daily fixture bars, so no session can be bought and
+  sold: every control falls at stage 1 and the scorecard says so; none seeded).
+  Mutation checks (15), each caught: no hand-off; hand-off gated on a method name; key
+  from the wrong bar; accuracy ignored; warm-up read; a sell on every bar; UTC dates;
+  seeding check off; withholding off; controls sent to generation; scorecard never built;
+  admission check off; level with buy and hold counted as beating it; noise always met;
+  noise pass rate counting every entrant.
 
 | # | Item | State |
 |---|---|---|
-| 1 | Oracle-control strategy + its next-session list + exclusion tag, with tests | ⚪ not started |
-| 2 | Controls fixture (60 / 55 / 52%, noise × 5) and the met / not met lines in the result file | ⚪ not started |
-| 3 | One run on B (go-ahead needed); results into section 5 against the table above | ⚪ waits on 1 and 2 |
+| 1 | Oracle-control strategy + its next-session list + exclusion tag, with tests | 🟡 built 2026-11-25, not committed |
+| 2 | Controls fixture (60 / 55 / 52%, noise × 5) and the met / not met lines in the result file | 🟡 built 2026-11-25, not committed |
+| 3 | One run on B (go-ahead needed); results into section 5 against the table above | ⚪ waits on 1 and 2 being merged and deployed to B |
 
 **Step 1b, generation repairs (built and merged)**
 
