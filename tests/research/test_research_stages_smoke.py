@@ -711,3 +711,21 @@ def test_research_refuses_to_run_without_point_in_time_universe(
 
     assert result.status == "failed"
     assert any("survivorship_guard" in e for e in result.errors)
+
+
+def test_the_lookback_layout_keeps_monte_carlo_at_its_old_bar(
+    smoke_data_root, pit_universe, db_session, replay_context
+) -> None:
+    """The 2026-11-26 tightening (Monte Carlo at 90% of paths) was measured in the
+    admission layout and applies there only; the lookback layout keeps 60%."""
+    import autonomous_trading_platform.application.services.platform_replay.research_hooks as rh
+    from autonomous_trading_platform.research.pipeline.stages.monte_carlo_stage import (
+        MonteCarloStage,
+    )
+
+    ctx = _build_context(db_session)
+    exp = _replay_experiment(db_session, replay_context, ctx.simulation_runner, profile="full")
+    (monte_carlo,) = [
+        s for s in exp.staged_pipeline_config.stages if isinstance(s, MonteCarloStage)
+    ]
+    assert monte_carlo._cfg.min_pass_rate == rh.LOOKBACK_MC_MIN_PASS_RATE == 0.6

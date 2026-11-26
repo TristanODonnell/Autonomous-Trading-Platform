@@ -62,6 +62,17 @@ MIN_RESEARCH_WINDOW_DAYS = 15
 WINDOW_LAYOUT_ADMISSION = "admission"
 _WINDOW_LAYOUTS = frozenset({WINDOW_LAYOUT_ADMISSION})
 
+# Gate tightened 2026-11-26 (user), in the admission layout only, after the planted
+# controls: 5 of 45 noise controls (no edge) passed every stage, against a bar of 1 in
+# 20. On the recorded evidence this rule rejects all five (the best reached 77% of
+# paths), keeps both oracles and 20 of the 21 real survivors of the 2026-11-25 run
+# (research plan, section 5). Monte Carlo: the share of resampled paths that must
+# clear the filter (0.6 before). An overfitting cut was weighed and left out: at 0.25
+# it rejected a two-of-three-folds record the 2026-11-18 pass rule admits.
+ADMISSION_MC_MIN_PASS_RATE = 0.9
+# The lookback layout keeps its setting: nothing was measured there.
+LOOKBACK_MC_MIN_PASS_RATE = 0.6
+
 # Which candidates a research tick runs (research.options.candidates).
 CANDIDATES_DRAW = "draw"
 CANDIDATES_PLANTED_CONTROLS = "planted_controls"
@@ -108,6 +119,8 @@ class _ResearchWindow:
     neighbour_check        True = after stress, each survivor is re-run with one
                            setting moved a little, each way, over gates_start to
                            end_date (plan R13; report only)
+    mc_min_pass_rate       the share of Monte Carlo's resampled paths that must
+                           clear the filter
     """
 
     start_date: date
@@ -117,6 +130,7 @@ class _ResearchWindow:
     fold_layout: Mapping[str, Any] | None
     gate_run_clears_filter: bool = False
     neighbour_check: bool = False
+    mc_min_pass_rate: float = LOOKBACK_MC_MIN_PASS_RATE
 
 
 def run_research_at_timestamp(
@@ -246,6 +260,11 @@ def run_scheduled_research_at_timestamp(
                (101 on) in place of the five fixed ones, to measure how often the
                gates pass a no-edge strategy; the ``controls_report`` gives that rate
                with its 95% range. Absent: the fixed table. Anything else is an error.
+
+      noise_first_seed: an integer, 101 or more, with ``noise_seeds`` only. The
+               first noise seed (default 101), so a later sample draws seeds no
+               earlier one used (the 2026-11-26 check of the tightened gates:
+               141 on). Anything else is an error.
 
     Under either layout the summary's ``gate_report`` holds what every stage said
     about every strategy (``research/pipeline/gate_report.py``): the funnel gives the
@@ -988,7 +1007,7 @@ def _build_replay_experiment_definition(
                 start_date=window.gates_start,
                 end_date=end_date,
                 n_runs=200 if smoke else 2000,
-                min_pass_rate=0.6,
+                min_pass_rate=window.mc_min_pass_rate,
                 filter_config=wf_mc_filter,
                 scoring_weights=default_weights,
                 max_workers=1,
@@ -1083,7 +1102,8 @@ def _build_replay_experiment_definition(
         # evidence is two folds at most, and on real bars the gate changed no
         # outcome. The score and findings are recorded; nobody is eliminated.
         # Not re-judged for the admission layout's three folds: report only
-        # there too.
+        # there too. (2026-11-26: a cut at 0.25 was weighed and left out, see
+        # ADMISSION_MC_MIN_PASS_RATE.)
         stages.append(
             OverfittingStage(
                 stage_config=OverfittingStageConfig(
@@ -1279,6 +1299,8 @@ def _admission_research_window(layout: AdmissionWindowLayout) -> _ResearchWindow
         # lookback layout, whose jobs run research every month of a long backtest:
         # whether they should pay for it has not been asked.
         neighbour_check=True,
+        # Tightened 2026-11-26 (user), from the planted controls.
+        mc_min_pass_rate=ADMISSION_MC_MIN_PASS_RATE,
     )
 
 
@@ -1715,19 +1737,26 @@ def _resolve_planted_controls(research_options: dict | None, candidates: str) ->
     the oracles and a noise sample (``noise_seeds``). None when the tick runs the draw.
     ``noise_seeds`` without the controls is an error: it would be silently ignored."""
     from autonomous_trading_platform.research.pipeline.controls_report import (
+        NOISE_SAMPLE_FIRST_SEED,
         PLANTED_CONTROLS,
         planted_controls_with_noise_sample,
     )
 
     options = research_options or {}
     if candidates != CANDIDATES_PLANTED_CONTROLS:
-        if "noise_seeds" in options:
-            raise ValueError("research.options.noise_seeds needs candidates 'planted_controls'")
+        for key in ("noise_seeds", "noise_first_seed"):
+            if key in options:
+                raise ValueError(f"research.options.{key} needs candidates 'planted_controls'")
         return None
     if "noise_seeds" not in options:
+        if "noise_first_seed" in options:
+            raise ValueError("research.options.noise_first_seed needs noise_seeds")
         return PLANTED_CONTROLS
     try:
-        return planted_controls_with_noise_sample(options["noise_seeds"])
+        return planted_controls_with_noise_sample(
+            options["noise_seeds"],
+            first_seed=options.get("noise_first_seed", NOISE_SAMPLE_FIRST_SEED),
+        )
     except ValueError as exc:
         raise ValueError(f"research.options.{exc}") from exc
 

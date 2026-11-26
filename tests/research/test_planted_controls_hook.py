@@ -187,3 +187,35 @@ def test_a_bad_noise_seeds_option_is_an_error(bad: object) -> None:
     options = {**_ADMISSION, "candidates": "planted_controls", "noise_seeds": bad}
     with pytest.raises(ValueError, match="research.options.noise_seeds must be"):
         rh._resolve_planted_controls(options, rh.CANDIDATES_PLANTED_CONTROLS)
+
+
+def test_noise_first_seed_moves_the_sample() -> None:
+    options = {
+        **_ADMISSION,
+        "candidates": "planted_controls",
+        "noise_seeds": 40,
+        "noise_first_seed": 141,
+    }
+    controls = rh._resolve_planted_controls(options, rh.CANDIDATES_PLANTED_CONTROLS)
+
+    assert controls is not None
+    assert [c.seed for c in controls[3:]] == list(range(141, 181))
+
+
+def test_noise_first_seed_needs_a_sample_and_the_controls() -> None:
+    controls = {**_ADMISSION, "candidates": "planted_controls", "noise_first_seed": 141}
+    with pytest.raises(ValueError, match="noise_first_seed needs noise_seeds"):
+        rh._resolve_planted_controls(controls, rh.CANDIDATES_PLANTED_CONTROLS)
+    with pytest.raises(ValueError, match="noise_first_seed needs candidates 'planted_controls'"):
+        rh._resolve_planted_controls({**_ADMISSION, "noise_first_seed": 141}, rh.CANDIDATES_DRAW)
+
+
+def test_a_bad_noise_first_seed_is_an_error() -> None:
+    options = {
+        **_ADMISSION,
+        "candidates": "planted_controls",
+        "noise_seeds": 40,
+        "noise_first_seed": 50,
+    }
+    with pytest.raises(ValueError, match="research.options.noise_first_seed must be"):
+        rh._resolve_planted_controls(options, rh.CANDIDATES_PLANTED_CONTROLS)

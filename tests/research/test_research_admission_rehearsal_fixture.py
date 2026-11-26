@@ -29,12 +29,14 @@ REHEARSAL = MEDIUM / "research_admission_rehearsal.yaml"
 BASELINE = MEDIUM / "research_admission_baseline.yaml"
 CONTROLS = MEDIUM / "research_planted_controls.yaml"
 NOISE40 = MEDIUM / "research_planted_controls_noise40.yaml"
+CHECK40 = MEDIUM / "research_planted_controls_check40.yaml"
 # Fixture file and the research profile it is meant to run.
 FIXTURES = [
     pytest.param(REHEARSAL, "smoke", id="rehearsal"),
     pytest.param(BASELINE, "full", id="baseline"),
     pytest.param(CONTROLS, "full", id="planted_controls"),
     pytest.param(NOISE40, "full", id="planted_controls_noise40"),
+    pytest.param(CHECK40, "full", id="planted_controls_check40"),
 ]
 # Every key run_scheduled_research_at_timestamp reads from research.options.
 OPTIONS_THE_HOOK_READS = {
@@ -45,6 +47,7 @@ OPTIONS_THE_HOOK_READS = {
     "window_layout",
     "candidates",
     "noise_seeds",
+    "noise_first_seed",
 }
 
 
@@ -132,3 +135,19 @@ def test_the_noise_sample_fixture_is_the_controls_fixture_with_40_noise_seeds() 
     assert noise["platform_replay"].pop("name") == "research_planted_controls_noise40"
     assert noise["scheduled_jobs"]["research"]["options"].pop("noise_seeds") == 40
     assert noise == controls
+
+
+def test_the_check_fixture_is_the_noise_sample_on_fresh_seeds() -> None:
+    """The tightened gates are checked on 40 noise controls none of the earlier runs used
+    (seeds 141 to 180): the name and the first seed are all that may differ."""
+    noise = yaml.safe_load(NOISE40.read_text(encoding="utf-8"))
+    check = yaml.safe_load(CHECK40.read_text(encoding="utf-8"))
+
+    options = _research_options(CHECK40)
+    sample = rh._resolve_planted_controls(options, rh._resolve_candidates_option(options))
+    assert sample is not None
+    assert [c.seed for c in sample[3:]] == list(range(141, 181))
+    assert noise["platform_replay"].pop("name") == "research_planted_controls_noise40"
+    assert check["platform_replay"].pop("name") == "research_planted_controls_check40"
+    assert check["scheduled_jobs"]["research"]["options"].pop("noise_first_seed") == 141
+    assert check == noise

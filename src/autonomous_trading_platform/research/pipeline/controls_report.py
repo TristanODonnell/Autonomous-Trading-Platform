@@ -90,18 +90,26 @@ def noise_sample_passes_allowed(noise_seeds: int) -> int:
     return math.floor(NOISE_SAMPLE_PASS_RATE_ALLOWED * noise_seeds + 1e-9)
 
 
-def planted_controls_with_noise_sample(noise_seeds: int) -> tuple[PlantedControl, ...]:
+def planted_controls_with_noise_sample(
+    noise_seeds: int, first_seed: int = NOISE_SAMPLE_FIRST_SEED
+) -> tuple[PlantedControl, ...]:
     """The three oracles of ``PLANTED_CONTROLS`` and ``noise_seeds`` noise controls on
-    fresh seeds. The oracles stay in as a check on the run itself: if they stopped
-    passing, the run broke, not the gates."""
+    fresh seeds from ``first_seed`` (101 or more, clear of the fixed table's). The
+    oracles stay in as a check on the run itself: if they stopped passing, the run
+    broke, not the gates."""
     if isinstance(noise_seeds, bool) or not isinstance(noise_seeds, int):
         raise ValueError(f"noise_seeds must be an integer, got {noise_seeds!r}")
     if not 1 <= noise_seeds <= NOISE_SAMPLE_MAX:
         raise ValueError(f"noise_seeds must be 1 to {NOISE_SAMPLE_MAX}, got {noise_seeds}")
+    if isinstance(first_seed, bool) or not isinstance(first_seed, int):
+        raise ValueError(f"noise_first_seed must be an integer, got {first_seed!r}")
+    if first_seed < NOISE_SAMPLE_FIRST_SEED:
+        raise ValueError(
+            f"noise_first_seed must be {NOISE_SAMPLE_FIRST_SEED} or more, got {first_seed}"
+        )
     oracles = tuple(c for c in PLANTED_CONTROLS if c.role != ROLE_MUST_BE_REJECTED)
     noise = tuple(
-        PlantedControl(0.50, NOISE_SAMPLE_FIRST_SEED + i, ROLE_MUST_BE_REJECTED)
-        for i in range(noise_seeds)
+        PlantedControl(0.50, first_seed + i, ROLE_MUST_BE_REJECTED) for i in range(noise_seeds)
     )
     return oracles + noise
 
