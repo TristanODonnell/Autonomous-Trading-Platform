@@ -241,6 +241,12 @@ def run_scheduled_research_at_timestamp(
                the summary's ``controls_report`` scores each against its expected
                outcome. Controls never seed governance. Any other value is an error.
 
+      noise_seeds: an integer, 1 to 200, with ``candidates: planted_controls`` only.
+               Runs the three oracles and this many noise controls on fresh seeds
+               (101 on) in place of the five fixed ones, to measure how often the
+               gates pass a no-edge strategy; the ``controls_report`` gives that rate
+               with its 95% range. Absent: the fixed table. Anything else is an error.
+
     Under either layout the summary's ``gate_report`` holds what every stage said
     about every strategy (``research/pipeline/gate_report.py``): the funnel gives the
     counts, and a report-only gate's findings show in no count.
@@ -251,6 +257,7 @@ def run_scheduled_research_at_timestamp(
     research_dataset_id = _resolve_dataset_version_option(research_options)
     window_layout = _resolve_window_layout_option(research_options)
     candidates = _resolve_candidates_option(research_options)
+    planted_controls = _resolve_planted_controls(research_options, candidates)
     base = dict(
         domain="research",
         timestamp=timestamp,
@@ -342,6 +349,7 @@ def run_scheduled_research_at_timestamp(
             research_dataset=research_dataset,
             admission_layout=admission_layout,
             candidates=candidates,
+            planted_controls=planted_controls,
         )
     except SurvivorshipBiasError as exc:
         return ResearchReplayResult(**base, status="failed", errors=[f"survivorship_guard: {exc}"])
@@ -575,16 +583,31 @@ def run_scheduled_research_at_timestamp(
 
     controls_report: dict[str, Any] | None = None
     if candidates == CANDIDATES_PLANTED_CONTROLS:
-        from autonomous_trading_platform.research.pipeline.controls_report import score_controls
+        from autonomous_trading_platform.research.pipeline.controls_report import (
+            ROLE_MUST_BE_REJECTED,
+            noise_sample_passes_allowed,
+            score_controls,
+        )
 
-        controls_report = score_controls(gate_report=gate_report, holdout_report=holdout_report)
+        noise_sample = "noise_seeds" in (research_options or {})
+        noise_count = sum(1 for c in planted_controls or () if c.role == ROLE_MUST_BE_REJECTED)
+
+        controls_report = score_controls(
+            gate_report=gate_report,
+            holdout_report=holdout_report,
+            controls=planted_controls or (),
+            noise_passes_allowed=(
+                noise_sample_passes_allowed(noise_count) if noise_sample else None
+            ),
+        )
         logger.info(
             "planted_controls | planted edge found=%s | noise rejected=%s (%d of %d noise "
-            "seeds passed every stage)",
+            "seeds passed every stage; within the bar=%s)",
             controls_report.get("planted_edge_found"),
             controls_report.get("noise_rejected"),
             controls_report.get("noise_passed_every_stage", 0),
             controls_report.get("noise_seeds", 0),
+            controls_report.get("noise_within_bar"),
         )
 
     return ResearchReplayResult(
@@ -682,6 +705,7 @@ def _build_replay_experiment_definition(
     research_dataset: ResearchWindowDataset | None = None,
     admission_layout: AdmissionWindowLayout | None = None,
     candidates: str = CANDIDATES_DRAW,
+    planted_controls: tuple | None = None,
 ):
     """Build an ExperimentDefinition with the staged pipeline for the monthly research tick.
 
@@ -1085,7 +1109,7 @@ def _build_replay_experiment_definition(
         experiment_type=ExperimentType.SWEEP,
         description=f"Monthly platform replay research — {tick_date.strftime('%B %Y')}",
         strategy_set=(
-            planted_control_strategy_set()
+            planted_control_strategy_set(planted_controls or ())
             if candidates == CANDIDATES_PLANTED_CONTROLS
             else _replay_strategy_set(smoke=smoke, seed=month_seed)
         ),
@@ -1684,6 +1708,28 @@ def _resolve_candidates_option(research_options: dict | None) -> str:
             f"{WINDOW_LAYOUT_ADMISSION!r}: the controls are scored on the holdout"
         )
     return raw
+
+
+def _resolve_planted_controls(research_options: dict | None, candidates: str) -> tuple | None:
+    """The controls the tick runs and scores, one list for both: the fixed table, or
+    the oracles and a noise sample (``noise_seeds``). None when the tick runs the draw.
+    ``noise_seeds`` without the controls is an error: it would be silently ignored."""
+    from autonomous_trading_platform.research.pipeline.controls_report import (
+        PLANTED_CONTROLS,
+        planted_controls_with_noise_sample,
+    )
+
+    options = research_options or {}
+    if candidates != CANDIDATES_PLANTED_CONTROLS:
+        if "noise_seeds" in options:
+            raise ValueError("research.options.noise_seeds needs candidates 'planted_controls'")
+        return None
+    if "noise_seeds" not in options:
+        return PLANTED_CONTROLS
+    try:
+        return planted_controls_with_noise_sample(options["noise_seeds"])
+    except ValueError as exc:
+        raise ValueError(f"research.options.{exc}") from exc
 
 
 def _withhold_planted_controls(deployable: list, config_by_id: dict) -> tuple[list, list[str]]:

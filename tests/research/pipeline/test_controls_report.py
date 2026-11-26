@@ -9,13 +9,18 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from autonomous_trading_platform.research.pipeline.controls_report import (
     PLANTED_CONTROLS,
     ROLE_MUST_BE_FOUND,
     ROLE_MUST_BE_REJECTED,
     ROLE_REPORT_ONLY,
     PlantedControl,
+    clopper_pearson_95,
+    noise_sample_passes_allowed,
     planted_control_strategy_set,
+    planted_controls_with_noise_sample,
     score_controls,
 )
 from autonomous_trading_platform.strategy.configs.strategy_config import StrategyConfig
@@ -111,6 +116,8 @@ def test_all_as_expected() -> None:
     assert _row(report, ORACLE_52)["met"] is None
     assert report["noise_passed_every_stage"] == 0
     assert report["noise_seeds"] == 2
+    assert report["noise_pass_rate"]["rate"] == 0.0
+    assert report["noise_pass_rate"]["low_95"] == 0.0
     assert report["noise_pass_rate_by_stage"] == {
         "initial_quality_filter": {"entered": 2, "passed": 1},
         "walk_forward_robustness": {"entered": 1, "passed": 0},
@@ -202,3 +209,104 @@ def test_a_gate_report_that_was_not_built_scores_nothing() -> None:
     )
 
     assert report == {"not_scored": "gate report not built: boom"}
+
+
+# --- the noise sample (2026-11-26) -------------------------------------------------------
+
+
+def test_the_noise_sample_keeps_the_oracles_and_draws_fresh_seeds() -> None:
+    controls = planted_controls_with_noise_sample(40)
+
+    oracles = [c for c in controls if c.role != ROLE_MUST_BE_REJECTED]
+    noise = [c for c in controls if c.role == ROLE_MUST_BE_REJECTED]
+    assert oracles == [c for c in PLANTED_CONTROLS if c.role != ROLE_MUST_BE_REJECTED]
+    assert [c.seed for c in noise] == list(range(101, 141))
+    assert {c.accuracy for c in noise} == {0.50}
+    # None of the five seeds already seen (one of them passed every stage).
+    seen = {c.seed for c in PLANTED_CONTROLS if c.role == ROLE_MUST_BE_REJECTED}
+    assert not seen & {c.seed for c in noise}
+    assert len({c.strategy_id for c in controls}) == 43
+
+
+@pytest.mark.parametrize("bad", [0, -1, 201, True, 1.5, "40", None])
+def test_a_bad_noise_sample_size_is_refused(bad: object) -> None:
+    with pytest.raises(ValueError, match="noise_seeds must be"):
+        planted_controls_with_noise_sample(bad)  # type: ignore[arg-type]
+
+
+def test_the_noise_pass_rate_is_reported_with_its_95_percent_range() -> None:
+    noise = planted_controls_with_noise_sample(4)[3:]
+    report = score_controls(
+        gate_report={
+            "stages": _STAGES,
+            "strategies": [
+                _record(noise[0].strategy_id, None),
+                *(_record(c.strategy_id, "initial_quality_filter") for c in noise[1:]),
+            ],
+        },
+        holdout_report=_holdout(),
+        controls=noise,
+    )
+
+    assert report["noise_passed_every_stage"] == 1
+    rate = report["noise_pass_rate"]
+    assert rate["rate"] == 0.25
+    assert rate["low_95"] == pytest.approx(0.00631, abs=1e-4)
+    assert rate["high_95"] == pytest.approx(0.80588, abs=1e-4)
+
+
+@pytest.mark.parametrize(
+    ("successes", "trials", "low", "high"),
+    [
+        # Exact Clopper-Pearson values, from scipy.stats.beta.ppf (2026-11-26).
+        (1, 5, 0.005051, 0.716418),
+        (0, 5, 0.0, 0.521824),
+        (5, 5, 0.478176, 1.0),
+        (2, 40, 0.006114, 0.169197),
+        (10, 40, 0.126915, 0.411962),
+        (0, 40, 0.0, 0.088097),
+    ],
+)
+def test_the_95_percent_range_is_the_exact_one(
+    successes: int, trials: int, low: float, high: float
+) -> None:
+    got_low, got_high = clopper_pearson_95(successes, trials)
+    assert got_low == pytest.approx(low, abs=1e-5)
+    assert got_high == pytest.approx(high, abs=1e-5)
+
+
+def test_no_trials_has_no_range() -> None:
+    assert clopper_pearson_95(0, 0) == (None, None)
+
+
+def test_the_bar_is_the_decided_one() -> None:
+    """User, 2026-11-26, before the run: at most 2 of 40 noise controls may pass."""
+    assert noise_sample_passes_allowed(40) == 2
+    assert noise_sample_passes_allowed(5) == 0
+    assert noise_sample_passes_allowed(100) == 5
+
+
+@pytest.mark.parametrize(("passed", "within"), [(0, True), (2, True), (3, False)])
+def test_a_noise_sample_is_judged_against_its_bar(passed: int, within: bool) -> None:
+    noise = planted_controls_with_noise_sample(40)[3:]
+    report = score_controls(
+        gate_report={
+            "stages": _STAGES,
+            "strategies": [
+                _record(c.strategy_id, None if i < passed else "initial_quality_filter")
+                for i, c in enumerate(noise)
+            ],
+        },
+        holdout_report=_holdout(),
+        controls=noise,
+        noise_passes_allowed=noise_sample_passes_allowed(40),
+    )
+
+    assert report["noise_passes_allowed"] == 2
+    assert report["noise_within_bar"] is within
+
+
+def test_the_fixed_table_has_no_bar() -> None:
+    report = score_controls(gate_report={"stages": _STAGES, "strategies": []}, holdout_report=None)
+    assert report["noise_passes_allowed"] is None
+    assert report["noise_within_bar"] is None
