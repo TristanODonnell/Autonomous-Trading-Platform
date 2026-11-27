@@ -330,8 +330,8 @@ gates reward exposure to a rising market (G9), now measured.
 | 3 | One run on B (go-ahead needed); results into section 5 against the table above | ✅ ran 2026-11-26 (exit 0, 8 min): planted edge found (60% and 55%), noise **not** rejected (1 of 5 seeds passed every stage); 52% out at stage 1. Section 5, "The planted controls" |
 | 4 | Noise sample (user 2026-11-26: "do more coin flippers"): option `noise_seeds` (the three oracles kept as a check on the run, N noise controls on fresh seeds 101 on, never 11 to 15), the noise pass rate with its exact 95% range in `controls_report`, fixture `research_planted_controls_noise40.yaml` (the controls fixture plus `noise_seeds: 40`, a test holds it), the bar of row 5 judged in the summary (`noise_within_bar`), tests, 6 mutation checks caught | ✅ merged as PR #208 (`81e2569fa`), on B 2026-11-26 |
 | 5 | Run the 40-seed sample on B (go-ahead needed); results into section 5 | ✅ ran 2026-11-26 (exit 0, 19 min): **4 of 40 noise passed every stage (10%, 95% range 2.8% to 23.7%), over the bar**; oracles as before. Section 5, "The noise sample". The bar was fixed before the run (user, 2026-11-26): at most 2 of the 40 pass every stage (5%); 3 or more, and the gates are tightened before G10. In code as `NOISE_SAMPLE_PASS_RATE_ALLOWED` (the summary's `noise_within_bar`) |
-| 6 | Tighten the gate (user 2026-11-26, from the recorded evidence): Monte Carlo at 90% of paths in the admission layout; the overfitting cut weighed and left out (it overrode the two-of-three fold rule); option `noise_first_seed`; fixture `research_planted_controls_check40.yaml`; tests, 3 mutation checks caught | 🟡 built 2026-11-26 on `research/gate-tightening`, not committed |
-| 7 | Check the tightened gate on B on 40 fresh noise seeds (141 to 180; go-ahead needed) | ⚪ waits on 6 merged and deployed. Holds if at most 2 of 40 pass every stage and the 60% and 55% oracles are found again (fixed before the run) |
+| 6 | Tighten the gate (user 2026-11-26, from the recorded evidence): Monte Carlo at 90% of paths in the admission layout; the overfitting cut weighed and left out (it overrode the two-of-three fold rule); option `noise_first_seed`; fixture `research_planted_controls_check40.yaml`; tests, 3 mutation checks caught | ✅ merged as PR #209 (`3c443b90c`), on B 2026-11-26 |
+| 7 | Check the tightened gate on B on 40 fresh noise seeds (141 to 180; go-ahead needed) | ✅ ran 2026-11-26 (exit 0, 19 min): **holds**, 0 of 40 fresh noise passed every stage (95% range 0% to 8.8%), the oracles found again; all 8 noise controls that reached Monte Carlo fell there (61% to 84% of paths). Section 5, "The check of the tightened gate". **M1 met** |
 
 **Step 1b, generation repairs (built and merged)**
 
@@ -6385,3 +6385,41 @@ noise controls no run has used (seeds 141 to 180, option `noise_first_seed`, fix
 `research_planted_controls_check40.yaml`). It holds if at most 2 of the 40 pass every
 stage (`noise_within_bar`) and the 60% and 55% oracles again pass every stage and beat
 buy and hold on the holdout (`planted_edge_found`).
+
+### The check of the tightened gate, 40 fresh coin-flippers (2026-11-26, `feed=iex`)
+
+Run on B 2026-11-26 06:35:52 to 06:54:38 UTC (18 min 46 s, exit 0; peak 1.68 of 2.98
+GiB), commit `3c443b90c` (PR #209: Monte Carlo at 90% of paths in the admission layout),
+fixture `research_planted_controls_check40`: the three oracles and 40 noise controls on
+seeds 141 to 180, which no earlier run used. Read from
+`artifacts/platform/backtests/research_planted_controls_check40.json` on B. None reached
+governance (2 held back, 0 `planted_oracle` rows).
+
+**Against the outcome fixed before the run: holds.** 0 of 40 noise controls passed every
+stage (95% range 0% to 8.8%; `noise_within_bar` true), and the 60% and 55% oracles again
+passed every stage and beat buy and hold on the holdout (`planted_edge_found` true), with
+the same numbers as before (60%: Monte Carlo 2000 of 2000; 55%: 1959 of 2000, 97.95%,
+clear of the new bar).
+
+| Stage | Noise (entered → passed) |
+|---|---|
+| 1 initial quality | 40 → 12 |
+| 2 walk-forward | 12 → 8 (four out on 1 of 3 folds) |
+| 3 Monte Carlo, 90% of paths | **8 → 0** (they reached 61% to 84%) |
+| later stages | none entered |
+
+Read 2026-11-26:
+- **Monte Carlo at 90% did the work on fresh noise.** All eight noise controls that
+  reached it fell there. Under the old bar (60%) all eight were above it (61% to 84%),
+  and in the two earlier runs no noise control that passed Monte Carlo was stopped by a
+  later stage, so the old gates would likely have let most of these eight through: about
+  one in five, against none now.
+- **The margin is narrower than the first sample showed.** The best fresh noise control
+  reached 84% of paths (seed 146, 1679 of 2000; seed 180 at 1671), where the best of the
+  first 45 reached 77%. The 55% oracle sits at 97.95%. The gap holds at this sample size,
+  but it is 6 points below the bar, not 13.
+- Stage 1 let through more noise this time (12 of 40, 30%; noise mean Sharpe 0.20,
+  spread 0.48), so the filtering now rests on Monte Carlo more than on stage 1.
+- **M1 met** (strategy-quality roadmap): the pipeline finds a planted edge of 55% and
+  more, and with the tightened gate it passed no noise control of 40 it had not seen.
+  The detection floor stays between 52% and 55%.
