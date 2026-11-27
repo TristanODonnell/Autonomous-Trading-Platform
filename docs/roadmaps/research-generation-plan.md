@@ -36,6 +36,13 @@ and the evidence for every line are in section 3.
 > **Candidate next build (not decided):** T1, a tear sheet for every research run
 > (`strategy-quality-roadmap.md`, section 8), report-only; its first input is the
 > 2026-11-25 run.
+> **Update 2026-11-27.** Planted controls done, M1 met (PRs #207 to #210). G10 started,
+> measure first (user): the 2026-11-25 survivors measured against buy and hold, read only
+> (section 5): no edge before or after costs, a 0.3-beta slice of buy and hold. The
+> horizon signal screen, stage 1, is built (board "Signal screen, stage 1" below): the
+> engine, library v1 and the rule for reading the result into G10, the last two approved
+> by the user before any run. Next: its run on B (go-ahead needed), then the direction;
+> stage 2 (long daily history, ranking rows) is discussed after.
 
 ### Where this plan joins the pre-launch plan (added 2026-11-25)
 
@@ -242,7 +249,65 @@ Key: 🟢 done (shipped; anything left is a follow-up or waits on something else
 Keep this board in step with the boxes: when a box changes in section 3, change its row.
 "Done / open" counts checkboxes.
 
-**Planted controls, M1 (the current work, added 2026-11-25)**
+**Signal screen, stage 1 (the current work, added 2026-11-27)**
+
+G10's second measurement. Moved up 2026-11-27 from the strategy-quality roadmap, section 8
+(T3), where it is worked through; nothing in it is new except its place in the order. It
+checks whether an indicator's value is followed by a different return, with no orders,
+fills or cash, so a run takes minutes. The user, 2026-11-27, asked for the most accurate
+version over the long term and for all three scopes offered, in two stages: **stage 1**
+(this board) the engine and today's 13 indicators at every horizon on the 24-month
+dataset; **stage 2** (discussed after stage 1) a long daily history and the rows that rank
+names against each other, which 20 names in force cannot test (a top fifth is 4 names).
+The engine is built once and reads either. Report only: no gate, no generator change.
+
+How it measures (set by the build from the roadmap's design; each can be challenged):
+
+| What | Rule |
+|---|---|
+| A row | An indicator (or two), its settings, a condition and the direction predicted, with its reason. Written before the run, versioned, never edited after a result (a variation is a new row in a new version); the library's hash is in every result and a test pins it. Library v1 is fixed with the user (row 5). **Changed in the build, 2026-11-27:** a row is tested at every horizon of its scale, not at one horizon it names. Where today's indicators carry information is the question, and one horizon a row would have left the others unread; the count of horizons tried is paid for under "Many tests" |
+| Source of the rows | The rules today's generator and families trade (`composite_generation.py`'s catalogue, the four simple families), so the screen tests the predictions already being traded |
+| Scales | 5-minute bars; and daily, one decision per session at its last tick, from the same bars |
+| Indicator values | Whole-column versions of the 13 functions in `strategy/indicators/`, held equal to them by a parity test; split terms as the context builder gives a strategy |
+| Entry | The close of the name's next bar after the bar the decision read, as the simulator fills |
+| Horizons | 5 minutes, 15 minutes, 1 hour (inside the session), to the close, the next close, 5 sessions; daily rows 1, 5 and 10 sessions |
+| Return | Total (splits and cash dividends), less the equal-weight mean of the names in force over the same interval; the raw return beside it |
+| Names | In force on the universe timeline at the decision |
+| Days | Selection and evaluation only. The loader refuses any bar on or after `HOLDOUT_START`, so no return reaches into the holdout |
+| The edge | The mean return after the bars where the condition held, less what the same firings find on other days (same names, same times of day), in basis points. Against all bars instead, a condition that only fires at the open would look like an edge |
+| Luck | The sessions are shuffled in blocks, pairing each day's indicator with another day's returns: time of day, names firing together and runs of days stay as they were. Up to 10,000 shuffles, each a different reordering, one-sided in the predicted direction |
+| Many tests | Benjamini-Hochberg at 10% over every cell tested (row x horizon x return kind) |
+| Beside each edge | The range luck gives, the edge on the selection and on the evaluation piece apart, the share of names that have it on their own, the share of returns that went the predicted way, and the edge less a 2 bp round trip |
+| Not tested | Fewer than 30 firings, or too few sessions for the block (a daily row that reaches back 100 days needs 300 sessions). Reported with the reason, and not counted by Benjamini-Hochberg |
+| Its own controls | A planted indicator that must be found and noise that must not, in the tests (the screen's M1) |
+| Reading into G10 | Fixed with the user 2026-11-27, before the run. **A finding**: a cell that passes the control, has its edge in the predicted direction on the selection piece and on the evaluation piece each, and shows it in at least half the names measured. **Tradeable as is**: also above the 2 bp round trip. Rows that predict a higher return pick the direction (the platform only buys). Tradeable findings at intraday horizons (5 minutes to the close): richer 5-minute strategies around the families that passed. Findings mostly at one session or longer, or on daily closes: slower strategies. Findings, all under the cost: slower strategies too. No findings: stop searching variations of today's indicators, stage 2 before any generator build. Only rows that predict lower: exits or filters, no direction from that alone. A horizon with no finding reads "nothing there" only where luck's upper end (97.5%, at the horizon's middle cell) stays under the cost; where it reaches the cost, "not enough data" (both point to stage 2). More than one outcome, or none as written: listed, and chosen with the user |
+
+| # | Item | State |
+|---|---|---|
+| 1 | Whole-column indicators, with the parity test against `strategy/indicators/` | 🟡 built (branch `research/signal-screen`): 25 tests, 8 of 8 planted faults caught |
+| 2 | Bars to decisions, entries, exits and forward returns; the holdout refusal | 🟡 built: 20 tests, 16 of 16 planted faults caught. The refusal is in the loader (row 4): bars are asked for up to the last evaluation session and a bar dated in the holdout stops the run |
+| 3 | The edge, the block shuffle, Benjamini-Hochberg; planted and noise controls | 🟡 built: 20 tests, 17 of 17 planted faults caught. Controls, on made-up data where days move together and the condition holds on runs of days: noise called an edge at the 5% level 17 times in 300 (5.7%, honest); a planted edge found 40 times in 40; shuffling single bars instead called the same noise an edge 16 times in 60 (27%). A plan holds each reordering once: about 372 sessions give 10,000 at blocks of up to 51 sessions and about 180 at blocks of 100, so a daily row that reaches back 100 days has a smallest p-value near 0.0055 and cannot pass on its own (18 months hold fewer than four such blocks; more history is the only cure, which is stage 2) |
+| 4 | Library file, the runner, the report, `atp research signal-screen`; end to end test | 🟡 built: the library is a Python module with a content hash, the loader reads by the rules buy and hold uses, `--describe` prints the rows without reading data. End to end on a made-up market with one planted edge (found in its direction, not in the other); 129 tests in all with row 5's, 25 of 25 planted faults caught; ruff and the mypy hook clean. At the real size on made-up random-walk bars (378 sessions, 78 bars a day, 45 names, the 80 rows of the v1 draft, 10,000 shuffles): 207 seconds and 511 MiB at the peak on the laptop, and **0 of 690 cells tested pass** (smallest p-value 0.008; 30 cells had fewer than 30 firings), the noise control at full size |
+| 5 | Library v1 and the rule for reading the result into G10, fixed with the user before the run | 🟡 **both decided by the user, 2026-11-27**; built. **v1 approved as drafted** (`research/signal_screen/libraries.py`: 40 ideas on each scale, 80 rows, 720 cells; hash `efede93d515a…`, pinned by a test, so a changed row fails the suite). **The reading rule approved as proposed** (the row "Reading into G10" above; `research/signal_screen/reading.py`): the report marks each cell a finding or not and says which outcomes apply; 27 tests, 29 of 29 planted faults caught. Two things set in the build, open to challenge before the run: a row at a horizon counts once whichever return shows it (against the other names, or raw); and beside the luck range the report shows the edge that stands above every shuffle, which is what passing the control alone takes (more than standing above the range), so each "nothing there" shows how firm it is. The label itself is the rule's |
+| 6 | The run on B (go-ahead needed); results into section 5 | 🔴 |
+
+Seen while building it (2026-11-27, not acted on; for task 5, Step 2's design):
+
+- `exponential_moving_average` and `rsi_wilder` depend on how many bars they are handed,
+  and a composite hands every indicator the same count: its longest warmup, plus one
+  where a crossover reads the bar before. An EMA 10 / 50 crossover is handed 51 bars
+  (checked through the registry), so its slow average is the 50-bar simple average plus
+  one smoothing step. The screen computes both as traded (the row names the bar count).
+- **Three of the 390 composites the generator makes can never trade.** The
+  `cmp_sma_N_vs_ema_N` templates (N = 10, 20, 50) have no crossover, so they are handed N
+  bars, and an EMA handed exactly its window is the simple average: the two numbers were
+  equal to the last bit in 20,000 of 20,000 made-up windows, and the rule is a strict
+  "above". (The note here earlier today said "one step apart"; that was wrong.)
+- The generator's volatility filter is `roll_std_20 < 5.0`, in dollars: a 20 dollar name
+  always passes it and a 900 dollar name rarely does. The screen refuses a dollar reading
+  compared with any number but 0, so this filter is not in the library.
+
+**Planted controls, M1 (done 2026-11-26, M1 met; added 2026-11-25)**
 
 Pulled forward from Step 5's box "Planted controls in every campaign" by the user,
 2026-11-25, after the run of that day (section 5: 21 through every stage, none beats buy
@@ -4139,7 +4204,16 @@ and G10 are still open. The status table at the top of this step summarises them
       are done.** Not decided, nothing to build. **2026-11-25:** the build rows are done
       and the run with them found nothing above buy and hold (section 5), which is G10's
       decision-point reading; the user put the planted controls first (top board), so
-      G10 is decided after them.
+      G10 is decided after them. **2026-11-27:** controls done (M1 met). The user,
+      unsure what to search first, chose to measure first ("whatever we can measure"):
+      (1) alpha, beta, exposure and costs of the 2026-11-25 survivors, read only,
+      **done** (section 5, "The 2026-11-25 survivors against buy and hold"): no edge
+      before or after costs, a 0.3-beta slice of buy and hold, which points away from
+      richer intraday composites first; (2) a horizon signal screen (roadmap T3: how
+      well simple signals predict returns at several horizons, across all names, no
+      simulation), **built as stage 1** (top board, "Signal screen, stage 1"; its
+      run on B is next). Small pilots of each direction
+      were left out (they spend holdout looks). The direction is picked from (1) and (2).
       **Added 2026-11-25 (with the user, during the controls run): what is searched,
       not only how.** Nothing decided or built; options for G10 and task 5:
       - **Composite structure: in scope (user: "should be part of the generation
@@ -6423,3 +6497,65 @@ Read 2026-11-26:
 - **M1 met** (strategy-quality roadmap): the pipeline finds a planted edge of 55% and
   more, and with the tightened gate it passed no noise control of 40 it had not seen.
   The detection floor stays between 52% and 55%.
+
+### The 2026-11-25 survivors against buy and hold: alpha, beta, exposure, costs (2026-11-27, read only)
+
+G10's first measurement (user 2026-11-27, unsure what to search first: "measure first,
+whatever we can measure"). Nothing simulated again: the 21 survivors of the 2026-11-25 run
+above, read from their saved runs on B. Script `Claude outputs/g10_measure/alpha_beta_costs.py`
+on the laptop (not committed), run in B's worker container under the job lock, Parquet and
+Postgres read only; every number below is in `result.json` beside it.
+
+How it was measured:
+- **Buy and hold** rebuilt with the hook's own `_benchmark_inputs` and `benchmark_series`:
+  equal to the run's recorded total return, Sharpe, drawdown and session count in all three
+  windows, to every digit.
+- **The runs**: each survivor's selection run (stage 1), evaluation run (Monte Carlo's base
+  run) and holdout run, found by strategy, stage and window role. Total return equal to the
+  recorded one within 1e-15, notional traded equal. Trade counts differ by definition only
+  (every fill counted here, `total_trades` in the record).
+- **Beta and alpha**: least squares of the strategy's daily return on buy and hold's; alpha
+  x 252 with its t-statistic. **Exposure**: positions value over equity at every saved
+  point, and at each day's close.
+- **Costs**: 1 bp x notional traded added back day by day (the half spread; the impact term
+  is at most about 0.03 bp at research order sizes). Against each survivor's 2x-cost stress
+  run the estimate is between 15% low and 2% high; no reading below changes with it.
+- **The 21 together**: one equal-weight portfolio of their daily returns, one regression.
+  Their own t-statistics are not independent (most hold the same 20 names), so counting
+  them would overstate the evidence.
+
+| Window | Buy and hold | The 21, equal weight | Beta | R² | Alpha a year, net (t) | Before costs (t) |
+|---|---|---|---|---|---|---|
+| Selection (183 sessions) | +28.2% | +8.1% | 0.29 | 0.80 | +0.2% (+0.05) | +2.6% (+0.53) |
+| Evaluation (188) | +50.1% | +13.9% | 0.37 | 0.86 | -2.9% (-0.83) | -0.4% (-0.11) |
+| Holdout (127) | -8.8% | -5.9% | 0.29 | 0.82 | -7.4% (-1.46) | -4.8% (-0.96) |
+
+Each survivor on its own: **no alpha reaches t = 2 in any window, before or after costs**
+(best before costs +0.97, +1.27, +0.54 on selection, evaluation, holdout; positive before
+costs 19, 8 and 5 of 21). Exposure 3% to 65% on average and 3% to 79% at the close (most
+hold overnight); beta 0.02 to 0.54, below exposure for every survivor in every window.
+Costs 0.0% to 5.5% of equity per window, the busiest momentum, factor and crossover draws
+the heaviest.
+
+Read 2026-11-27:
+- **No hidden edge.** The survivors behave as a 0.3-beta slice of buy and hold: 80% to 86%
+  of their daily movement is the market's, and what is left averages to nothing, on the
+  windows they were chosen on as well as the holdout.
+- **Costs are not the cause.** Adding them back moves alpha up about 2.5 points a year and
+  makes none of it significant.
+- **The gates selected beta.** Stage 1's bar is absolute; in windows where buy and hold made
+  28% and 50%, a strategy partly invested clears it without any skill. This is the G9
+  concern, now measured, and it bears on task 5's open question (beating buy and hold, or
+  alpha, as a gate or as the search's fitness).
+- The holdout's "lost less than buy and hold" (15 of 21, the run above) is beta 0.3 in a
+  falling market, not skill.
+- **What this cannot see**: an alpha below about 7% to 10% a year (two standard errors on
+  127 to 188 sessions). At beta 0.3 an edge that small would still trail buy and hold in a
+  rising market.
+- **For G10**: of the three readings set out before the measurement (an edge hidden by low
+  exposure: richer intraday composites first; no edge: slower strategies; too noisy to
+  tell: leans slower), this is the second. It is evidence against putting richer intraday
+  composites first (built from the same rules), and it does not say which horizon; that is
+  the horizon signal screen's question (G10's next measurement, design with the user). The
+  holdout was read here to choose a direction of research, not a strategy: one more look
+  at it, counted under R2's repeated attempts.
