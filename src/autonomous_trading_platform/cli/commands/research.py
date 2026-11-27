@@ -35,7 +35,11 @@ from sqlalchemy import select
 from autonomous_trading_platform.application.services.strategy_catalog_service import (
     ExperimentCatalogService,
 )
-from autonomous_trading_platform.cli.formatters import print_header, print_json
+from autonomous_trading_platform.cli.formatters import (
+    print_error,
+    print_header,
+    print_json,
+)
 from autonomous_trading_platform.contracts.common.enums import PriceBasis
 from autonomous_trading_platform.db import get_session
 from autonomous_trading_platform.research.black_litterman.black_litterman_research_service import (
@@ -504,6 +508,7 @@ def register(subparsers) -> None:
     _register_intelligence_commands(research_subparsers)
     _register_calibration(research_subparsers)
     _register_cost_model(research_subparsers)
+    _register_signal_screen(research_subparsers)
 
 
 # ---------------------------------------------------------------------------
@@ -911,6 +916,106 @@ def _register_calibration(subparsers) -> None:
     parser.add_argument("--output", required=True)
     parser.add_argument("--format", choices=["json", "yaml"], default="json")
     parser.set_defaults(func=handle_calibrate_slippage)
+
+
+def _register_signal_screen(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "signal-screen",
+        help="Test a library of indicator conditions against luck (no holdout day is read)",
+    )
+    parser.add_argument("--library", default="v1")
+    parser.add_argument(
+        "--describe",
+        action="store_true",
+        help="Print the library's rows and stop; no data is read",
+    )
+    parser.add_argument(
+        "--dataset-version", default=None, help="A research-window raw-bars dataset version"
+    )
+    parser.add_argument(
+        "--universe-timeline", default=None, help="An exported universe timeline version"
+    )
+    parser.add_argument(
+        "--scale",
+        action="append",
+        choices=["5min", "daily"],
+        default=None,
+        help="Run this scale only (repeatable). Without every scale the run is a rehearsal",
+    )
+    parser.add_argument(
+        "--shuffles", type=int, default=None, help="Rehearsal only: fewer shuffles than declared"
+    )
+    parser.add_argument("--seed", type=int, default=None, help="Rehearsal only: another seed")
+    parser.add_argument("--output", default=None, help="Write the full result as JSON here")
+    parser.add_argument("--format", choices=["text", "json"], default="text")
+    parser.set_defaults(func=handle_signal_screen)
+
+
+def handle_signal_screen(args: argparse.Namespace) -> int:
+    """Run the signal screen; with ``--describe``, print the library it would run."""
+    import sys
+
+    from autonomous_trading_platform.application.services.signal_screen_service import (
+        SCALES,
+        run_signal_screen,
+        signal_screen_source,
+    )
+    from autonomous_trading_platform.research.signal_screen.libraries import library_named
+    from autonomous_trading_platform.research.signal_screen.report import (
+        describe_library,
+        render_report,
+    )
+    from autonomous_trading_platform.research.signal_screen.screen import ScreenSettings
+
+    try:
+        library = library_named(args.library)
+    except ValueError as exc:
+        print_error(str(exc))
+        return 2
+    if args.describe:
+        described = library.describe()
+        if args.format == "json":
+            print_json(described)
+        else:
+            print(describe_library(described))
+        return 0
+    if not args.dataset_version or not args.universe_timeline:
+        print_error("--dataset-version and --universe-timeline are needed to run the screen")
+        return 2
+
+    declared = ScreenSettings()
+    settings = ScreenSettings(
+        shuffles=declared.shuffles if args.shuffles is None else args.shuffles,
+        seed=declared.seed if args.seed is None else args.seed,
+    )
+    session = get_session()
+    try:
+        source = signal_screen_source(
+            session,
+            dataset_version=args.dataset_version,
+            universe_timeline=args.universe_timeline,
+        )
+        report = run_signal_screen(
+            source,
+            library=library,
+            scales=tuple(args.scale) if args.scale else SCALES,
+            settings=settings,
+            progress=lambda message: print(message, file=sys.stderr, flush=True),
+        )
+    except (RuntimeError, ValueError, LookupError, OSError) as exc:
+        # The loaders' own errors (a version not registered, a file that does not
+        # match its hash) and the screen's: say why, report nothing.
+        print_error(f"signal screen: {exc}")
+        return 1
+    finally:
+        session.close()
+
+    _emit_artifact_if_requested(payload=report, output=args.output)
+    if args.format == "json":
+        print_json(report)
+    else:
+        print(render_report(report))
+    return 0
 
 
 def _register_cost_model(subparsers) -> None:
