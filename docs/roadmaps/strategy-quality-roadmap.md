@@ -41,7 +41,7 @@ Items 1 to 3 are the Research tier of pre-launch 7.1b; item 4 is its Live tier.
 
 | # | Milestone | Means | State |
 |---|---|---|---|
-| M1 | The pipeline can find an edge | Positive control found, negative control rejected | 🟡 designed 2026-11-25 (noisy next-session oracle at 60 / 55 / 52%, noise × 5, outcomes fixed before the run: research plan, top board "Planted controls, M1"); not built |
+| M1 | The pipeline can find an edge | Positive control found, negative control rejected | ✅ met 2026-11-26 (research plan, top board "Planted controls, M1", and section 5): the noisy next-session oracle at 60% and 55% passes every stage and beats buy and hold on the holdout (52% does not: the floor); noise let through 5 of 45 at first, so Monte Carlo now decides at 90% of paths (PR #209), and on 40 unseen noise controls 0 passed (95% range 0% to 8.8%) |
 | M2 | First strategy passes the Research tier | Section 1, items 1 to 3 | ⚪ every baseline so far lost on the holdout |
 | M3 | First strategy passes the Live tier | Section 1, item 4 | ⚪ waits on M2 and 3.3(b) |
 | M4 | Three uncorrelated strategies live | Pairwise correlation of daily returns below a level *to set*, each passing M3 | ⚪ waits on M3 |
