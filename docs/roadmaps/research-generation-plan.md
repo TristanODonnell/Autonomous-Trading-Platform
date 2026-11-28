@@ -41,8 +41,11 @@ and the evidence for every line are in section 3.
 > (section 5): no edge before or after costs, a 0.3-beta slice of buy and hold. The
 > horizon signal screen, stage 1, is built (board "Signal screen, stage 1" below): the
 > engine, library v1 and the rule for reading the result into G10, the last two approved
-> by the user before any run. Next: its run on B (go-ahead needed), then the direction;
-> stage 2 (long daily history, ranking rows) is discussed after.
+> by the user before any run. Merged as PR #211 and **run on B 2026-11-27: 720 cells
+> tested, 0 pass.** By the rule fixed before the run: no findings; "nothing there" at
+> horizons up to an hour, "not enough data" from the close on; so stage 2 (long daily
+> history, ranking rows) before any generator build (section 5, "The signal screen,
+> library v1"). Next: stage 2's design with the user, then G10's direction.
 
 ### Where this plan joins the pre-launch plan (added 2026-11-25)
 
@@ -249,7 +252,7 @@ Key: 🟢 done (shipped; anything left is a follow-up or waits on something else
 Keep this board in step with the boxes: when a box changes in section 3, change its row.
 "Done / open" counts checkboxes.
 
-**Signal screen, stage 1 (the current work, added 2026-11-27)**
+**Signal screen, stage 1 (the current work, added 2026-11-27; run 2026-11-27, no findings; stage 2 is discussed next)**
 
 G10's second measurement. Moved up 2026-11-27 from the strategy-quality roadmap, section 8
 (T3), where it is worked through; nothing in it is new except its place in the order. It
@@ -284,12 +287,12 @@ How it measures (set by the build from the roadmap's design; each can be challen
 
 | # | Item | State |
 |---|---|---|
-| 1 | Whole-column indicators, with the parity test against `strategy/indicators/` | 🟡 built (branch `research/signal-screen`): 25 tests, 8 of 8 planted faults caught |
-| 2 | Bars to decisions, entries, exits and forward returns; the holdout refusal | 🟡 built: 20 tests, 16 of 16 planted faults caught. The refusal is in the loader (row 4): bars are asked for up to the last evaluation session and a bar dated in the holdout stops the run |
-| 3 | The edge, the block shuffle, Benjamini-Hochberg; planted and noise controls | 🟡 built: 20 tests, 17 of 17 planted faults caught. Controls, on made-up data where days move together and the condition holds on runs of days: noise called an edge at the 5% level 17 times in 300 (5.7%, honest); a planted edge found 40 times in 40; shuffling single bars instead called the same noise an edge 16 times in 60 (27%). A plan holds each reordering once: about 372 sessions give 10,000 at blocks of up to 51 sessions and about 180 at blocks of 100, so a daily row that reaches back 100 days has a smallest p-value near 0.0055 and cannot pass on its own (18 months hold fewer than four such blocks; more history is the only cure, which is stage 2) |
-| 4 | Library file, the runner, the report, `atp research signal-screen`; end to end test | 🟡 built: the library is a Python module with a content hash, the loader reads by the rules buy and hold uses, `--describe` prints the rows without reading data. End to end on a made-up market with one planted edge (found in its direction, not in the other); 129 tests in all with row 5's, 25 of 25 planted faults caught; ruff and the mypy hook clean. At the real size on made-up random-walk bars (378 sessions, 78 bars a day, 45 names, the 80 rows of the v1 draft, 10,000 shuffles): 207 seconds and 511 MiB at the peak on the laptop, and **0 of 690 cells tested pass** (smallest p-value 0.008; 30 cells had fewer than 30 firings), the noise control at full size |
-| 5 | Library v1 and the rule for reading the result into G10, fixed with the user before the run | 🟡 **both decided by the user, 2026-11-27**; built. **v1 approved as drafted** (`research/signal_screen/libraries.py`: 40 ideas on each scale, 80 rows, 720 cells; hash `efede93d515a…`, pinned by a test, so a changed row fails the suite). **The reading rule approved as proposed** (the row "Reading into G10" above; `research/signal_screen/reading.py`): the report marks each cell a finding or not and says which outcomes apply; 27 tests, 29 of 29 planted faults caught. Two things set in the build, open to challenge before the run: a row at a horizon counts once whichever return shows it (against the other names, or raw); and beside the luck range the report shows the edge that stands above every shuffle, which is what passing the control alone takes (more than standing above the range), so each "nothing there" shows how firm it is. The label itself is the rule's |
-| 6 | The run on B (go-ahead needed); results into section 5 | 🔴 |
+| 1 | Whole-column indicators, with the parity test against `strategy/indicators/` | ✅ merged as PR #211 (`0f6dc4017`), on A and B 2026-11-27, verified: 25 tests, 8 of 8 planted faults caught |
+| 2 | Bars to decisions, entries, exits and forward returns; the holdout refusal | ✅ merged (PR #211): 20 tests, 16 of 16 planted faults caught. The refusal is in the loader (row 4): bars are asked for up to the last evaluation session and a bar dated in the holdout stops the run |
+| 3 | The edge, the block shuffle, Benjamini-Hochberg; planted and noise controls | ✅ merged (PR #211): 20 tests, 17 of 17 planted faults caught. Controls, on made-up data where days move together and the condition holds on runs of days: noise called an edge at the 5% level 17 times in 300 (5.7%, honest); a planted edge found 40 times in 40; shuffling single bars instead called the same noise an edge 16 times in 60 (27%). A plan holds each reordering once: about 372 sessions give 10,000 at blocks of up to 51 sessions and about 180 at blocks of 100, so a daily row that reaches back 100 days has a smallest p-value near 0.0055 and cannot pass on its own (18 months hold fewer than four such blocks; more history is the only cure, which is stage 2) |
+| 4 | Library file, the runner, the report, `atp research signal-screen`; end to end test | ✅ merged (PR #211): the library is a Python module with a content hash, the loader reads by the rules buy and hold uses, `--describe` prints the rows without reading data. End to end on a made-up market with one planted edge (found in its direction, not in the other); 129 tests in all with row 5's, 25 of 25 planted faults caught; ruff and the mypy hook clean. At the real size on made-up random-walk bars (378 sessions, 78 bars a day, 45 names, the 80 rows of the v1 draft, 10,000 shuffles): 207 seconds and 511 MiB at the peak on the laptop, and **0 of 690 cells tested pass** (smallest p-value 0.008; 30 cells had fewer than 30 firings), the noise control at full size |
+| 5 | Library v1 and the rule for reading the result into G10, fixed with the user before the run | ✅ **both decided by the user, 2026-11-27**; merged (PR #211). **v1 approved as drafted** (`research/signal_screen/libraries.py`: 40 ideas on each scale, 80 rows, 720 cells; hash `efede93d515a…`, pinned by a test, so a changed row fails the suite). **The reading rule approved as proposed** (the row "Reading into G10" above; `research/signal_screen/reading.py`): the report marks each cell a finding or not and says which outcomes apply; 27 tests, 29 of 29 planted faults caught. Two things set in the build, open to challenge before the run: a row at a horizon counts once whichever return shows it (against the other names, or raw); and beside the luck range the report shows the edge that stands above every shuffle, which is what passing the control alone takes (more than standing above the range), so each "nothing there" shows how firm it is. The label itself is the rule's |
+| 6 | The run on B (go-ahead needed); results into section 5 | ✅ ran 2026-11-27 on the user's go-ahead (exit 0, 3 minutes 50 seconds, peak about 584 MiB of 3,055): **720 of 720 cells tested, 0 pass.** By the rule: no findings; "nothing there" at 5 minutes, 15 minutes and 1 hour, "not enough data" from the close on; stage 2 before any generator build. Section 5, "The signal screen, library v1" |
 
 Seen while building it (2026-11-27, not acted on; for task 5, Step 2's design):
 
@@ -4211,8 +4214,10 @@ and G10 are still open. The status table at the top of this step summarises them
       before or after costs, a 0.3-beta slice of buy and hold, which points away from
       richer intraday composites first; (2) a horizon signal screen (roadmap T3: how
       well simple signals predict returns at several horizons, across all names, no
-      simulation), **built as stage 1** (top board, "Signal screen, stage 1"; its
-      run on B is next). Small pilots of each direction
+      simulation), **built as stage 1 and run 2026-11-27** (top board, "Signal screen,
+      stage 1"; section 5): 0 of 720 cells pass, no findings by the rule fixed before
+      the run, which sends G10 to stage 2 before any generator build. Small pilots of
+      each direction
       were left out (they spend holdout looks). The direction is picked from (1) and (2).
       **Added 2026-11-25 (with the user, during the controls run): what is searched,
       not only how.** Nothing decided or built; options for G10 and task 5:
@@ -6559,3 +6564,84 @@ Read 2026-11-27:
   the horizon signal screen's question (G10's next measurement, design with the user). The
   holdout was read here to choose a direction of research, not a strategy: one more look
   at it, counted under R2's repeated attempts.
+
+### The signal screen, library v1, on the 24-month dataset (2026-11-27, `feed=iex`)
+
+G10's second measurement (top board, "Signal screen, stage 1"). Run on B 2026-11-27,
+22:53 to 22:57 UTC, through `worker_job.sh` on the merge commit of PR #211 (`0f6dc4017`):
+exit 0, 3 minutes 50 seconds, peak about 584 MiB of the 3,055 MiB ceiling. Library v1
+(hash `efede93d515a…`, 80 of 80 rows) with the declared settings (10,000 shuffles, seed
+20261127, 10% false discovery rate, 2 bp round trip). Result file
+`artifacts/signal_screen/v1_20261127.json` on B, log in
+`~/rehearsals/signal_screen_20261127/`. The library and the reading rule were fixed with
+the user before the run; nothing below changes either.
+
+What was read: `raw_bars_20261118T234501Z_043e50ad` and
+`universe_timeline_20261119T220329Z_54a0ff84`. Decisions from 2024-11-18 to 2026-05-15,
+371 sessions (selection 183, to 2025-08-15; evaluation 188, from 2025-08-18), with 34
+sessions of bars before them for the indicators; nothing from 2026-05-18 on. 29 names,
+about 20 in force a session; 729,077 bars, none refused; 1 split and 136 cash dividends
+applied. 518,081 five-minute decisions and 7,418 daily ones. At the 5-minute horizon
+34,062 of 510,663 returns (6.7%) end on a price from before the entry, because the name
+had not traded since (thin IEX bars); they are counted, as the simulator marks a position.
+
+**Result: 720 of 720 cells tested, 0 pass.** The smallest p-value is 0.0007; passing
+alone takes 0.00014 (10% over 720 cells).
+
+| Horizon | Luck reaches (bp) | Above every shuffle (bp) | Largest edge of a row that predicts higher: less the other names / raw (bp) | Reads |
+|---|---|---|---|---|
+| 5-minute bars, 5 minutes | 0.15 | 0.30 | +0.53 / +0.72 | nothing there |
+| 15 minutes | 0.36 | 0.67 | +0.56 / +1.21 | nothing there |
+| 1 hour | 1.14 | 2.14 | +1.35 / +1.74 | nothing there |
+| to the close | 2.15 | 4.19 | +1.62 / +4.00 | not enough data |
+| 1 session | 5.16 | 9.89 | +1.61 / +5.41 | not enough data |
+| 5 sessions | 11.64 | 22.88 | +3.12 / +12.22 | not enough data |
+| Daily closes, 1 session | 15.63 | 28.52 | +22.26 / +62.99 | not enough data |
+| 5 sessions | 59.90 | 111.09 | +81.63 / +144.97 | not enough data |
+| 10 sessions | 103.30 | 189.24 | +141.72 / +130.80 | not enough data |
+
+"Luck reaches": the upper end (97.5%) of what the shuffles give, at the horizon's middle
+cell; this is what the rule compares with the 2 bp cost. "Above every shuffle": the edge
+it takes to pass the control alone. 80 cells at each horizon.
+
+**Read by the rule: no findings.** The outcome that applies is "no findings: stop
+searching variations of today's indicators; stage 2 (a long daily history, rows that rank
+names) before any generator build".
+
+- **Up to an hour, nothing there.** No row that predicts a higher return has an edge that
+  reaches the 2 bp cost at 5 minutes, 15 minutes or an hour, on either return, before
+  asking whether it is luck; and luck is small enough there that a tradeable edge would
+  have stood out. This agrees with the first measurement (the survivors: no edge before
+  or after costs).
+- **From the close on, not enough data.** Luck alone reaches 2 to 100 bp, so an edge
+  worth trading could sit inside it. The largest edges of the rows that predict higher
+  are on daily closes, where luck is as large. Eighteen months of about 20 names cannot
+  tell.
+- The hour is the least firm of the three "nothing there": luck's range stays under the
+  cost (1.14 bp) and the edge that passes alone is just over it (2.14 bp).
+
+Seen in the result and **not findings**: none of it passed the control, and each was
+noticed after the run, so each is a question for a later library, not evidence.
+
+- Small p-values are more common than independent noise gives: 79 of 720 under 0.05
+  (11.0%), 21 under 0.01 (2.9%). The rows are not independent: most of the smallest are
+  near-copies of one condition on the return less the other names (below its 50-bar
+  average, the 20-bar rate of change down, the 10 under the 50). What they share: a name
+  below its average does a little worse than the other names afterwards, 0.1 bp over 5
+  minutes, 0.2 over 15, 0.7 over an hour, 4 to 5 over a session, same sign on both
+  pieces, in 59% to 76% of names. Up to an hour that is a twentieth to a third of the
+  cost, and it predicts lower: a reason to be out, not a buy.
+- Two cells stand above every shuffle they have: `d.sma_20under100` (the 20-day average
+  under the 100-day, predicts lower) at 5 and 10 sessions on the return less the other
+  names, +47 and +101 bp, same sign on both pieces, in 65% and 70% of 20 names. Their
+  p-value, 0.0055, is the floor for a cell with 180 distinct shuffles (blocks of 100
+  sessions; 24 cells have that floor). About one cell at that level is expected by luck
+  among the 240 daily ones, and these two overlap. Eighteen months cannot say more: the
+  case stage 2 is for.
+- Rows asked both ways came out as exact mirrors of each other, as built.
+
+**For G10** (the direction is taken with the user): the two measurements agree about
+the 5-minute side: no edge in the survivors, and none in the indicators they are built
+from at horizons up to an hour. By the rule the next step is stage 2 before any generator
+build. What stage 2 has to settle is what this run could not: horizons of a session and
+longer, where 18 months of about 20 names are too few.
